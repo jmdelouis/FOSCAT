@@ -1,0 +1,11 @@
+README.md
+setup.cfg
+setup.py
+src/FoCUS/FoCUS.py
+src/FoCUS/__init__.py
+src/FoCUS/saved_FoCUS.py
+src/foscat.egg-info/PKG-INFO
+src/foscat.egg-info/SOURCES.txt
+src/foscat.egg-info/dependency_links.txt
+src/foscat.egg-info/requires.txt
+src/foscat.egg-info/top_level.txt
