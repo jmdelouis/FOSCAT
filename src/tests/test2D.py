@@ -1,7 +1,7 @@
 import numpy as np
 import os, sys
 import matplotlib.pyplot as plt
-import foscat as FOC
+import foscat.FoCUS as FOC
 
 #=================================================================================
 # INITIALIZE foscat class
@@ -23,7 +23,7 @@ XSIZE=128
 #=================================================================================
 avg_ang=False
 
-fc=FOC.foscat(NORIENT=8,KERNELSZ=5,OSTEP=0)
+fc=FOC.FoCUS(NORIENT=8,KERNELSZ=5,OSTEP=0,TEMPLATE_PATH=scratch_path)
 
 #=================================================================================
 #  READ data and get data if necessary: 
@@ -94,7 +94,7 @@ np.save(scratch_path+'/%s_r1.npy'%(outname), r1)
 np.save(scratch_path+'/%s_r2.npy'%(outname), r2)
 
 # Run the learning
-fc.learn(tw1,tw2,tb1,tb2,NUM_EPOCHS = 5000,DECAY_RATE=1.0)
+fc.learn(tw1,tw2,tb1,tb2,NUM_EPOCHS = 1000,DECAY_RATE=1.0)
 
 # get the output map
 omap=fc.get_map()

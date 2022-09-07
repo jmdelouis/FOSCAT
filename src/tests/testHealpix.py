@@ -2,7 +2,7 @@ import numpy as np
 import os, sys
 import matplotlib.pyplot as plt
 import healpy as hp
-import foscat as FOC
+import foscat.FoCUS as FOC
 
 #=================================================================================
 # DEFINE A PATH FOR scratch data
@@ -15,7 +15,7 @@ Default_nside=512
 #=================================================================================
 # INITIALIZE foscat class
 #=================================================================================
-fc=FOC.foscat(NORIENT=4,
+fc=FOC.FoCUS(NORIENT=4,
              KERNELSZ=3,
              healpix=True,
              OSTEP=0,
@@ -62,7 +62,7 @@ except:
 try:
     td=dodown(np.load(scratch_path+'/TH1_512.npy'),nout)
 except:
-    os.system('wget -O '+scratch_path+'/haslam408_dsds_Remazeilles2014.fits "http://pla.esac.esa.int/pla/aio/product-action?MAP.MAP_ID=haslam408_dsds_Remazeilles2014.fits"')
+    os.system('wget -O '+scratch_path+'/haslam408_dsds_Remazeilles2014.fits http://pla.esac.esa.int/pla/aio/product-action?MAP.MAP_ID=haslam408_dsds_Remazeilles2014.fits')
     h1=hp.ud_grade(hp.read_map(scratch_path+'/haslam408_dsds_Remazeilles2014.fits'),512)
     idx=hp.nest2ring(512,np.arange(12*512**2))
     h1=h1/h1.std()
@@ -107,19 +107,19 @@ for imask in range(len(tab)):
     try:
         mask[imask]=dodown(np.load(scratch_path+'/'+tab[imask]),nout)
     except:
-        print("==========================================================")
-        print("")
-        print("Get offical Planck Galactic masks...may take few minutes..")
-        print("")
-        print("==========================================================")
+        print('==========================================================')
+        print('')
+        print('Get offical Planck Galactic masks...may take few minutes..')
+        print('')
+        print('==========================================================')
 
         os.system('wget -O '+scratch_path+'/HFI_Mask_GalPlane-apo5_2048_R2.00.fits https://irsa.ipac.caltech.edu/data/Planck/release_2/ancillary-data/masks/HFI_Mask_GalPlane-apo5_2048_R2.00.fits')
         tab_data=['GAL020','GAL040','GAL060','GAL070','GAL080','GAL090','GAL097','GAL099']
         
         idx=hp.nest2ring(512,np.arange(12*512**2))
-        for i in range(10):
-            mask=hp.ud_grade(hp.read_map(scratch_path+'/HFI_Mask_GalPlane-apo5_2048_R2.00.fits',i),512)
-            np.save(scratch_path+'/MASK_%s_512.npy'%(tab_data[i]),mask[idx])
+        for i in range(8):
+            lmask=hp.ud_grade(hp.read_map(scratch_path+'/HFI_Mask_GalPlane-apo5_2048_R2.00.fits',i),512)
+            np.save(scratch_path+'/MASK_%s_512.npy'%(tab_data[i]),lmask[idx])
             print('Save '+scratch_path+'/MASK_%s_512.npy'%(tab_data[i]))
         os.system('rm '+scratch_path+'/HFI_Mask_GalPlane-apo5_2048_R2.00.fits')
         mask[imask]=dodown(np.load(scratch_path+'/'+tab[imask]),nout)
@@ -210,7 +210,7 @@ for itt in range(5):
     # make the learn
     fc.reset()
     
-    omap=fc.learn(tw1,tw2,tb1,tb2,NUM_EPOCHS = 500,DECAY_RATE=0.95,LEARNING_RATE=0.03)
+    omap=fc.learn(tw1,tw2,tb1,tb2,NUM_EPOCHS = 500,DECAY_RATE=0.995,LEARNING_RATE=0.03,ADDAPT_LEARN=2.0)
 
     print('ITT ',itt,((d-omap)*mask[1].reshape(12*nout**2)).std(),((d-di)*mask[1].reshape(12*nout**2)).std())
     sys.stdout.flush()

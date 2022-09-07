@@ -3,9 +3,9 @@ import os, sys
 import healpy as hp
 import matplotlib.pyplot as plt
 
-nitt=10
+nitt=5
 scratch_path = 'foscat_data'
-outname='TEST_MPI'
+outname='TEST'
 
 def dodown(a,nout):
     nin=int(np.sqrt(a.shape[0]//12))
