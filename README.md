@@ -1,6 +1,6 @@
-# FoCuS
+# foscat
 
-
+A python package dedicated to image component separation based on cross scattering transform analysis.
 
 ## Getting started
 
@@ -15,14 +15,14 @@ Already a pro? Just edit this README.md and make it your own. Want to make it ea
 
 ```
 cd existing_repo
-git remote add origin https://gitlab.ifremer.fr/deepsee/focus.git
+git remote add origin https://gitlab.ifremer.fr/deepsee/foscat.git
 git branch -M main
 git push -uf origin main
 ```
 
 ## Integrate with your tools
 
-- [ ] [Set up project integrations](https://gitlab.ifremer.fr/deepsee/focus/-/settings/integrations)
+- [ ] [Set up project integrations](https://gitlab.ifremer.fr/deepsee/foscat/-/settings/integrations)
 
 ## Collaborate with your team
 

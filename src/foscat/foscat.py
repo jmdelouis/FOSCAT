@@ -4,16 +4,62 @@ tf.disable_v2_behavior()
 import os, sys
 import time
 
-class FoCUS:
+class foscat:
+    def __init__(self,
+                 NORIENT=4,
+                 LAMBDA=1.2,
+                 KERNELSZ=3,
+                 slope=2.0,
+                 all_type='float64',
+                 padding='SAME',
+                 gpupos=0,
+                 healpix=False,
+                 OSTEP=0,
+                 isMPI=False,
+                 TEMPLATE_PATH='data'):
 
-    def __init__(self,NORIENT=4,LAMBDA=1.2,KERNELSZ=3,slope=2.0,
-                 all_type='float64',padding='SAME',gpupos=0,healpix=False,
-                 OSTEP=-1):
+        self.TEMPLATE_PATH=TEMPLATE_PATH
+        
+        if os.path.exists(self.TEMPLATE_PATH)==False:
+            print('The directory %s to store temporary information for Foscat does not exist: Try to create it'%(self.TEMPLATE_PATH))
+            try:
+                os.system('mkdir -p %s'%(self.TEMPLATE_PATH))
+                print('The directory %s is created')
+            except:
+                print('Impossible to create the directory %s'%(self.TEMPLATE_PATH))
+                exit(0)
+                
         self.nloss=0
+        self.inpar={}
+        self.rewind={}
+        self.diff_map1={}
+        self.diff_map2={}
+        self.diff_mask={}
+        self.diff_weight={}
+        self.loss_type={}
+        self.MAPDIFF=1
+        self.SCATDIFF=2
+        
         self.padding=padding
         self.healpix=healpix
         self.OSTEP=OSTEP
-        
+        self.nparam=0
+
+        if isMPI:
+            from mpi4py import MPI
+
+            self.comm = MPI.COMM_WORLD
+            self.size = self.comm.Get_size()
+            self.rank = self.comm.Get_rank()
+            
+            if all_type=='float32':
+                self.MPI_ALL_TYPE=MPI.FLOAT
+            else:
+                self.MPI_ALL_TYPE=MPI.DOUBLE
+        else:
+            self.size = 1
+            self.rank = 0
+            
         self.tw1={}
         self.tw2={}
         self.tb1={}
@@ -39,17 +85,22 @@ class FoCUS:
                 self.all_tf_type=tf.float64
                 #self.MPI_ALL_TYPE=MPI.DOUBLE
             else:
-                print('ERROR INIT FOCUS ',all_type,' should be float32 or float64')
+                print('ERROR INIT FOSCAT ',all_type,' should be float32 or float64')
                 exit(0)
             
         #===========================================================================
         # INIT 
-        print("Num GPUs Available: ", len(tf.config.experimental.list_physical_devices('GPU')))
-        sys.stdout.flush()
+        if self.rank==0:
+            print("Num GPUs Available: ", len(tf.config.experimental.list_physical_devices('GPU')))
+            sys.stdout.flush()
         tf.debugging.set_log_device_placement(False)
         tf.config.set_soft_device_placement(True)
         
         gpus = tf.config.experimental.list_physical_devices('GPU')
+        gpuname='CPU:0'
+        self.gpulist={}
+        self.gpulist[0]=gpuname
+        self.ngpu=1
         if gpus:
             try:
                 # Currently, memory growth needs to be the same across GPUs
@@ -57,6 +108,7 @@ class FoCUS:
                     tf.config.experimental.set_memory_growth(gpu, True)
                 logical_gpus = tf.config.experimental.list_logical_devices('GPU')
                 print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+                sys.stdout.flush()
                 gpuname=logical_gpus[gpupos].name
                 self.gpulist={}
                 self.ngpu=len(logical_gpus)
@@ -66,16 +118,12 @@ class FoCUS:
             except RuntimeError as e:
                 # Memory growth must be set before GPUs have been initialized
                 print(e)
-                gpuname='CPU:0'
-                self.gpulist={}
-                self.gpulist[0]=gpuname
-                self.ngpu=1
                 
-        self.gpupos=gpupos%self.ngpu
+        self.gpupos=(gpupos+self.rank)%self.ngpu
         print('============================================================')
         print('==                                                        ==')
         print('==                                                        ==')
-        print('==     RUN ON GPU : %s                 =='%(self.gpulist[self.gpupos%self.ngpu]))
+        print('==     RUN ON GPU Rank %d : %s                          =='%(self.rank,self.gpulist[self.gpupos%self.ngpu]))
         print('==                                                        ==')
         print('==                                                        ==')
         print('============================================================')
@@ -117,6 +165,138 @@ class FoCUS:
             for j in range(NORIENT):
                 self.mat_avg_ang[i+j*NORIENT,i]=1.0
         self.mat_avg_ang=tf.constant(self.mat_avg_ang)
+
+        
+    # ---------------------------------------------−---------
+    # --       COMPUTE 3X3 INDEX FOR HEALPIX WORK          --
+    # ---------------------------------------------−---------
+    def corr_idx_wXX(self,x,y):
+        idx=np.where(x==-1)[0]
+        res=x
+        res[idx]=y[idx]
+        return(res)
+    
+    def comp_idx_w9(self,max_nside=1024):
+        import healpy as hp
+        nout=max_nside
+        while nout>0:
+            x,y,z=hp.pix2vec(nout,np.arange(12*nout**2),nest=True)
+            vec=np.zeros([3,12*nout**2])
+            vec[0,:]=x
+            vec[1,:]=y
+            vec[2,:]=z
+
+            radius=np.sqrt(4*np.pi/(12*nout*nout))
+            
+            npt=9
+            outname='W9'
+            
+            th,ph=hp.pix2ang(nout,np.arange(12*nout**2),nest=True)
+            idx=hp.get_all_neighbours(nout,th,ph,nest=True)
+    
+            allidx=np.zeros([9,12*nout*nout],dtype='int')
+
+            def corr(x,y):
+                idx=np.where(x==-1)[0]
+                res=x
+                res[idx]=y[idx]
+                return(res)
+
+            allidx[4,:] = np.arange(12*nout**2)
+            allidx[0,:] = self.corr_idx_wXX(idx[1,:],idx[2,:])
+            allidx[1,:] = self.corr_idx_wXX(idx[2,:],idx[3,:])
+            allidx[2,:] = self.corr_idx_wXX(idx[3,:],idx[4,:])
+            
+            allidx[3,:] = self.corr_idx_wXX(idx[0,:],idx[1,:])
+            allidx[5,:] = self.corr_idx_wXX(idx[4,:],idx[5,:])
+            
+            allidx[6,:] = self.corr_idx_wXX(idx[7,:],idx[0,:])
+            allidx[7,:] = self.corr_idx_wXX(idx[6,:],idx[7,:])
+            allidx[8,:] = self.corr_idx_wXX(idx[5,:],idx[6,:])
+            
+            idx=np.zeros([12*nout*nout,npt],dtype='int')
+            for iii in range(12*nout*nout):
+                idx[iii,:]=allidx[:,iii]
+
+            np.save('%s/%s_%d_IDX.npy'%(self.TEMPLATE_PATH,outname,nout),idx)
+            print('%s/%s_%d_IDX.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nout))
+            nout=nout//2
+            
+    # ---------------------------------------------−---------
+    # --       COMPUTE 5X5 INDEX FOR HEALPIX WORK          --
+    # ---------------------------------------------−---------
+    def comp_idx_w25(self,max_nside=1024):
+        import healpy as hp
+        nout=max_nside
+        while nout>0:
+            x,y,z=hp.pix2vec(nout,np.arange(12*nout**2),nest=True)
+            vec=np.zeros([3,12*nout**2])
+            vec[0,:]=x
+            vec[1,:]=y
+            vec[2,:]=z
+
+            radius=np.sqrt(4*np.pi/(12*nout*nout))
+            
+            npt=25
+            outname='W25'
+            
+            th,ph=hp.pix2ang(nout,np.arange(12*nout**2),nest=True)
+            idx=hp.get_all_neighbours(nout,th,ph,nest=True)
+    
+            allidx=np.zeros([25,12*nout*nout],dtype='int')
+
+            allidx[12,:] = np.arange(12*nout**2)
+            allidx[11,:] = self.corr_idx_wXX(idx[0,:],idx[1,:])
+            allidx[ 7,:] = self.corr_idx_wXX(idx[2,:],idx[3,:])
+            allidx[13,:] = self.corr_idx_wXX(idx[4,:],idx[5,:])
+            allidx[17,:] = self.corr_idx_wXX(idx[6,:],idx[7,:])
+            
+            allidx[10,:] = self.corr_idx_wXX(idx[0,allidx[11,:]],idx[1,allidx[11,:]])
+            allidx[ 6,:] = self.corr_idx_wXX(idx[2,allidx[11,:]],idx[3,allidx[11,:]])
+            allidx[16,:] = self.corr_idx_wXX(idx[6,allidx[11,:]],idx[7,allidx[11,:]])
+            
+            allidx[2,:]  = self.corr_idx_wXX(idx[2,allidx[7,:]],idx[3,allidx[7,:]])
+            allidx[8,:]  = self.corr_idx_wXX(idx[4,allidx[7,:]],idx[5,allidx[7,:]])
+            
+            allidx[14,:]  = self.corr_idx_wXX(idx[4,allidx[13,:]],idx[5,allidx[13,:]])
+            allidx[18,:]  = self.corr_idx_wXX(idx[6,allidx[13,:]],idx[7,allidx[13,:]])
+            
+            allidx[22,:]  = self.corr_idx_wXX(idx[6,allidx[17,:]],idx[7,allidx[17,:]])
+            
+            allidx[1,:]   = self.corr_idx_wXX(idx[2,allidx[6,:]],idx[3,allidx[6,:]])
+            allidx[5,:]   = self.corr_idx_wXX(idx[0,allidx[6,:]],idx[1,allidx[6,:]])
+            
+            allidx[3,:]   = self.corr_idx_wXX(idx[2,allidx[8,:]],idx[3,allidx[8,:]])
+            allidx[9,:]   = self.corr_idx_wXX(idx[4,allidx[8,:]],idx[5,allidx[8,:]])
+            
+            allidx[19,:]  = self.corr_idx_wXX(idx[4,allidx[18,:]],idx[5,allidx[18,:]])
+            allidx[23,:]  = self.corr_idx_wXX(idx[6,allidx[18,:]],idx[7,allidx[18,:]])
+            
+            allidx[15,:]  = self.corr_idx_wXX(idx[0,allidx[16,:]],idx[1,allidx[16,:]])
+            allidx[21,:]  = self.corr_idx_wXX(idx[6,allidx[16,:]],idx[7,allidx[16,:]])
+            
+            allidx[0,:]   = self.corr_idx_wXX(idx[0,allidx[1,:]],idx[1,allidx[1,:]])
+            
+            allidx[4,:]   = self.corr_idx_wXX(idx[4,allidx[3,:]],idx[5,allidx[3,:]])
+            
+            allidx[20,:]   = self.corr_idx_wXX(idx[0,allidx[21,:]],idx[1,allidx[21,:]])
+            
+            allidx[24,:]   = self.corr_idx_wXX(idx[4,allidx[23,:]],idx[5,allidx[23,:]])
+            
+            idx=np.zeros([12*nout*nout,npt],dtype='int')
+            for iii in range(12*nout*nout):
+                idx[iii,:]=allidx[:,iii]
+
+            np.save('%s/%s_%d_IDX.npy'%(self.TEMPLATE_PATH,outname,nout),idx)
+            print('%s/%s_%d_IDX.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nout))
+            nout=nout//2
+    # ---------------------------------------------−---------
+    def get_rank(self):
+        return(self.rank)
+    
+    # ---------------------------------------------−---------
+    def barrier(self):
+        self.comm.Barrier()
             
     # ---------------------------------------------−---------
     def get_ww(self):
@@ -133,6 +313,7 @@ class FoCUS:
             plt.subplot(2,c.shape[1],1+i+c.shape[1])
             plt.imshow(s[:,i].reshape(npt,npt),cmap='Greys',vmin=-0.5,vmax=1.0)
             print((c[:,i]**2+s[:,i]**2).sum(),(c[:,i]**2).sum(),c[:,i].sum(),s[:,i].sum())
+            sys.stdout.flush()
         plt.show()
     # ---------------------------------------------−---------
     def relu(self,x):
@@ -449,6 +630,37 @@ class FoCUS:
             
         return(s1,s2)
     # ---------------------------------------------−---------
+    
+    def donaiveinterpol(self,im,mask,xpadding=False):
+        lmask=1*mask
+        tot=lmask.mean()
+        while tot!=1.0:
+            idx=np.where(lmask==0)
+            nx,ny=im.shape
+            res=im[(idx[0]+1)%nx,idx[1]]   *lmask[(idx[0]+1)%nx,idx[1]]
+            res+=im[(idx[0]-1+nx)%nx,idx[1]]*lmask[(idx[0]-1+nx)%nx,idx[1]]
+            res+=im[(idx[0]+1)%nx,(idx[1]+1)%ny]   *lmask[(idx[0]+1)%nx,(idx[1]+1)%ny]
+            res+=im[(idx[0]-1+nx)%nx,(idx[1]+1)%ny]*lmask[(idx[0]-1+nx)%nx,(idx[1]+1)%ny]
+            res+=im[(idx[0]+1)%nx,(idx[1]-1+ny)%ny]   *lmask[(idx[0]+1)%nx,(idx[1]-1+ny)%ny]
+            res+=im[(idx[0]-1+nx)%nx,(idx[1]-1+ny)%ny]*lmask[(idx[0]-1+nx)%nx,(idx[1]-1+ny)%ny]
+            res+=im[idx[0],(idx[1]+1)%ny]   *lmask[idx[0],(idx[1]+1)%ny]
+            res+=im[idx[0],(idx[1]-1+ny)%ny]*lmask[idx[0],(idx[1]-1+ny)%ny]
+            nres=lmask[(idx[0]+1)%nx,idx[1]]
+            nres+=lmask[(idx[0]-1+nx)%nx,idx[1]]
+            nres+=lmask[idx[0],(idx[1]+1)%ny]
+            nres+=lmask[idx[0],(idx[1]-1+ny)%ny]
+            nres+=lmask[(idx[0]+1)%nx,(idx[1]+1)%ny]
+            nres+=lmask[(idx[0]-1+nx)%nx,(idx[1]+1)%ny]
+            nres+=lmask[(idx[0]+1)%nx,(idx[1]-1+ny)%ny]
+            nres+=lmask[(idx[0]-1+nx)%nx,(idx[1]-1+ny)%ny]
+            im[idx[0][nres>0],idx[1][nres>0]]=res[nres>0]/nres[nres>0]
+            lmask[idx[0][nres>0],idx[1][nres>0]]=1.0
+            tot=lmask.mean()
+        if xpadding:
+            im[:,0:im.shape[1]//4]=im[:,im.shape[1]//2:im.shape[1]//2+im.shape[1]//4]
+            im[:,-im.shape[1]//4:]=im[:,im.shape[1]//4:im.shape[1]//2]
+        return(im)
+    # ---------------------------------------------−---------
     def add_mask(self,mask):
         
         for i in range(1,mask.shape[0]):
@@ -460,7 +672,19 @@ class FoCUS:
         else:
             self.mask=tf.reshape(tf.constant(mask.astype(self.all_type)),[mask.shape[0],mask.shape[1],mask.shape[2],1])
             self.NMASK=mask.shape[0]
-        print('Use %d masks'%(self.NMASK))
+        if self.rank==0:
+            print('Use %d masks'%(self.NMASK))
+            sys.stdout.flush()
+            
+    # ---------------------------------------------−---------
+    def add_loss_diff(self,image1,image2,mask,weight=1.0):
+        with tf.device(self.gpulist[self.gpupos%self.ngpu]):
+            self.diff_map1[self.nloss]=image1
+            self.diff_map2[self.nloss]=image2
+            self.diff_mask[self.nloss]=mask
+            self.diff_weight[self.nloss]=tf.constant(np.array([weight]).astype(self.all_type))
+            self.loss_type[self.nloss]=self.MAPDIFF
+        
     # ---------------------------------------------−---------
     def add_loss(self,image1,image2,image3,image4,doL1=True,imaginary=False,avg_ang=False):
 
@@ -509,32 +733,84 @@ class FoCUS:
                 
             self.ss1[self.nloss]=ss1
             self.ss2[self.nloss]=ss2
+            self.loss_type[self.nloss]=self.SCATDIFF
 
             self.nloss=self.nloss+1
 
-            return self.nloss-1
     # ---------------------------------------------−---------
     def add_loss_healpix(self,image1,image2,image3,image4,avg_ang=False,imaginary=False):
         
-        return self.add_loss(image1,image2,image3,image4,avg_ang=avg_ang,imaginary=imaginary)
+        self.add_loss(image1,image2,image3,image4,avg_ang=avg_ang,imaginary=imaginary)
     # ---------------------------------------------−---------  
     def add_loss_2d(self,image1,image2,image3,image4,avg_ang=False,imaginary=False):
         
-        return self.add_loss(image1,image2,image3,image4,avg_ang=avg_ang,imaginary=imaginary)
+        self.add_loss(image1,image2,image3,image4,avg_ang=avg_ang,imaginary=imaginary)
+    
+    # ---------------------------------------------−---------  
+    def add_loss_determ(self,image1,image2,doL1=True,avg_ang=False,imaginary=False):
+        
+        with tf.device(self.gpulist[self.nloss%self.ngpu]):
+            if self.nout!=-1:
+                os1,os2=self.hpwst1(image1,image2,doL1=self.doL1,imaginary=imaginary,avg_ang=avg_ang)
+            else:
+                os1,os2=self.cwst1(image1,image2,imaginary=imaginary,avg_ang=avg_ang)
+
+            self.os1[self.nloss]=os1
+            self.os2[self.nloss]=os2
+            self.is1[self.nloss]=tf.constant(0,self.all_tf_type)
+            self.is2[self.nloss]=tf.constant(0,self.all_tf_type)
+
+            ss1=os1.get_shape().as_list()
+            ss2=os2.get_shape().as_list()
+
+            if avg_ang:
+                self.tw1[self.nloss]=tf.compat.v1.placeholder(self.all_tf_type,
+                                                              shape=(ss1[0],ss1[1]),
+                                                              name='TW1_%d'%(self.nloss))
+                self.tw2[self.nloss]=tf.compat.v1.placeholder(self.all_tf_type,
+                                                              shape=(ss2[0],ss2[1]),
+                                                              name='TW2_%d'%(self.nloss))
+                self.tb1[self.nloss]=tf.compat.v1.placeholder(self.all_tf_type,
+                                                              shape=(ss1[0],ss1[1]),
+                                                              name='TB1_%d'%(self.nloss))
+                self.tb2[self.nloss]=tf.compat.v1.placeholder(self.all_tf_type,
+                                                              shape=(ss2[0],ss2[1]),
+                                                              name='TB2_%d'%(self.nloss))
+            else:
+                self.tw1[self.nloss]=tf.compat.v1.placeholder(self.all_tf_type,
+                                                              shape=(ss1[0],ss1[1],ss1[2]),
+                                                              name='TW1_%d'%(self.nloss))
+                self.tw2[self.nloss]=tf.compat.v1.placeholder(self.all_tf_type,
+                                                              shape=(ss2[0],ss2[1],ss2[2]),
+                                                              name='TW2_%d'%(self.nloss))
+                self.tb1[self.nloss]=tf.compat.v1.placeholder(self.all_tf_type,
+                                                              shape=(ss1[0],ss1[1],ss1[2]),
+                                                              name='TB1_%d'%(self.nloss))
+                self.tb2[self.nloss]=tf.compat.v1.placeholder(self.all_tf_type,
+                                                              shape=(ss2[0],ss2[1],ss2[2]),
+                                                              name='TB2_%d'%(self.nloss))
+                
+            self.ss1[self.nloss]=ss1
+            self.ss2[self.nloss]=ss2
+            self.loss_type[self.nloss]=self.SCATDIFF
+
+            self.nloss=self.nloss+1
+        
     # ---------------------------------------------−---------
     def calc_stat(self,n1,n2,imaginary=False,gpupos=0,avg_ang=False):
         
-        with tf.device(self.gpulist[gpupos]):
+        with tf.device(self.gpulist[gpupos%self.ngpu]):
             nsim=n1.shape[0]
-            nx=n1.shape[1]
             for i in range(nsim):
                 feed_dict={}
                 if self.nout!=-1:
                     feed_dict[self.noise1]=n1[i].reshape(1,12*self.nout*self.nout,1,1)
                     feed_dict[self.noise2]=n2[i].reshape(1,12*self.nout*self.nout,1,1)
                 else:
-                    feed_dict[self.noise1]=n1[i].reshape(1,nx,nx,1)
-                    feed_dict[self.noise2]=n2[i].reshape(1,nx,nx,1)
+                    nx=n1.shape[1]
+                    ny=n1.shape[2]
+                    feed_dict[self.noise1]=n1[i].reshape(1,nx,ny,1)
+                    feed_dict[self.noise2]=n2[i].reshape(1,nx,ny,1)
 
                 if imaginary:
                     if avg_ang==False:
@@ -561,21 +837,28 @@ class FoCUS:
             
     # ---------------------------------------------−---------    
     def convimage(self,image):
-        with tf.device(self.gpulist[self.gpupos]):
+        with tf.device(self.gpulist[self.gpupos%self.ngpu]):
             if self.healpix:
                 return(self.convhealpix(image))
             
             return(tf.constant((image.astype(self.all_type)).reshape(1,image.shape[0],image.shape[1],1)))
     def convhealpix(self,image):
-        with tf.device(self.gpulist[self.gpupos]):
+        with tf.device(self.gpulist[self.gpupos%self.ngpu]):
             return(tf.constant((image.astype(self.all_type)).reshape(1,image.shape[0],1,1)))
     # ---------------------------------------------−---------
     def reset(self):
         self.sess.run(self.doreset)
     # ---------------------------------------------−---------   
-    def init_synthese(self,image):
+    def init_synthese(self,image,interpol=[],xpadding=False):
         self.nout=-1
-        with tf.device(self.gpulist[self.gpupos]):
+        with tf.device(self.gpulist[self.gpupos%self.ngpu]):
+            self.nparam=1
+            self.learndata={}
+            self.param={}
+            self.pshape={}
+            self.doreset={}
+            self.logits={}
+            
             if self.healpix==True:
                 self.widx2={}
                 self.wcos={}
@@ -583,26 +866,64 @@ class FoCUS:
                 nout=int(np.sqrt(image.shape[0]//12))
                 self.nout=nout
                 nstep=int(np.log(nout)/np.log(2))-self.OSTEP
-                print('Initialize HEALPIX synthesis NSIDE=',nout)
+                if self.rank==0:
+                    print('Initialize HEALPIX synthesis NSIDE=',nout)
+                    sys.stdout.flush()
+                    
                 for i in range(nstep):
                     lout=nout//(2**i)
-                    tmp=np.load('../data/W%d_%d_IDX_FINAL.npy'%(self.KERNELSZ**2,lout))
+                    try:
+                        tmp=np.load('%s/W%d_%d_IDX.npy'%(self.TEMPLATE_PATH,self.KERNELSZ**2,lout))
+                    except:
+                        if self.KERNELSZ**2==9:
+                            if self.rank==0:
+                                self.comp_idx_w9(max_nside=nout)
+                        elif self.KERNELSZ**2==25:
+                            if self.rank==0:
+                                self.comp_idx_w25(max_nside=nout)
+                        else:
+                            if self.rank==0:
+                                print('Only 3x3 and 5x5 kernel have been developped for Healpix and you ask for %dx%d'%(KERNELSZ,KERNELSZ))
+                            exit(0)
+                            
+                        self.barrier()
+                        tmp=np.load('%s/W%d_%d_IDX.npy'%(self.TEMPLATE_PATH,self.KERNELSZ**2,lout))
+
                     npt=tmp.shape[1]
                     self.widx2[lout]=tf.constant(tmp.flatten())
                     self.wcos[lout]=tf.reshape(tf.transpose(self.wwc),[1,self.NORIENT,1,npt])
                     self.wsin[lout]=tf.reshape(tf.transpose(self.wws),[1,self.NORIENT,1,npt])
 
-                self.learndata=tf.constant(image.astype(self.all_type).reshape(1,image.shape[0],1,1))
-                self.param=tf.Variable(0*image.astype(self.all_type).reshape(1,image.shape[0],1,1))
-                self.doreset=self.param.assign(0*image.astype(self.all_type).reshape(1,image.shape[0],1,1))
+                self.learndata[0]=tf.constant(image.astype(self.all_type).reshape(1,image.shape[0],1,1))
+                self.pshape[0]=image.shape[0]
+                self.param[0]=tf.Variable(0*image.astype(self.all_type).reshape(image.shape[0]))
+                self.doreset[0]=self.param[0].assign(0*image.astype(self.all_type).reshape(image.shape[0]))
+                self.logits[0] = self.learndata[0]-tf.reshape(self.param[0],[1,image.shape[0],1,1])
             else:
-                self.learndata=tf.constant(image.astype(self.all_type).reshape(1,image.shape[0],image.shape[1],1))
-                self.param=tf.Variable(0*image.astype(self.all_type).reshape(1,image.shape[0],image.shape[1],1))
-                self.doreset=self.param.assign(0*image.astype(self.all_type).reshape(1,image.shape[0],image.shape[1],1))
+                limage=1*image
+                if len(interpol)>0:
+                    limage=self.donaiveinterpol(image,interpol,xpadding=xpadding)
+                    
+                self.learndata[0]=tf.constant(limage.astype(self.all_type).reshape(1,image.shape[0],image.shape[1],1))
+                if xpadding:
+                    self.pshape[0]=image.shape[0]*image.shape[1]//2
+                    tmp=0*image[:,0:image.shape[1]//2].astype(self.all_type).reshape(image.shape[0]*image.shape[1]//2)
+                    self.param[0]=tf.Variable(tmp)
+                    self.doreset[0]=self.param[0].assign(tmp)
+                    lpar=tf.reshape(self.param[0],[1,image.shape[0],image.shape[1]//2,1])
+                    b = tf.constant([1,1,2,1], tf.int32)
+                    lpar=tf.tile(lpar,b)
+                    self.logits[0] = self.learndata[0]-lpar
+                else:
+                    self.pshape[0]=image.shape[0]*image.shape[1]
+                    self.param[0]=tf.Variable(0*image.astype(self.all_type).reshape(image.shape[0]*image.shape[1]))
+                    self.doreset[0]=self.param[0].assign(0*image.astype(self.all_type).reshape(image.shape[0]*image.shape[1]))
+                    self.logits[0] = self.learndata[0]-tf.reshape(self.param[0],[1,image.shape[0],image.shape[1],1])
+                
 
-            self.logits = self.learndata-self.param
-
-            sim1=self.learndata.get_shape().as_list()
+            self.inpar[0]=tf.placeholder(self.all_tf_type,shape=(self.pshape[0]))
+            self.rewind[0]=self.param[0].assign(self.inpar[0])
+            sim1=self.learndata[0].get_shape().as_list()
 
             if self.healpix==True:
                 self.noise1=tf.compat.v1.placeholder(self.all_tf_type,
@@ -634,38 +955,106 @@ class FoCUS:
             self.on2=on2
             self.oni1=oni1
             self.oni2=oni2
-            return(self.logits)
+            return(self.logits[0])
+        
+    # ---------------------------------------------−---------   
+    def add_image(self,image,xpadding=False,interpol=[]):
+        with tf.device(self.gpulist[self.gpupos%self.ngpu]):
+            
+            if self.healpix==True:
+                self.learndata[self.nparam]=tf.constant(image.astype(self.all_type).reshape(1,image.shape[0],1,1))
+                self.pshape[self.nparam]=image.shape[0]
+                self.param[self.nparam]=tf.Variable(0*image.astype(self.all_type).reshape(image.shape[0]))
+                self.doreset[self.nparam]=self.param[self.nparam].assign(0*image.astype(self.all_type).reshape(image.shape[0]))
+                self.logits[self.nparam] = self.learndata[self.nparam]-tf.reshape(self.param[self.nparam],[1,image.shape[0],1,1])
+            else:
+                limage=1*image
+                if len(interpol)>0:
+                    limage=self.donaiveinterpol(image,interpol,xpadding=xpadding)
+                self.learndata[self.nparam]=tf.constant(limage.astype(self.all_type).reshape(1,image.shape[0],image.shape[1],1))
+                if xpadding:
+                    self.pshape[self.nparam]=image.shape[0]*image.shape[1]//2
+                    tmp=0*image[:,0:image.shape[1]//2].astype(self.all_type).reshape(image.shape[0]*image.shape[1]//2)
+                    self.param[self.nparam]=tf.Variable(tmp)
+                    self.doreset[self.nparam]=self.param[self.nparam].assign(tmp)
+                    lpar=tf.reshape(self.param[self.nparam],[1,image.shape[0],image.shape[1]//2,1])
+                    b = tf.constant([1,1,2,1], tf.int32)
+                    lpar=tf.tile(lpar,b)
+                    self.logits[self.nparam] = self.learndata[self.nparam]-lpar
+                else:
+                    self.pshape[self.nparam]=image.shape[0]*image.shape[1]
+                    self.param[self.nparam]=tf.Variable(0*image.astype(self.all_type).reshape(image.shape[0]*image.shape[1]))
+                    self.doreset[self.nparam]=self.param[self.nparam].assign(0*image.astype(self.all_type).reshape(image.shape[0]*image.shape[1]))
+                    self.logits[self.nparam] = self.learndata[self.nparam]-tf.reshape(self.param[self.nparam],[1,image.shape[0],image.shape[1],1])
+                
+
+            self.inpar[self.nparam]=tf.placeholder(self.all_tf_type,shape=(self.pshape[self.nparam]))
+            self.rewind[self.nparam]=self.param[self.nparam].assign(self.inpar[self.nparam])
+            self.nparam=self.nparam+1
+            
+            return(self.logits[self.nparam-1])
     # ---------------------------------------------−---------
     def init_optim(self):
         
         LEARNING_RATE = 0.03
-        with tf.device(self.gpulist[self.gpupos]):
+        with tf.device(self.gpulist[self.gpupos%self.ngpu]):
             self.Tloss={} 
             self.loss=tf.constant(0,self.all_tf_type)
             self.nvarl={}
             self.nvar=0.0
+            
             for i in range(self.nloss):
                 self.nvarl[i]=1.0
-                self.Tloss[i]=tf.reduce_sum(tf.square(self.tw1[i]*(self.os1[i] - self.is1[i] -self.tb1[i]))) + tf.reduce_sum(tf.square(self.tw2[i]*(self.os2[i]- self.is2[i] -self.tb2[i])))
+                
+                if self.loss_type[i]==self.SCATDIFF:
+                    self.Tloss[i]=tf.reduce_sum(tf.square(self.tw1[i]*(self.os1[i] - self.is1[i] -self.tb1[i]))) + tf.reduce_sum(tf.square(self.tw2[i]*(self.os2[i]- self.is2[i] -self.tb2[i])))
+                    tshape=self.os1[i].get_shape().as_list()
+                    for j in range(len(tshape)):
+                        self.nvarl[i]=self.nvarl[i]*tshape[j]
+                    self.nvar=self.nvar+self.nvarl[i]
+                    
+                if self.loss_type[i]==self.MAPDIFF:
+                    self.Tloss[i]=self.diff_weight[i]*tf.reduce_sum(tf.square((self.diff_map1[i]-self.diff_map2[i])*self.diff_mask[i]))
+                    self.nvarl[self.nloss+i]=1.0
                 
                 self.loss=self.loss+self.Tloss[i]
-                tshape=self.os1[i].get_shape().as_list()
-                for j in range(len(tshape)):
-                    self.nvarl[i]=self.nvarl[i]*tshape[j]
-                self.nvar=self.nvar+self.nvarl[i]
+                
             self.learning_rate = tf.compat.v1.placeholder_with_default(tf.constant(LEARNING_RATE),shape=())
             self.numbatch = tf.Variable(0, dtype=self.all_tf_type)
         
             # Use simple momentum for the optimization.
             opti=tf.train.AdamOptimizer(self.learning_rate)
-            self.optimizer=opti.minimize(self.loss,global_step=self.numbatch)
-        
+
+            # if mpi is up compute gradient for each node
+            if self.size>1:
+                self.igrad={}
+                self.gradient={}
+                self.tgradient={}
+                self.apply_grad={}
+                for k in range(self.nparam):
+                    self.igrad[k]    = tf.placeholder(self.all_tf_type,shape=(self.pshape[k]))
+                    self.gradient[k] = opti.compute_gradients(self.loss,var_list=[self.param[k]])[0]
+                    self.tgradient[k] = [(self.igrad[k],self.gradient[k][1])]
+                    self.apply_grad[k] = opti.apply_gradients(self.tgradient[k],global_step=self.numbatch)
+                    
+                tlin=np.zeros([self.size+1],dtype=self.all_type)
+                tlout=np.zeros([self.size+1],dtype=self.all_type)
+                tlin[0]=self.nvar
+                tlin[1+self.rank]=self.nvarl[0]
+                self.comm.Allreduce((tlin,self.MPI_ALL_TYPE),(tlout,self.MPI_ALL_TYPE))
+                for i in range(self.size):
+                    self.nvarl[i]=tlout[1+i]
+                self.nvar=tlout[0]
+            else:
+                self.optimizer=opti.minimize(self.loss,global_step=self.numbatch)
+                
             self.sess=tf.Session()
 
             tf.global_variables_initializer().run(session=self.sess)
 
-            print('Initialized!')
-            sys.stdout.flush()
+            if self.rank==0:
+                print('Initialized!')
+                sys.stdout.flush()
         
         return(self.loss)
     # ---------------------------------------------−---------
@@ -675,66 +1064,158 @@ class FoCUS:
               EVAL_FREQUENCY = 100,
               DEVAL_STAT_FREQUENCY = 1000,
               LEARNING_RATE = 0.03,
-              ACURACY = 1E16):
+              ACURACY = 1E16,
+              gradmask=[],
+              ADDAPT_LEARN=1E30):
+
+        if len(gradmask)==0:
+            gradmask=[True for i in range(self.nparam)]
 
         minloss=1E30
-        with tf.device(self.gpulist[self.gpupos]):
+        with tf.device(self.gpulist[self.gpupos%self.ngpu]):
             feed_dict={}
             for i in range(self.nloss):
-                feed_dict[self.tw1[i]]=iw1[i]
-                feed_dict[self.tw2[i]]=iw2[i]
-                feed_dict[self.tb1[i]]=ib1[i]
-                feed_dict[self.tb2[i]]=ib2[i]
+                if self.loss_type[i]!=self.MAPDIFF:
+                    feed_dict[self.tw1[i]]=iw1[i]
+                    feed_dict[self.tw2[i]]=iw2[i]
+                    feed_dict[self.tb1[i]]=ib1[i]
+                    feed_dict[self.tb2[i]]=ib2[i]
+                    
             feed_dict[self.learning_rate]=LEARNING_RATE
 
             start_time = time.time()
             tl,l,lr=self.sess.run([self.Tloss,self.loss,self.learning_rate],
                                   feed_dict=feed_dict)
+            if self.size>1:
+                tlin=np.zeros([1],dtype=self.all_type)
+                tlout=np.zeros([1],dtype=self.all_type)
+                tlin[0]=l
+                self.comm.Allreduce((tlin,self.MPI_ALL_TYPE),(tlout,self.MPI_ALL_TYPE))
+                l=tlout[0]
+            if l==0:
+                l=1E30
             lstart=l
             step=0
+                
             while step<NUM_EPOCHS and l*ACURACY>lstart:
                     
                 
-                if step%EVAL_FREQUENCY==0:
+                if step%EVAL_FREQUENCY==0 or step==NUM_EPOCHS-1:
                 
                     elapsed_time = time.time() - start_time
                     start_time = time.time()
                     tl,l,lr=self.sess.run([self.Tloss,self.loss,self.learning_rate],
                                           feed_dict=feed_dict)
+                    if self.size>1:
+                        tlin=np.zeros([self.size+1],dtype=self.all_type)
+                        tlout=np.zeros([self.size+1],dtype=self.all_type)
+                        tlin[0]=l
+                        if self.nloss==1:
+                            tlin[1+self.rank]=tl[0]
+                        self.comm.Allreduce((tlin,self.MPI_ALL_TYPE),(tlout,self.MPI_ALL_TYPE))
+                        tl=tlout[1:1+self.size]
+                        l=tlout[0]
+                        
                     if l<minloss:
-                        omap=self.sess.run([self.logits])[0]
-                        lsize=omap.shape
-                        if self.nout==-1:
-                            omap=omap.reshape(lsize[1],lsize[2])
-                        else:
-                            omap=omap.flatten()
-                        minloss=l
+                        lpar={}
+                        for i in range(self.nparam):
+                            lmap=self.sess.run([self.param[i]])[0]
+                            lpar[i]=lmap
                             
-                    losstab=''
-                    for i in range(self.nloss):
-                        losstab=losstab+'%.3lg'%(tl[i]/self.nvarl[i])
-                        if i<self.nloss-1:
-                            losstab=losstab+','
-                    print('STEP %d mLoss=%.3g Loss=%.3lg(%s) Lr=%.3lg DT=%4.2fs'%(step,
-                                                                                  minloss/self.nvar,
-                                                                           l/self.nvar,
-                                                                           losstab,
-                                                                           lr,
-                                                                           elapsed_time))
-                    sys.stdout.flush()
-                self.sess.run(self.optimizer,feed_dict=feed_dict)
+                            lmap=self.sess.run([self.logits[i]])[0]
+                            lsize=lmap.shape
+                            if self.nout==-1:
+                                lmap=lmap.reshape(lsize[1],lsize[2])
+                                if i==0:
+                                    if self.nparam>1:
+                                        omap=lmap.reshape(lsize[1],lsize[2],1)
+                                    else:
+                                        omap=lmap
+                                else:
+                                    omap=np.concatenate((omap,lmap.reshape(lsize[1],lsize[2],1)),2)
+                            else:
+                                lmap=lmap.flatten()
+                                if i==0:
+                                    if self.nparam>1:
+                                        omap=lmap.reshape(lmap.shape[0],1)
+                                    else:
+                                        omap=lmap
+                                else:
+                                    omap=np.concatenate((omap,lmap.reshape(lmap.shape[0],1)),1)
+                                    
+                                
+                        minloss=l
+                    if l>ADDAPT_LEARN*minloss:
+                        lfeed={}
+                        for i in range(self.nparam):
+                            lfeed[self.inpar[i]]=lpar[i]
+                        self.sess.run(self.rewind, feed_dict=lfeed)
+                        feed_dict[self.learning_rate]=feed_dict[self.learning_rate]/10.0
+                            
+                    if self.size>1:
+                        losstab=''
+                        for i in range(self.size):
+                            losstab=losstab+'%9.3lg'%(tl[i]/self.nvarl[i])
+                            if i<self.size-1:
+                                losstab=losstab+','
+                    else:
+                        losstab=''
+                        for i in range(self.nloss):
+                            losstab=losstab+'%9.3lg'%(tl[i]/self.nvarl[i])
+                            if i<self.nloss-1:
+                                losstab=losstab+','
+                                
+                    if self.rank==0:
+                        print('STEP %d mLoss=%9.3g Loss=%9.3lg(%s) Lr=%.3lg DT=%4.2fs'%(step,
+                                                                                      minloss/self.nvar,
+                                                                                      l/self.nvar,
+                                                                                      losstab,
+                                                                                      lr,
+                                                                                      elapsed_time))
+                        sys.stdout.flush()
+                    
+                if self.size==1:
+                    self.sess.run(self.optimizer,feed_dict=feed_dict)
+                else:
+                    #====================================================================
+                    # compute the gradients1
+                    for k in range(self.nparam):
+                        
+                        if gradmask[k]:
+                            
+                            lgrad=self.sess.run([self.gradient[k]],feed_dict=feed_dict)[0]
+                            if 'dense_shape' in dir(lgrad[0]):
+                                vgrad = np.bincount(lgrad[0][1],weights=lgrad[0][0],minlength=lgrad[0][2][0]).astype(all_type)
+                            else:
+                                vgrad = np.array(lgrad)[0]
+                        else:
+                            vgrad=np.zeros([self.pshape[k]])
+                            
+                        tsgrad=np.zeros([self.pshape[k]])
+                        self.comm.Allreduce((vgrad,self.MPI_ALL_TYPE),(tsgrad,self.MPI_ALL_TYPE))
+                        # apply the gradients1
+                        feed_dict_grad={}
+                        feed_dict_grad[self.igrad[k]]=tsgrad
+                        self.sess.run(self.apply_grad[k], feed_dict=feed_dict_grad)
+                
                 feed_dict[self.learning_rate]=feed_dict[self.learning_rate]*DECAY_RATE
                 step=step+1
         return(omap)
 
     # ---------------------------------------------−---------
-    def get_map(self):
+    def get_map(self,idx=0):
                 
-        l=self.sess.run([self.logits])[0]
+        l=self.sess.run([self.logits[idx]])[0]
         lsize=l.shape
         if self.nout==-1:
             l=l.reshape(lsize[1],lsize[2])
         else:
             l=l.flatten()
+        return(l)
+    
+    # ---------------------------------------------−---------
+    def get_param(self,idx=0):
+                
+        l=self.sess.run([self.param[idx]])[0]
         return(l)
         
