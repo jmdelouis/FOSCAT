@@ -59,7 +59,8 @@ class FoCUS:
         else:
             self.size = 1
             self.rank = 0
-            
+        self.isMPI=isMPI
+        
         self.tw1={}
         self.tw2={}
         self.tb1={}
@@ -165,7 +166,7 @@ class FoCUS:
             for j in range(NORIENT):
                 self.mat_avg_ang[i+j*NORIENT,i]=1.0
         self.mat_avg_ang=tf.constant(self.mat_avg_ang)
-
+    
         
     # ---------------------------------------------−---------
     # --       COMPUTE 3X3 INDEX FOR HEALPIX WORK          --
@@ -296,7 +297,8 @@ class FoCUS:
     
     # ---------------------------------------------−---------
     def barrier(self):
-        self.comm.Barrier()
+        if self.isMPI:
+            self.comm.Barrier()
             
     # ---------------------------------------------−---------
     def get_ww(self):
