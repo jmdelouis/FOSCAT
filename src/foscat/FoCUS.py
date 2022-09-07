@@ -4,7 +4,7 @@ tf.disable_v2_behavior()
 import os, sys
 import time
 
-class foscat:
+class FoCUS:
     def __init__(self,
                  NORIENT=4,
                  LAMBDA=1.2,
@@ -21,7 +21,7 @@ class foscat:
         self.TEMPLATE_PATH=TEMPLATE_PATH
         
         if os.path.exists(self.TEMPLATE_PATH)==False:
-            print('The directory %s to store temporary information for Foscat does not exist: Try to create it'%(self.TEMPLATE_PATH))
+            print('The directory %s to store temporary information for FoCUS does not exist: Try to create it'%(self.TEMPLATE_PATH))
             try:
                 os.system('mkdir -p %s'%(self.TEMPLATE_PATH))
                 print('The directory %s is created')
@@ -85,7 +85,7 @@ class foscat:
                 self.all_tf_type=tf.float64
                 #self.MPI_ALL_TYPE=MPI.DOUBLE
             else:
-                print('ERROR INIT FOSCAT ',all_type,' should be float32 or float64')
+                print('ERROR INIT FOCUS ',all_type,' should be float32 or float64')
                 exit(0)
             
         #===========================================================================
