@@ -39,6 +39,9 @@ class FoCUS:
         self.loss_type={}
         self.MAPDIFF=1
         self.SCATDIFF=2
+
+        self.log=np.zeros([10])
+        self.nlog=0
         
         self.padding=padding
         self.healpix=healpix
@@ -633,6 +636,24 @@ class FoCUS:
         return(s1,s2)
     # ---------------------------------------------−---------
     
+    def donaiveinterpolH(self,im,mask):
+        lmask=1*mask
+        lim=1*im
+        lim[mask==0]=hp.UNSEEN
+        idx=np.where(lim==hp.UNSEEN)[0]
+        nin=int(np.sqrt(im.shape[0]//12))//2
+        nout=2*nin
+        while nin>0 and len(idx)>0:
+            th,ph=hp.pix2ang(nout,idx)
+            pidx=hp.ang2pix(nin,th,ph)
+            llim=hp.ud_grade(lim,nin)
+            lim[idx]=llim[pidx]
+            nin=nin//2
+            idx=np.where(lim==hp.UNSEEN)[0]
+        return(lim)
+    
+    # ---------------------------------------------−---------
+    
     def donaiveinterpol(self,im,mask,xpadding=False):
         lmask=1*mask
         tot=lmask.mean()
@@ -686,6 +707,7 @@ class FoCUS:
             self.diff_mask[self.nloss]=mask
             self.diff_weight[self.nloss]=tf.constant(np.array([weight]).astype(self.all_type))
             self.loss_type[self.nloss]=self.MAPDIFF
+            self.nloss=self.nloss+1
         
     # ---------------------------------------------−---------
     def add_loss(self,image1,image2,image3,image4,doL1=True,imaginary=False,avg_ang=False):
@@ -862,6 +884,11 @@ class FoCUS:
             self.logits={}
             
             if self.healpix==True:
+                if len(interpol)>0:
+                    limage=self.donaiveinterpolH(image,interpol)
+                else:
+                    limage=image
+                    
                 self.widx2={}
                 self.wcos={}
                 self.wsin={}
@@ -896,7 +923,7 @@ class FoCUS:
                     self.wcos[lout]=tf.reshape(tf.transpose(self.wwc),[1,self.NORIENT,1,npt])
                     self.wsin[lout]=tf.reshape(tf.transpose(self.wws),[1,self.NORIENT,1,npt])
 
-                self.learndata[0]=tf.constant(image.astype(self.all_type).reshape(1,image.shape[0],1,1))
+                self.learndata[0]=tf.constant(limage.astype(self.all_type).reshape(1,image.shape[0],1,1))
                 self.pshape[0]=image.shape[0]
                 self.param[0]=tf.Variable(0*image.astype(self.all_type).reshape(image.shape[0]))
                 self.doreset[0]=self.param[0].assign(0*image.astype(self.all_type).reshape(image.shape[0]))
@@ -964,7 +991,11 @@ class FoCUS:
         with tf.device(self.gpulist[self.gpupos%self.ngpu]):
             
             if self.healpix==True:
-                self.learndata[self.nparam]=tf.constant(image.astype(self.all_type).reshape(1,image.shape[0],1,1))
+                if len(interpol)>0:
+                    limage=self.donaiveinterpolH(image,interpol)
+                else:
+                    limage=image
+                self.learndata[self.nparam]=tf.constant(limage.astype(self.all_type).reshape(1,image.shape[0],1,1))
                 self.pshape[self.nparam]=image.shape[0]
                 self.param[self.nparam]=tf.Variable(0*image.astype(self.all_type).reshape(image.shape[0]))
                 self.doreset[self.nparam]=self.param[self.nparam].assign(0*image.astype(self.all_type).reshape(image.shape[0]))
@@ -1014,10 +1045,10 @@ class FoCUS:
                     for j in range(len(tshape)):
                         self.nvarl[i]=self.nvarl[i]*tshape[j]
                     self.nvar=self.nvar+self.nvarl[i]
-                    
+                
                 if self.loss_type[i]==self.MAPDIFF:
                     self.Tloss[i]=self.diff_weight[i]*tf.reduce_sum(tf.square((self.diff_map1[i]-self.diff_map2[i])*self.diff_mask[i]))
-                    self.nvarl[self.nloss+i]=1.0
+                    self.nvarl[i]=1.0
                 
                 self.loss=self.loss+self.Tloss[i]
                 
@@ -1175,6 +1206,12 @@ class FoCUS:
                                                                                       lr,
                                                                                       elapsed_time))
                         sys.stdout.flush()
+                        if self.nlog==self.log.shape[0]:
+                            new_log=np.zeros([self.log.shape[0]*2])
+                            new_log[0:self.nlog]=self.log
+                            self.log=new_log
+                        self.log[self.nlog]=l
+                        self.nlog=self.nlog+1
                     
                 if self.size==1:
                     self.sess.run(self.optimizer,feed_dict=feed_dict)
@@ -1184,7 +1221,6 @@ class FoCUS:
                     for k in range(self.nparam):
                         
                         if gradmask[k]:
-                            
                             lgrad=self.sess.run([self.gradient[k]],feed_dict=feed_dict)[0]
                             if 'dense_shape' in dir(lgrad[0]):
                                 vgrad = np.bincount(lgrad[0][1],weights=lgrad[0][0],minlength=lgrad[0][2][0]).astype(all_type)
@@ -1204,6 +1240,10 @@ class FoCUS:
                 step=step+1
         return(omap)
 
+    # ---------------------------------------------−---------
+    def get_log(self):
+        return(self.log[0:self.nlog])
+    
     # ---------------------------------------------−---------
     def get_map(self,idx=0):
                 
