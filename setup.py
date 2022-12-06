@@ -13,7 +13,7 @@ setup(
     maintainer_email='theo.foulquier@ifremer.fr',
     packages=['foscat'],
     package_dir={'': 'src'},
-    url='https://gitlab.ifremer.fr/deepsee/foscat',
+    url='https://github.com/jmdelouis/FOSCAT',
     keywords=['Scattering transform','Component separation', 'denoising'],
     install_requires=[
           'imageio',
