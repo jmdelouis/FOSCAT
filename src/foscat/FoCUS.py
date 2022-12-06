@@ -9,17 +9,17 @@ class FoCUS:
                  NORIENT=4,
                  LAMBDA=1.2,
                  KERNELSZ=3,
-                 slope=2.0,
+                 slope=1.0,
                  all_type='float64',
                  padding='SAME',
                  gpupos=0,
-                 healpix=False,
+                 healpix=True,
                  OSTEP=0,
                  isMPI=False,
                  TEMPLATE_PATH='data'):
-
-        self.TEMPLATE_PATH=TEMPLATE_PATH
         
+        self.TEMPLATE_PATH=TEMPLATE_PATH
+        self.tf=tf
         if os.path.exists(self.TEMPLATE_PATH)==False:
             print('The directory %s to store temporary information for FoCUS does not exist: Try to create it'%(self.TEMPLATE_PATH))
             try:
@@ -37,8 +37,11 @@ class FoCUS:
         self.diff_mask={}
         self.diff_weight={}
         self.loss_type={}
+        self.loss_weight={}
+        
         self.MAPDIFF=1
         self.SCATDIFF=2
+        self.NOISESTAT=3
 
         self.log=np.zeros([10])
         self.nlog=0
@@ -47,7 +50,12 @@ class FoCUS:
         self.healpix=healpix
         self.OSTEP=OSTEP
         self.nparam=0
-
+        self.on1={}
+        self.on2={}
+        self.tmpa={}
+        self.tmpb={}
+        self.tmpc={}
+        
         if isMPI:
             from mpi4py import MPI
 
@@ -160,8 +168,11 @@ class FoCUS:
             sigma=np.sqrt((wwc[:,i]**2).mean())
             wwc[:,i]/=sigma
             wws[:,i]/=sigma
+
         self.np_wwc=wwc
         self.np_wws=wws
+        self.wwc=tf.constant(wwc)
+        self.wws=tf.constant(wws)
         self.wwc=tf.constant(wwc)
         self.wws=tf.constant(wws)
         self.mat_avg_ang=np.zeros([NORIENT*NORIENT,NORIENT])
@@ -297,11 +308,28 @@ class FoCUS:
     # ---------------------------------------------−---------
     def get_rank(self):
         return(self.rank)
+    # ---------------------------------------------−---------
+    def get_size(self):
+        return(self.size)
     
     # ---------------------------------------------−---------
     def barrier(self):
         if self.isMPI:
             self.comm.Barrier()
+
+    
+    # ---------------------------------------------−---------
+    def do_conv(self,image):
+        c,s=self.get_ww()
+        lout=int(np.sqrt(image.shape[0]//12))
+        idx=np.load('%s/W%d_%d_IDX.npy'%(self.TEMPLATE_PATH,self.KERNELSZ**2,lout))
+        res=np.zeros([12*lout*lout,self.NORIENT],dtype='complex')
+        
+        res[:,:].real=np.sum(image[idx].reshape(12*lout*lout,self.KERNELSZ**2,1)
+                             *c.reshape(1,self.KERNELSZ**2,self.NORIENT),1)
+        res[:,:].imag=np.sum(image[idx].reshape(12*lout*lout,self.KERNELSZ**2,1)
+                             *s.reshape(1,self.KERNELSZ**2,self.NORIENT),1)
+        return(res)
             
     # ---------------------------------------------−---------
     def get_ww(self):
@@ -317,14 +345,13 @@ class FoCUS:
             plt.imshow(c[:,i].reshape(npt,npt),cmap='Greys',vmin=-0.5,vmax=1.0)
             plt.subplot(2,c.shape[1],1+i+c.shape[1])
             plt.imshow(s[:,i].reshape(npt,npt),cmap='Greys',vmin=-0.5,vmax=1.0)
-            print((c[:,i]**2+s[:,i]**2).sum(),(c[:,i]**2).sum(),c[:,i].sum(),s[:,i].sum())
             sys.stdout.flush()
         plt.show()
     # ---------------------------------------------−---------
     def relu(self,x):
         return tf.nn.relu(x)
     # ---------------------------------------------−---------
-    def hpwst_2(self,image1,mask,doL1=True):
+    def hpwst_2(self,image1,mask,doL1=True,doL2=False):
             
         BATCH_SIZE=1
         im_shape = image1.get_shape().as_list()
@@ -346,7 +373,7 @@ class FoCUS:
         s1=[]
         
         for iscale in range(nstep):
-            vnorm=tf.reshape(2.0/(tf.math.reduce_sum(vmask,1)),[self.NMASK,1,1])
+            vnorm=2.0/(tf.math.reduce_sum(vmask))
             im_shape = lim1.get_shape().as_list()
             alim1=tf.reshape(tf.gather(lim1,self.widx2[n0],axis=1),[BATCH_SIZE*norient,1,12*n0*n0,npt])
             cconv1 = tf.reduce_sum(self.wcos[n0]*alim1,3)
@@ -360,9 +387,10 @@ class FoCUS:
                 vals=vnorm*tf.math.reduce_sum(tf.reshape(vmask,[self.NMASK,1,1,12*n0*n0])*tf.reshape(tmp1,[1,l_shape[0],l_shape[1],l_shape[2]]),3)
                 ts1=vscale*tf.reshape(vals,[BATCH_SIZE*self.NMASK,norient,norient])
                 s1.append(ts1)
-            else:
-                valc=vnorm*tf.math.reduce_sum(tf.reshape(vmask,[self.NMASK,1,1,12*n0*n0])*tf.reshape(tconvc1,[1,l_shape[0],l_shape[1],l_shape[2]]),3)
-                ts1=vscale*tf.reshape(valc,[BATCH_SIZE*self.NMASK,norient,norient])
+                
+            if doL2:
+                vals=vnorm*tf.math.reduce_sum(tf.reshape(vmask,[self.NMASK,1,1,12*n0*n0])*tf.reshape(tconvc1,[1,l_shape[0],l_shape[1],l_shape[2]]),3)
+                ts1=vscale*tf.reshape(vals,[BATCH_SIZE*self.NMASK,norient,norient])
                 s1.append(ts1)
                 
 
@@ -372,68 +400,89 @@ class FoCUS:
             tshape=vmask.get_shape().as_list()
             vmask=tf.math.reduce_mean(tf.reshape(vmask,[self.NMASK,tshape[1]//4,4]),2) 
             n0=n0//2
-            vscale=vscale*self.slope
+            #vscale=vscale*self.slope
         
         return(tf.concat(s1,2))
 
     # ---------------------------------------------−---------
-    def hpwst1(self,image1,image2,doL1=True,imaginary=False,avg_ang=False):
+    #  Compute the CWST on the sphere
+    # 
+    # ---------------------------------------------−---------
+    def hpwst1(self,image1,image2,imaginary=False,avg_ang=False,doL1=True,doL2=False):
             
         BATCH_SIZE=1
         im_shape = image1.get_shape().as_list()
-        nout=int(im_shape[1])
-        norient=self.NORIENT
-            
+        nout=int(im_shape[1]) 
+        norient=self.NORIENT  
+
+        # compute the number of step : OSTEP can be configured
         nstep=int(np.log(np.sqrt(nout/12))/np.log(2))-self.OSTEP
+
+        # set temporal tensor with downgraded image
         lim1=image1
         lim2=image2
         tshape=self.mask.get_shape().as_list()
-        
+
+        # same for mask
         vmask=self.mask
 
+        # compute the input nside
         n0=int(np.sqrt(nout/12))
 
-
+        # information for internal loop
         vscale=1.0
         all_nstep=0
         wshape=self.widx2[n0].get_shape().as_list()
+
+        # number of wieghts in the convolution
         npt=wshape[0]//(12*n0*n0)
-        
+
+        # loop on all scales
         for iscale in range(nstep):
 
-            vnorm=tf.reshape(2.0/(tf.math.reduce_sum(vmask,1)),[self.NMASK,1,1])
+            vnorm=2.0/(tf.math.reduce_sum(vmask))
             im_shape = lim1.get_shape().as_list()
-            
+
+            # build table (BATCHSIZE)x(1)x(12*nside*nside)x(npt) of the two input maps
             alim1=tf.reshape(tf.gather(lim1,self.widx2[n0],axis=1),[BATCH_SIZE,1,12*n0*n0,npt])
             alim2=tf.reshape(tf.gather(lim2,self.widx2[n0],axis=1),[BATCH_SIZE,1,12*n0*n0,npt])
             
-            cconv1 = tf.reduce_sum(self.wcos[n0]*alim1,3)
+            # compute convolution for the real and imaginary part of each image
+            # sum (1)x(NORIENT)x(1)x(npt) * (BATCHSIZE)x(NORIENT)x(12*nside*nside)x(npt) sum sur (npt)
+            # => (BATCHSIZE)x(NORIENT)x(12*nside*nside)
+            cconv1 = tf.reduce_sum(self.wcos[n0]*alim1,3) 
             cconv2 = tf.reduce_sum(self.wcos[n0]*alim2,3)
             sconv1 = tf.reduce_sum(self.wsin[n0]*alim1,3)
             sconv2 = tf.reduce_sum(self.wsin[n0]*alim2,3)
-                
-            tconvc1=(cconv1*cconv2+sconv1*sconv2)
+
+            # compute the L2 norm
+            tconvc1=self.ampnorm[iscale]*(cconv1*cconv2+sconv1*sconv2)
+            # compute L1 norm
             tmpc1=tf.reshape(self.L1(tconvc1),[BATCH_SIZE*norient,12*n0*n0])
             
             l_shape=tconvc1.get_shape().as_list()
                 
             if doL1:
-                vals=vnorm*tf.math.reduce_sum(tf.reshape(vmask,[self.NMASK,1,1,12*n0*n0])*tf.reshape(tmpc1    ,[1,l_shape[0],l_shape[1],l_shape[2]]),3)
-                ts1=vscale*tf.reshape(vals,[BATCH_SIZE*self.NMASK,1,norient])
-                if iscale==0:
-                    s1=ts1
-                else:
-                    s1=tf.concat([s1,ts1],2)
-            else:
-                valc=vnorm*tf.math.reduce_sum(tf.reshape(vmask,[self.NMASK,1,1,12*n0*n0])*tf.reshape(tconvc1,[1,l_shape[0],l_shape[1],l_shape[2]]),3)
+                #do the sum using mask
+                valc=vnorm*tf.math.reduce_sum(tf.reshape(vmask,[self.NMASK,1,1,12*n0*n0])*tf.reshape(tmpc1    ,[1,l_shape[0],l_shape[1],l_shape[2]]),3)
+                # add to outputed stats
                 ts1=vscale*tf.reshape(valc,[BATCH_SIZE*self.NMASK,1,norient])
                 if iscale==0:
                     s1=ts1
                 else:
                     s1=tf.concat([s1,ts1],2)
+            if doL2:
+                
+                valc=vnorm*tf.math.reduce_sum(tf.reshape(vmask,[self.NMASK,1,1,12*n0*n0])*tf.reshape(tconvc1,[1,l_shape[0],l_shape[1],l_shape[2]]),3)
+                ts1=vscale*tf.reshape(valc,[BATCH_SIZE*self.NMASK,1,norient])
+                if iscale==0 and doL1==False:
+                    s1=ts1
+                else:
+                    s1=tf.concat([s1,ts1],2)
 
             if imaginary:
-                tconvs1=(cconv1*sconv2-sconv1*cconv2)
+                # do the same thing on imaginary part of the cross norm
+                tconvs1=self.ampnorm[iscale]*(cconv1*sconv2-sconv1*cconv2)
                 tmps1=tf.reshape(self.L1(tconvs1),[BATCH_SIZE*norient,12*n0*n0])
                     
                 if doL1:
@@ -443,23 +492,24 @@ class FoCUS:
                         c1=ts1
                     else:
                         c1=tf.concat([c1,ts1],2)
-                else:
-                    valc=vnorm*tf.math.reduce_sum(tf.reshape(vmask,[NMASK,1,1,12*n0*n0])*tf.reshape(tconvs1,[1,l_shape[0],l_shape[1],l_shape[2]]),3)
-                    ts1=vscale*tf.reshape(valc,[BATCH_SIZE*self.NMASK,1,norient])
-                    if iscale==0:
+                if doL2:
+                    vals=vnorm*tf.math.reduce_sum(tf.reshape(vmask,[self.NMASK,1,1,12*n0*n0])*tf.reshape(tconvs1,[1,l_shape[0],l_shape[1],l_shape[2]]),3)
+                    ts1=vscale*tf.reshape(vals,[BATCH_SIZE*self.NMASK,1,norient])
+                    if iscale==0 and doL1==False:
                         c1=ts1
                     else:
                         c1=tf.concat([c1,ts1],2)
 
             if iscale<nstep-1:
-                val2c=self.hpwst_2(self.relu(tmpc1),vmask,doL1=doL1)-self.hpwst_2(self.relu(-tmpc1),vmask,doL1=doL1)
+                # si l'echelle le permet calcul les coefs S2 callin hpwst2
+                val2c=self.hpwst_2(self.relu(tmpc1),vmask,doL1=doL1,doL2=doL2)-self.hpwst_2(self.relu(-tmpc1),vmask,doL1=doL1,doL2=doL2)
                 ts2= vscale*val2c
                 if iscale==0:
                     s2=ts2
                 else:
                     s2=tf.concat([s2,ts2],2)
                 if imaginary:
-                    val2s=self.hpwst_2(self.relu(tmps1),vmask,doL1=doL1)-self.hpwst_2(self.relu(-tmps1),vmask,doL1=doL1)
+                    val2s=self.hpwst_2(self.relu(tmps1),vmask,doL1=doL1,doL2=doL2)-self.hpwst_2(self.relu(-tmps1),vmask,doL1=doL1,doL2=doL2)
                 
                     ts2= vscale*val2s
                     if iscale==0:
@@ -489,7 +539,7 @@ class FoCUS:
             
         return(s1,s2)
     # ---------------------------------------------−---------      
-    def cwst_2(self,image1,mask):
+    def cwst_2(self,image1,mask,doL1=True,doL2=False):
 
         BATCH_SIZE=1
         slope=self.slope
@@ -514,19 +564,26 @@ class FoCUS:
             convs1 = tf.nn.conv2d(lim1,iwws,strides=[1, 1, 1, 1],
                                   padding=self.padding,name='sconv1_%d'%(iscale))
             
-            tconvc1=convc1*convc1+convs1*convs1
-            tconvc1=self.L1(tconvc1)
-            valc=tf.math.reduce_sum(tf.reshape(tf.reshape(vmask,[BATCH_SIZE,1,self.NMASK,n0,n1,1])*
-                                               tf.reshape(tconvc1,[BATCH_SIZE,self.NORIENT,1,n0,n1,self.NORIENT]),
-                                               [BATCH_SIZE*self.NMASK*self.NORIENT,n0*n1,self.NORIENT]),1)
-            
-            tshape=valc.get_shape().as_list()
-            
-            ts1=vscale*tf.reshape(valc,[BATCH_SIZE*self.NMASK,self.NORIENT,self.NORIENT])
-            if iscale==0:
-                s1=ts1
-            else:
-                s1=tf.concat([s1,ts1],2)
+            tconvc1_l2=convc1*convc1+convs1*convs1
+            tconvc1=self.L1(tconvc1_l2)
+            if doL1:
+                valc=tf.math.reduce_sum(tf.reshape(tf.reshape(vmask,[BATCH_SIZE,1,self.NMASK,n0,n1,1])*
+                                                   tf.reshape(tconvc1,[BATCH_SIZE,self.NORIENT,1,n0,n1,self.NORIENT]),
+                                                   [BATCH_SIZE*self.NMASK*self.NORIENT,n0*n1,self.NORIENT]),1)
+                ts1=vscale*tf.reshape(valc,[BATCH_SIZE*self.NMASK,self.NORIENT,self.NORIENT])
+                if iscale==0:
+                    s1=ts1
+                else:
+                    s1=tf.concat([s1,ts1],2)
+            if doL2:
+                valc=tf.math.reduce_sum(tf.reshape(tf.reshape(vmask,[BATCH_SIZE,1,self.NMASK,n0,n1,1])*
+                                                   tf.reshape(tconvc1_l2,[BATCH_SIZE,self.NORIENT,1,n0,n1,self.NORIENT]),
+                                                   [BATCH_SIZE*self.NMASK*self.NORIENT,n0*n1,self.NORIENT]),1)
+                ts1=vscale*tf.reshape(valc,[BATCH_SIZE*self.NMASK,self.NORIENT,self.NORIENT])
+                if iscale==0 and doL1==False:
+                    s1=ts1
+                else:
+                    s1=tf.concat([s1,ts1],2)
                 
             lim1=2*tf.nn.avg_pool(lim1,ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1],padding='SAME')
             vmask=tf.reshape(tf.nn.avg_pool(tf.reshape(vmask,[self.NMASK,n0,n1,1]), ksize=[1, 2, 2, 1],
@@ -537,12 +594,13 @@ class FoCUS:
             n1=n1//2
             vscale=vscale*self.slope
         return(s1)
+    
     # ---------------------------------------------−---------
     def L1(self,tmp):
         return(tf.sign(tmp)*tf.sqrt(tf.sign(tmp)*tmp))
     
     # ---------------------------------------------−---------    
-    def cwst1(self,image1,image2,imaginary=False,avg_ang=False):
+    def cwst1(self,image1,image2,imaginary=False,avg_ang=False,doL1=True,doL2=False):
 
         BATCH_SIZE=1
         slope=self.slope
@@ -561,39 +619,60 @@ class FoCUS:
         all_nstep=0
         iwwc=tf.reshape(self.wwc,[self.KERNELSZ,self.KERNELSZ,1,self.NORIENT])
         iwws=tf.reshape(self.wws,[self.KERNELSZ,self.KERNELSZ,1,self.NORIENT])
+        
         for iscale in range(nstep):
             convc1 = tf.nn.conv2d(lim1,iwwc,strides=[1, 1, 1, 1],padding=self.padding,name='cconv1_%d'%(iscale))
             convc2 = tf.nn.conv2d(lim2,iwwc,strides=[1, 1, 1, 1],padding=self.padding,name='cconv2_%d'%(iscale))
             convs1 = tf.nn.conv2d(lim1,iwws,strides=[1, 1, 1, 1],padding=self.padding,name='sconv1_%d'%(iscale))
             convs2 = tf.nn.conv2d(lim2,iwws,strides=[1, 1, 1, 1],padding=self.padding,name='sconv2_%d'%(iscale))
             
-            tconvc1=convc1*convc2+convs1*convs2
-            tconvc1=self.L1(tconvc1)
-            valc=tf.math.reduce_sum(tf.reshape(tf.reshape(vmask,[BATCH_SIZE,self.NMASK,n0,n1,1])*
-                                               tf.reshape(tconvc1,[BATCH_SIZE,1,n0,n1,norient]),
-                                               [BATCH_SIZE*self.NMASK,n0*n1,norient]),1)
-            tshape=valc.get_shape().as_list()
-            
-            ts1=vscale*tf.reshape(valc,[BATCH_SIZE*self.NMASK,1,norient])
-            if iscale==0:
-                s1=ts1
-            else:
-                s1=tf.concat([s1,ts1],2)
+            tconvc1_l2=convc1*convc2+convs1*convs2
+            tconvc1=self.L1(tconvc1_l2)
+
+            if doL1:
+                valc=tf.math.reduce_sum(tf.reshape(tf.reshape(vmask,[BATCH_SIZE,self.NMASK,n0,n1,1])*
+                                                   tf.reshape(tconvc1,[BATCH_SIZE,1,n0,n1,norient]),
+                                                   [BATCH_SIZE*self.NMASK,n0*n1,norient]),1)
+                ts1=vscale*tf.reshape(valc,[BATCH_SIZE*self.NMASK,1,norient])
+                if iscale==0:
+                    s1=ts1
+                else:
+                    s1=tf.concat([s1,ts1],2)
+            if doL2:
+                valc=tf.math.reduce_sum(tf.reshape(tf.reshape(vmask,[BATCH_SIZE,self.NMASK,n0,n1,1])*
+                                                   tf.reshape(tconvc1_l2,[BATCH_SIZE,1,n0,n1,norient]),
+                                                   [BATCH_SIZE*self.NMASK,n0*n1,norient]),1)
+                ts1=vscale*tf.reshape(valc,[BATCH_SIZE*self.NMASK,1,norient])
+                if iscale==0 and doL1==False:
+                    s1=ts1
+                else:
+                    s1=tf.concat([s1,ts1],2)
 
             if imaginary:
-                tconvs1=convc1*convs2-convc2*convs1
-                tconvs1=self.L1(tconvs1)
-                vals=tf.math.reduce_sum(tf.reshape(tf.reshape(vmask,[BATCH_SIZE,self.NMASK,n0,n1,1])*
-                                                   tf.reshape(tconvs1,[BATCH_SIZE,1,n0,n1,norient]),
-                                                   [BATCH_SIZE*self.NMASK,n0*n1,norient]),1)
-                ts1=vscale*tf.reshape(vals,[BATCH_SIZE*self.NMASK,1,norient])
-                if iscale==0:
-                    c1=ts1
-                else:
-                    c1=tf.concat([c1,ts1],2)
+                tconvs1_l2=convc1*convs2-convc2*convs1
+                tconvs1=self.L1(tconvs1_l2)
+                
+                if doL1:
+                    vals=tf.math.reduce_sum(tf.reshape(tf.reshape(vmask,[BATCH_SIZE,self.NMASK,n0,n1,1])*
+                                                       tf.reshape(tconvs1,[BATCH_SIZE,1,n0,n1,norient]),
+                                                       [BATCH_SIZE*self.NMASK,n0*n1,norient]),1)
+                    ts1=vscale*tf.reshape(vals,[BATCH_SIZE*self.NMASK,1,norient])
+                    if iscale==0:
+                        c1=ts1
+                    else:
+                        c1=tf.concat([c1,ts1],2)
+                if doL2:
+                    vals=tf.math.reduce_sum(tf.reshape(tf.reshape(vmask,[BATCH_SIZE,self.NMASK,n0,n1,1])*
+                                                       tf.reshape(tconvs1_l2,[BATCH_SIZE,1,n0,n1,norient]),
+                                                       [BATCH_SIZE*self.NMASK,n0*n1,norient]),1)
+                    ts1=vscale*tf.reshape(vals,[BATCH_SIZE*self.NMASK,1,norient])
+                    if iscale==0 and doL1==False:
+                        c1=ts1
+                    else:
+                        c1=tf.concat([c1,ts1],2)
 
             if iscale<nstep-1:
-                val2c=self.cwst_2(self.relu(tconvc1),vmask)-self.cwst_2(self.relu(-tconvc1),vmask)
+                val2c=self.cwst_2(self.relu(tconvc1),vmask,doL1=doL1,doL2=doL2)-self.cwst_2(self.relu(-tconvc1),vmask,doL1=doL1,doL2=doL2)
             
                 tshape2=val2c.get_shape().as_list()
                 
@@ -604,7 +683,7 @@ class FoCUS:
                     s2=tf.concat([s2,ts2],2)
                 
                 if imaginary:
-                    val2s=self.cwst_2(self.relu(tconvs1),vmask)-self.cwst_2(self.relu(-tconvs1),vmask)
+                    val2s=self.cwst_2(self.relu(tconvs1),vmask,doL1=doL1,doL2=doL2)-self.cwst_2(self.relu(-tconvs1),vmask,doL1=doL1,doL2=doL2)
                     
                     ts2= vscale*val2s
                     
@@ -708,17 +787,35 @@ class FoCUS:
             self.diff_weight[self.nloss]=tf.constant(np.array([weight]).astype(self.all_type))
             self.loss_type[self.nloss]=self.MAPDIFF
             self.nloss=self.nloss+1
+            
+    # ---------------------------------------------−---------
+    def add_loss_noise_stat(self,mask,noise,image,weight=1.0):
+        with tf.device(self.gpulist[self.gpupos%self.ngpu]):
+            vv=np.zeros([self.NMASK])
+            for k in range(self.NMASK):
+                vv[k]=np.mean((noise*mask[k].reshape(1,12*self.nout*self.nout))**2)
+            nstat=tf.reduce_mean(tf.square(tf.reshape(self.mask,[self.NMASK,12*self.nout*self.nout])
+                                           *tf.reshape(self.param[0],[1,12*self.nout*self.nout])),1)
+            self.diff_map1[self.nloss]=tf.constant(vv)
+            self.diff_map2[self.nloss]=nstat
+            self.diff_weight[self.nloss]=weight
+            self.loss_type[self.nloss]=self.NOISESTAT
+            self.nloss=self.nloss+1
         
     # ---------------------------------------------−---------
-    def add_loss(self,image1,image2,image3,image4,doL1=True,imaginary=False,avg_ang=False):
+    def add_loss(self,image1,image2,image3,image4,doL1=True,doL2=False,imaginary=False,avg_ang=False,weight=1.0):
 
+        if doL1==False and doL2==False:
+            print('You have to choose a statistic L1 or L2 or both here doL1=False and doL2=False')
+            exit(0)
+            
         with tf.device(self.gpulist[self.nloss%self.ngpu]):
             if self.nout!=-1:
-                os1,os2=self.hpwst1(image1,image2,doL1=doL1,imaginary=imaginary,avg_ang=avg_ang)
-                is1,is2=self.hpwst1(image3,image4,doL1=doL1,imaginary=imaginary,avg_ang=avg_ang)
+                os1,os2=self.hpwst1(image1,image2,doL1=doL1,doL2=doL2,imaginary=imaginary,avg_ang=avg_ang)
+                is1,is2=self.hpwst1(image3,image4,doL1=doL1,doL2=doL2,imaginary=imaginary,avg_ang=avg_ang)
             else:
-                os1,os2=self.cwst1(image1,image2,imaginary=imaginary,avg_ang=avg_ang)
-                is1,is2=self.cwst1(image3,image4,imaginary=imaginary,avg_ang=avg_ang)
+                os1,os2=self.cwst1(image1,image2,imaginary=imaginary,avg_ang=avg_ang,doL1=doL1,doL2=doL2)
+                is1,is2=self.cwst1(image3,image4,imaginary=imaginary,avg_ang=avg_ang,doL1=doL1,doL2=doL2)
 
             self.os1[self.nloss]=os1
             self.os2[self.nloss]=os2
@@ -758,26 +855,30 @@ class FoCUS:
             self.ss1[self.nloss]=ss1
             self.ss2[self.nloss]=ss2
             self.loss_type[self.nloss]=self.SCATDIFF
-
+            self.loss_weight[self.nloss]=weight
             self.nloss=self.nloss+1
 
     # ---------------------------------------------−---------
-    def add_loss_healpix(self,image1,image2,image3,image4,avg_ang=False,imaginary=False):
+    def add_loss_healpix(self,image1,image2,image3,image4,avg_ang=False,imaginary=False,weight=1.0,doL1=True,doL2=False):
         
-        self.add_loss(image1,image2,image3,image4,avg_ang=avg_ang,imaginary=imaginary)
+        self.add_loss(image1,image2,image3,image4,avg_ang=avg_ang,imaginary=imaginary,weight=weight,doL1=doL1,doL2=doL2)
     # ---------------------------------------------−---------  
-    def add_loss_2d(self,image1,image2,image3,image4,avg_ang=False,imaginary=False):
+    def add_loss_2d(self,image1,image2,image3,image4,avg_ang=False,imaginary=False,weight=1.0,doL1=True,doL2=False):
         
-        self.add_loss(image1,image2,image3,image4,avg_ang=avg_ang,imaginary=imaginary)
+        self.add_loss(image1,image2,image3,image4,avg_ang=avg_ang,imaginary=imaginary,weight=weight,doL1=doL1,doL2=doL2)
     
     # ---------------------------------------------−---------  
-    def add_loss_determ(self,image1,image2,doL1=True,avg_ang=False,imaginary=False):
+    def add_loss_determ(self,image1,image2,doL1=True,doL2=False,avg_ang=False,imaginary=False,weight=1.0):
         
+        if doL1==False and doL2==False:
+            print('You have to choose a statistic L1 or L2 or both here doL1=False and doL2=False')
+            exit(0)
+            
         with tf.device(self.gpulist[self.nloss%self.ngpu]):
             if self.nout!=-1:
-                os1,os2=self.hpwst1(image1,image2,doL1=self.doL1,imaginary=imaginary,avg_ang=avg_ang)
+                os1,os2=self.hpwst1(image1,image2,doL1=doL1,doL2=doL2,imaginary=imaginary,avg_ang=avg_ang)
             else:
-                os1,os2=self.cwst1(image1,image2,imaginary=imaginary,avg_ang=avg_ang)
+                os1,os2=self.cwst1(image1,image2,doL1=doL1,doL2=doL2,imaginary=imaginary,avg_ang=avg_ang)
 
             self.os1[self.nloss]=os1
             self.os2[self.nloss]=os2
@@ -817,12 +918,17 @@ class FoCUS:
             self.ss1[self.nloss]=ss1
             self.ss2[self.nloss]=ss2
             self.loss_type[self.nloss]=self.SCATDIFF
+            self.loss_weight[self.nloss]=weight
 
             self.nloss=self.nloss+1
         
     # ---------------------------------------------−---------
-    def calc_stat(self,n1,n2,imaginary=False,gpupos=0,avg_ang=False):
+    def calc_stat(self,n1,n2,imaginary=False,gpupos=0,avg_ang=False,doL1=True,doL2=False):
         
+        if doL1==False and doL2==False:
+            print('You have to choose a statistic L1 or L2 or both here doL1=False and doL2=False')
+            exit(0)
+            
         with tf.device(self.gpulist[gpupos%self.ngpu]):
             nsim=n1.shape[0]
             for i in range(nsim):
@@ -836,16 +942,13 @@ class FoCUS:
                     feed_dict[self.noise1]=n1[i].reshape(1,nx,ny,1)
                     feed_dict[self.noise2]=n2[i].reshape(1,nx,ny,1)
 
-                if imaginary:
-                    if avg_ang==False:
-                        o1,o2= self.sess.run([self.oni1,self.oni2],feed_dict=feed_dict)
-                    else:
-                        o1,o2= self.sess.run([self.av_oni1,self.av_oni2],feed_dict=feed_dict)
-                else:
-                    if avg_ang==False:
-                        o1,o2= self.sess.run([self.on1,self.on2],feed_dict=feed_dict)
-                    else:
-                        o1,o2= self.sess.run([self.av_on1,self.av_on2],feed_dict=feed_dict)
+                    
+                icase=int((imaginary==True)
+                          +2*(avg_ang==True)
+                          +4*(doL1==True)
+                          +8*(doL2==True))
+                
+                o1,o2= self.sess.run([self.on1[icase],self.on2[icase]],feed_dict=feed_dict)
 
                 if i==0:
                     if avg_ang:
@@ -873,7 +976,7 @@ class FoCUS:
     def reset(self):
         self.sess.run(self.doreset)
     # ---------------------------------------------−---------   
-    def init_synthese(self,image,interpol=[],xpadding=False):
+    def init_synthese(self,image,image1=None,image2=None,interpol=[],xpadding=False):
         self.nout=-1
         with tf.device(self.gpulist[self.gpupos%self.ngpu]):
             self.nparam=1
@@ -898,7 +1001,7 @@ class FoCUS:
                 if self.rank==0:
                     print('Initialize HEALPIX synthesis NSIDE=',nout)
                     sys.stdout.flush()
-                    
+                self.ampnorm={}
                 for i in range(nstep):
                     lout=nout//(2**i)
                     try:
@@ -923,6 +1026,35 @@ class FoCUS:
                     self.wcos[lout]=tf.reshape(tf.transpose(self.wwc),[1,self.NORIENT,1,npt])
                     self.wsin[lout]=tf.reshape(tf.transpose(self.wws),[1,self.NORIENT,1,npt])
 
+                    if (image1 is not None):
+                        atmp=np.zeros([1,4,1])
+                        if i==0:
+                            tmp1=image1
+                            tmp2=image2
+                        else:
+                            tmp1=np.mean((image1).reshape(12*nout*nout//4**(i),4**i),1)
+                            tmp2=np.mean((image2).reshape(12*nout*nout//4**(i),4**i),1)
+                
+                        cs1=np.mean(tmp1[tmp]*(self.np_wwc.T).reshape(self.NORIENT,1,self.KERNELSZ**2),2)
+                        ss1=np.mean(tmp1[tmp]*(self.np_wws.T).reshape(self.NORIENT,1,self.KERNELSZ**2),2)
+                        cs2=np.mean(tmp2[tmp]*(self.np_wwc.T).reshape(self.NORIENT,1,self.KERNELSZ**2),2)
+                        ss2=np.mean(tmp2[tmp]*(self.np_wws.T).reshape(self.NORIENT,1,self.KERNELSZ**2),2)
+
+                        #import healpy as hp
+                        
+                        for k in range(self.NORIENT):
+                            res=cs1[k]*cs2[k]+ss1[k]*ss2[k]
+                            atmp[0,k,0]=(1/res.std())
+                
+                        if self.rank==0:
+                            print('Scale ',i,atmp[0,:,0])
+                            sys.stdout.flush()
+
+                        self.ampnorm[i]=tf.constant(atmp,dtype=self.all_tf_type)
+                    else:
+                        self.ampnorm[i]=tf.constant(1.0,dtype=self.all_tf_type)
+                    
+                    
                 self.learndata[0]=tf.constant(limage.astype(self.all_type).reshape(1,image.shape[0],1,1))
                 self.pshape[0]=image.shape[0]
                 self.param[0]=tf.Variable(0*image.astype(self.all_type).reshape(image.shape[0]))
@@ -954,6 +1086,7 @@ class FoCUS:
             self.rewind[0]=self.param[0].assign(self.inpar[0])
             sim1=self.learndata[0].get_shape().as_list()
 
+                
             if self.healpix==True:
                 self.noise1=tf.compat.v1.placeholder(self.all_tf_type,
                                                      shape=(1,sim1[1],1,1),
@@ -961,10 +1094,17 @@ class FoCUS:
                 self.noise2=tf.compat.v1.placeholder(self.all_tf_type,
                                                      shape=(1,sim1[1],1,1),
                                                      name='NOISE2_%d'%(self.nloss))
-                oni1,oni2=self.hpwst1(self.noise1,self.noise2,imaginary=True)
-                on1,on2=self.hpwst1(self.noise1,self.noise2)
-                av_oni1,av_oni2=self.hpwst1(self.noise1,self.noise2,imaginary=True,avg_ang=True)
-                av_on1,av_on2=self.hpwst1(self.noise1,self.noise2,avg_ang=True)
+
+                for i in range(16):
+                    if ((i//4)%2)+((i//8)%2)!=0:
+                        on1,on2=self.hpwst1(self.noise1,
+                                            self.noise2,
+                                            imaginary=(i%2)==1,
+                                            avg_ang=((i//2)%2)==1,
+                                            doL1=((i//4)%2)==1,
+                                            doL2=((i//8)%2)==1)
+                        self.on1[i]=on1
+                        self.on2[i]=on2
             else:
                 self.noise1=tf.compat.v1.placeholder(self.all_tf_type,
                                                      shape=(1,sim1[1],sim1[2],1),
@@ -972,18 +1112,17 @@ class FoCUS:
                 self.noise2=tf.compat.v1.placeholder(self.all_tf_type,
                                                      shape=(1,sim1[1],sim1[2],1),
                                                      name='NOISE2_%d'%(self.nloss))
-                oni1,oni2=self.cwst1(self.noise1,self.noise2,imaginary=True)
-                on1,on2=self.cwst1(self.noise1,self.noise2)
-                av_oni1,av_oni2=self.cwst1(self.noise1,self.noise2,imaginary=True,avg_ang=True)
-                av_on1,av_on2=self.cwst1(self.noise1,self.noise2,avg_ang=True)
-            self.av_on1=av_on1
-            self.av_on2=av_on2
-            self.av_oni1=av_oni1
-            self.av_oni2=av_oni2
-            self.on1=on1
-            self.on2=on2
-            self.oni1=oni1
-            self.oni2=oni2
+
+                for i in range(16):
+                    if ((i//4)%2)+((i//8)%2)!=0:
+                        on1,on2=self.cwst1(self.noise1,self.noise2,
+                                           imaginary=(i%2)==1,
+                                           avg_ang=((i//2)%2)==1,
+                                           doL1=((i//4)%2)==1,
+                                           doL2=((i//8)%2)==1)
+                        self.on1[i]=on1
+                        self.on2[i]=on2
+                    
             return(self.logits[0])
         
     # ---------------------------------------------−---------   
@@ -1032,7 +1171,7 @@ class FoCUS:
         LEARNING_RATE = 0.03
         with tf.device(self.gpulist[self.gpupos%self.ngpu]):
             self.Tloss={} 
-            self.loss=tf.constant(0,self.all_tf_type)
+            self.Topti={} 
             self.nvarl={}
             self.nvar=0.0
             
@@ -1040,7 +1179,7 @@ class FoCUS:
                 self.nvarl[i]=1.0
                 
                 if self.loss_type[i]==self.SCATDIFF:
-                    self.Tloss[i]=tf.reduce_sum(tf.square(self.tw1[i]*(self.os1[i] - self.is1[i] -self.tb1[i]))) + tf.reduce_sum(tf.square(self.tw2[i]*(self.os2[i]- self.is2[i] -self.tb2[i])))
+                    self.Tloss[i]=self.loss_weight[i]*(tf.reduce_sum(tf.square(self.tw1[i]*(self.os1[i] - self.is1[i] -self.tb1[i]))) + tf.reduce_sum(tf.square(self.tw2[i]*(self.os2[i]- self.is2[i] -self.tb2[i]))))
                     tshape=self.os1[i].get_shape().as_list()
                     for j in range(len(tshape)):
                         self.nvarl[i]=self.nvarl[i]*tshape[j]
@@ -1049,8 +1188,14 @@ class FoCUS:
                 if self.loss_type[i]==self.MAPDIFF:
                     self.Tloss[i]=self.diff_weight[i]*tf.reduce_sum(tf.square((self.diff_map1[i]-self.diff_map2[i])*self.diff_mask[i]))
                     self.nvarl[i]=1.0
-                
-                self.loss=self.loss+self.Tloss[i]
+                    
+                if self.loss_type[i]==self.NOISESTAT:
+                    self.Tloss[i]=self.diff_weight[i]*tf.reduce_sum(tf.square(self.diff_map1[i]-self.diff_map2[i]))
+                    self.nvarl[i]=self.NMASK
+                if i==0:
+                    self.loss = self.Tloss[i]
+                else:
+                    self.loss = self.loss+self.Tloss[i]
                 
             self.learning_rate = tf.compat.v1.placeholder_with_default(tf.constant(LEARNING_RATE),shape=())
             self.numbatch = tf.Variable(0, dtype=self.all_tf_type)
@@ -1080,6 +1225,8 @@ class FoCUS:
                 self.nvar=tlout[0]
             else:
                 self.optimizer=opti.minimize(self.loss,global_step=self.numbatch)
+                for i in self.Tloss:
+                    self.Topti[i]=opti.minimize(self.Tloss[i],global_step=self.numbatch)
                 
             self.sess=tf.Session()
 
@@ -1099,16 +1246,17 @@ class FoCUS:
               LEARNING_RATE = 0.03,
               ACURACY = 1E16,
               gradmask=[],
-              ADDAPT_LEARN=1E30):
+              ADDAPT_LEARN=1E30,
+              SEQUENTIAL_ITT=0):
 
         if len(gradmask)==0:
             gradmask=[True for i in range(self.nparam)]
 
-        minloss=1E30
+        minloss=1E300
         with tf.device(self.gpulist[self.gpupos%self.ngpu]):
             feed_dict={}
             for i in range(self.nloss):
-                if self.loss_type[i]!=self.MAPDIFF:
+                if self.loss_type[i]==self.SCATDIFF:
                     feed_dict[self.tw1[i]]=iw1[i]
                     feed_dict[self.tw2[i]]=iw2[i]
                     feed_dict[self.tb1[i]]=ib1[i]
@@ -1126,10 +1274,34 @@ class FoCUS:
                 self.comm.Allreduce((tlin,self.MPI_ALL_TYPE),(tlout,self.MPI_ALL_TYPE))
                 l=tlout[0]
             if l==0:
-                l=1E30
+                l=1E300
             lstart=l
             step=0
-                
+            lpar={}
+            #initialize omap
+            for i in range(self.nparam):
+                            
+                lmap=self.sess.run([self.logits[i]])[0]
+                lsize=lmap.shape
+                if self.nout==-1:
+                    lmap=lmap.reshape(lsize[1],lsize[2])
+                    if i==0:
+                        if self.nparam>1:
+                            omap=lmap.reshape(lsize[1],lsize[2],1)
+                        else:
+                            omap=lmap
+                    else:
+                        omap=np.concatenate((omap,lmap.reshape(lsize[1],lsize[2],1)),2)
+                else:
+                    lmap=lmap.flatten()
+                    if i==0:
+                        if self.nparam>1:
+                            omap=lmap.reshape(lmap.shape[0],1)
+                        else:
+                            omap=lmap
+                    else:
+                        omap=np.concatenate((omap,lmap.reshape(lmap.shape[0],1)),1)
+
             while step<NUM_EPOCHS and l*ACURACY>lstart:
                     
                 
@@ -1142,15 +1314,20 @@ class FoCUS:
                     if self.size>1:
                         tlin=np.zeros([self.size+1],dtype=self.all_type)
                         tlout=np.zeros([self.size+1],dtype=self.all_type)
-                        tlin[0]=l
+                        if len(tl)==1:
+                            tlin[0]=l
+                        else:
+                            tlin[0]=l
                         if self.nloss==1:
                             tlin[1+self.rank]=tl[0]
+                        else:
+                            tlin[1+self.rank]=l
+                            
                         self.comm.Allreduce((tlin,self.MPI_ALL_TYPE),(tlout,self.MPI_ALL_TYPE))
                         tl=tlout[1:1+self.size]
                         l=tlout[0]
                         
                     if l<minloss:
-                        lpar={}
                         for i in range(self.nparam):
                             lmap=self.sess.run([self.param[i]])[0]
                             lpar[i]=lmap
@@ -1178,30 +1355,31 @@ class FoCUS:
                                     
                                 
                         minloss=l
-                    if l>ADDAPT_LEARN*minloss:
+                    if l>ADDAPT_LEARN*minloss and len(lpar)>0:
                         lfeed={}
                         for i in range(self.nparam):
                             lfeed[self.inpar[i]]=lpar[i]
+                            
                         self.sess.run(self.rewind, feed_dict=lfeed)
                         feed_dict[self.learning_rate]=feed_dict[self.learning_rate]/10.0
                             
                     if self.size>1:
                         losstab=''
                         for i in range(self.size):
-                            losstab=losstab+'%9.3lg'%(tl[i]/self.nvarl[i])
+                            losstab=losstab+'%9.4lg'%(np.sqrt(tl[i]))
                             if i<self.size-1:
                                 losstab=losstab+','
                     else:
                         losstab=''
                         for i in range(self.nloss):
-                            losstab=losstab+'%9.3lg'%(tl[i]/self.nvarl[i])
+                            losstab=losstab+'%9.4lg'%(np.sqrt(tl[i]))
                             if i<self.nloss-1:
                                 losstab=losstab+','
                                 
                     if self.rank==0:
                         print('STEP %d mLoss=%9.3g Loss=%9.3lg(%s) Lr=%.3lg DT=%4.2fs'%(step,
-                                                                                      minloss/self.nvar,
-                                                                                      l/self.nvar,
+                                                                                      np.sqrt(minloss),
+                                                                                      np.sqrt(l),
                                                                                       losstab,
                                                                                       lr,
                                                                                       elapsed_time))
@@ -1212,14 +1390,17 @@ class FoCUS:
                             self.log=new_log
                         self.log[self.nlog]=l
                         self.nlog=self.nlog+1
-                    
+                        
                 if self.size==1:
-                    self.sess.run(self.optimizer,feed_dict=feed_dict)
+                    if step>=SEQUENTIAL_ITT:
+                        self.sess.run(self.optimizer,feed_dict=feed_dict)
+                    else:
+                        for i in self.Tloss:
+                            self.sess.run(self.Topti[i],feed_dict=feed_dict)
                 else:
                     #====================================================================
                     # compute the gradients1
                     for k in range(self.nparam):
-                        
                         if gradmask[k]:
                             lgrad=self.sess.run([self.gradient[k]],feed_dict=feed_dict)[0]
                             if 'dense_shape' in dir(lgrad[0]):
@@ -1229,11 +1410,15 @@ class FoCUS:
                         else:
                             vgrad=np.zeros([self.pshape[k]])
                             
-                        tsgrad=np.zeros([self.pshape[k]])
-                        self.comm.Allreduce((vgrad,self.MPI_ALL_TYPE),(tsgrad,self.MPI_ALL_TYPE))
-                        # apply the gradients1
                         feed_dict_grad={}
-                        feed_dict_grad[self.igrad[k]]=tsgrad
+                        if step>=SEQUENTIAL_ITT:
+                            tsgrad=np.zeros([self.pshape[k]])
+                            self.comm.Allreduce((vgrad,self.MPI_ALL_TYPE),(tsgrad,self.MPI_ALL_TYPE))
+                            feed_dict_grad[self.igrad[k]]=tsgrad
+                        else:
+                            self.comm.Bcast((vgrad,self.MPI_ALL_TYPE),step%self.size)
+                            feed_dict_grad[self.igrad[k]]=vgrad
+                        # apply the gradients1
                         self.sess.run(self.apply_grad[k], feed_dict=feed_dict_grad)
                 
                 feed_dict[self.learning_rate]=feed_dict[self.learning_rate]*DECAY_RATE
