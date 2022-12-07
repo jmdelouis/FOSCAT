@@ -991,8 +991,8 @@ class FoCUS:
                     limage=image
                     
                 self.widx2={}
-                self.wcos=tf.reshape(tf.transpose(self.wwc),[1,self.NORIENT,1,npt])
-                self.wsin=tf.reshape(tf.transpose(self.wws),[1,self.NORIENT,1,npt])
+                self.wcos=tf.reshape(tf.transpose(self.wwc),[1,self.NORIENT,1,self.KERNELSZ**2])
+                self.wsin=tf.reshape(tf.transpose(self.wws),[1,self.NORIENT,1,self.KERNELSZ**2])
                 
                 nout=int(np.sqrt(image.shape[0]//12))
                 self.nout=nout
