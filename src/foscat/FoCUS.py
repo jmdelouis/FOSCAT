@@ -183,8 +183,6 @@ class FoCUS:
         self.np_wws=wws
         self.wwc=tf.constant(wwc)
         self.wws=tf.constant(wws)
-        self.wwc=tf.constant(wwc)
-        self.wws=tf.constant(wws)
         self.mat_avg_ang=np.zeros([NORIENT*NORIENT,NORIENT])
         for i in range(NORIENT):
             for j in range(NORIENT):
@@ -386,8 +384,8 @@ class FoCUS:
             vnorm=2.0/(tf.math.reduce_sum(vmask))
             im_shape = lim1.get_shape().as_list()
             alim1=tf.reshape(tf.gather(lim1,self.widx2[n0],axis=1),[BATCH_SIZE*norient,1,12*n0*n0,npt])
-            cconv1 = tf.reduce_sum(self.wcos[n0]*alim1,3)
-            sconv1 = tf.reduce_sum(self.wsin[n0]*alim1,3)
+            cconv1 = tf.reduce_sum(self.wcos*alim1,3)
+            sconv1 = tf.reduce_sum(self.wsin*alim1,3)
 
             tconvc1=cconv1*cconv1+sconv1*sconv1
             tmp1=self.L1(tconvc1)
@@ -555,10 +553,10 @@ class FoCUS:
             # compute convolution for the real and imaginary part of each image
             # sum (1)x(NORIENT)x(1)x(npt) * (BATCHSIZE)x(NORIENT)x(12*nside*nside)x(npt) sum sur (npt)
             # => (BATCHSIZE)x(NORIENT)x(12*nside*nside)
-            cconv1 = tf.reduce_sum(self.wcos[n0]*alim1,3) 
-            cconv2 = tf.reduce_sum(self.wcos[n0]*alim2,3)
-            sconv1 = tf.reduce_sum(self.wsin[n0]*alim1,3)
-            sconv2 = tf.reduce_sum(self.wsin[n0]*alim2,3)
+            cconv1 = tf.reduce_sum(self.wcos*alim1,3) 
+            cconv2 = tf.reduce_sum(self.wcos*alim2,3)
+            sconv1 = tf.reduce_sum(self.wsin*alim1,3)
+            sconv2 = tf.reduce_sum(self.wsin*alim2,3)
 
             # compute the L2 norm
             tconvc1=self.ampnorm[iscale]*(cconv1*cconv2+sconv1*sconv2)
@@ -1190,8 +1188,9 @@ class FoCUS:
                     limage=image
                     
                 self.widx2={}
-                self.wcos={}
-                self.wsin={}
+                self.wcos=tf.reshape(tf.transpose(self.wwc),[1,self.NORIENT,1,self.KERNELSZ**2])
+                self.wsin=tf.reshape(tf.transpose(self.wws),[1,self.NORIENT,1,self.KERNELSZ**2])
+                
                 nout=int(np.sqrt(image.shape[0]//12))
                 self.nout=nout
                 nstep=int(np.log(nout)/np.log(2))-self.OSTEP
@@ -1220,8 +1219,6 @@ class FoCUS:
 
                     npt=tmp.shape[1]
                     self.widx2[lout]=tf.constant(tmp.flatten())
-                    self.wcos[lout]=tf.reshape(tf.transpose(self.wwc),[1,self.NORIENT,1,npt])
-                    self.wsin[lout]=tf.reshape(tf.transpose(self.wws),[1,self.NORIENT,1,npt])
 
                     if (image1 is not None):
                         atmp=np.zeros([1,4,1])
