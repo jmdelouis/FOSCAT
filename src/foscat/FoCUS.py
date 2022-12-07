@@ -446,8 +446,8 @@ class FoCUS:
             #### Make the convolution
             alim1 = tf.reshape(tf.gather(lim1, self.widx2[n0], axis=1),
                                [BATCH_SIZE, 1, 12 * n0 * n0, npt])
-            cconv1 = tf.reduce_sum(self.wcos[n0] * alim1, 3)  # Real part [Nbatch, Norient, Npix]
-            sconv1 = tf.reduce_sum(self.wsin[n0] * alim1, 3)  # Imag part [Nbatch, Norient, Npix]
+            cconv1 = tf.reduce_sum(self.wcos * alim1, 3)  # Real part [Nbatch, Norient, Npix]
+            sconv1 = tf.reduce_sum(self.wsin * alim1, 3)  # Imag part [Nbatch, Norient, Npix]
             # Take the module
             I1_square = cconv1 * cconv1 + sconv1 * sconv1  # Square module [Nbatch, Norient, Npix]
             I1 = tf.sqrt(I1_square)  # Module [Nbatch, Norient, Npix]
@@ -471,8 +471,8 @@ class FoCUS:
             for j2 in range(0, j3):  # j2 <= j3
                 I1convPsi2 = tf.reshape(tf.gather(I1_dic[j2], self.widx2[n0], axis=2),
                                        [BATCH_SIZE, norient, 12 * n0 * n0, npt])  # [Nbatch, Norient, Npix, Npt]
-                cI1convPsi2 = tf.reduce_sum(self.wcos[n0] * I1convPsi2, 3)  # Real part [Nbatch, Norient, Npix]
-                sI1convPsi2 = tf.reduce_sum(self.wsin[n0] * I1convPsi2, 3)  # Imag part [Nbatch, Norient, Npix]
+                cI1convPsi2 = tf.reduce_sum(self.wcos * I1convPsi2, 3)  # Real part [Nbatch, Norient, Npix]
+                sI1convPsi2 = tf.reduce_sum(self.wsin * I1convPsi2, 3)  # Imag part [Nbatch, Norient, Npix]
 
                 product = cconv1[:, None, :, :] * cI1convPsi2[:, :, None, :] +\
                           sconv1[:, None, :, :] * sI1convPsi2[:, :, None, :]  # [Nbatch, Norient, Norient, Npix]
