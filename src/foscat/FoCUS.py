@@ -443,6 +443,7 @@ class FoCUS:
             #### Make the convolution
             alim1 = tf.reshape(tf.gather(lim1, self.widx2[n0], axis=1),
                                [BATCH_SIZE, 1, 12 * n0 * n0, npt])  # [Nbatch, 1, Npix, Npt]
+
             cconv1 = tf.reduce_sum(self.wcos * alim1, 3)  # Real part [Nbatch, Norient, Npix]
             sconv1 = tf.reduce_sum(self.wsin * alim1, 3)  # Imag part [Nbatch, Norient, Npix]
             # Take the module
