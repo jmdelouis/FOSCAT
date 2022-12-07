@@ -17,7 +17,6 @@ class FoCUS:
                  OSTEP=0,
                  isMPI=False,
                  TEMPLATE_PATH='data'):
-        
         self.TEMPLATE_PATH=TEMPLATE_PATH
         self.tf=tf
         if os.path.exists(self.TEMPLATE_PATH)==False:
@@ -42,6 +41,7 @@ class FoCUS:
         self.MAPDIFF=1
         self.SCATDIFF=2
         self.NOISESTAT=3
+        self.SCATCOV = 4
 
         self.log=np.zeros([10])
         self.nlog=0
@@ -74,16 +74,26 @@ class FoCUS:
         
         self.tw1={}
         self.tw2={}
+        self.tw3={}
+        self.tw4={}
         self.tb1={}
         self.tb2={}
+        self.tb3={}
+        self.tb4={}
 
         self.ss1={}
         self.ss2={}
+        self.ss3={}
+        self.ss4={}
         
-        self.os1={}
-        self.os2={}
-        self.is1={}
-        self.is2={}
+        self.os1 = {}
+        self.os2 = {}
+        self.os3 = {}
+        self.os4 = {}
+        self.is1 = {}
+        self.is2 = {}
+        self.is3 = {}
+        self.is4 = {}
         
         self.NMASK=1
         self.mask={}
@@ -403,6 +413,101 @@ class FoCUS:
             #vscale=vscale*self.slope
         
         return(tf.concat(s1,2))
+
+
+    def hpwst_2_cov(self, image1):
+
+        BATCH_SIZE = 1
+        im_shape = image1.get_shape().as_list()
+        nout = int(im_shape[1])  # Number of pixels
+        n0 = int(np.sqrt(nout / 12))  # NSIDE
+        norient = self.NORIENT
+
+        # Number of j scales
+        J = int(np.log(np.sqrt(nout / 12)) / np.log(2))
+        # Number of steps for the loop on scales
+        nstep = J - self.OSTEP
+
+        lim1 = image1  # [Nbatch, Npix, 1, 1]
+        print('lim1', lim1.shape)
+        tshape = self.mask.get_shape().as_list()
+
+        vmask = self.mask
+        vscale = 1.0
+        all_nstep = 0
+        wshape = self.widx2[n0].get_shape().as_list()
+        npt = wshape[0] // (12 * n0 * n0)
+        S1, P00, C01, C11 = [], [], [], []
+        I1_dic = {}
+
+        #### Loop on each scale
+        for j3 in range(nstep):
+            vnorm = 2.0 / (tf.math.reduce_sum(vmask))
+            im_shape = lim1.get_shape().as_list()
+
+            #### Make the convolution
+            alim1 = tf.reshape(tf.gather(lim1, self.widx2[n0], axis=1),
+                               [BATCH_SIZE, 1, 12 * n0 * n0, npt])
+            cconv1 = tf.reduce_sum(self.wcos[n0] * alim1, 3)  # Real part [Nbatch, Norient, Npix]
+            sconv1 = tf.reduce_sum(self.wsin[n0] * alim1, 3)  # Imag part [Nbatch, Norient, Npix]
+            # Take the module
+            I1_square = cconv1 * cconv1 + sconv1 * sconv1  # Square module [Nbatch, Norient, Npix]
+            I1 = tf.sqrt(I1_square)  # Module [Nbatch, Norient, Npix]
+            I1_dic[j3] = I1
+            l_shape = I1.get_shape().as_list()
+
+            ### S1: L1 norm
+            # Apply the mask on the convolved map and average over pixels
+            vals = vnorm * tf.math.reduce_sum(tf.reshape(vmask, [self.NMASK, 1, 1, 12 * n0 * n0]) *
+                                              tf.reshape(I1,[1, l_shape[0], l_shape[1], l_shape[2]]), 3)
+            s1 = vscale * tf.reshape(vals, [BATCH_SIZE * self.NMASK, norient])  # [Nbatch x Nmask, Norient]
+            S1.append(s1)
+
+            ### P00: L2 norm
+            vals_p00 = vnorm * tf.math.reduce_sum(tf.reshape(vmask, [self.NMASK, 1, 1, 12 * n0 * n0]) *
+                                                  tf.reshape(I1_square,[1, l_shape[0], l_shape[1], l_shape[2]]), 3)
+            p00 = vscale * tf.reshape(vals_p00, [BATCH_SIZE * self.NMASK, norient])  # [Nbatch x Nmask, Norient]
+            P00.append(p00)
+
+            ### C01
+            for j2 in range(0, j3):  # j2 <= j3
+                I1convPsi2 = tf.reshape(tf.gather(I1_dic[j2], self.widx2[n0], axis=2),
+                                       [BATCH_SIZE, norient, 12 * n0 * n0, npt])  # [Nbatch, Norient, Npix, Npt]
+                cI1convPsi2 = tf.reduce_sum(self.wcos[n0] * I1convPsi2, 3)  # Real part [Nbatch, Norient, Npix]
+                sI1convPsi2 = tf.reduce_sum(self.wsin[n0] * I1convPsi2, 3)  # Imag part [Nbatch, Norient, Npix]
+
+                product = cconv1[:, None, :, :] * cI1convPsi2[:, :, None, :] +\
+                          sconv1[:, None, :, :] * sI1convPsi2[:, :, None, :]  # [Nbatch, Norient, Norient, Npix]
+                # Sum over pixels and apply the mask
+                c01 = vscale * tf.reduce_sum(tf.reshape(vmask, [1, self.NMASK, 1, 1, 12*n0*n0]) *
+                                             product[:, None, :, :, :], axis=4)  # [Nmask, Nbatch, Norient, Norient]
+                print(c01.shape)
+                C01.append(c01)
+
+                # ### C11
+                C11 = C01
+                # for j1 in range(0, j2 + 1):  # j1 <= j2
+                #     c11 =
+                #     C11.append(c11)
+
+            ### Reshape the image and the mask for next iteration
+            lim1 = tf.reshape(tf.nn.avg_pool(tf.reshape(lim1, [BATCH_SIZE, 12 * n0 * n0, 1, 1]),
+                                             ksize=[1, 4, 1, 1], strides=[1, 4, 1, 1], padding='SAME'),
+                              [BATCH_SIZE, 12 * n0 * n0 // 4])
+            for j2 in range(0, j3+1):  # j2 <= j3
+                I1_dic[j2] = tf.reshape(tf.nn.avg_pool(tf.reshape(I1_dic[j2],
+                                                                  [BATCH_SIZE, norient, 12 * n0 * n0, 1]),
+                                             ksize=[1, 1, 4, 1], strides=[1, 1, 4, 1], padding='SAME'),
+                              [BATCH_SIZE, norient,  12 * n0 * n0 // 4])
+            # Update the mask for next iteration
+            tshape = vmask.get_shape().as_list()
+            vmask = tf.math.reduce_mean(tf.reshape(vmask, [self.NMASK, tshape[1] // 4, 4]), 2)
+            # Update NSIDE for next iteration
+            n0 = n0 // 2
+
+            vscale=vscale*self.slope
+
+        return tf.concat(S1, 0), tf.concat(P00, 0), tf.concat(C01, 0), tf.concat(C11, 0)
 
     # ---------------------------------------------−---------
     #  Compute the CWST on the sphere
@@ -859,6 +964,67 @@ class FoCUS:
             self.nloss=self.nloss+1
 
     # ---------------------------------------------−---------
+    def add_loss_cov(self, image1, image2, weight=1.0):
+
+        with tf.device(self.gpulist[self.nloss % self.ngpu]):
+            if self.nout != -1:
+                iS1, iP00, iC01, iC11 = self.hpwst_2_cov(image1)
+                oS1, oP00, oC01, oC11 = self.hpwst_2_cov(image2)
+            else:
+                print('Not developed for 2D plan.')
+                exit(0)
+
+            self.os1[self.nloss] = iS1
+            self.os2[self.nloss] = iP00
+            self.os3[self.nloss] = iC01
+            self.os4[self.nloss] = iC11
+
+            self.is1[self.nloss] = oS1
+            self.is2[self.nloss] = oP00
+            self.is3[self.nloss] = oC01
+            self.is4[self.nloss] = oC11
+
+            ss1 = iS1.shape
+            ss2 = iP00.shape
+            ss3 = iC01.shape
+            ss4 = iC11.shape
+
+            # Sigma
+            self.tw1[self.nloss] = tf.compat.v1.placeholder(self.all_tf_type,
+                                                            shape=ss1,
+                                                            name='TW1_%d' % (self.nloss))
+            self.tw2[self.nloss] = tf.compat.v1.placeholder(self.all_tf_type,
+                                                            shape=ss2,
+                                                            name='TW2_%d' % (self.nloss))
+            self.tw3[self.nloss] = tf.compat.v1.placeholder(self.all_tf_type,
+                                                            shape=ss3,
+                                                            name='TW1_%d' % (self.nloss))
+            self.tw4[self.nloss] = tf.compat.v1.placeholder(self.all_tf_type,
+                                                            shape=ss4,
+                                                            name='TW2_%d' % (self.nloss))
+            # Bias
+            self.tb1[self.nloss] = tf.compat.v1.placeholder(self.all_tf_type,
+                                                            shape=ss1,
+                                                            name='TW1_%d' % (self.nloss))
+            self.tb2[self.nloss] = tf.compat.v1.placeholder(self.all_tf_type,
+                                                            shape=ss2,
+                                                            name='TW2_%d' % (self.nloss))
+            self.tb3[self.nloss] = tf.compat.v1.placeholder(self.all_tf_type,
+                                                            shape=ss3,
+                                                            name='TW1_%d' % (self.nloss))
+            self.tb4[self.nloss] = tf.compat.v1.placeholder(self.all_tf_type,
+                                                            shape=ss4,
+                                                            name='TW2_%d' % (self.nloss))
+
+            self.ss1[self.nloss] = ss1
+            self.ss2[self.nloss] = ss2
+            self.ss3[self.nloss] = ss3
+            self.ss4[self.nloss] = ss4
+            self.loss_type[self.nloss] = self.SCATCOV
+            self.loss_weight[self.nloss] = weight
+            self.nloss = self.nloss + 1
+
+    # ---------------------------------------------−---------
     def add_loss_healpix(self,image1,image2,image3,image4,avg_ang=False,imaginary=False,weight=1.0,doL1=True,doL2=False):
         
         self.add_loss(image1,image2,image3,image4,avg_ang=avg_ang,imaginary=imaginary,weight=weight,doL1=doL1,doL2=doL2)
@@ -961,7 +1127,37 @@ class FoCUS:
                 stat_o2[i]=o2
                 
             return(stat_o1,stat_o2)
-            
+
+    # ---------------------------------------------−---------
+    def calc_stat_cov(self, n1, gpupos=0):
+
+        with tf.device(self.gpulist[gpupos % self.ngpu]):
+            nsim = n1.shape[0]
+            for i in range(nsim):
+                feed_dict = {}
+                if self.nout != -1:
+                    feed_dict[self.noise1] = n1[i].reshape(1, 12 * self.nout * self.nout, 1, 1)
+                else:
+                    print('Only work in Healpix.')
+
+                S1, P00, C01, C11 = self.sess.run([self.S1, self.P00, self.C01, self.C11], feed_dict=feed_dict)
+                print(S1.shape, P00.shape, [nsim] + list(S1.shape))
+                if i == 0:
+                    stat_S1 = np.zeros([nsim] + list(S1.shape))
+                    stat_P00 = np.zeros([nsim] + list(P00.shape))
+                    stat_C01 = np.zeros([nsim] + list(C01.shape))
+                    stat_C11 = np.zeros([nsim] + list(C11.shape))
+                    # stat_S1 = np.zeros([nsim, S1.shape[0], S1.shape[1]])
+                    # stat_P00 = np.zeros([nsim, P00.shape[0], P00.shape[1]])
+                    # stat_C01 = np.zeros([nsim, C01.shape[0], C01.shape[1]])
+                    # stat_C11 = np.zeros([nsim, C11.shape[0], C11.shape[1]])
+                stat_S1[i] = S1
+                stat_P00[i] = P00
+                stat_C01[i] = C01
+                stat_C11[i] = C11
+
+            return (stat_S1, stat_P00, stat_C01, stat_C11)
+
     # ---------------------------------------------−---------    
     def convimage(self,image):
         with tf.device(self.gpulist[self.gpupos%self.ngpu]):
@@ -975,6 +1171,7 @@ class FoCUS:
     # ---------------------------------------------−---------
     def reset(self):
         self.sess.run(self.doreset)
+
     # ---------------------------------------------−---------   
     def init_synthese(self,image,image1=None,image2=None,interpol=[],xpadding=False):
         self.nout=-1
@@ -1095,6 +1292,12 @@ class FoCUS:
                                                      shape=(1,sim1[1],1,1),
                                                      name='NOISE2_%d'%(self.nloss))
 
+                # Scattering covariance coefficient
+                S1, P00, C01, C11 = self.hpwst_2_cov(self.noise1)
+                self.S1 = S1
+                self.P00 = P00
+                self.C01 = C01
+                self.C11 = C11
                 for i in range(16):
                     if ((i//4)%2)+((i//8)%2)!=0:
                         on1,on2=self.hpwst1(self.noise1,
@@ -1184,6 +1387,17 @@ class FoCUS:
                     for j in range(len(tshape)):
                         self.nvarl[i]=self.nvarl[i]*tshape[j]
                     self.nvar=self.nvar+self.nvarl[i]
+
+                if self.loss_type[i]==self.SCATCOV:
+                    self.Tloss[i]=self.loss_weight[i]*(tf.reduce_sum(tf.square(self.tw1[i]*(self.os1[i] - self.is1[i] -self.tb1[i]))) +
+                                                       tf.reduce_sum(tf.square(self.tw2[i]*(self.os2[i] - self.is2[i] -self.tb2[i]))) +
+                                                       tf.reduce_sum(tf.square(self.tw3[i]*(self.os3[i] - self.is3[i] -self.tb3[i]))) +
+                                                       tf.reduce_sum(tf.square(self.tw4[i]*(self.os4[i] - self.is4[i] -self.tb4[i])))
+                                                       )
+                    tshape=self.os1[i].get_shape().as_list()
+                    for j in range(len(tshape)):
+                        self.nvarl[i]=self.nvarl[i]*tshape[j]
+                    self.nvar=self.nvar+self.nvarl[i]
                 
                 if self.loss_type[i]==self.MAPDIFF:
                     self.Tloss[i]=self.diff_weight[i]*tf.reduce_sum(tf.square((self.diff_map1[i]-self.diff_map2[i])*self.diff_mask[i]))
@@ -1192,6 +1406,7 @@ class FoCUS:
                 if self.loss_type[i]==self.NOISESTAT:
                     self.Tloss[i]=self.diff_weight[i]*tf.reduce_sum(tf.square(self.diff_map1[i]-self.diff_map2[i]))
                     self.nvarl[i]=self.NMASK
+
                 if i==0:
                     self.loss = self.Tloss[i]
                 else:
@@ -1247,7 +1462,11 @@ class FoCUS:
               ACURACY = 1E16,
               gradmask=[],
               ADDAPT_LEARN=1E30,
-              SEQUENTIAL_ITT=0):
+              SEQUENTIAL_ITT=0,
+              IW3=None,
+              IW4=None,
+              IB3=None,
+              IB4=None):
 
         if len(gradmask)==0:
             gradmask=[True for i in range(self.nparam)]
@@ -1261,6 +1480,15 @@ class FoCUS:
                     feed_dict[self.tw2[i]]=iw2[i]
                     feed_dict[self.tb1[i]]=ib1[i]
                     feed_dict[self.tb2[i]]=ib2[i]
+                if self.loss_type[i]==self.SCATCOV:
+                    feed_dict[self.tw1[i]]=iw1[i]
+                    feed_dict[self.tw2[i]]=iw2[i]
+                    feed_dict[self.tw3[i]]=IW3[i]
+                    feed_dict[self.tw4[i]]=IW4[i]
+                    feed_dict[self.tb1[i]]=ib1[i]
+                    feed_dict[self.tb2[i]]=ib2[i]
+                    feed_dict[self.tb3[i]]=IB3[i]
+                    feed_dict[self.tb4[i]]=IB4[i]
                     
             feed_dict[self.learning_rate]=LEARNING_RATE
 
