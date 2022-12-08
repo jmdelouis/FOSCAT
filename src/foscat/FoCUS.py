@@ -427,8 +427,10 @@ class FoCUS:
         # Number of steps for the loop on scales
         nstep = J - self.OSTEP
 
-        lim1 = image1  # [Nbatch, Npix, 1, 1]
-        vmask = self.mask
+        # The shape of image1 is [Nbatch, Npix, 1, 1]
+        lim1 = image1[:, :, 0, 0]  # [Nbatch, Npix]
+
+        vmask = self.mask[:, :, 0, 0]  # [Nmask, Npix]
         vscale = 1.0
 
         wshape = self.widx2[n0].get_shape().as_list()
@@ -442,65 +444,60 @@ class FoCUS:
 
             #### Make the convolution
             alim1 = tf.reshape(tf.gather(lim1, self.widx2[n0], axis=1),
-                               [BATCH_SIZE, 1, 12 * n0 * n0, npt])  # [Nbatch, 1, Npix, Npt]
-
+                               [BATCH_SIZE, 1, npix, npt])  # [Nbatch, 1, Npix, Npt]
             cconv1 = tf.reduce_sum(self.wcos * alim1, 3)  # Real part [Nbatch, Norient, Npix]
             sconv1 = tf.reduce_sum(self.wsin * alim1, 3)  # Imag part [Nbatch, Norient, Npix]
             # Take the module
             I1_square = cconv1 * cconv1 + sconv1 * sconv1  # Square module [Nbatch, Norient, Npix]
             I1 = tf.sqrt(I1_square)  # Module [Nbatch, Norient, Npix]
             I1_dic[j3] = I1
-            l_shape = I1.get_shape().as_list()
 
             ### S1: L1 norm
             # Apply the mask on the convolved map and average over pixels
-            vals = vnorm * tf.math.reduce_sum(tf.reshape(vmask, [self.NMASK, 1, 1, 12 * n0 * n0]) *
-                                              tf.reshape(I1,[1, l_shape[0], l_shape[1], l_shape[2]]),
-                                              axis=3)
+            vals = vnorm * tf.math.reduce_sum(vmask[:, None, None, :] * I1[None, :, :, :],
+                                              axis=3)  # [Nmask, Nbatch, Norient]
             s1 = vscale * tf.reshape(vals, [BATCH_SIZE * self.NMASK, norient])  # [Nbatch x Nmask, Norient]
             S1.append(s1)
 
             ### P00: L2 norm
-            vals_p00 = vnorm * tf.math.reduce_sum(tf.reshape(vmask, [self.NMASK, 1, 1, 12 * n0 * n0]) *
-                                                  tf.reshape(I1_square,[1, l_shape[0], l_shape[1], l_shape[2]]),
-                                                  axis=3)
+            vals_p00 = vnorm * tf.math.reduce_sum(vmask[:, None, None, :] * I1_square[None, :, :, :],
+                                                  axis=3)  # [Nmask, Nbatch, Norient]
             p00 = vscale * tf.reshape(vals_p00, [BATCH_SIZE * self.NMASK, norient])  # [Nbatch x Nmask, Norient]
             P00.append(p00)
 
             ### C01
             for j2 in range(0, j3):  # j2 <= j3
                 I1convPsi2 = tf.reshape(tf.gather(I1_dic[j2], self.widx2[n0], axis=2),
-                                       [BATCH_SIZE, norient, 12 * n0 * n0, npt])  # [Nbatch, Norient, Npix, Npt]
+                                       [BATCH_SIZE, norient, npix, npt])  # [Nbatch, Norient, Npix, Npt]
                 cI1convPsi2 = tf.reduce_sum(self.wcos * I1convPsi2, 3)  # Real part [Nbatch, Norient, Npix]
                 sI1convPsi2 = tf.reduce_sum(self.wsin * I1convPsi2, 3)  # Imag part [Nbatch, Norient, Npix]
 
                 product = cconv1[:, None, :, :] * cI1convPsi2[:, :, None, :] +\
                           sconv1[:, None, :, :] * sI1convPsi2[:, :, None, :]  # [Nbatch, Norient, Norient, Npix]
                 # Sum over pixels and apply the mask
-                c01 = vscale * tf.reduce_sum(tf.reshape(vmask, [1, self.NMASK, 1, 1, 12*n0*n0]) *
+                c01 = vscale * tf.reduce_sum(tf.reshape(vmask, [1, self.NMASK, 1, 1, npix]) *
                                              product[:, None, :, :, :], axis=4)  # [Nmask, Nbatch, Norient, Norient]
                 C01.append(c01)
 
-                # ### C11
+                ### C11
                 C11 = C01
                 # for j1 in range(0, j2 + 1):  # j1 <= j2
                 #     c11 =
                 #     C11.append(c11)
 
             ### Reshape the image and the mask for next iteration
-            lim1 = tf.reshape(tf.nn.avg_pool(tf.reshape(lim1, [BATCH_SIZE, 12 * n0 * n0, 1, 1]),
+            lim1 = tf.reshape(tf.nn.avg_pool(lim1[:, :, None, None],
                                              ksize=[1, 4, 1, 1], strides=[1, 4, 1, 1], padding='SAME'),
-                              [BATCH_SIZE, 12 * n0 * n0 // 4])
+                              [BATCH_SIZE, npix // 4])
             for j2 in range(0, j3+1):  # j2 <= j3
-                I1_dic[j2] = tf.reshape(tf.nn.avg_pool(tf.reshape(I1_dic[j2],
-                                                                  [BATCH_SIZE, norient, 12 * n0 * n0, 1]),
+                I1_dic[j2] = tf.reshape(tf.nn.avg_pool(I1_dic[j2][:, :, :, None],
                                                        ksize=[1, 1, 4, 1], strides=[1, 1, 4, 1], padding='SAME'),
-                                        [BATCH_SIZE, norient,  12 * n0 * n0 // 4])
+                                        [BATCH_SIZE, norient, npix // 4])
             # Update the mask for next iteration
-            tshape = vmask.get_shape().as_list()
-            vmask = tf.math.reduce_mean(tf.reshape(vmask, [self.NMASK, tshape[1] // 4, 4]), 2)
-            # Update NSIDE for next iteration
+            vmask = tf.math.reduce_mean(tf.reshape(vmask, [self.NMASK, npix // 4, 4]), 2)
+            # Update NSIDE and npix for next iteration
             n0 = n0 // 2
+            npix = 12 * n0 * n0
 
             vscale = vscale * self.slope
 
@@ -1144,10 +1141,6 @@ class FoCUS:
                     stat_P00 = np.zeros([nsim] + list(P00.shape))
                     stat_C01 = np.zeros([nsim] + list(C01.shape))
                     stat_C11 = np.zeros([nsim] + list(C11.shape))
-                    # stat_S1 = np.zeros([nsim, S1.shape[0], S1.shape[1]])
-                    # stat_P00 = np.zeros([nsim, P00.shape[0], P00.shape[1]])
-                    # stat_C01 = np.zeros([nsim, C01.shape[0], C01.shape[1]])
-                    # stat_C11 = np.zeros([nsim, C11.shape[0], C11.shape[1]])
                 stat_S1[i] = S1
                 stat_P00[i] = P00
                 stat_C01[i] = C01
@@ -1288,12 +1281,9 @@ class FoCUS:
                                                      shape=(1,sim1[1],1,1),
                                                      name='NOISE2_%d'%(self.nloss))
 
-                # Scattering covariance coefficient
-                S1, P00, C01, C11 = self.hpwst_2_cov(self.noise1)
-                self.S1 = S1
-                self.P00 = P00
-                self.C01 = C01
-                self.C11 = C11
+                # Scattering covariance coefficients
+                self.S1, self.P00, self.C01, self.C11 = self.hpwst_2_cov(self.noise1)
+
                 for i in range(16):
                     if ((i//4)%2)+((i//8)%2)!=0:
                         on1,on2=self.hpwst1(self.noise1,
