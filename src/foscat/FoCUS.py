@@ -17,6 +17,11 @@ class FoCUS:
                  OSTEP=0,
                  isMPI=False,
                  TEMPLATE_PATH='data'):
+
+        print('================================================')
+        print('          START FOSCAT CONFIGURATION')
+        print('================================================')
+
         self.TEMPLATE_PATH=TEMPLATE_PATH
         self.tf=tf
         if os.path.exists(self.TEMPLATE_PATH)==False:
@@ -109,7 +114,7 @@ class FoCUS:
             else:
                 print('ERROR INIT FOCUS ',all_type,' should be float32 or float64')
                 exit(0)
-            
+                
         #===========================================================================
         # INIT 
         if self.rank==0:
@@ -401,9 +406,9 @@ class FoCUS:
                 ts1=vscale*tf.reshape(vals,[BATCH_SIZE*self.NMASK,norient,norient])
                 s1.append(ts1)
                 
-
-            lim1=tf.reshape(tf.nn.avg_pool(tf.reshape(lim1,[BATCH_SIZE*norient,12*n0*n0,1,1]),
-                                           ksize=[1, 4, 1, 1], strides=[1, 4, 1, 1],padding='SAME'),[BATCH_SIZE*norient,12*n0*n0//4])
+            lim1=tf.math.reduce_mean(tf.reshape(lim1,[BATCH_SIZE*norient,12*n0*n0//4,4,1,1]),2) 
+            #lim1=tf.reshape(tf.nn.avg_pool(tf.reshape(lim1,[BATCH_SIZE*norient,12*n0*n0,1,1]),
+#                                           ksize=[1, 4, 1, 1], strides=[1, 4, 1, 1],padding='SAME'),[BATCH_SIZE*norient,12*n0*n0//4])
                 
             tshape=vmask.get_shape().as_list()
             vmask=tf.math.reduce_mean(tf.reshape(vmask,[self.NMASK,tshape[1]//4,4]),2) 
@@ -427,7 +432,6 @@ class FoCUS:
         nstep = J - self.OSTEP
 
         lim1 = image1  # [Nbatch, Npix, 1, 1]
-        print('lim1', lim1.shape)
         tshape = self.mask.get_shape().as_list()
 
         vmask = self.mask
@@ -479,7 +483,6 @@ class FoCUS:
                 # Sum over pixels and apply the mask
                 c01 = vscale * tf.reduce_sum(tf.reshape(vmask, [1, self.NMASK, 1, 1, 12*n0*n0]) *
                                              product[:, None, :, :, :], axis=4)  # [Nmask, Nbatch, Norient, Norient]
-                print(c01.shape)
                 C01.append(c01)
 
                 # ### C11
@@ -489,9 +492,10 @@ class FoCUS:
                 #     C11.append(c11)
 
             ### Reshape the image and the mask for next iteration
-            lim1 = tf.reshape(tf.nn.avg_pool(tf.reshape(lim1, [BATCH_SIZE, 12 * n0 * n0, 1, 1]),
-                                             ksize=[1, 4, 1, 1], strides=[1, 4, 1, 1], padding='SAME'),
-                              [BATCH_SIZE, 12 * n0 * n0 // 4])
+            lim1=tf.math.reduce_mean(tf.reshape(lim1,[BATCH_SIZE,12*n0*n0//4,4,1,1]),2) 
+            #lim1 = tf.reshape(tf.nn.avg_pool(tf.reshape(lim1, [BATCH_SIZE, 12 * n0 * n0, 1, 1]),
+            #                                 ksize=[1, 4, 1, 1], strides=[1, 4, 1, 1], padding='SAME'),
+            #                  [BATCH_SIZE, 12 * n0 * n0 // 4])
             for j2 in range(0, j3+1):  # j2 <= j3
                 I1_dic[j2] = tf.reshape(tf.nn.avg_pool(tf.reshape(I1_dic[j2],
                                                                   [BATCH_SIZE, norient, 12 * n0 * n0, 1]),
@@ -620,8 +624,10 @@ class FoCUS:
                     else:
                         c2=tf.concat([c2,ts2],2)
 
-            lim1=tf.nn.avg_pool(lim1, ksize=[1, 4, 1, 1], strides=[1, 4, 1, 1],padding='SAME')
-            lim2=tf.nn.avg_pool(lim2, ksize=[1, 4, 1, 1], strides=[1, 4, 1, 1],padding='SAME')
+            lim1=tf.math.reduce_mean(tf.reshape(lim1,[BATCH_SIZE,12*n0*n0//4,4,1,1]),2) 
+            lim2=tf.math.reduce_mean(tf.reshape(lim2,[BATCH_SIZE,12*n0*n0//4,4,1,1]),2) 
+            #lim1=tf.nn.avg_pool(lim1, ksize=[1, 4, 1, 1], strides=[1, 4, 1, 1],padding='SAME')
+            #lim2=tf.nn.avg_pool(lim2, ksize=[1, 4, 1, 1], strides=[1, 4, 1, 1],padding='SAME')
                 
             tshape=vmask.get_shape().as_list()
             vmask=tf.math.reduce_mean(tf.reshape(vmask,[self.NMASK,tshape[1]//4,4]),2) 
@@ -1139,7 +1145,7 @@ class FoCUS:
                     print('Only work in Healpix.')
 
                 S1, P00, C01, C11 = self.sess.run([self.S1, self.P00, self.C01, self.C11], feed_dict=feed_dict)
-                print(S1.shape, P00.shape, [nsim] + list(S1.shape))
+
                 if i == 0:
                     stat_S1 = np.zeros([nsim] + list(S1.shape))
                     stat_P00 = np.zeros([nsim] + list(P00.shape))
