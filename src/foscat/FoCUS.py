@@ -1227,7 +1227,7 @@ class FoCUS:
                     self.widx2[lout]=tf.constant(tmp.flatten())
 
                     if (image1 is not None):
-                        atmp=np.zeros([1,4,1])
+                        atmp=np.zeros([1,self.NORIENT,1])
                         if i==0:
                             tmp1=image1
                             tmp2=image2
