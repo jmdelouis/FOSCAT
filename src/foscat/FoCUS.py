@@ -1422,29 +1422,33 @@ class FoCUS:
             opti=tf.train.AdamOptimizer(self.learning_rate)
 
             # if mpi is up compute gradient for each node
-            if self.size>1:
-                self.igrad={}
-                self.gradient={}
-                self.tgradient={}
-                self.apply_grad={}
-                for k in range(self.nparam):
-                    self.igrad[k]    = tf.placeholder(self.all_tf_type,shape=(self.pshape[k]))
-                    self.gradient[k] = opti.compute_gradients(self.loss,var_list=[self.param[k]])[0]
-                    self.tgradient[k] = [(self.igrad[k],self.gradient[k][1])]
-                    self.apply_grad[k] = opti.apply_gradients(self.tgradient[k],global_step=self.numbatch)
-                    
-                tlin=np.zeros([self.size+1],dtype=self.all_type)
-                tlout=np.zeros([self.size+1],dtype=self.all_type)
-                tlin[0]=self.nvar
-                tlin[1+self.rank]=self.nvarl[0]
-                self.comm.Allreduce((tlin,self.MPI_ALL_TYPE),(tlout,self.MPI_ALL_TYPE))
-                for i in range(self.size):
-                    self.nvarl[i]=tlout[1+i]
-                self.nvar=tlout[0]
+            if len(self.Tloss)>0:
+                if self.size>1:
+                    self.igrad={}
+                    self.gradient={}
+                    self.tgradient={}
+                    self.apply_grad={}
+                    for k in range(self.nparam):
+                        self.igrad[k]    = tf.placeholder(self.all_tf_type,shape=(self.pshape[k]))
+                        self.gradient[k] = opti.compute_gradients(self.loss,var_list=[self.param[k]])[0]
+                        self.tgradient[k] = [(self.igrad[k],self.gradient[k][1])]
+                        self.apply_grad[k] = opti.apply_gradients(self.tgradient[k],global_step=self.numbatch)
+
+                    tlin=np.zeros([self.size+1],dtype=self.all_type)
+                    tlout=np.zeros([self.size+1],dtype=self.all_type)
+                    tlin[0]=self.nvar
+                    tlin[1+self.rank]=self.nvarl[0]
+                    self.comm.Allreduce((tlin,self.MPI_ALL_TYPE),(tlout,self.MPI_ALL_TYPE))
+                    for i in range(self.size):
+                        self.nvarl[i]=tlout[1+i]
+                    self.nvar=tlout[0]
+                else:
+                    self.optimizer=opti.minimize(self.loss,global_step=self.numbatch)
+                    for i in self.Tloss:
+                        self.Topti[i]=opti.minimize(self.Tloss[i],global_step=self.numbatch)
             else:
-                self.optimizer=opti.minimize(self.loss,global_step=self.numbatch)
-                for i in self.Tloss:
-                    self.Topti[i]=opti.minimize(self.Tloss[i],global_step=self.numbatch)
+                 print('NO LOSS DEFINED: this foscat session only computes coeficients, learn operation will crash')
+                 self.loss=tf.constant(0)
                 
             self.sess=tf.Session()
 
