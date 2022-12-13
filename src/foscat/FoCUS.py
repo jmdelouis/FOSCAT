@@ -43,10 +43,11 @@ class FoCUS:
         self.loss_type={}
         self.loss_weight={}
         
-        self.MAPDIFF=1
-        self.SCATDIFF=2
-        self.NOISESTAT=3
-        self.SCATCOV = 4
+        self.MAPDIFF   = 1
+        self.SCATDIFF  = 2
+        self.NOISESTAT = 3
+        self.SCATCOV   = 4
+        self.SCATCOEF  = 5
 
         self.log=np.zeros([10])
         self.nlog=0
@@ -967,6 +968,59 @@ class FoCUS:
             self.loss_weight[self.nloss]=weight
             self.nloss=self.nloss+1
 
+
+    # ---------------------------------------------−---------
+    def add_loss_coef(self,image1,image2,doL1=True,doL2=False,imaginary=False,avg_ang=False,weight=1.0):
+
+        if doL1==False and doL2==False:
+            print('You have to choose a statistic L1 or L2 or both here doL1=False and doL2=False')
+            exit(0)
+            
+        with tf.device(self.gpulist[self.nloss%self.ngpu]):
+            if self.nout!=-1:
+                os1,os2=self.hpwst1(image1,image2,doL1=doL1,doL2=doL2,imaginary=imaginary,avg_ang=avg_ang)
+            else:
+                os1,os2=self.cwst1(image1,image2,imaginary=imaginary,avg_ang=avg_ang,doL1=doL1,doL2=doL2)
+
+            self.os1[self.nloss]=os1
+            self.os2[self.nloss]=os2
+
+            ss1=os1.get_shape().as_list()
+            ss2=os2.get_shape().as_list()
+
+            if avg_ang:
+                self.tw1[self.nloss]=tf.compat.v1.placeholder(self.all_tf_type,
+                                                              shape=(ss1[0],ss1[1]),
+                                                              name='TW1_%d'%(self.nloss))
+                self.tw2[self.nloss]=tf.compat.v1.placeholder(self.all_tf_type,
+                                                              shape=(ss2[0],ss2[1]),
+                                                              name='TW2_%d'%(self.nloss))
+                self.tb1[self.nloss]=tf.compat.v1.placeholder(self.all_tf_type,
+                                                              shape=(ss1[0],ss1[1]),
+                                                              name='TB1_%d'%(self.nloss))
+                self.tb2[self.nloss]=tf.compat.v1.placeholder(self.all_tf_type,
+                                                              shape=(ss2[0],ss2[1]),
+                                                              name='TB2_%d'%(self.nloss))
+            else:
+                self.tw1[self.nloss]=tf.compat.v1.placeholder(self.all_tf_type,
+                                                              shape=(ss1[0],ss1[1],ss1[2]),
+                                                              name='TW1_%d'%(self.nloss))
+                self.tw2[self.nloss]=tf.compat.v1.placeholder(self.all_tf_type,
+                                                              shape=(ss2[0],ss2[1],ss2[2]),
+                                                              name='TW2_%d'%(self.nloss))
+                self.tb1[self.nloss]=tf.compat.v1.placeholder(self.all_tf_type,
+                                                              shape=(ss1[0],ss1[1],ss1[2]),
+                                                              name='TB1_%d'%(self.nloss))
+                self.tb2[self.nloss]=tf.compat.v1.placeholder(self.all_tf_type,
+                                                              shape=(ss2[0],ss2[1],ss2[2]),
+                                                              name='TB2_%d'%(self.nloss))
+                
+            self.ss1[self.nloss]=ss1
+            self.ss2[self.nloss]=ss2
+            self.loss_type[self.nloss]=self.SCATCOEF
+            self.loss_weight[self.nloss]=weight
+            self.nloss=self.nloss+1
+
     # ---------------------------------------------−---------
     def add_loss_cov(self, image1, image2, weight=1.0):
 
@@ -1384,6 +1438,13 @@ class FoCUS:
             for i in range(self.nloss):
                 self.nvarl[i]=1.0
                 
+                if self.loss_type[i]==self.SCATCOEF:
+                    self.Tloss[i]=self.loss_weight[i]*(tf.reduce_sum(tf.square(self.tw1[i]*(self.os1[i] - self.tb1[i]))) + tf.reduce_sum(tf.square(self.tw2[i]*(self.os2[i] - self.tb2[i]))))
+                    tshape=self.os1[i].get_shape().as_list()
+                    for j in range(len(tshape)):
+                        self.nvarl[i]=self.nvarl[i]*tshape[j]
+                    self.nvar=self.nvar+self.nvarl[i]
+                
                 if self.loss_type[i]==self.SCATDIFF:
                     self.Tloss[i]=self.loss_weight[i]*(tf.reduce_sum(tf.square(self.tw1[i]*(self.os1[i] - self.is1[i] -self.tb1[i]))) + tf.reduce_sum(tf.square(self.tw2[i]*(self.os2[i]- self.is2[i] -self.tb2[i]))))
                     tshape=self.os1[i].get_shape().as_list()
@@ -1482,7 +1543,7 @@ class FoCUS:
         with tf.device(self.gpulist[self.gpupos%self.ngpu]):
             feed_dict={}
             for i in range(self.nloss):
-                if self.loss_type[i]==self.SCATDIFF:
+                if self.loss_type[i]==self.SCATDIFF or self.loss_type[i]==self.SCATCOEF :
                     feed_dict[self.tw1[i]]=iw1[i]
                     feed_dict[self.tw2[i]]=iw2[i]
                     feed_dict[self.tb1[i]]=ib1[i]
