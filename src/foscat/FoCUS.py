@@ -172,13 +172,11 @@ class FoCUS:
             a=i/NORIENT*np.pi
             xx=LAMBDA*(x*np.cos(a)+y*np.sin(a))
             yy=LAMBDA*(x*np.sin(a)-y*np.cos(a))
-            ww=np.exp(-0.5*yy**2)
-            tmp=np.cos(yy*np.pi)*np.exp(-0.5*(4/float(NORIENT)*xx**2))*ww
-            ww[tmp<0]-=tmp.sum()/(np.cos(yy[tmp<0]*np.pi)*np.exp(-0.5*(4/float(NORIENT)*xx[tmp<0]**2))).sum()
-            tmp=np.cos(yy*np.pi)*np.exp(-0.5*(4/float(NORIENT)*xx**2))*ww
+        
+            tmp=np.cos(yy*np.pi)*np.exp(-0.5*((3/float(KERNELSZ)*xx)**2+(3/float(KERNELSZ)*yy)**2))
             tmp-=tmp.mean()
             wwc[:,i]=tmp.flatten()
-            tmp=np.sin(yy*np.pi)*np.exp(-0.5*(4/float(NORIENT)*xx**2))*ww
+            tmp=np.sin(yy*np.pi)*np.exp(-0.5*((3/float(KERNELSZ)*xx)**2+(3/float(KERNELSZ)*yy)**2))
             tmp-=tmp.mean()
             wws[:,i]=tmp.flatten()
             sigma=np.sqrt((wwc[:,i]**2).mean())
