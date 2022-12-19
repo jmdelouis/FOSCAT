@@ -515,35 +515,35 @@ class FoCUS:
                 # C01.append(sc01)
 
                 ###### C11 <(|I * psi1| * psi3)(|I * psi2| * psi3)>
-                for j1 in range(0, j2 + 1):  # j1 <= j2
-                    ### Compute (|I * psi1| * psi3)
-                    # Degrade I1_dic[j1] at j3 resolution
-                    I1convPsi = tf.reshape(tf.gather(I1_dic[j1], self.widx2[nside], axis=2),
-                                            [BATCH_SIZE, norient, 1, npix, npt])  # [Nbatch, Norient1, 1, Npix_j3, Npt]
-                    # Do the convolution
-                    cI1convPsi = tf.reduce_sum(self.wcos * I1convPsi, axis=4)  # Real [Nbatch, Norient1, Norient3, Npix_j3]
-                    sI1convPsi = tf.reduce_sum(self.wsin * I1convPsi, axis=4)  # Imag [Nbatch, Norient1, Norient3, Npix_j3]
-                    ### Compute the product (|I * psi1| * psi3)(|I * psi2| * psi3)
-                    # z_1 x z_2^* = (a1a2 + b1b2) + i(b1a2 - a1b2)
-                    cproduct = cI2convPsi[:, None, :, :, :] * cI1convPsi[:, :, None, :, :] +\
-                               sI2convPsi[:, None, :, :, :] * sI1convPsi[:, :, None, :, :]  # Real [Nbatch, Norient1, Norient2, Norient3, Npix_j3]
-                    sproduct = sI2convPsi[:, None, :, :, :] * cI1convPsi[:, :, None, :, :] -\
-                               cI2convPsi[:, None, :, :, :] * sI1convPsi[:, :, None, :, :]  # Imag [Nbatch, Norient1, Norient2, Norient3, Npix_j3]
-                    ### Sum over pixels and apply the mask
-                    cc11 = tf.reduce_sum(vmask[None, :, None, None, None, :] *
-                                         cproduct[:, None, :, :, :, :], axis=5)  # Real [Nbatch, Nmask, Norient1, Norient2, Norient3]
-                    sc11 = tf.reduce_sum(vmask[None, :, None, None, None, :] *
-                                         sproduct[:, None, :, :, :, :], axis=5)  # Imag [Nbatch, Nmask, Norient1, Norient2, Norient3]
-                    ### Group the Nbatch and Nmask dimensions
-                    # cc11 = tf.reshape(cc11, [BATCH_SIZE * self.NMASK, norient,
-                    #                          norient, norient])  # Real [Nbatch x Nmask, Norient1, Norient2, Norient3]
-                    # sc11 = tf.reshape(sc11, [BATCH_SIZE * self.NMASK, norient,
-                    #                          norient, norient])  # Imag [Nbatch x Nmask, Norient1, Norient2, Norient3]
-                    ### Normalize C11 with P00
-                    cc11 /= (p00[:, :, :, None, None] * p00[:, :, None, :, None]) ** 0.5  # [Nbatch x Nmask, Norient1, Norient2, Norient3]
-                    sc11 /= (p00[:, :, :, None, None] * p00[:, :, None, :, None]) ** 0.5  # [Nbatch x Nmask, Norient1, Norient2, Norient3]
+                # for j1 in range(0, j2 + 1):  # j1 <= j2
+                #     ### Compute (|I * psi1| * psi3)
+                #     # Degrade I1_dic[j1] at j3 resolution
+                #     I1convPsi = tf.reshape(tf.gather(I1_dic[j1], self.widx2[nside], axis=2),
+                #                             [BATCH_SIZE, norient, 1, npix, npt])  # [Nbatch, Norient1, 1, Npix_j3, Npt]
+                #     # Do the convolution
+                #     cI1convPsi = tf.reduce_sum(self.wcos * I1convPsi, axis=4)  # Real [Nbatch, Norient1, Norient3, Npix_j3]
+                #     sI1convPsi = tf.reduce_sum(self.wsin * I1convPsi, axis=4)  # Imag [Nbatch, Norient1, Norient3, Npix_j3]
+                #     ### Compute the product (|I * psi1| * psi3)(|I * psi2| * psi3)
+                #     # z_1 x z_2^* = (a1a2 + b1b2) + i(b1a2 - a1b2)
+                #     cproduct = cI2convPsi[:, None, :, :, :] * cI1convPsi[:, :, None, :, :] +\
+                #                sI2convPsi[:, None, :, :, :] * sI1convPsi[:, :, None, :, :]  # Real [Nbatch, Norient1, Norient2, Norient3, Npix_j3]
+                #     sproduct = sI2convPsi[:, None, :, :, :] * cI1convPsi[:, :, None, :, :] -\
+                #                cI2convPsi[:, None, :, :, :] * sI1convPsi[:, :, None, :, :]  # Imag [Nbatch, Norient1, Norient2, Norient3, Npix_j3]
+                #     ### Sum over pixels and apply the mask
+                #     cc11 = tf.reduce_sum(vmask[None, :, None, None, None, :] *
+                #                          cproduct[:, None, :, :, :, :], axis=5)  # Real [Nbatch, Nmask, Norient1, Norient2, Norient3]
+                #     sc11 = tf.reduce_sum(vmask[None, :, None, None, None, :] *
+                #                          sproduct[:, None, :, :, :, :], axis=5)  # Imag [Nbatch, Nmask, Norient1, Norient2, Norient3]
+                #     ### Group the Nbatch and Nmask dimensions
+                #     # cc11 = tf.reshape(cc11, [BATCH_SIZE * self.NMASK, norient,
+                #     #                          norient, norient])  # Real [Nbatch x Nmask, Norient1, Norient2, Norient3]
+                #     # sc11 = tf.reshape(sc11, [BATCH_SIZE * self.NMASK, norient,
+                #     #                          norient, norient])  # Imag [Nbatch x Nmask, Norient1, Norient2, Norient3]
+                #     ### Normalize C11 with P00
+                #     cc11 /= (p00[:, :, :, None, None] * p00[:, :, None, :, None]) ** 0.5  # [Nbatch, Nmask, Norient1, Norient2, Norient3]
+                #     sc11 /= (p00[:, :, :, None, None] * p00[:, :, None, :, None]) ** 0.5  # [Nbatch, Nmask, Norient1, Norient2, Norient3]
 
-                    C11.append(cc11)
+                C11.append(cc01)
                     # C11.append(sc11)
 
             ### Reshape the image and the mask for next iteration
@@ -554,7 +554,7 @@ class FoCUS:
             #     I1_dic[j2] = tf.reshape(tf.nn.avg_pool(I1_dic[j2][:, :, :, None],
             #                                            ksize=[1, 1, 4, 1], strides=[1, 1, 4, 1], padding='SAME'),
             #                             [BATCH_SIZE, norient, npix // 4])
-            # Update the mask for next iteration
+            # # Update the mask for next iteration
             vmask = tf.math.reduce_mean(tf.reshape(vmask, [self.NMASK, npix // 4, 4]), 2)
             # Update NSIDE and npix for next iteration
             nside = nside // 2
@@ -565,10 +565,10 @@ class FoCUS:
         ###### Concatenate the lists and make tensors
         print(len(S1), len(P00), len(C01), len(C11))
         print(S1[0].shape, P00[0].shape, C01[0].shape, C11[0].shape)
-        S1 = tf.concat(S1, axis=0)    # [NS1 x Nbatch x Nmask, Norient3]
-        P00 = tf.concat(P00, axis=0)  # [NP00 x Nbatch x Nmask, Norient3]
-        C01 = tf.concat(C01, axis=0)  # [NC01 x Nbatch x Nmask, Norient2, Norient3]
-        C11 = tf.concat(C11, axis=0)  # [NC11 x Nbatch x Nmask, Norient1, Norient2, Norient3]
+        S1 = tf.concat(S1, axis=0)    # [NS1 x Nbatch, Nmask, Norient3]
+        P00 = tf.concat(P00, axis=0)  # [NP00 x Nbatch, Nmask, Norient3]
+        C01 = tf.concat(C01, axis=0)  # [NC01 x Nbatch, Nmask, Norient2, Norient3]
+        C11 = tf.concat(C11, axis=0)  # [NC11 x Nbatch, Nmask, Norient1, Norient2, Norient3]
         print(S1.shape, P00.shape, C01.shape, C11.shape)
 
         ###### Normalize S1 and P00
@@ -1203,29 +1203,45 @@ class FoCUS:
 
     # ---------------------------------------------−---------
     def calc_stat_cov(self, n1, gpupos=0):
+        """
+
+        Parameters
+        ----------
+        n1: array
+            Image [Nsim, Npix]
+        gpupos
+
+        Returns
+        -------
+
+        """
 
         with tf.device(self.gpulist[gpupos % self.ngpu]):
-            nsim = n1.shape[0]
+            nsim = n1.shape[0]  # Number of simulations
             for i in range(nsim):
                 feed_dict = {}
-                if self.nout != -1:
-                    feed_dict[self.noise1] = n1[i].reshape(1, 12 * self.nout * self.nout, 1, 1)
-                else:
+                if self.nout != -1:  # Healpix
+                    # Reshape the image as [1, Npix, 1, 1] and put it in a dictionary
+                    # feed_dict[self.noise1] = n1[i].reshape(1, 12 * self.nout * self.nout, 1, 1)  # [1, Npix, 1, 1]
+                    feed_dict[self.noise1] = n1[i][None, :, None, None]  # [1, Npix, 1, 1]
+                else:  # 2D plan
                     print('Only work in Healpix.')
 
+                # Get the scattering coefficients
                 S1, P00, C01, C11 = self.sess.run([self.S1, self.P00, self.C01, self.C11], feed_dict=feed_dict)
 
+                # Store the coefficients
                 if i == 0:
                     stat_S1 = np.zeros([nsim] + list(S1.shape))
                     stat_P00 = np.zeros([nsim] + list(P00.shape))
                     stat_C01 = np.zeros([nsim] + list(C01.shape))
                     stat_C11 = np.zeros([nsim] + list(C11.shape))
-                stat_S1[i] = S1
+                stat_S1[i] = S1  # [Nsim, ...]
                 stat_P00[i] = P00
                 stat_C01[i] = C01
                 stat_C11[i] = C11
 
-            return (stat_S1, stat_P00, stat_C01, stat_C11)
+            return stat_S1, stat_P00, stat_C01, stat_C11
 
     # ---------------------------------------------−---------    
     def convimage(self,image):
