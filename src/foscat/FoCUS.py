@@ -575,7 +575,8 @@ class FoCUS:
         # C01 = tf.log(C01)
         # C11 = tf.log(C11)
 
-        C11 = S1
+        # C01 = S1
+        # C11 = P00
         # C11 *= 1.e-30
 
         return S1, P00, C01, C11
