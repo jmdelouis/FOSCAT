@@ -9,7 +9,7 @@ import healpy as hp
 #=================================================================================
 scratch_path = '../data'
 outname='TEST_EE'
-nout=32
+nout=64
 #=================================================================================
 # Function to reduce the data used in the FoCUS algorithm 
 #=================================================================================
@@ -22,7 +22,6 @@ def dodown(a,nout):
 # Get data
 #=================================================================================
 im=dodown(np.load('Venus_256.npy'),nout)
-
 
 #=================================================================================
 # INITIALIZE FoCUS class
@@ -40,9 +39,10 @@ fc=FOC.FoCUS(NORIENT=4,   # define the number of wavelet orientation
 # of it inside the previous call. 
 #================================================================================
 #=================================================================================
-# Set masking to define the sky region of interest
+# Set masking to ONE all surface is used and expected to be stationary
 #================================================================================
-mask=np.ones([1,12*nout*nout])
+
+mask=np.ones([1,12*nout**2])
 fc.add_mask(mask)
 
 #=============================================
@@ -59,30 +59,8 @@ ldata=fc.init_synthese(np.random.randn(12*nout*nout))
 # DEFINE THE LOSS, SHOULD BE DONE INSIDE INITIALISATION
 #================================================================================
 
-#=================================================================================
-# COMPUTE THE WAVELET TRANSFORM
-#=================================================================================
-res=fc.do_conv(im)
-
-plt.figure(figsize=(12,8))
-for i in range(4):
-    hp.mollview(res[:,i].real,cmap='jet',hold=False,sub=(3,4,1+i),nest=True,title='Real Dir=%d'%(i),norm='hist')
-    hp.mollview(res[:,i].imag,cmap='jet',hold=False,sub=(3,4,5+i),nest=True,title='Imag Dir=%d'%(i),norm='hist')
-    hp.mollview(abs(res[:,i]),cmap='jet',hold=False,sub=(3,4,9+i),nest=True,title='Norm Dir=%d'%(i),norm='hist')
-
-#=================================================================================
-# GET WAVELET COEFFICIENTS
-#=================================================================================
-c,s=fc.get_ww()
-kernel=int(np.sqrt(c.shape[0]))
-print('Real Part of the wavelet coefficients')
-print(c[:,0].reshape(kernel,kernel))
-print('Imaginary Part of the wavelet coefficients')
-print(s[:,0].reshape(kernel,kernel))
-fc.plot_ww()
-
-# Add losss:
-fc.add_loss_healpix(data,data,ldata,ldata,imaginary=False)
+# Add covariance losss:
+fc.add_loss_cov(data,ldata)
 
 # initiliaze the loss
 loss=fc.init_optim()
@@ -95,50 +73,65 @@ loss=fc.init_optim()
 # Compute the S1 and S2 coefficients
 #================================================================================
 
-s1,s2=fc.calc_stat(im.reshape(1,12*nout*nout)*ampmap,im.reshape(1,12*nout*nout)*ampmap,imaginary=False)
+s1,s2,s3,s4=fc.calc_stat_cov(im.reshape(1,12*nout*nout)*ampmap)
 
-plt.figure(figsize=(16,6))
-plt.subplot(1,2,1)
-plt.plot(s1.flatten())
-plt.subplot(1,2,2)
-plt.plot(s2.flatten())
-plt.show()
-    
+#save the input map
+r1,r2,r3,r4=fc.calc_stat_cov(fc.get_map().reshape(1,12*nout*nout))
+
+np.save('st_cov_s1.npy', r1)
+np.save('st_cov_s2.npy', r2)
+np.save('st_cov_s3.npy', r3)
+np.save('st_cov_s4.npy', r4)
+
 #define BIAS and WEIGTH for each scaterring coefficients
 tw1={}
 tw2={}
+tw3={}
+tw4={}
 tb1={}
 tb2={}
+tb3={}
+tb4={}
 for i in range(1):
     tw1[i]=np.ones_like(s1[0])
     tw2[i]=np.ones_like(s2[0])
+    tw3[i]=np.ones_like(s3[0])
+    tw4[i]=np.ones_like(s4[0])
     tb1[i]=np.zeros_like(s1[0])
     tb2[i]=np.zeros_like(s2[0])
-        
+    tb3[i]=np.zeros_like(s3[0])
+    tb4[i]=np.zeros_like(s4[0])
+
 #================================================================================
 # Run the synthesis
 #================================================================================
 omap=fc.learn(tw1,tw2,tb1,tb2,
-              NUM_EPOCHS = 1000,
+              NUM_EPOCHS = 5000,
               EVAL_FREQUENCY = 100,
               DECAY_RATE=0.9999,
               LEARNING_RATE=1.0,
               SEQUENTIAL_ITT=10,
-              ADDAPT_LEARN=200.0)
+              ADDAPT_LEARN=200.0,
+              IW3=tw3,IW4=tw4,
+              IB3=tb3,IB4=tb4)
 
 #================================================================================
 # store results
 #================================================================================
 modd1=omap.reshape(1,12*nout**2)
-os1,os2=fc.calc_stat(modd1,modd1,imaginary=False)
+os1,os2,os3,os4=fc.calc_stat_cov(modd1)
 
-np.save('in_demo_mask.npy', mask)
-np.save('in_demo_s1.npy', s1)
-np.save('in_demo_s2.npy', s2)
-np.save('out_demo_s1.npy', os1)
-np.save('out_demo_s2.npy', os2)
-np.save('in_demo_map.npy',im)
-np.save('out_demo_map.npy',omap/ampmap)
+np.save('in_cov_mask.npy', mask)
+np.save('in_cov_s1.npy', s1)
+np.save('in_cov_s2.npy', s2)
+np.save('in_cov_s3.npy', s3)
+np.save('in_cov_s4.npy', s4)
+np.save('out_cov_s1.npy', os1)
+np.save('out_cov_s2.npy', os2)
+np.save('out_cov_s3.npy', os3)
+np.save('out_cov_s4.npy', os4)
+np.save('in_cov_map.npy',im)
+np.save('out_cov_map.npy',omap/ampmap)
 
 print('Computation Done')
 sys.stdout.flush()
