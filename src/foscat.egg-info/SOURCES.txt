@@ -1,9 +1,9 @@
 README.md
 setup.cfg
 setup.py
-src/FoCUS/FoCUS.py
-src/FoCUS/__init__.py
-src/FoCUS/saved_FoCUS.py
+src/foscat/FoCUS.py
+src/foscat/__init__.py
+src/foscat/build_demo.py
 src/foscat.egg-info/PKG-INFO
 src/foscat.egg-info/SOURCES.txt
 src/foscat.egg-info/dependency_links.txt

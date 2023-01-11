@@ -1,1 +1,6 @@
-tensorflow
+imageio
+imagecodecs
+matplotlib
+numpy
+tensorflow-gpu
+healpy
