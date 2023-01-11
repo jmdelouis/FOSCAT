@@ -23,7 +23,7 @@ XSIZE=128
 #=================================================================================
 avg_ang=False
 
-fc=FOC.FoCUS(healpix=False,NORIENT=8,KERNELSZ=5,OSTEP=0,TEMPLATE_PATH=scratch_path)
+fc=FOC.FoCUS(healpix=False,NORIENT=12,KERNELSZ=7,OSTEP=0,TEMPLATE_PATH=scratch_path)
 
 #=================================================================================
 #  READ data and get data if necessary: 

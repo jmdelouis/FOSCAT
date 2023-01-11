@@ -1,11 +1,40 @@
 Metadata-Version: 2.1
 Name: foscat
-Version: 0.1
-Summary: UNKNOWN
-Home-page: https://gitlab.ifremer.fr/deepsee/focus
+Version: 1.1.14
+Summary: Synthesise 2D or Healpix data using Cross Scattering Transform
+Home-page: https://github.com/jmdelouis/FOSCAT
 Author: Jean-Marc DELOUIS
 Author-email: jean.marc.delouis@ifremer.fr
+Maintainer: Theo Foulquier
+Maintainer-email: theo.foulquier@ifremer.fr
 License: MIT
-Description: UNKNOWN
-Keywords: Scattering transform
-Platform: UNKNOWN
+Keywords: Scattering transform,Component separation,denoising
+
+Synthesise data (2D or Healpix) using Cross Scattering Transform (https://arxiv.org/abs/2207.12527) usable for component separation (e.g. denoising). 
+ #startup 
+ To generate test files run the follosing lines in python: 
+ >python
+
+>> import foscat.build_demo as dem
+
+>> dem.genDemo()
+
+>> quit()
+
+##run 2D test
+
+>python test2D.py
+
+to plot results
+
+>python test2Dplot.py
+
+##run Healpix test
+
+ >python testHealpix.py 
+
+ to plot results 
+
+ >python testHplot.py 
+
+ Note: If mpi is availble you can run testHealpix_mpi.py that uses 3 nodes to do the same computation than tesHealpix.py
