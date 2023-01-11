@@ -62,12 +62,6 @@ class FoCUS:
         self.tmpa={}
         self.tmpb={}
         self.tmpc={}
-
-        self.w_smooth=np.array([0.1,0.3,0.1,
-                           0.3,1.0,0.3,
-                           0.1,0.3,0.1])
-        
-        self.w_smooth=tf.constant(self.w_smooth/self.w_smooth.sum())
         
         if isMPI:
             from mpi4py import MPI
@@ -190,6 +184,10 @@ class FoCUS:
             wwc[:,i]/=sigma
             wws[:,i]/=sigma
 
+            w_smooth=np.exp(-0.5*((3/float(KERNELSZ)*xx)**2+(3/float(KERNELSZ)*yy)**2)).flatten()
+        
+        self.w_smooth=tf.constant(w_smooth/w_smooth.sum())
+        
         self.np_wwc=wwc
         self.np_wws=wws
         self.wwc=tf.constant(wwc)
@@ -801,8 +799,13 @@ class FoCUS:
                     s1=ts1
                 else:
                     s1=tf.concat([s1,ts1],2)
-                
-            lim1=2*tf.nn.avg_pool(lim1,ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1],padding='SAME')
+                    
+            iww_smooth=tf.reshape(self.w_smooth,[self.KERNELSZ,self.KERNELSZ,1,1])
+            
+            slim1 = tf.nn.conv2d(lim1,iww_smooth,strides=[1, 1, 1, 1],
+                                  padding=self.padding,name='sconv1_%d'%(iscale))
+            lim1=2*tf.nn.avg_pool(slim1,ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1],padding='SAME')
+            
             vmask=tf.reshape(tf.nn.avg_pool(tf.reshape(vmask,[self.NMASK,n0,n1,1]), ksize=[1, 2, 2, 1],
                                             strides=[1, 2, 2, 1],padding='SAME'),
                              [self.NMASK,n0//2,n1//2,1])
@@ -909,8 +912,14 @@ class FoCUS:
                     else:
                         c2=tf.concat([c2,ts2],2)
 
-                lim1=2*tf.nn.avg_pool(lim1, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1],padding='SAME')
-                lim2=2*tf.nn.avg_pool(lim2, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1],padding='SAME')
+                iww_smooth=tf.reshape(self.w_smooth,[self.KERNELSZ,self.KERNELSZ,1,1])
+            
+                slim1 = tf.nn.conv2d(lim1,iww_smooth,strides=[1, 1, 1, 1],
+                                     padding=self.padding,name='sconv1_%d'%(iscale))
+                slim2 = tf.nn.conv2d(lim2,iww_smooth,strides=[1, 1, 1, 1],
+                                     padding=self.padding,name='sconv2_%d'%(iscale))
+                lim1=2*tf.nn.avg_pool(slim1, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1],padding='SAME')
+                lim2=2*tf.nn.avg_pool(slim2, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1],padding='SAME')
                 vmask=tf.reshape(tf.nn.avg_pool(tf.reshape(vmask,[self.NMASK,n0,n1,1]), ksize=[1, 2, 2, 1],
                                                 strides=[1, 2, 2, 1],padding='SAME'),[self.NMASK,n0//2,n1//2,1])
                 n0=n0//2
@@ -920,7 +929,7 @@ class FoCUS:
         if imaginary:
             s1=tf.concat([s1,c1],0)
             s2=tf.concat([s2,c2],0)
-
+            
         if avg_ang:
             lshape=s1.get_shape().as_list()
             s1=tf.math.reduce_mean(tf.reshape(s1,[lshape[0],lshape[2]//self.NORIENT,self.NORIENT]),2)
