@@ -430,9 +430,9 @@ class FoCUS:
         
         return(tf.concat(s1,2))
 
-    def get_scat_cov_coeffs(self, image1):
+    def get_scat_cov_coeffs(self, image1, image2=None):
         """
-        Calculates the scattering correlations for a batch of images, including:
+        Calculates the scattering correlations for a batch of images. Mean are done over pixels.
         mean of modulus:
                         S1 = <|I * Psi_j3|>
              Normalization : take the log
@@ -440,7 +440,7 @@ class FoCUS:
                         P00 = <|I * Psi_j3|^2>
             Normalization : take the log
         orig. x modulus:
-                        C01 = < (I * Psi)_j3 x (|I * psi2| * Psi_j3)^* >_pix
+                        C01 = < (I * Psi)_j3 x (|I * Psi_j2| * Psi_j3)^* >
              Normalization : divide by (P00_j2 * P00_j3)^0.5
         modulus x modulus:
                         C11 = <(|I * psi1| * psi3)(|I * psi2| * psi3)^*>
@@ -449,6 +449,8 @@ class FoCUS:
         ----------
         image1: tensor
             Image on which we compute the scattering coefficients [Nbatch, Npix, 1, 1]
+        image2: tensor
+            Second image. If not None, we compute cross-scattering covariance coefficients.
         Returns
         -------
         S1, P00, C01, C11 normalized
@@ -464,7 +466,7 @@ class FoCUS:
         J = int(np.log(np.sqrt(npix / 12)) / np.log(2))
 
         ### Number of steps for the loop on scales
-        nstep = J - self.OSTEP
+        Jmax = J - self.OSTEP
 
         ### Rename image1 and the mask because it will be reshaped along the iterations
         # image1 is [Nbatch, Npix, 1, 1]
@@ -482,13 +484,13 @@ class FoCUS:
         I1_dic, P00_dic = {}, {}
 
         #### Loop on each scale
-        nside = n0  # NSIDE start (nside = n0 / 2^j3)
-        for j3 in range(nstep):
-            print(f'\n Npix_j3 = {npix}, Nside_j3={nside}')
+        nside_j3 = n0  # NSIDE start (nside_j3 = n0 / 2^j3)
+        for j3 in range(Jmax):
+            print(f'Npix_j3 = {npix}, Nside_j3={nside_j3}')
 
             #### Make the convolution I * Psi_j3
-            # self.widx2[nside] is [Npix_j3 x kersize]
-            alim1 = tf.reshape(tf.gather(lim1, self.widx2[nside], axis=1),
+            # self.widx2[nside_j3] is [Npix_j3 x kersize]
+            alim1 = tf.reshape(tf.gather(lim1, self.widx2[nside_j3], axis=1),
                                [BATCH_SIZE, 1, npix, kersize])  # [Nbatch, 1, Npix_j3, kersize]
             # Convolution with wcos [1, Norient3, 1, kersize]
             cconv1 = tf.reduce_sum(self.wcos * alim1, axis=3)  # Real part [Nbatch, Norient3, Npix_j3]
@@ -529,8 +531,8 @@ class FoCUS:
         
                 ### Compute I1_j2 * Psi_j3
                 # Warning: I1_dic[j2] is already at j3 resolution [Nbatch, Norient3, Npix_j3]
-                # self.widx2[nside] is [Npix_j3 x kersize]
-                I1convPsi = tf.reshape(tf.gather(I1_dic[j2], self.widx2[nside], axis=2),
+                # self.widx2[nside_j3] is [Npix_j3 x kersize]
+                I1convPsi = tf.reshape(tf.gather(I1_dic[j2], self.widx2[nside_j3], axis=2),
                                         [BATCH_SIZE, norient, 1, npix, kersize])  # [Nbatch, Norient2, 1, Npix_j3, kersize]
                 # Do the convolution with wcos, wsin  [1, Norient3, 1, kersize]
                 cI1convPsi = tf.reduce_sum(self.wcos[None, ...] * I1convPsi, axis=4)  # Real [Nbatch, Norient2, Norient3, Npix_j3]
@@ -587,7 +589,7 @@ class FoCUS:
                                         axis=2)  # Add a dimension for NC11
                 
             ### Reshape the image and I1_dic for next iteration on j3
-            slim1 = tf.reshape(tf.gather(lim1, self.widx2[nside], axis=1),
+            slim1 = tf.reshape(tf.gather(lim1, self.widx2[nside_j3], axis=1),
                                [BATCH_SIZE, npix, kersize])  # [Nbatch, Npix, kersize]
             # Convolution with self.w_smooth [1, 1,kersize]
             slim1 = tf.reduce_sum(self.w_smooth[None,None,:] * slim1, axis=2)  # [Nbatch, Npix]
@@ -595,7 +597,7 @@ class FoCUS:
             
             for j2 in range(0, j3):  # j2 <= j3
                 #I1_dic[j2] = tf.reduce_mean(tf.reshape(I1_dic[j2], [BATCH_SIZE, norient, npix // 4, 4]), axis=3)  # [Nbatch, Norient3, Npix]
-                slim1 = tf.reshape(tf.gather(I1_dic[j2], self.widx2[nside], axis=2),
+                slim1 = tf.reshape(tf.gather(I1_dic[j2], self.widx2[nside_j3], axis=2),
                                [BATCH_SIZE, norient, npix, kersize])  # [Nbatch, Norient3,Npix, kersize]
                 # Convolution with self.w_smooth [1, 1,1,kersize]
                 slim1 = tf.reduce_sum(self.w_smooth[None,None,None,:] * slim1, axis=3)  # Real part [Nbatch, Norient3, Npix_j3]
@@ -604,8 +606,8 @@ class FoCUS:
             # Update the mask for next iteration
             vmask = tf.reduce_mean(tf.reshape(vmask, [self.NMASK, npix // 4, 4]), axis=2)  # [Nmask, Npix]
             # Update NSIDE and npix for next iteration
-            nside = nside // 2
-            npix = 12 * nside**2
+            nside_j3 = nside_j3 // 2
+            npix = 12 * nside_j3**2
 
         print(S1.shape, P00.shape, C01.shape, C11.shape)
 
