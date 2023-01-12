@@ -1316,28 +1316,27 @@ class FoCUS:
             return(stat_o1,stat_o2)
 
     # ---------------------------------------------−---------
-    def calc_stat_cov(self, n1, gpupos=0):
+    def calc_stat_cov(self, image1, gpupos=0):
         """
-
+        Calculate scattering covariance coeffs on a batch of images.
         Parameters
         ----------
-        n1: array
-            Image [Nsim, Npix]
-        gpupos
+        image1: array
+            Image [Nbatch, Npix]
+        gpupos: int
 
         Returns
         -------
-
+        stat_S1, stat_P00, stat_C01, stat_C11: Scattering coeffs for each image in the batch.
         """
 
         with tf.device(self.gpulist[gpupos % self.ngpu]):
-            nsim = n1.shape[0]  # Number of simulations
+            nsim = image1.shape[0]  # Number of simulations
             for i in range(nsim):
                 feed_dict = {}
                 if self.nout != -1:  # Healpix
                     # Reshape the image as [1, Npix, 1, 1] and put it in a dictionary
-                    # feed_dict[self.noise1] = n1[i].reshape(1, 12 * self.nout * self.nout, 1, 1)  # [1, Npix, 1, 1]
-                    feed_dict[self.noise1] = n1[i][None, :, None, None]  # [1, Npix, 1, 1]
+                    feed_dict[self.noise1] = image1[i][None, :, None, None]  # [1, Npix, 1, 1]
                 else:  # 2D plan
                     print('Only work in Healpix.')
 
