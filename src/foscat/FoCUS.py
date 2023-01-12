@@ -430,17 +430,28 @@ class FoCUS:
         
         return(tf.concat(s1,2))
 
-    def hpwst_2_cov(self, image1):
+    def get_scat_cov_coeffs(self, image1):
         """
-        Compute the scattering covariance coefficients S1, P00, C01 and C11.
+        Calculates the scattering correlations for a batch of images, including:
+        mean of modulus:
+                        S1 = <|I * Psi_j3|>
+             Normalization : take the log
+        power spectrum:
+                        P00 = <|I * Psi_j3|^2>
+            Normalization : take the log
+        orig. x modulus:
+                        C01 = < (I * Psi)_j3 x (|I * psi2| * Psi_j3)^* >_pix
+             Normalization : divide by (P00_j2 * P00_j3)^0.5
+        modulus x modulus:
+                        C11 = <(|I * psi1| * psi3)(|I * psi2| * psi3)^*>
+             Normalization : divide by (P00_j1 * P00_j2)^0.5
         Parameters
         ----------
         image1: tensor
             Image on which we compute the scattering coefficients [Nbatch, Npix, 1, 1]
-
         Returns
         -------
-        S1, P00, C01, C11
+        S1, P00, C01, C11 normalized
         """
         
         BATCH_SIZE = 1
@@ -549,7 +560,7 @@ class FoCUS:
                 else:
                     C01 = tf.concat([C01, cc01[:, :, None, :, :], sc01[:, :, None, :, :]], axis=2)  # Add a dimension for NC01
                 
-                ##### C11 <(|I * psi1| * psi3)(|I * psi2| * psi3)^*>
+                ##### C11 = <(|I * psi1| * psi3)(|I * psi2| * psi3)^*>
                 for j1 in range(0, j2):  # j1 <= j2
                     ### Compute the product (|I * psi1| * psi3)(|I * psi2| * psi3)
                     # z_1 x z_2^* = (a1a2 + b1b2) + i(b1a2 - a1b2)
@@ -1146,8 +1157,8 @@ class FoCUS:
 
             ### Compute the scattering covariance coefficients of image 1 and image2
             if self.nout != -1:  # Healpix sphere
-                iS1, iP00, iC01, iC11 = self.hpwst_2_cov(image1)
-                oS1, oP00, oC01, oC11 = self.hpwst_2_cov(image2)
+                iS1, iP00, iC01, iC11 = self.get_scat_cov_coeffs(image1)
+                oS1, oP00, oC01, oC11 = self.get_scat_cov_coeffs(image2)
             else:
                 print('Not developed for 2D plan.')
                 exit(0)
@@ -1480,7 +1491,7 @@ class FoCUS:
                                                      name='NOISE2_%d'%(self.nloss))
 
                 # Scattering covariance coefficients
-                self.S1, self.P00, self.C01, self.C11 = self.hpwst_2_cov(self.noise1)
+                self.S1, self.P00, self.C01, self.C11 = self.get_scat_cov_coeffs(self.noise1)
 
                 for i in range(16):
                     if ((i//4)%2)+((i//8)%2)!=0:
