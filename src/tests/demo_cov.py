@@ -53,7 +53,13 @@ ampmap=1/im[mask[0]>0.9].std()
 data = fc.convimage(ampmap*(im))
 
 # Initialize the learning and initialize the tensor to be synthesized
-ldata=fc.init_synthese(np.random.randn(12*nout*nout))
+idx=hp.ring2nest(nout,np.arange(12*nout**2))
+idx2=hp.nest2ring(nout,np.arange(12*nout**2))
+
+cl=hp.anafast((ampmap*im)[idx])
+sim=hp.synfast(cl,nout)
+cl2=hp.anafast(sim)
+ldata=fc.init_synthese(sim[idx2])
 
 #=================================================================================
 # DEFINE THE LOSS, SHOULD BE DONE INSIDE INITIALISATION
@@ -93,10 +99,12 @@ tb2={}
 tb3={}
 tb4={}
 for i in range(1):
+    
     tw1[i]=np.ones_like(s1[0])
     tw2[i]=np.ones_like(s2[0])
     tw3[i]=np.ones_like(s3[0])
     tw4[i]=np.ones_like(s4[0])
+    
     tb1[i]=np.zeros_like(s1[0])
     tb2[i]=np.zeros_like(s2[0])
     tb3[i]=np.zeros_like(s3[0])
@@ -106,10 +114,10 @@ for i in range(1):
 # Run the synthesis
 #================================================================================
 omap=fc.learn(tw1,tw2,tb1,tb2,
-              NUM_EPOCHS = 5000,
+              NUM_EPOCHS = 3000,
               EVAL_FREQUENCY = 100,
               DECAY_RATE=0.9999,
-              LEARNING_RATE=1.0,
+              LEARNING_RATE=0.3,
               SEQUENTIAL_ITT=10,
               ADDAPT_LEARN=200.0,
               IW3=tw3,IW4=tw4,

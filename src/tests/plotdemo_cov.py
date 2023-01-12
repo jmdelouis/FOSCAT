@@ -22,8 +22,8 @@ os2= np.load('out_cov_s2.npy')
 os3= np.load('out_cov_s3.npy')
 os4= np.load('out_cov_s4.npy')
 
-im = np.load('in_map.npy')
-om = np.load('out_map.npy')
+im = np.load('in_cov_map.npy')
+om = np.load('out_cov_map.npy')
 
 #make the galactic ridge positive
 if abs(om).max()>om.max():
