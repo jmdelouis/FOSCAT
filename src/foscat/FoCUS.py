@@ -455,170 +455,399 @@ class FoCUS:
         -------
         S1, P00, C01, C11 normalized
         """
-        
+        ### AUTO OR CROSS
+        cross = False
+        if image2 is not None:
+            cross = True
+            
+        ### PARAMETERS
         BATCH_SIZE = 1
         im_shape = image1.get_shape().as_list()
         npix = int(im_shape[1])  # Number of pixels
         n0 = int(np.sqrt(npix / 12))  # NSIDE
-        norient = self.NORIENT  # Number of orientations
-
-        ### Number of j scales
-        J = int(np.log(np.sqrt(npix / 12)) / np.log(2))
-
-        ### Number of steps for the loop on scales
-        Jmax = J - self.OSTEP
-
-        ### Rename image1 and the mask because it will be reshaped along the iterations
+        J = int(np.log(np.sqrt(npix / 12)) / np.log(2)) # Number of j scales
+        Jmax = J - self.OSTEP # Number of steps for the loop on scales
+        # self.KERNELSZ is the number of pixel on one side (3, 5, 7...)
+        kersize2 = self.KERNELSZ ** 2 # Kernel size square (9, 25, 49...)
+        
+        ### LOCAL VARIABLES (IMAGES and MASK)
         # image1 is [Nbatch, Npix, 1, 1]
-        lim1 = image1[:, :, 0, 0]  # [Nbatch, Npix]
+        I1 = image1[:, :, 0, 0]  # Local image1 [Nbatch, Npix]
+        if cross:
+            I2 = image2[:, :, 0, 0]  # Local image2 [Nbatch, Npix]
         # self.mask is [Nmask, Npix, 1, 1]
         vmask = self.mask[:, :, 0, 0]  # [Nmask, Npix]
         # Normalize the masks because they have different pixel numbers
-        vmask /= tf.math.reduce_sum(vmask, axis=1)[:, None]  # [Nmask, Npix]
+        vmask /= tf.reduce_sum(vmask, axis=1)[:, None]  # [Nmask, Npix]
 
-        ### Kernel size (9, 16, 25...)
-        # self.widx2[n0] is [Npix x kersize]
-        kersize = self.widx2[n0].get_shape()[0] // npix
-
+        ### COEFFS INITIALIZATION
         S1, P00, C01, C11 = None, None, None, None
-        I1_dic, P00_dic = {}, {}
+        M1_dic, P1_dic = {}, {}  # M stands for Module
+        if cross:
+            M2_dic, P2_dic = {}, {}
 
-        #### Loop on each scale
-        nside_j3 = n0  # NSIDE start (nside_j3 = n0 / 2^j3)
+        #### COMPUTE S1, P00, C01 and C11
+        nside_j3 = n0   # NSIDE start (nside_j3 = n0 / 2^j3)
+        npix_j3 = npix  # Pixel number at each iteration on j3 
         for j3 in range(Jmax):
-            print(f'Npix_j3 = {npix}, Nside_j3={nside_j3}')
+            print(f'Nside_j3={nside_j3}')
 
-            #### Make the convolution I * Psi_j3
-            # self.widx2[nside_j3] is [Npix_j3 x kersize]
-            alim1 = tf.reshape(tf.gather(lim1, self.widx2[nside_j3], axis=1),
-                               [BATCH_SIZE, 1, npix, kersize])  # [Nbatch, 1, Npix_j3, kersize]
-            # Convolution with wcos [1, Norient3, 1, kersize]
-            cconv1 = tf.reduce_sum(self.wcos * alim1, axis=3)  # Real part [Nbatch, Norient3, Npix_j3]
-            sconv1 = tf.reduce_sum(self.wsin * alim1, axis=3)  # Imag part [Nbatch, Norient3, Npix_j3]
+            ### Make the convolution I1 * Psi_j3
+            cconv1, sconv1, M1_square, M1 = self._compute_IconvPsi(I1, nside_j3, BATCH_SIZE, npix_j3, kersize2)
+            # Store M1_j3 in a dictionary
+            M1_dic[j3] = M1
+
+            if cross:
+                ### Make the convolution I2 * Psi_j3
+                cconv2, sconv2, M2_square, M2 = self._compute_IconvPsi(I2, nside_j3, BATCH_SIZE, npix_j3, kersize2)
+                # Store M2_j3 in a dictionary
+                M2_dic[j3] = M2
             
-            # Take the module I1_j3 = |I * Psi_j3|
-            I1_square = cconv1 * cconv1 + sconv1 * sconv1  # [Nbatch, Norient3, Npix_j3]
-            I1 = tf.sqrt(I1_square)  # [Nbatch, Norient3, Npix_j3]
-            # Store I1_j3 in a dictionary
-            I1_dic[j3] = I1
-
-            ### S1 = < I1 >_pix (L1 norm)
-            # Apply the mask [Nmask, Npix_j3] on the convolved map and average over pixels
-            s1 = tf.reduce_sum(vmask[None, :, None, :] * I1[:, None, :, :],
-                                              axis=3)  # [Nbatch, Nmask, Norient3]
-            # We store S1
-            if S1 is None:
-                S1 = s1[:, :, None, :] # Add a dimension for NS1
-            else:
-                S1 = tf.concat([S1, s1[:, :, None, :]], axis=2)
-
-            ### P00 = < I1^2 >_pix : L2 norm
-            p00 = tf.reduce_sum(vmask[None, :, None, :] * I1_square[:, None, :, :],
-                                                  axis=3)  # [Nbatch, Nmask, Norient3]
-            # We store P00
-            if P00 is None:
-                P00 = p00[:, :, None, :] # Add a dimension for NP00
-            else:
-                P00 = tf.concat([P00, p00[:, :, None, :]], axis=2)
-            P00_dic[j3] = p00  # [Nbatch, Nmask, Norient3]
-
-            # Initialize dictionaries for |I*Psi_j| * Psi_j3
-            cI1convPsi_dic = {}
-            sI1convPsi_dic = {}
-
-            ###### C01 = < (I * Psi)_j3 x (|I * psi2| * Psi_j3)^* >_pix
-            for j2 in range(0, j3):  # j2 <= j3
-        
-                ### Compute I1_j2 * Psi_j3
-                # Warning: I1_dic[j2] is already at j3 resolution [Nbatch, Norient3, Npix_j3]
-                # self.widx2[nside_j3] is [Npix_j3 x kersize]
-                I1convPsi = tf.reshape(tf.gather(I1_dic[j2], self.widx2[nside_j3], axis=2),
-                                        [BATCH_SIZE, norient, 1, npix, kersize])  # [Nbatch, Norient2, 1, Npix_j3, kersize]
-                # Do the convolution with wcos, wsin  [1, Norient3, 1, kersize]
-                cI1convPsi = tf.reduce_sum(self.wcos[None, ...] * I1convPsi, axis=4)  # Real [Nbatch, Norient2, Norient3, Npix_j3]
-                sI1convPsi = tf.reduce_sum(self.wsin[None, ...] * I1convPsi, axis=4)  # Imag [Nbatch, Norient2, Norient3, Npix_j3]
-                # Store it so we can use it in C11 computation
-                cI1convPsi_dic[j2] = cI1convPsi  # [Nbatch, Norient2, Norient3, Npix_j3]
-                sI1convPsi_dic[j2] = sI1convPsi  # [Nbatch, Norient2, Norient3, Npix_j3]
-                ### Compute the product (I * Psi)_j3 x (I1_j2 * Psi_j3)^*
-                # z_1 x z_2^* = (a1a2 + b1b2) + i(b1a2 - a1b2)
-                # cconv1, sconv1 are [Nbatch, Norient3, Npix_j3]
-                cproduct = cconv1[:, None, :, :] * cI1convPsi +\
-                           sconv1[:, None, :, :] * sI1convPsi  # Real [Nbatch, Norient2, Norient3, Npix_j3]
-                sproduct = sconv1[:, None, :, :] * cI1convPsi -\
-                           cconv1[:, None, :, :] * sI1convPsi  # Imag [Nbatch, Norient2, Norient3, Npix_j3]
-                ### Sum over pixels after applying the mask [Nmask, Npix]
-                cc01 = tf.reduce_sum(vmask[None,:, None, None, :] *
-                                     cproduct[:, None, :, :, :], axis=4)  # Real [Nbatch, Nmask, Norient2, Norient3]
-                sc01 = tf.reduce_sum(vmask[None, :, None, None, :] *
-                                     sproduct[:, None, :, :, :], axis=4)  # Imag [Nbatch, Nmask, Norient2, Norient3]
-                ### Normalize C01 with P00 [Nbatch, Nmask, Norient]
-                cc01 /= (P00_dic[j2][:, :, :, None] * P00_dic[j3][:, :, None, :]) ** 0.5  # [Nbatch, Nmask, Norient2, Norient3]
-                sc01 /= (P00_dic[j2][:, :, :, None] * P00_dic[j3][:, :, None, :]) ** 0.5  # [Nbatch, Nmask, Norient2, Norient3]
-
-                # We store C01
-                if C01 is None:
-                    C01 = tf.concat([cc01[:, :, None, :, :], sc01[:, :, None, :, :]], axis=2)  # Add a dimension for NC01
+            ####### S1 and P00
+            ### P00_auto = < M1^2 >_pix
+            p00 = tf.reduce_sum(vmask[None, :, None, :] * M1_square[:, None, :, :],
+                                axis=3)  # [Nbatch, Nmask, Norient3]
+            # We store it for normalisation of C01 and C11
+            P1_dic[j3] = p00  # [Nbatch, Nmask, Norient3]
+            
+            if not cross:
+                # We store P00_auto to be returned
+                if P00 is None:
+                    P00 = p00[:, :, None, :]  # Add a dimension for NP00
                 else:
-                    C01 = tf.concat([C01, cc01[:, :, None, :, :], sc01[:, :, None, :, :]], axis=2)  # Add a dimension for NC01
-                
-                ##### C11 = <(|I * psi1| * psi3)(|I * psi2| * psi3)^*>
-                for j1 in range(0, j2):  # j1 <= j2
-                    ### Compute the product (|I * psi1| * psi3)(|I * psi2| * psi3)
-                    # z_1 x z_2^* = (a1a2 + b1b2) + i(b1a2 - a1b2)
-                    # cI1convPsi_dic[j] is [Nbatch, Norient, Norient3, Npix_j3]
-                    cproduct = cI1convPsi_dic[j1][:, :, None, :, :] * cI1convPsi_dic[j2][:, None, :, :, :] +\
-                               sI1convPsi_dic[j1][:, :, None, :, :] * sI1convPsi_dic[j2][:, None, :, :, :]  # Real [Nbatch, Norient1, Norient2, Norient3, Npix_j3]
-                    sproduct = sI1convPsi_dic[j1][:, :, None, :, :] * cI1convPsi_dic[j2][:, None, :, :, :] -\
-                               cI1convPsi_dic[j1][:, :, None, :, :] * sI1convPsi_dic[j2][:, None, :, :, :]  # Imag [Nbatch, Norient1, Norient2, Norient3, Npix_j3]
-                    ### Sum over pixels and apply the mask
-                    cc11 = tf.reduce_sum(vmask[None, :, None, None, None, :] *
-                                         cproduct[:, None, :, :, :, :], axis=5)  # Real [Nbatch, Nmask, Norient1, Norient2, Norient3]
-                    sc11 = tf.reduce_sum(vmask[None, :, None, None, None, :] *
-                                         sproduct[:, None, :, :, :, :], axis=5)  # Imag [Nbatch, Nmask, Norient1, Norient2, Norient3]
-                    ### Normalize C11 with P00_j [Nbatch, Nmask, Norient_j]
-                    cc11 /= (P00_dic[j1][:, :, :, None, None] * P00_dic[j2][:, :, None, :, None]) ** 0.5  # [Nbatch, Nmask, Norient1, Norient2, Norient3]
-                    sc11 /= (P00_dic[j1][:, :, :, None, None] * P00_dic[j2][:, :, None, :, None]) ** 0.5  # [Nbatch, Nmask, Norient1, Norient2, Norient3]
+                    P00 = tf.concat([P00, p00[:, :, None, :]], axis=2)
+                    
+                #### S1_auto computation
+                ### Image 1 : S1 = < M1 >_pix
+                # Apply the mask [Nmask, Npix_j3] and average over pixels
+                s1 = tf.reduce_sum(vmask[None, :, None, :] * M1[:, None, :, :],
+                                       axis=3)  # [Nbatch, Nmask, Norient3]
+                ### We store S1 for image1
+                if S1 is None:
+                    S1 = s1[:, :, None, :]  # Add a dimension for NS1
+                else:
+                    S1 = tf.concat([S1, s1[:, :, None, :]], axis=2)
 
-                    # We store C11
-                    if C11 is None:
-                        C11 = tf.concat([cc11[:, :, None, :, :, :], sc11[:, :, None, :, :, :]],
-                                        axis=2)  # Add a dimension for NC11
-                    else:
-                        C11 = tf.concat([C11, cc11[:, :, None, :, :, :], sc11[:, :, None, :, :, :]],
-                                        axis=2)  # Add a dimension for NC11
-                
-            ### Reshape the image and I1_dic for next iteration on j3
-            slim1 = tf.reshape(tf.gather(lim1, self.widx2[nside_j3], axis=1),
-                               [BATCH_SIZE, npix, kersize])  # [Nbatch, Npix, kersize]
-            # Convolution with self.w_smooth [1, 1,kersize]
-            slim1 = tf.reduce_sum(self.w_smooth[None,None,:] * slim1, axis=2)  # [Nbatch, Npix]
-            lim1 = tf.reduce_mean(tf.reshape(slim1, [BATCH_SIZE, npix // 4, 4]), axis=2)  # [Nbatch, Npix]
-            
+            else:
+                ### P00_auto = < M2^2 >_pix
+                p00 = tf.reduce_sum(vmask[None, :, None, :] * M2_square[:, None, :, :],
+                                    axis=3)  # [Nbatch, Nmask, Norient3]
+                # We store it for normalisation
+                P2_dic[j3] = p00  # [Nbatch, Nmask, Norient3]
+
+                ### P00_cross = < (I1 * Psi_j3) (I2 * Psi_j3)^* >_pix
+                # z_1 x z_2^* = (a1a2 + b1b2) + i(b1a2 - a1b2)
+                p00_real = cconv1 * cconv2 + sconv1 * sconv2
+                p00_imag = sconv1 * cconv2 - cconv1 * sconv2
+                # Apply the mask [Nmask, Npix_j3] and average over pixels
+                p00_real = tf.reduce_sum(vmask[None, :, None, :] * p00_real[:, None, :, :],
+                                         axis=3)  # [Nbatch, Nmask, Norient3]
+                p00_imag = tf.reduce_sum(vmask[None, :, None, :] * p00_imag[:, None, :, :],
+                                         axis=3)  # [Nbatch, Nmask, Norient3]
+                ### We store P00_cross
+                if P00 is None:
+                    P00 = tf.concat([p00_real[:, :, None, :], p00_imag[:, :, None, :]], axis=2)  # Add a dimension for NP00
+                else:
+                    P00 = tf.concat([P00, p00_real[:, :, None, :], p00_imag[:, :, None, :]], axis=2)
+
+            # Initialize dictionaries for |I1*Psi_j| * Psi_j3
+            cM1convPsi_dic = {}
+            sM1convPsi_dic = {}
+            if cross:
+                # Initialize dictionaries for |I2*Psi_j| * Psi_j3
+                cM2convPsi_dic = {}
+                sM2convPsi_dic = {}
+
+            ###### C01
             for j2 in range(0, j3):  # j2 <= j3
-                #I1_dic[j2] = tf.reduce_mean(tf.reshape(I1_dic[j2], [BATCH_SIZE, norient, npix // 4, 4]), axis=3)  # [Nbatch, Norient3, Npix]
-                slim1 = tf.reshape(tf.gather(I1_dic[j2], self.widx2[nside_j3], axis=2),
-                               [BATCH_SIZE, norient, npix, kersize])  # [Nbatch, Norient3,Npix, kersize]
-                # Convolution with self.w_smooth [1, 1,1,kersize]
-                slim1 = tf.reduce_sum(self.w_smooth[None,None,None,:] * slim1, axis=3)  # Real part [Nbatch, Norient3, Npix_j3]
-                I1_dic[j2] = tf.reduce_mean(tf.reshape(slim1, [BATCH_SIZE, norient, npix // 4, 4]), axis=3)  # [Nbatch, Norient3, Npix]
-                
-            # Update the mask for next iteration
-            vmask = tf.reduce_mean(tf.reshape(vmask, [self.NMASK, npix // 4, 4]), axis=2)  # [Nmask, Npix]
-            # Update NSIDE and npix for next iteration
-            nside_j3 = nside_j3 // 2
-            npix = 12 * nside_j3**2
+                ### C01_auto = < (I1 * Psi)_j3 x (|I1 * psi2| * Psi_j3)^* >_pix
+                if not cross:
+                    cc01, sc01 = self._compute_C01_auto(j2, cconv1, sconv1, vmask,
+                                                        M1_dic, cM1convPsi_dic, sM1convPsi_dic,
+                                                        nside_j3, BATCH_SIZE, npix_j3, kersize2)
+                    ### Normalize C01 with P00 [Nbatch, Nmask, Norient]
+                    cc01 /= (P1_dic[j2][:, :, :, None] *
+                             P1_dic[j3][:, :, None, :]) ** 0.5  # [Nbatch, Nmask, Norient2, Norient3]
+                    sc01 /= (P1_dic[j2][:, :, :, None] *
+                             P1_dic[j3][:, :, None, :]) ** 0.5  # [Nbatch, Nmask, Norient2, Norient3]
+                    ### Store C01
+                    if C01 is None:
+                        C01 = tf.concat([cc01[:, :, None, :, :], sc01[:, :, None, :, :]], axis=2)  # Add a dimension for NC01
+                    else:
+                        C01 = tf.concat([C01, cc01[:, :, None, :, :], sc01[:, :, None, :, :]], axis=2)  # Add a dimension for NC01
 
+                ### C01_cross = < (I1 * Psi)_j3 x (|I2 * psi2| * Psi_j3)^* >_pix
+                ### C01_cross_bis = < (I2 * Psi)_j3 x (|I1 * psi2| * Psi_j3)^* >_pix
+                else:
+                    cc01, sc01, cc01_bis, sc01_bis = self._compute_C01_cross(j2, cconv1, sconv1, cconv2, sconv2, vmask,
+                                                                             M1_dic, M2_dic,
+                                                                             cM1convPsi_dic, sM1convPsi_dic,
+                                                                             cM2convPsi_dic, sM2convPsi_dic,
+                                                                             nside_j3, BATCH_SIZE, npix_j3, kersize2)
+                    ### Normalize C01 with P00 [Nbatch, Nmask, Norient]
+                    cc01 /= (P2_dic[j2][:, :, :, None] *
+                             P1_dic[j3][:, :, None, :]) ** 0.5  # [Nbatch, Nmask, Norient2, Norient3]
+                    sc01 /= (P2_dic[j2][:, :, :, None] *
+                             P1_dic[j3][:, :, None, :]) ** 0.5  # [Nbatch, Nmask, Norient2, Norient3]
+                    cc01_bis /= (P1_dic[j2][:, :, :, None] *
+                                 P2_dic[j3][:, :, None, :]) ** 0.5  # [Nbatch, Nmask, Norient2, Norient3]
+                    sc01_bis /= (P1_dic[j2][:, :, :, None] *
+                                 P2_dic[j3][:, :, None, :]) ** 0.5  # [Nbatch, Nmask, Norient2, Norient3]
+                    ### Store C01
+                    if C01 is None:
+                        C01 = tf.concat([cc01[:, :, None, :, :], sc01[:, :, None, :, :],
+                                         cc01_bis[:, :, None, :, :], sc01_bis[:, :, None, :, :]],
+                                        axis=2)  # Add a dimension for NC01
+                    else:
+                        C01 = tf.concat([C01,
+                                         cc01[:, :, None, :, :], sc01[:, :, None, :, :],
+                                         cc01_bis[:, :, None, :, :], sc01_bis[:, :, None, :, :]],
+                                        axis=2)  # Add a dimension for NC01
+
+                ##### C11
+                for j1 in range(0, j2):  # j1 <= j2
+                    ### C11_auto = <(|I1 * psi1| * psi3)(|I1 * psi2| * psi3)^*>
+                    if not cross:
+                        cc11, sc11 = self._compute_C11_auto(j1, j2, vmask, cM1convPsi_dic, sM1convPsi_dic)
+                        ### Normalize C11 with P00_j [Nbatch, Nmask, Norient_j]
+                        cc11 /= (P1_dic[j1][:, :, :, None, None] *
+                                 P1_dic[j2][:, :, None, :, None]) ** 0.5  # [Nbatch, Nmask, Norient1, Norient2, Norient3]
+                        sc11 /= (P1_dic[j1][:, :, :, None, None] *
+                                 P1_dic[j2][:, :, None, :, None]) ** 0.5  # [Nbatch, Nmask, Norient1, Norient2, Norient3]
+                        # We store C11
+                        if C11 is None:
+                            C11 = tf.concat([cc11[:, :, None, :, :, :], sc11[:, :, None, :, :, :]],
+                                            axis=2)  # Add a dimension for NC11
+                        else:
+                            C11 = tf.concat([C11, cc11[:, :, None, :, :, :], sc11[:, :, None, :, :, :]],
+                                            axis=2)  # Add a dimension for NC11
+
+                    ### C11_cross = <(|I1 * psi1| * psi3)(|I2 * psi2| * psi3)^*>
+                    else:
+                        cc11, sc11 = self._compute_C11_cross(j1, j2, vmask,
+                                                             cM1convPsi_dic, sM1convPsi_dic,
+                                                             cM2convPsi_dic, sM2convPsi_dic)
+                        ### Normalize C11 with P00_j [Nbatch, Nmask, Norient_j]
+                        cc11 /= (P1_dic[j1][:, :, :, None, None] *
+                                 P2_dic[j2][:, :, None, :, None]) ** 0.5  # [Nbatch, Nmask, Norient1, Norient2, Norient3]
+                        sc11 /= (P1_dic[j1][:, :, :, None, None] *
+                                 P2_dic[j2][:, :, None, :, None]) ** 0.5  # [Nbatch, Nmask, Norient1, Norient2, Norient3]
+                        # We store C11
+                        if C11 is None:
+                            C11 = tf.concat([cc11[:, :, None, :, :, :], sc11[:, :, None, :, :, :]],
+                                            axis=2)  # Add a dimension for NC11
+                        else:
+                            C11 = tf.concat([C11, cc11[:, :, None, :, :, :], sc11[:, :, None, :, :, :]],
+                                            axis=2)  # Add a dimension for NC11
+
+            ###### Reshape for next iteration on j3
+            ### Image I1
+            I1_smooth = tf.reshape(tf.gather(I1, self.widx2[nside_j3], axis=1),
+                               [BATCH_SIZE, npix_j3, kersize2])  # [Nbatch, Npix_j3, kersize2]
+            # Convolution with self.w_smooth [1, 1, kersize2]
+            I1_smooth = tf.reduce_sum(self.w_smooth[None, None, :] * I1_smooth, axis=2)  # [Nbatch, Npix_j3]
+            I1 = tf.reduce_mean(tf.reshape(I1_smooth, [BATCH_SIZE, npix_j3 // 4, 4]), axis=2)  # [Nbatch, Npix_j3]
+            ### Image I2
+            if cross:
+                I2_smooth = tf.reshape(tf.gather(I2, self.widx2[nside_j3], axis=1),
+                                       [BATCH_SIZE, npix_j3, kersize2])  # [Nbatch, Npix_j3, kersize2]
+                # Convolution with self.w_smooth [1, 1, kersize2]
+                I2_smooth = tf.reduce_sum(self.w_smooth[None, None, :] * I2_smooth, axis=2)  # [Nbatch, Npix_j3]
+                I2 = tf.reduce_mean(tf.reshape(I2_smooth,
+                                               [BATCH_SIZE, npix_j3 // 4, 4]), axis=2)  # [Nbatch, Npix_j3]
+            ### Modules
+            for j2 in range(0, j3):  # j2 <= j3
+                ### Dictionary M1_dic[j2]
+                M1_smooth = tf.reshape(tf.gather(M1_dic[j2], self.widx2[nside_j3], axis=2),
+                                       [BATCH_SIZE, self.NORIENT, npix_j3, kersize2])  # [Nbatch, Norient3, Npix_j3, kersize2]
+                # Convolution with self.w_smooth [1, 1,1,kersize2]
+                M1_smooth = tf.reduce_sum(self.w_smooth[None,None,None,:] * M1_smooth, axis=3)  # Real part [Nbatch, Norient3, Npix_j3]
+                M1_dic[j2] = tf.reduce_mean(tf.reshape(M1_smooth,
+                                                       [BATCH_SIZE, self.NORIENT, npix_j3 // 4, 4]), axis=3)  # [Nbatch, Norient3, Npix]
+                ### Dictionary M2_dic[j2]
+                if cross:
+                    M2_smooth = tf.reshape(tf.gather(M2_dic[j2], self.widx2[nside_j3], axis=2),
+                                           [BATCH_SIZE, self.NORIENT, npix_j3, kersize2])  # [Nbatch, Norient3, Npix_j3, kersize2]
+                    # Convolution with self.w_smooth [1, 1,1,kersize2]
+                    M2_smooth = tf.reduce_sum(self.w_smooth[None, None, None, :] * M2_smooth,
+                                              axis=3)  # Real part [Nbatch, Norient3, Npix_j3]
+                    M2_dic[j2] = tf.reduce_mean(tf.reshape(M2_smooth,
+                                                           [BATCH_SIZE, self.NORIENT, npix_j3 // 4, 4]),
+                                                axis=3)  # [Nbatch, Norient3, Npix_j3]
+            ### Mask
+            vmask = tf.reduce_mean(tf.reshape(vmask, [self.NMASK, npix_j3 // 4, 4]), axis=2)  # [Nmask, Npix_j3]
+            ### NSIDE_j3 and npix_j3
+            nside_j3 = nside_j3 // 2
+            npix_j3 = 12 * nside_j3**2
+
+        #### For test
         print(S1.shape, P00.shape, C01.shape, C11.shape)
 
         ###### Normalize S1 and P00
-        S1 = tf.log(S1)
         P00 = tf.log(P00)
-        ### !!! For test
-        # C01 = tf.log(C01)
-        # C11 = tf.log(C11)
+        if not cross:
+            S1 = tf.log(S1)
 
         return S1, P00, C01, C11
+
+    def _compute_IconvPsi(self, I, nside_j3, BATCH_SIZE, npix_j3, kersize2):
+        """
+        Make the convolution I * Psi_j3
+        Returns
+        -------
+
+        """
+        # self.widx2[nside_j3] is [Npix_j3 x kersize2]
+        alim = tf.reshape(tf.gather(I, self.widx2[nside_j3], axis=1),
+                          [BATCH_SIZE, 1, npix_j3, kersize2])  # [Nbatch, 1, Npix_j3, kersize2]
+        # Convolution with wcos [1, Norient3, 1, kersize2]
+        cconv = tf.reduce_sum(self.wcos * alim, axis=3)  # Real part [Nbatch, Norient3, Npix_j3]
+        sconv = tf.reduce_sum(self.wsin * alim, axis=3)  # Imag part [Nbatch, Norient3, Npix_j3]
+
+        # Module square |I * Psi_j3|^2
+        M_square = cconv * cconv + sconv * sconv  # [Nbatch, Norient3, Npix_j3]
+        # Module |I * Psi_j3|
+        M = tf.sqrt(M_square)  # [Nbatch, Norient3, Npix_j3]
+        return cconv, sconv, M_square, M
+
+    def _compute_C01_auto(self, j2, cconv1, sconv1, vmask, M1_dic, cM1convPsi_dic, sM1convPsi_dic,
+                          nside_j3, BATCH_SIZE, npix_j3, kersize2):
+        ### Compute |I1 * psi2| * Psi_j3 = M1_j2 * Psi_j3
+        # Warning: M1_dic[j2] is already at j3 resolution [Nbatch, Norient3, Npix_j3]
+        # self.widx2[nside_j3] is [Npix_j3 x kersize2]
+        M1convPsi = tf.reshape(tf.gather(M1_dic[j2], self.widx2[nside_j3], axis=2),
+                               [BATCH_SIZE, self.NORIENT, 1, npix_j3, kersize2])  # [Nbatch, Norient2, 1, Npix_j3, kersize2]
+        # Do the convolution with wcos, wsin  [1, Norient3, 1, kersize2]
+        cM1convPsi = tf.reduce_sum(self.wcos[None, ...] * M1convPsi,
+                                   axis=4)  # Real [Nbatch, Norient2, Norient3, Npix_j3]
+        sM1convPsi = tf.reduce_sum(self.wsin[None, ...] * M1convPsi,
+                                   axis=4)  # Imag [Nbatch, Norient2, Norient3, Npix_j3]
+        # Store it so we can use it in C11 computation
+        cM1convPsi_dic[j2] = cM1convPsi  # [Nbatch, Norient2, Norient3, Npix_j3]
+        sM1convPsi_dic[j2] = sM1convPsi  # [Nbatch, Norient2, Norient3, Npix_j3]
+
+        ### Compute the product (I1 * Psi)_j3 x (M1_j2 * Psi_j3)^*
+        # z_1 x z_2^* = (a1a2 + b1b2) + i(b1a2 - a1b2)
+        # cconv1, sconv1 are [Nbatch, Norient3, Npix_j3]
+        cc01 = cconv1[:, None, :, :] * cM1convPsi + \
+               sconv1[:, None, :, :] * sM1convPsi  # Real [Nbatch, Norient2, Norient3, Npix_j3]
+        sc01 = sconv1[:, None, :, :] * cM1convPsi - \
+               cconv1[:, None, :, :] * sM1convPsi  # Imag [Nbatch, Norient2, Norient3, Npix_j3]
+
+        ### Sum over pixels after applying the mask [Nmask, Npix_j3]
+        cc01 = tf.reduce_sum(vmask[None, :, None, None, :] *
+                             cc01[:, None, :, :, :], axis=4)  # Real [Nbatch, Nmask, Norient2, Norient3]
+        sc01 = tf.reduce_sum(vmask[None, :, None, None, :] *
+                             sc01[:, None, :, :, :], axis=4)  # Imag [Nbatch, Nmask, Norient2, Norient3]
+        return cc01, sc01
+
+    def _compute_C01_cross(self, j2, cconv1, sconv1, cconv2, sconv2,
+                           vmask, M1_dic, M2_dic,
+                           cM1convPsi_dic, sM1convPsi_dic,
+                           cM2convPsi_dic, sM2convPsi_dic,
+                           nside_j3, BATCH_SIZE, npix_j3, kersize2):
+        """
+        Compute the C01 cross coefficients
+        C01_cross = < (I2 * Psi)_j3 x (|I1 * psi2| * Psi_j3)^* >_pix
+        C01_cross_bis = < (I1 * Psi)_j3 x (|I2 * psi2| * Psi_j3)^* >_pix
+        Parameters
+        ----------
+
+        Returns
+        -------
+        cc01, sc01, cc01_bis, sc01_bis: real and imag parts of C01 cross coeff
+        """
+
+        ####### C01_cross
+        ### Compute |I1 * psi2| * Psi_j3 = M1_j2 * Psi_j3
+        # Warning: M1_dic[j2] is already at j3 resolution [Nbatch, Norient3, Npix_j3]
+        # self.widx2[nside_j3] is [Npix_j3 x kersize2]
+        M1convPsi = tf.reshape(tf.gather(M1_dic[j2], self.widx2[nside_j3], axis=2),
+                               [BATCH_SIZE, self.NORIENT, 1, npix_j3, kersize2])  # [Nbatch, Norient2, 1, Npix_j3, kersize2]
+        # Do the convolution with wcos, wsin  [1, Norient3, 1, kersize2]
+        cM1convPsi = tf.reduce_sum(self.wcos[None, ...] * M1convPsi,
+                                   axis=4)  # Real [Nbatch, Norient2, Norient3, Npix_j3]
+        sM1convPsi = tf.reduce_sum(self.wsin[None, ...] * M1convPsi,
+                                   axis=4)  # Imag [Nbatch, Norient2, Norient3, Npix_j3]
+        # Store it so we can use it in C11 computation
+        cM1convPsi_dic[j2] = cM1convPsi  # [Nbatch, Norient2, Norient3, Npix_j3]
+        sM1convPsi_dic[j2] = sM1convPsi  # [Nbatch, Norient2, Norient3, Npix_j3]
+        ### Compute the product (I2 * Psi)_j3 x (M1_j2 * Psi_j3)^*
+        # z_1 x z_2^* = (a1a2 + b1b2) + i(b1a2 - a1b2)
+        # cconv1, sconv1 are [Nbatch, Norient3, Npix_j3]
+        cc01 = cconv2[:, None, :, :] * cM1convPsi + \
+               sconv2[:, None, :, :] * sM1convPsi  # Real [Nbatch, Norient2, Norient3, Npix_j3]
+        sc01 = sconv2[:, None, :, :] * cM1convPsi - \
+               cconv2[:, None, :, :] * sM1convPsi  # Imag [Nbatch, Norient2, Norient3, Npix_j3]
+        ### Sum over pixels after applying the mask [Nmask, Npix_j3]
+        cc01 = tf.reduce_sum(vmask[None, :, None, None, :] *
+                             cc01[:, None, :, :, :], axis=4)  # Real [Nbatch, Nmask, Norient2, Norient3]
+        sc01 = tf.reduce_sum(vmask[None, :, None, None, :] *
+                             sc01[:, None, :, :, :], axis=4)  # Imag [Nbatch, Nmask, Norient2, Norient3]
+
+        ####### C01_cross_bis
+        ### Compute |I2 * psi2| * Psi_j3 = M2_j2 * Psi_j3
+        # Warning: M2_dic[j2] is already at j3 resolution [Nbatch, Norient3, Npix_j3]
+        # self.widx2[nside_j3] is [Npix_j3 x kersize2]
+        M2convPsi = tf.reshape(tf.gather(M2_dic[j2], self.widx2[nside_j3], axis=2),
+                               [BATCH_SIZE, self.NORIENT, 1, npix_j3, kersize2])  # [Nbatch, Norient2, 1, Npix_j3, kersize2]
+        # Do the convolution with wcos, wsin  [1, Norient3, 1, kersize2]
+        cM2convPsi = tf.reduce_sum(self.wcos[None, ...] * M2convPsi,
+                                   axis=4)  # Real [Nbatch, Norient2, Norient3, Npix_j3]
+        sM2convPsi = tf.reduce_sum(self.wsin[None, ...] * M2convPsi,
+                                   axis=4)  # Imag [Nbatch, Norient2, Norient3, Npix_j3]
+        # Store it so we can use it in C11 computation
+        cM2convPsi_dic[j2] = cM2convPsi  # [Nbatch, Norient2, Norient3, Npix_j3]
+        sM2convPsi_dic[j2] = sM2convPsi  # [Nbatch, Norient2, Norient3, Npix_j3]
+        ### Compute the product (I1 * Psi)_j3 x (M2_j2 * Psi_j3)^*
+        # z_1 x z_2^* = (a1a2 + b1b2) + i(b1a2 - a1b2)
+        # cconv1, sconv1 are [Nbatch, Norient3, Npix_j3]
+        cc01_bis = cconv1[:, None, :, :] * cM2convPsi + \
+                       sconv1[:, None, :, :] * sM2convPsi  # Real [Nbatch, Norient2, Norient3, Npix_j3]
+        sc01_bis = sconv1[:, None, :, :] * cM2convPsi - \
+                       cconv1[:, None, :, :] * sM2convPsi  # Imag [Nbatch, Norient2, Norient3, Npix_j3]
+
+        ### Sum over pixels after applying the mask [Nmask, Npix_j3]
+        cc01_bis = tf.reduce_sum(vmask[None, :, None, None, :] *
+                                 cc01_bis[:, None, :, :, :], axis=4)  # Real [Nbatch, Nmask, Norient2, Norient3]
+        sc01_bis = tf.reduce_sum(vmask[None, :, None, None, :] *
+                                 sc01_bis[:, None, :, :, :], axis=4)  # Imag [Nbatch, Nmask, Norient2, Norient3]
+        return cc01, sc01, cc01_bis, sc01_bis
+
+    def _compute_C11_auto(self, j1, j2, vmask, cM1convPsi_dic, sM1convPsi_dic):
+        ### Compute the product (|I1 * psi1| * psi3)(|I1 * psi2| * psi3)
+        # z_1 x z_2^* = (a1a2 + b1b2) + i(b1a2 - a1b2)
+        # cM1convPsi_dic[j] is [Nbatch, Norient, Norient3, Npix_j3]
+        cc11 = cM1convPsi_dic[j1][:, :, None, :, :] * cM1convPsi_dic[j2][:, None, :, :, :] + \
+               sM1convPsi_dic[j1][:, :, None, :, :] * sM1convPsi_dic[j2][:, None, :, :, :]  # Real [Nbatch, Norient1, Norient2, Norient3, Npix_j3]
+        sc11 = sM1convPsi_dic[j1][:, :, None, :, :] * cM1convPsi_dic[j2][:, None, :, :, :] - \
+               cM1convPsi_dic[j1][:, :, None, :, :] * sM1convPsi_dic[j2][:, None, :, :, :]  # Imag [Nbatch, Norient1, Norient2, Norient3, Npix_j3]
+        ### Sum over pixels and apply the mask
+        cc11 = tf.reduce_sum(vmask[None, :, None, None, None, :] *
+                             cc11[:, None, :, :, :, :],
+                             axis=5)  # Real [Nbatch, Nmask, Norient1, Norient2, Norient3]
+        sc11 = tf.reduce_sum(vmask[None, :, None, None, None, :] *
+                             sc11[:, None, :, :, :, :],
+                             axis=5)  # Imag [Nbatch, Nmask, Norient1, Norient2, Norient3]
+        return cc11, sc11
+
+    def _compute_C11_cross(self, j1, j2, vmask, cM1convPsi_dic, sM1convPsi_dic, cM2convPsi_dic, sM2convPsi_dic):
+
+        ### Compute the product (|I1 * psi1| * psi3)(|I2 * psi2| * psi3)
+        # z_1 x z_2^* = (a1a2 + b1b2) + i(b1a2 - a1b2)
+        # cM1convPsi_dic[j] is [Nbatch, Norient, Norient3, Npix_j3]
+        cc11 = cM1convPsi_dic[j1][:, :, None, :, :] * cM2convPsi_dic[j2][:, None, :, :, :] + \
+               sM1convPsi_dic[j1][:, :, None, :, :] * sM2convPsi_dic[j2][:, None, :, :, :]  # Real [Nbatch, Norient1, Norient2, Norient3, Npix_j3]
+        sc11 = sM1convPsi_dic[j1][:, :, None, :, :] * cM2convPsi_dic[j2][:, None, :, :, :] - \
+               cM1convPsi_dic[j1][:, :, None, :, :] * sM2convPsi_dic[j2][:, None, :, :, :]  # Imag [Nbatch, Norient1, Norient2, Norient3, Npix_j3]
+        ### Sum over pixels and apply the mask
+        cc11 = tf.reduce_sum(vmask[None, :, None, None, None, :] *
+                             cc11[:, None, :, :, :, :],
+                             axis=5)  # Real [Nbatch, Nmask, Norient1, Norient2, Norient3]
+        sc11 = tf.reduce_sum(vmask[None, :, None, None, None, :] *
+                             sc11[:, None, :, :, :, :],
+                             axis=5)  # Imag [Nbatch, Nmask, Norient1, Norient2, Norient3]
+        return cc11, sc11
 
     # ---------------------------------------------−---------
     #  Compute the CWST on the sphere
@@ -1149,7 +1378,7 @@ class FoCUS:
             self.nloss=self.nloss+1
 
     # ---------------------------------------------−---------
-    def add_loss_cov(self, image1, image2, weight=1.0):
+    def add_loss_cov(self, target1, guess1, target2=None, guess2=None, weight=1.0):
 
         with tf.device(self.gpulist[self.nloss % self.ngpu]):
 
@@ -1159,8 +1388,8 @@ class FoCUS:
 
             ### Compute the scattering covariance coefficients of image 1 and image2
             if self.nout != -1:  # Healpix sphere
-                iS1, iP00, iC01, iC11 = self.get_scat_cov_coeffs(image1)
-                oS1, oP00, oC01, oC11 = self.get_scat_cov_coeffs(image2)
+                iS1, iP00, iC01, iC11 = self.get_scat_cov_coeffs(image1=target1, image2=target2)
+                oS1, oP00, oC01, oC11 = self.get_scat_cov_coeffs(image1=guess1, image2=guess2)
             else:
                 print('Not developed for 2D plan.')
                 exit(0)
@@ -1318,7 +1547,7 @@ class FoCUS:
             return(stat_o1,stat_o2)
 
     # ---------------------------------------------−---------
-    def calc_stat_cov(self, image1, gpupos=0):
+    def calc_stat_cov(self, image1, image2=None, gpupos=0):
         """
         Calculate scattering covariance coeffs on a batch of images.
         Parameters
@@ -1339,6 +1568,8 @@ class FoCUS:
                 if self.nout != -1:  # Healpix
                     # Reshape the image as [1, Npix, 1, 1] and put it in a dictionary
                     feed_dict[self.noise1] = image1[i][None, :, None, None]  # [1, Npix, 1, 1]
+                    if image2 is not None:
+                        feed_dict[self.noise2] = image2[i][None, :, None, None]  # [1, Npix, 1, 1]
                 else:  # 2D plan
                     print('Only work in Healpix.')
 
@@ -1492,7 +1723,7 @@ class FoCUS:
                                                      name='NOISE2_%d'%(self.nloss))
 
                 # Scattering covariance coefficients
-                self.S1, self.P00, self.C01, self.C11 = self.get_scat_cov_coeffs(self.noise1)
+                self.S1, self.P00, self.C01, self.C11 = self.get_scat_cov_coeffs(image1=self.noise1)
 
                 for i in range(16):
                     if ((i//4)%2)+((i//8)%2)!=0:
