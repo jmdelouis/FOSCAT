@@ -7,7 +7,7 @@ import healpy as hp
 # DEFINE A PATH FOR scratch data
 # The data are storred using a default nside to minimize the needed storage
 #=================================================================================
-
+#python hwst_foscat_v2.py EE0256 /export/home/jmdeloui/heal_cnn/ /home1/scratch/jmdeloui/heal_cnn/
 if len(sys.argv)<4:
     print('\nhwst_foscat usage:\n')
     print('python hwst_foscat <in> <scratch_path> <out>')
@@ -33,7 +33,6 @@ nout=16
 # set the default name
 outname='FOCUS%s%d'%(sys.argv[1],nout)
 
-
 #=================================================================================
 # Function to reduce the data used in the FoCUS algorithm 
 #=================================================================================
@@ -54,7 +53,7 @@ Alpha=1.0
 DAlpha=1.0
 
 #number of simulations used as reference
-nsim=100
+nsim=10
 
 #work with angle invariant statistics 
 avg_ang=False
@@ -122,11 +121,12 @@ for i in range(nsim):
 import foscat.scat as sc
 import foscat.Synthesis as synthe
 
-scat_op=sc.scat_funct(NORIENT=4,   # define the number of wavelet orientation
-                      KERNELSZ=5,  # define the kernel size (here 5x5)
-                      OSTEP=-1,     # get very large scale (nside=1)
-                      LAMBDA=1.0,
-                      TEMPLATE_PATH=scratch_path)
+scat_op=sc.funct(NORIENT=4,   # define the number of wavelet orientation
+                 KERNELSZ=5,  # define the kernel size (here 5x5)
+                 OSTEP=-1,     # get very large scale (nside=1)
+                 LAMBDA=1.0,
+                 all_type='float32',
+                 TEMPLATE_PATH=scratch_path)
 
 #compute d1xd2
 refH=scat_op.eval(ampmap*(d1-off),image2=ampmap*(d2-off),Imaginary=False)
@@ -134,19 +134,19 @@ refH=scat_op.eval(ampmap*(d1-off),image2=ampmap*(d2-off),Imaginary=False)
 #compute Tdxdi
 refX=scat_op.eval(ampmap*(td),image2=ampmap*(di-off))
 
-def loss1(x,args):
+def loss_fct1(x,args):
 
     ref  = args[0]
     mask = args[1]
     isig = args[2]
     
-    b=scat_op.eval(x)
+    b=scat_op.eval(x,mask=mask)
 
-    l_val=scat_op.reduce_mean(scat_op.square(ref-b))
+    l_val=scat_op.reduce_mean(isig*scat_op.square(ref-b))
     
     return(l_val)
 
-def loss2(x,args):
+def loss_fct2(x,args):
 
     ref  = args[0]
     TT   = args[1]
@@ -159,15 +159,15 @@ def loss2(x,args):
     
     return(l_val)
 
-def loss3(x,args):
+def loss_fct3(x,args):
 
     im   = args[0]
     bias = args[1]
     mask = args[2]
     isig = args[3]
     
-    a=scat_op.eval(im,image2=x,mask=mask)-bias
-    b=scat_op.eval(x,image2=x,mask=mask)
+    a=scat_op.eval(im,image2=x,mask=mask,Imaginary=False)-bias
+    b=scat_op.eval(x,image2=x,mask=mask,Imaginary=False)
     
     l_val=scat_op.reduce_mean(isig*scat_op.square((a-b)))
     
@@ -183,10 +183,11 @@ for itt in range(10):
     #loss1 : d1xd2 = (u+n1)x(u+n2)
     stat1_p_noise=scat_op.eval(np.expand_dims(i1,0)+noise1,
                                image2=np.expand_dims(i2,0)+noise2,
-                               mask=None)
+                               mask=mask,Imaginary=False)
     stat1 =scat_op.eval(np.expand_dims(i1,0),
                         image2=np.expand_dims(i2,0),
-                        mask=None)
+                        mask=mask,Imaginary=False)
+    
     #bias1 = mean(F((d1+n1)*(d2+n2))-F(d1*d2))
     bias1 = scat_op.reduce_mean(stat1_p_noise-stat1,axis=0)
     isig1 = scat_op.reduce_mean(scat_op.square(stat1_p_noise-stat1),axis=0)
@@ -194,8 +195,8 @@ for itt in range(10):
     #scat_op.inv(isig1).plot(name='bias1')
     #isig1.plot(name='isig1')
     #refH.plot(name='refH')
-    
-    loss1=synthe.Loss(loss1,refH,mask,scat_op.one())#scat_op.inv(isig1))
+
+    loss1=synthe.Loss(loss_fct1,refH,mask,scat_op.one())#scat_op.inv(isig1))
 
     #loss2 : Txd = Tx(u+n)
     stat2_p_noise=scat_op.eval(np.expand_dims(ampmap*td,0),
@@ -211,34 +212,32 @@ for itt in range(10):
     
     #bias2.plot(name='bias2')
     #isig2.plot(name='isig2')
-    
-    loss2=synthe.Loss(loss2,refX-bias2,ampmap*td,mask,scat_op.inv(isig2))
+
+    loss2=synthe.Loss(loss_fct2,refX-bias2,ampmap*td,mask,scat_op.inv(isig2))
 
     #loss3 : dxu = (u+n)xu
     stat3_p_noise=scat_op.eval(np.expand_dims(ampmap*(di-off),0),
                                image2=np.expand_dims((i1+i2)/2,0)+noise,
-                               mask=mask)
+                               mask=mask,Imaginary=False)
     stat3 =scat_op.eval(np.expand_dims(ampmap*(di-off),0),
                         image2=np.expand_dims((i1+i2)/2,0),
-                        mask=mask)
-    
+                        mask=mask,Imaginary=False)
     
     bias3 = scat_op.reduce_mean(stat3_p_noise-stat3,axis=0)
     isig3 = scat_op.reduce_mean(scat_op.square(stat3_p_noise-stat3),axis=0)
     
     #bias3.plot(name='bias3')
     #isig3.plot(name='isig3')
+    #plt.show()
 
-    plt.show()
-    loss3=synthe.Loss(loss3,ampmap*(di-off),bias3,mask,scat_op.inv(isig3))
+    loss3=synthe.Loss(loss_fct3,ampmap*(di-off),bias3,mask,scat_op.inv(isig3))
     
-    sy = synthe.Synthesis([loss1,loss2])#,loss3])
-
+    sy = synthe.Synthesis([loss1,loss2,loss3])
 
     omap=sy.run(imap,
-                EVAL_FREQUENCY = 1,
+                EVAL_FREQUENCY = 10,
                 DECAY_RATE=0.9998,
-                NUM_EPOCHS = 30,
+                NUM_EPOCHS = 300,
                 LEARNING_RATE = 0.003,
                 EPSILON = 1E-16)
 
