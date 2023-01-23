@@ -46,6 +46,7 @@ class Synthesis:
     @tf.function
     def loss(self,x,loss_function):
 
+        print(loss_function)
         l=loss_function.eval(x)
         
         g=self.check_dense(tf.gradients(l,x)[0],x)
