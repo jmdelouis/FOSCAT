@@ -77,13 +77,13 @@ def main():
     # COMPUTE THE WAVELET TRANSFORM OF THE REFERENCE MAP
     #=================================================================================
     scat_op=sc.funct(NORIENT=4,   # define the number of wavelet orientation
-                     KERNELSZ=5,  # define the kernel size (here 5x5)
+                     KERNELSZ=3,  # define the kernel size (here 5x5)
                      OSTEP=-1,     # get very large scale (nside=1)
                      LAMBDA=1.0,
                      TEMPLATE_PATH=scratch_path,
                      all_type='float32')
 
-    refX=scat_op.eval(im,image2=im)
+    refX=scat_op.eval(im)
 
     #=================================================================================
     # DEFINE A LOSS FUNCTION AND THE SYNTHESIS
@@ -91,10 +91,10 @@ def main():
 
     def lossX(x,args):
 
-        ref=args[0]
-        im=args[1]
+        ref = args[0]
+        im  = args[1]
 
-        b=scat_op.eval(im,image2=x)
+        b=scat_op.eval(x)
 
         loss=scat_op.reduce_sum(scat_op.square((ref-b)))
 
@@ -111,7 +111,7 @@ def main():
     imap=np.random.randn(12*nside*nside).astype('float32')
 
     omap=sy.run(imap,
-                DECAY_RATE=0.9998,
+                DECAY_RATE=0.995,
                 NUM_EPOCHS = nstep,
                 LEARNING_RATE = 0.03,
                 EPSILON = 1E-16)

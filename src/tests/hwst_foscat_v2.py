@@ -29,7 +29,7 @@ Default_nside=256
 # DEFINE THE WORKING NSIDE
 #=================================================================================
 
-nout=16
+nout=128
 # set the default name
 outname='FOCUS%s%d'%(sys.argv[1],nout)
 
@@ -53,7 +53,7 @@ Alpha=1.0
 DAlpha=1.0
 
 #number of simulations used as reference
-nsim=10
+nsim=100
 
 #work with angle invariant statistics 
 avg_ang=False
@@ -181,54 +181,52 @@ imap=ampmap*(di-off)
 for itt in range(10):
 
     #loss1 : d1xd2 = (u+n1)x(u+n2)
-    stat1_p_noise=scat_op.eval(np.expand_dims(i1,0)+noise1,
-                               image2=np.expand_dims(i2,0)+noise2,
-                               mask=mask,Imaginary=False)
-    stat1 =scat_op.eval(np.expand_dims(i1,0),
-                        image2=np.expand_dims(i2,0),
-                        mask=mask,Imaginary=False)
+    stat1_p_noise=scat_op.eval(i1+noise1[0],image2=i2+noise2[0],mask=mask,Imaginary=False)
+    stat1 =scat_op.eval(i1,image2=i2,mask=mask,Imaginary=False)
     
     #bias1 = mean(F((d1+n1)*(d2+n2))-F(d1*d2))
-    bias1 = scat_op.reduce_mean(stat1_p_noise-stat1,axis=0)
-    isig1 = scat_op.reduce_mean(scat_op.square(stat1_p_noise-stat1),axis=0)
+    bias1 = stat1_p_noise-stat1
+    isig1 = scat_op.square(stat1_p_noise-stat1)
+    for k in range(1,nsim):
+        stat1_p_noise=scat_op.eval(i1+noise1[k],image2=i2+noise2[k],mask=mask,Imaginary=False)
+        bias1 = bias1 + stat1_p_noise-stat1
+        isig1 = isig1 + scat_op.square(stat1_p_noise-stat1)
 
-    #scat_op.inv(isig1).plot(name='bias1')
-    #isig1.plot(name='isig1')
-    #refH.plot(name='refH')
+    bias1=bias1/nsim
+    isig1=nsim/isig1
 
-    loss1=synthe.Loss(loss_fct1,refH,mask,scat_op.one())#scat_op.inv(isig1))
+    loss1=synthe.Loss(loss_fct1,refH-bias1,mask,isig1)
 
     #loss2 : Txd = Tx(u+n)
-    stat2_p_noise=scat_op.eval(np.expand_dims(ampmap*td,0),
-                               image2=np.expand_dims((i1+i2)/2,0)+noise,
-                               mask=mask)
-    stat2 =scat_op.eval(np.expand_dims(ampmap*td,0),
-                        image2=np.expand_dims((i1+i2)/2,0),
-                        mask=mask)
-    
     #bias2 = mean(F((T*(d+n))-F(T*d))
-    bias2 = scat_op.reduce_mean(stat2_p_noise-stat2,axis=0)
-    isig2 = scat_op.reduce_mean(scat_op.square(stat2_p_noise-stat2),axis=0)
+    stat2_p_noise=scat_op.eval(ampmap*td,image2=(i1+i2)/2+noise[0],mask=mask,Imaginary=True)
+    stat2 =scat_op.eval(ampmap*td,image2=(i1+i2)/2,mask=mask,Imaginary=True)
     
-    #bias2.plot(name='bias2')
-    #isig2.plot(name='isig2')
+    bias2 = stat2_p_noise-stat2
+    isig2 = scat_op.square(stat2_p_noise-stat2)
+    for k in range(1,nsim):
+        stat2_p_noise=scat_op.eval(ampmap*td,image2=(i1+i2)/2+noise[k],mask=mask,Imaginary=True)
+        bias2 = bias2 + stat2_p_noise-stat2
+        isig2 = isig2 + scat_op.square(stat2_p_noise-stat2)
 
-    loss2=synthe.Loss(loss_fct2,refX-bias2,ampmap*td,mask,scat_op.inv(isig2))
+    bias2=bias2/nsim
+    isig2=nsim/isig2
+
+    loss2=synthe.Loss(loss_fct2,refX-bias2,ampmap*td,mask,isig2)
 
     #loss3 : dxu = (u+n)xu
-    stat3_p_noise=scat_op.eval(np.expand_dims(ampmap*(di-off),0),
-                               image2=np.expand_dims((i1+i2)/2,0)+noise,
-                               mask=mask,Imaginary=False)
-    stat3 =scat_op.eval(np.expand_dims(ampmap*(di-off),0),
-                        image2=np.expand_dims((i1+i2)/2,0),
-                        mask=mask,Imaginary=False)
+    stat3_p_noise=scat_op.eval(ampmap*(di-off),image2=(i1+i2)/2+noise[0],mask=mask,Imaginary=False)
+    stat3 =scat_op.eval(ampmap*(di-off),image2=(i1+i2)/2,mask=mask,Imaginary=False)
     
-    bias3 = scat_op.reduce_mean(stat3_p_noise-stat3,axis=0)
-    isig3 = scat_op.reduce_mean(scat_op.square(stat3_p_noise-stat3),axis=0)
-    
-    #bias3.plot(name='bias3')
-    #isig3.plot(name='isig3')
-    #plt.show()
+    bias3 = stat3_p_noise-stat3
+    isig3 = scat_op.square(stat3_p_noise-stat3)
+    for k in range(1,nsim):
+        stat3_p_noise=scat_op.eval(ampmap*(di-off),image2=(i1+i2)/2+noise[k],mask=mask,Imaginary=False)
+        bias3 = bias3 + stat3_p_noise-stat3
+        isig3 = isig3 + scat_op.square(stat3_p_noise-stat3)
+
+    bias3=bias3/nsim
+    isig3=nsim/isig3
 
     loss3=synthe.Loss(loss_fct3,ampmap*(di-off),bias3,mask,scat_op.inv(isig3))
     

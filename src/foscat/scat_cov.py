@@ -24,76 +24,98 @@ class scat_cov:
     def get_C11(self):
         return(self.C11)
 
-    def __add__(self,val):
-        if self.S1 is None:
-            if val.S1 is not None:
-                print('Impossible to sum two scat_cov with S1 commonly defined or undefined')
-            
-            return scat_cov(self.P00 + val.P00, \
-                            self.C01 + val.C01, \
-                            self.C11 + val.C11)
-        else:
-            if val.S1 is None:
-                print('Impossible to sum two scat_cov with S1 commonly defined or undefined')
-            
-            return scat_cov(self.P00 + val.P00, \
-                            self.C01 + val.C01, \
-                            self.C11 + val.C11, \
-                            s1=self.S1 + val.S1)
 
-    def __div__(self,val):
+    def __add__(self,other):
+        assert isinstance(other, float) or isinstance(other, int) or \
+            isinstance(other, bool) or isinstance(other, scat_cov)
+        
         if self.S1 is None:
-            if val.S1 is not None:
-                print('Impossible to sum two scat_cov with S1 commonly defined or undefined')
-            
-            return scat_cov(self.P00/val.P00, \
-                            self.C01/val.C01, \
-                            self.C11/val.C11)
+            s1=None
         else:
-            if val.S1 is None:
-                print('Impossible to sum two scat_cov with S1 commonly defined or undefined')
-            
-            return scat_cov(self.P00/val.P00, \
-                            self.C01/val.C01, \
-                            self.C11/val.C11, \
-                            s1=self.S1/val.S1)
+            if isinstance(other, scat_cov):
+                s1=self.S1+other.S1
+            else:
+                s1=self.S1+other
+                
+        if isinstance(other, scat_cov):
+            return scat_cov((self.P00+ other.P00), \
+                        (self.C01+ other.C01), \
+                        (self.C11+ other.C11), \
+                        s1=s1)
+        else:
+            return scat_cov((self.P00+ other), \
+                        (self.C01+ other), \
+                        (self.C11+ other), \
+                        s1=s1)
 
-    def __truediv__(self,val):
-        return self.__div__(self,val)
+    def __truediv__(self,other):
+        assert isinstance(other, float) or isinstance(other, int) or \
+            isinstance(other, bool) or isinstance(other, scat_cov)
         
-    def __sub__(self,val):
         if self.S1 is None:
-            if val.S1 is not None:
-                print('Impossible to sum two scat_cov with S1 commonly defined or undefined')
-            
-            return scat_cov(self.P00 - val.P00, \
-                            self.C01 - val.C01, \
-                            self.C11 - val.C11)
+            s1=None
         else:
-            if val.S1 is None:
-                print('Impossible to sum two scat_cov with S1 commonly defined or undefined')
-            
-            return scat_cov(self.P00 - val.P00, \
-                            self.C01 - val.C01, \
-                            self.C11 - val.C11, \
-                            s1=self.S1 - val.S1)
+            if isinstance(other, scat_cov):
+                s1=self.S1/other.S1
+            else:
+                s1=self.S1/other
+                
+        if isinstance(other, scat_cov):
+            return scat_cov((self.P00/ other.P00), \
+                        (self.C01/ other.C01), \
+                        (self.C11/ other.C11), \
+                        s1=s1)
+        else:
+            return scat_cov((self.P00/ other), \
+                        (self.C01/ other), \
+                        (self.C11/ other), \
+                        s1=s1)
         
-    def __mul__(self,val):
+    def __sub__(self,other):
+        assert isinstance(other, float) or isinstance(other, int) or \
+            isinstance(other, bool) or isinstance(other, scat_cov)
+        
         if self.S1 is None:
-            if val.S1 is not None:
-                print('Impossible to sum two scat_cov with S1 commonly defined or undefined')
-            
-            return scat_cov(self.P00 * val.P00, \
-                            self.C01 * val.C01, \
-                            self.C11 * val.C11)
+            s1=None
         else:
-            if val.S1 is None:
-                print('Impossible to sum two scat_cov with S1 commonly defined or undefined')
-            
-            return scat_cov(self.P00 * val.P00, \
-                            self.C01 * val.C01, \
-                            self.C11 * val.C11, \
-                            s1=self.S1 * val.S1)
+            if isinstance(other, scat_cov):
+                s1=self.S1-other.S1
+            else:
+                s1=self.S1-other
+                
+        if isinstance(other, scat_cov):
+            return scat_cov((self.P00- other.P00), \
+                        (self.C01- other.C01), \
+                        (self.C11- other.C11), \
+                        s1=s1)
+        else:
+            return scat_cov((self.P00- other), \
+                        (self.C01- other), \
+                        (self.C11- other), \
+                        s1=s1)
+        
+    def __mul__(self,other):
+        assert isinstance(other, float) or isinstance(other, int) or \
+            isinstance(other, bool) or isinstance(other, scat_cov)
+        
+        if self.S1 is None:
+            s1=None
+        else:
+            if isinstance(other, scat_cov):
+                s1=self.S1*other.S1
+            else:
+                s1=self.S1*other
+                
+        if isinstance(other, scat_cov):
+            return scat_cov((self.P00* other.P00), \
+                        (self.C01* other.C01), \
+                        (self.C11* other.C11), \
+                        s1=s1)
+        else:
+            return scat_cov((self.P00* other), \
+                        (self.C01* other), \
+                        (self.C11* other), \
+                        s1=s1)
     
     def plot(self,name=None,hold=True,color='blue',lw=1):
 
@@ -364,10 +386,9 @@ class funct(FOC.FoCUS):
                                  P1_dic[j2][:, :, None, None, :]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
                         # We store C11
                         if C11 is None:
-                            C11 = self.bk_concat([cc11[:, :, None, :, :, :], sc11[:, :, None, :, :, :]],
-                                            axis=2)  # Add a dimension for NC11
+                            C11 = self.bk_complex(cc11[:, :, None, :, :, :], sc11[:, :, None, :, :, :])  # Add a dimension for NC11
                         else:
-                            C11 = self.bk_concat([C11, cc11[:, :, None, :, :, :], sc11[:, :, None, :, :, :]],
+                            C11 = self.bk_concat([C11, self.bk_complex(cc11[:, :, None, :, :, :], sc11[:, :, None, :, :, :])],
                                             axis=2)  # Add a dimension for NC11
 
                         ### C11_cross = <(|I1 * psi1| * psi3)(|I2 * psi2| * psi3)^*>
@@ -383,10 +404,9 @@ class funct(FOC.FoCUS):
                         
                         # We store C11
                         if C11 is None:
-                            C11 = self.bk_concat([cc11[:, :, None, :, :, :], sc11[:, :, None, :, :, :]],
-                                            axis=2)  # Add a dimension for NC11
+                            C11 = self.bk_complex(cc11[:, :, None, :, :, :], sc11[:, :, None, :, :, :])  # Add a dimension for NC11
                         else:
-                            C11 = self.bk_concat([C11, cc11[:, :, None, :, :, :], sc11[:, :, None, :, :, :]],
+                            C11 = self.bk_concat([C11, self.bk_complex(cc11[:, :, None, :, :, :], sc11[:, :, None, :, :, :])],
                                             axis=2)  # Add a dimension for NC11
 
             ###### Reshape for next iteration on j3

@@ -11,7 +11,7 @@ td=np.load(outpath+'/%std.npy'%(outname))
 di=np.load(outpath+'/%sdi.npy'%(outname))
 d1=np.load(outpath+'/%sd1.npy'%(outname))
 d2=np.load(outpath+'/%sd2.npy'%(outname))
-rr=np.load(outpath+'/%sresult_%d.npy'%(outname,0))
+rr=np.load(outpath+'/%sresult_%d.npy'%(outname,9))
 
 amp=300
 plt.figure(figsize=(6,12))

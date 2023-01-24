@@ -22,32 +22,71 @@ class scat:
     def get_P00(self):
         return(self.P00)
 
-    def __add__(self,val):
-        return scat(self.P00 + val.P00, \
-                    self.S1 + val.S1, \
-                    self.S2 + val.S2,
-                    cross=self.cross)
-
-    def __div__(self,val1):
-        return scat(self.P00 / val2.P00, \
-                    self.S1 / val2.S1, \
-                    self.S2 / val2.S2,
-                    cross=self.cross)
-
-    def __truediv__(self,val):
-        return self.__div__(self,val)
+    def __add__(self,other):
+        assert isinstance(other, float) or isinstance(other, int) or \
+            isinstance(other, bool) or isinstance(other, scat)
         
-    def __sub__(self,val):
-        return scat(self.P00 - val.P00, \
-                    self.S1 - val.S1, \
-                    self.S2 - val.S2,
-                    cross=self.cross)
+        if isinstance(other, scat):
+            return scat((self.P00+ other.P00), \
+                        (self.S1+ other.S1), \
+                        (self.S2+ other.S2))
+        else:
+            return scat((self.P00+ other), \
+                        (self.S1+ other), \
+                        (self.S2+ other))
+
+    def __truediv__(self,other):
+        assert isinstance(other, float) or isinstance(other, int) or \
+            isinstance(other, bool) or isinstance(other, scat)
         
-    def __mul__(self,val):
-        return scat(self.P00 * val.P00, \
-                    self.S1 * val.S1, \
-                    self.S2 * val.S2,
-                    cross=self.cross)
+        if isinstance(other, scat):
+            return scat((self.P00/ other.P00), \
+                        (self.S1/ other.S1), \
+                        (self.S2/ other.S2))
+        else:
+            return scat((self.P00/ other), \
+                        (self.S1/ other), \
+                        (self.S2/ other))
+        
+
+    def __rtruediv__(self,other):
+        assert isinstance(other, float) or isinstance(other, int) or \
+            isinstance(other, bool) or isinstance(other, scat)
+        
+        if isinstance(other, scat):
+            return scat((other.P00/ self.P00), \
+                        (other.S1 / self.S1), \
+                        (other.S2 / self.S2))
+        else:
+            return scat((other/ self.P00), \
+                        (other / self.S1), \
+                        (other / self.S2))
+        
+    def __sub__(self,other):
+        assert isinstance(other, float) or isinstance(other, int) or \
+            isinstance(other, bool) or isinstance(other, scat)
+        
+        if isinstance(other, scat):
+            return scat((self.P00- other.P00), \
+                        (self.S1- other.S1), \
+                        (self.S2- other.S2))
+        else:
+            return scat((self.P00- other), \
+                        (self.S1- other), \
+                        (self.S2- other))
+        
+    def __mul__(self,other):
+        assert isinstance(other, float) or isinstance(other, int) or \
+            isinstance(other, bool) or isinstance(other, scat)
+        
+        if isinstance(other, scat):
+            return scat((self.P00* other.P00), \
+                        (self.S1* other.S1), \
+                        (self.S2* other.S2))
+        else:
+            return scat((self.P00* other), \
+                        (self.S1* other), \
+                        (self.S2* other))
 
     def plot(self,name=None,hold=True,color='blue',lw=1):
 
