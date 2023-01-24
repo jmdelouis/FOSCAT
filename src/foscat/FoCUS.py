@@ -44,6 +44,7 @@ class FoCUS:
         print('================================================')
         print('          START FOSCAT CONFIGURATION')
         print('================================================')
+        sys.stdout.flush()
 
         self.TEMPLATE_PATH=TEMPLATE_PATH
         if os.path.exists(self.TEMPLATE_PATH)==False:
@@ -386,6 +387,7 @@ class FoCUS:
 
         np.save('%s/%s_%d_IDX.npy'%(self.TEMPLATE_PATH,outname,nout),idx)
         print('%s/%s_%d_IDX.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nout))
+        sys.stdout.flush()
             
     # ---------------------------------------------−---------
     # --       COMPUTE 5X5 INDEX FOR HEALPIX WORK          --
@@ -452,6 +454,7 @@ class FoCUS:
 
         np.save('%s/%s_%d_IDX.npy'%(self.TEMPLATE_PATH,outname,nout),idx)
         print('%s/%s_%d_IDX.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nout))
+        sys.stdout.flush()
         
     # ---------------------------------------------−---------
     def get_rank(self):

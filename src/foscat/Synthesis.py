@@ -1,6 +1,7 @@
 import tensorflow as tf
 import numpy as np
 import time
+import sys
 
 class Loss:
     
@@ -38,7 +39,6 @@ class Synthesis:
         s='%s'%(type(data))
         if 'Index' in s:
             idx=tf.cast(data.indices, tf.int32)
-            print(idx)
             data=tf.math.bincount(idx,weights=data.values,
                                   minlength=datasz)
         return data
@@ -120,6 +120,7 @@ class Synthesis:
                 cur_loss=cur_loss+')'
                 
                 print('Itt %d L=%s %.3fs'%(itt,cur_loss,(end-start)))
+                sys.stdout.flush()
                 start = time.time()
                 
         return(x)

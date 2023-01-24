@@ -93,14 +93,13 @@ def main():
         ref = args[0]
         im  = args[1]
 
-        learn=scat_op.eval(x)
+        learn=scat_op.eval(im,image2=x)
 
-        loss=scat_op.reduce_sum(scat_op.bk_square(ref.get_C01()-learn.get_C01()))+ \
-              scat_op.reduce_sum(scat_op.bk_square(ref.get_P00()-learn.get_P00()))
+        loss=scat_op.reduce_sum(scat_op.bk_square(ref-learn))
 
         return(loss)
 
-    refX=scat_op.eval(im)
+    refX=scat_op.eval(im,image2=im)
     loss1=synthe.Loss(lossX,refX,im.astype('float32'))
 
     sy = synthe.Synthesis([loss1])
