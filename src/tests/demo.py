@@ -82,9 +82,8 @@ def main():
                      LAMBDA=1.0,
                      TEMPLATE_PATH=scratch_path,
                      all_type='float32')
-
-    refX=scat_op.eval(im)
-
+    
+    
     #=================================================================================
     # DEFINE A LOSS FUNCTION AND THE SYNTHESIS
     #=================================================================================
@@ -94,12 +93,14 @@ def main():
         ref = args[0]
         im  = args[1]
 
-        b=scat_op.eval(x)
+        learn=scat_op.eval(x)
 
-        loss=scat_op.reduce_sum(scat_op.square((ref-b)))
+        loss=scat_op.reduce_sum(scat_op.bk_square(ref.get_C01()-learn.get_C01()))+ \
+              scat_op.reduce_sum(scat_op.bk_square(ref.get_P00()-learn.get_P00()))
 
         return(loss)
 
+    refX=scat_op.eval(im)
     loss1=synthe.Loss(lossX,refX,im.astype('float32'))
 
     sy = synthe.Synthesis([loss1])
@@ -111,7 +112,7 @@ def main():
     imap=np.random.randn(12*nside*nside).astype('float32')
 
     omap=sy.run(imap,
-                DECAY_RATE=0.995,
+                DECAY_RATE=0.999,
                 NUM_EPOCHS = nstep,
                 LEARNING_RATE = 0.03,
                 EPSILON = 1E-16)

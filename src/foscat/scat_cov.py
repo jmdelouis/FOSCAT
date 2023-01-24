@@ -79,7 +79,11 @@ class scat_cov:
             s1=None
         else:
             if isinstance(other, scat_cov):
-                s1=self.S1-other.S1
+                if other.S1 is None:
+                    s1=None
+                else:
+                    s1=self.S1-other.S1
+                    
             else:
                 s1=self.S1-other
                 
@@ -423,7 +427,7 @@ class funct(FOC.FoCUS):
             ### Modules
             for j2 in range(0, j3+1):  # j2 <= j3
                 ### Dictionary M1_dic[j2]
-                M1_smooth = self.smooth(M1_dic[j2],axis=1) #[Nbatch, Npix_j3, Norient3]
+                M1_smooth = self.smooth(M1_dic[j2],axis=1) #[Nbatch,Npix_j3, Norient3]
                 M1_dic[j2] = self.ud_grade_2(M1_smooth,axis=1) #[Nbatch, Npix_j3, Norient3]
                 
                 ### Dictionary M2_dic[j2]
@@ -590,52 +594,63 @@ class funct(FOC.FoCUS):
         return cc11, sc11
 
     def square(self,x):
-        if x.S1 is None:
-            return scat_cov(self.bk_abs(self.bk_square(x.P00)),
-                            self.bk_abs(self.bk_square(x.C01)),
-                            self.bk_abs(self.bk_square(x.C11)))
+        if isinstance(x, scat_cov):
+            if x.S1 is None:
+                return scat_cov(self.bk_abs(self.bk_square(x.P00)),
+                                self.bk_abs(self.bk_square(x.C01)),
+                                self.bk_abs(self.bk_square(x.C11)))
+            else:
+                return scat_cov(self.bk_abs(self.bk_square(x.P00)),
+                                self.bk_abs(self.bk_square(x.C01)),
+                                self.bk_abs(self.bk_square(x.C11)),
+                                s1=self.bk_abs(self.bk_square(x.S1)))
         else:
-            return scat_cov(self.bk_abs(self.bk_square(x.P00)),
-                            self.bk_abs(self.bk_square(x.C01)),
-                            self.bk_abs(self.bk_square(x.C11)),
-                            s1=self.bk_abs(self.bk_square(x.S1)))
+            return self.bk_abs(self.bk_square(x))
 
     def reduce_mean(self,x):
-        
-        if x.S1 is None:
-            result=self.bk_reduce_mean(x.P00) + \
-                    self.bk_reduce_mean(x.C01) + \
-                    self.bk_reduce_mean(x.C11)
+        if isinstance(x, scat_cov):
+            if x.S1 is None:
+                result=self.bk_reduce_mean(x.P00) + \
+                        self.bk_reduce_mean(x.C01) + \
+                        self.bk_reduce_mean(x.C11)
+            else:
+                result=self.bk_reduce_mean(x.P00) + \
+                        self.bk_reduce_mean(x.S1) + \
+                        self.bk_reduce_mean(x.C01) + \
+                        self.bk_reduce_mean(x.C11)
         else:
-            result=self.bk_reduce_mean(x.P00) + \
-                    self.bk_reduce_mean(x.S1) + \
-                    self.bk_reduce_mean(x.C01) + \
-                    self.bk_reduce_mean(x.C11)
+            return self.bk_reduce_mean(x)
         return(result)
 
     def reduce_sum(self,x):
         
-        if x.S1 is None:
-            result=self.bk_reduce_sum(x.P00) + \
-                    self.bk_reduce_sum(x.C01) + \
-                    self.bk_reduce_sum(x.C11)
+        if isinstance(x, scat_cov):
+            if x.S1 is None:
+                result=self.bk_reduce_sum(x.P00) + \
+                        self.bk_reduce_sum(x.C01) + \
+                        self.bk_reduce_sum(x.C11)
+            else:
+                result=self.bk_reduce_sum(x.P00) + \
+                        self.bk_reduce_sum(x.S1) + \
+                        self.bk_reduce_sum(x.C01) + \
+                        self.bk_reduce_sum(x.C11)
         else:
-            result=self.bk_reduce_sum(x.P00) + \
-                    self.bk_reduce_sum(x.S1) + \
-                    self.bk_reduce_sum(x.C01) + \
-                    self.bk_reduce_sum(x.C11)
+            return self.bk_reduce_sum(x)
         return(result)
     
     def log(self,x):
+        if isinstance(x, scat_cov):
         
-        if x.S1 is None:
-            result= self.bk_log(x.P00) + \
-                    self.bk_log(x.C01) + \
-                    self.bk_log(x.C11)
+            if x.S1 is None:
+                result= self.bk_log(x.P00) + \
+                        self.bk_log(x.C01) + \
+                        self.bk_log(x.C11)
+            else:
+                result= self.bk_log(x.P00) + \
+                        self.bk_log(x.S1) + \
+                        self.bk_log(x.C01) + \
+                        self.bk_log(x.C11)
         else:
-            result= self.bk_log(x.P00) + \
-                    self.bk_log(x.S1) + \
-                    self.bk_log(x.C01) + \
-                    self.bk_log(x.C11)
+            return self.bk_log(x)
         return(result)
 
