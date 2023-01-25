@@ -123,11 +123,10 @@ class scat:
         return scat(s1,s2,p0)
     
     def get_np(self,x):
-        if 'numpy.ndarray' in '%s'%(x.__class__):
+        if isinstance(x, np.ndarray):
             return x
         else:
-            x.numpy()
-        return(x)
+            return x.numpy()
         
     
 class funct(FOC.FoCUS):
@@ -299,9 +298,9 @@ class funct(FOC.FoCUS):
 
     def reduce_mean(self,x,axis=None):
         if axis is None:
-            return  self.bk_reduce_mean(x.P00)+ \
-                self.bk_reduce_mean(x.S1)+ \
-                self.bk_reduce_mean(x.S2)
+            return  scat(self.bk_reduce_mean(x.P00),
+                         self.bk_reduce_mean(x.S1),
+                         self.bk_reduce_mean(x.S2))
         else:
             return scat(self.bk_reduce_mean(x.P00,axis=axis),
                         self.bk_reduce_mean(x.S1,axis=axis),

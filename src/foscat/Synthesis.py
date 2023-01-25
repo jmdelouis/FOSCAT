@@ -110,7 +110,6 @@ class Synthesis:
                     grad=g
                 else:
                     grad=grad+g
-                print(k,grad.numpy().std())
 
                 ltot[k]=l.numpy()
             """
