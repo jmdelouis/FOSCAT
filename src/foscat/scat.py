@@ -131,7 +131,7 @@ class scat:
         
     
 class funct(FOC.FoCUS):
-
+    
     def eval(self, image1, image2=None,mask=None,Imaginary=True):
         
         ### AUTO OR CROSS
@@ -200,21 +200,21 @@ class funct(FOC.FoCUS):
             if cross and Imaginary:
                 conj_imag=c_image1_real*c_image2_imag-c_image1_imag*c_image2_real
             
-            # Compute l_p00 [....,....,1,Norient]  
-            l_p00_real = self.bk_expand_dims(self.bk_reduce_mean(conj_real,axis=axis),-2)
+            # Compute l_p00 [....,....,Nmask,1,Norient]  
+            l_p00_real = self.bk_expand_dims(self.bk_masked_mean(conj_real,vmask,axis=axis),-2)
             if cross and Imaginary:
-                l_p00_imag = self.bk_expand_dims(self.bk_reduce_mean(conj_imag,axis=axis),-2)
+                l_p00_imag = self.bk_expand_dims(self.bk_masked_mean(conj_imag,vmask,axis=axis),-2)
             
             conj_real=self.bk_L1(conj_real)
             if cross and Imaginary:
                 conj_imag=self.bk_L1(conj_imag)
 
-            # Compute l_s1 [....,....,1,Norient] 
-            l_s1_real = self.bk_expand_dims(self.bk_reduce_mean(conj_real,axis=axis),-2)
+            # Compute l_s1 [....,....,Nmask,1,Norient] 
+            l_s1_real = self.bk_expand_dims(self.bk_masked_mean(conj_real,vmask,axis=axis),-2)
             if cross and Imaginary:
-                l_s1_imag = self.bk_expand_dims(self.bk_reduce_mean(conj_imag,axis=axis),-2)
+                l_s1_imag = self.bk_expand_dims(self.bk_masked_mean(conj_imag,vmask,axis=axis),-2)
             
-            # Concat S1,P00 [....,....,j1,Norient] 
+            # Concat S1,P00 [....,....,Nmask,j1,Norient] 
             if s1 is None:
                 if cross and Imaginary:
                     s1  = self.bk_complex(l_s1_real,l_s1_imag)
@@ -251,12 +251,12 @@ class funct(FOC.FoCUS):
             if cross and Imaginary:
                 conj2_imag=self.bk_sqrt(c2_image_imag_real*c2_image_imag_real+c2_image_imag_imag*c2_image_imag_imag)
             
-            # Convol l_s2 [....,....,j1,Norient,Norient]
-            l_s2 = self.bk_reduce_mean(conj2,axis=axis)
+            # Convol l_s2 [....,....,Nmask,j1,Norient,Norient]
+            l_s2 = self.bk_masked_mean(conj2,vmask,axis=axis)
             if cross and Imaginary:
-                l_imag_s2 = self.bk_reduce_mean(conj2_imag,axis=axis)
+                l_imag_s2 = self.bk_masked_mean(conj2_imag,vmask,axis=axis)
             
-            # Concat l_s2 [....,....,j1*(j1+1)/2,Norient,Norient]
+            # Concat l_s2 [....,....,Nmask,j1*(j1+1)/2,Norient,Norient]
             if s2 is None:
                 if cross and Imaginary:
                     s2=self.bk_complex(l_s2,l_imag_s2)
@@ -268,6 +268,10 @@ class funct(FOC.FoCUS):
                 else:
                     s2=self.bk_concat([s2,l_s2],axis=-3)
 
+            # Rescale vmask [Nmask,Npix_j1//4]   
+            vmask = self.smooth(vmask,axis=1)
+            vmask = self.ud_grade_2(vmask,axis=1)
+            
             # Rescale l2_image [....,Npix_j1//4,....,j1,Norient]   
             l2_image = self.smooth(l2_image,axis=axis)
             l2_image = self.ud_grade_2(l2_image,axis=axis)

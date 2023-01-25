@@ -2,6 +2,8 @@ import tensorflow as tf
 import numpy as np
 import time
 import sys
+from datetime import datetime
+from packaging import version
 
 class Loss:
     
@@ -92,6 +94,14 @@ class Synthesis:
         start = time.time()
         
         for itt in range(NUM_EPOCHS):
+            """
+            # Set up logging.
+            stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            logdir = 'logs/func/%s' % stamp
+            writer = tf.summary.create_file_writer(logdir)
+
+            tf.summary.trace_on(graph=True, profiler=True)
+            """
             grad=None
             ltot=np.zeros([self.number_of_loss])
             for k in range(self.number_of_loss):
@@ -100,9 +110,18 @@ class Synthesis:
                     grad=g
                 else:
                     grad=grad+g
+                print(k,grad.numpy().std())
 
                 ltot[k]=l.numpy()
-                    
+            """
+            with writer.as_default():
+                tf.summary.trace_export(
+                    name="my_func_trace",
+                    step=0,
+                    profiler_outdir=logdir)
+
+            exit(0)
+            """
             if self.nlog==self.history.shape[0]:
                 new_log=np.zeros([self.history.shape[0]*2])
                 new_log[0:self.nlog]=self.history
@@ -110,7 +129,7 @@ class Synthesis:
             self.history[self.nlog]=ltot.sum()
             self.nlog=self.nlog+1
                 
-            x=x-self.update(g)
+            x=x-self.update(grad)
             
             if itt%EVAL_FREQUENCY==0:
                 end = time.time()

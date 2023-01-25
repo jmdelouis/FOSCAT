@@ -29,7 +29,7 @@ Default_nside=256
 # DEFINE THE WORKING NSIDE
 #=================================================================================
 
-nout=128
+nout=16
 # set the default name
 outname='FOCUS%s%d'%(sys.argv[1],nout)
 
@@ -53,7 +53,7 @@ Alpha=1.0
 DAlpha=1.0
 
 #number of simulations used as reference
-nsim=100
+nsim=10
 
 #work with angle invariant statistics 
 avg_ang=False
@@ -79,7 +79,6 @@ except:
     di=np.load(outpath+'/%sdi.npy'%(outname)).astype('float64')
     d1=np.load(outpath+'/%sd1.npy'%(outname)).astype('float64')
     d2=np.load(outpath+'/%sd2.npy'%(outname)).astype('float64')
-
 
 
 # All information of the map is used

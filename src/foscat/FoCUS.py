@@ -596,6 +596,21 @@ class FoCUS:
         return self.transpose(x,thelist)
     
     # ---------------------------------------------−---------
+    # Mean using mask x [....,Npix,....], mask[Nmask,Npix]  to [....,Nmask,....]
+    def bk_masked_mean(self,x,mask,axis=0):
+        
+        shape=x.shape.as_list()
+        l_x=self.bk_expand_dims(x,axis)
+        l_mask=mask
+        for i in range(axis):
+            l_mask=self.bk_expand_dims(l_mask,0)
+        
+        for i in range(axis+1,len(x.shape)):
+            l_mask=self.bk_expand_dims(l_mask,-1)
+
+        return self.bk_reduce_mean(l_mask*l_x,axis=axis+1)
+        
+    # ---------------------------------------------−---------
     # convert tensor x [....,a,b,....] to [....,a*b,....]
     def reduce_dim(self,x,axis=0):
         shape=x.shape.as_list()
