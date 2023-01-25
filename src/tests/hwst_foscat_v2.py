@@ -29,7 +29,7 @@ Default_nside=256
 # DEFINE THE WORKING NSIDE
 #=================================================================================
 
-nout=16
+nout=64
 # set the default name
 outname='FOCUS%s%d'%(sys.argv[1],nout)
 
@@ -60,10 +60,10 @@ avg_ang=False
 
 # Read data from disk
 try:
-    di=np.load(outpath+'/%sdi.npy'%(outname)).astype('float64')
-    d1=np.load(outpath+'/%sd1.npy'%(outname)).astype('float64')
-    d2=np.load(outpath+'/%sd2.npy'%(outname)).astype('float64')
-    td=np.load(outpath+'/%std.npy'%(outname)).astype('float64')
+    di=np.load(outpath+'/%sdi.npy'%(outname)) 
+    d1=np.load(outpath+'/%sd1.npy'%(outname)) 
+    d2=np.load(outpath+'/%sd2.npy'%(outname)) 
+    td=np.load(outpath+'/%std.npy'%(outname)) 
 except:
     td=dodown(np.load(datapath+'TT857_%d.npy'%(Default_nside)),nout)
     di=dodown(np.load(datapath+'%s_MONO.npy'%(sys.argv[1])),nout)
@@ -75,10 +75,10 @@ except:
     np.save(outpath+'/%sd1.npy'%(outname),d1)
     np.save(outpath+'/%sd2.npy'%(outname),d2)
     
-    td=np.load(outpath+'/%std.npy'%(outname)).astype('float64')
-    di=np.load(outpath+'/%sdi.npy'%(outname)).astype('float64')
-    d1=np.load(outpath+'/%sd1.npy'%(outname)).astype('float64')
-    d2=np.load(outpath+'/%sd2.npy'%(outname)).astype('float64')
+    td=np.load(outpath+'/%std.npy'%(outname)) 
+    di=np.load(outpath+'/%sdi.npy'%(outname)) 
+    d1=np.load(outpath+'/%sd1.npy'%(outname)) 
+    d2=np.load(outpath+'/%sd2.npy'%(outname)) 
 
 
 # All information of the map is used
@@ -93,6 +93,7 @@ for i in range(len(tab)):
 mask[0,:]=1.0
 for i in range(1,len(tab)):
     mask[i,:]=mask[i,:]*mask[0,:].sum()/mask[i,:].sum()
+
     
 off=np.median(di[di>-1E10])
 d1[di<-1E10]=off
@@ -100,8 +101,15 @@ d2[di<-1E10]=off
 di[di<-1E10]=off
 
 #=============================================
+
 # compute amplitude to normalize the dynamic range
-ampmap=1/di[mask[1]>0.9].std()
+ampmap=1/dodown(np.load(scratch_path+'%s_NOISE%03d_full.npy'%(sys.argv[1][0:6],0)).flatten(),nout).std()
+
+# rescale maps to ease the convergence
+d1=ampmap*(d1-off)
+d2=ampmap*(d2-off)
+di=ampmap*(di-off)
+td=ampmap*(td)
 
 #compute all noise map statistics
 noise=np.zeros([nsim,12*nout*nout],dtype='float64')
@@ -117,6 +125,7 @@ for i in range(nsim):
     noise2[i]-=np.mean(noise[i])
     noise[i] -=np.mean(noise[i])
 
+
 import foscat.scat as sc
 import foscat.Synthesis as synthe
 
@@ -128,10 +137,10 @@ scat_op=sc.funct(NORIENT=4,   # define the number of wavelet orientation
                  TEMPLATE_PATH=scratch_path)
 
 #compute d1xd2
-refH=scat_op.eval(ampmap*(d1-off),image2=ampmap*(d2-off),Imaginary=False)
+refH=scat_op.eval(d1,image2=d2,Imaginary=False,mask=mask)
 
 #compute Tdxdi
-refX=scat_op.eval(ampmap*(td),image2=ampmap*(di-off))
+refX=scat_op.eval(td,image2=di,mask=mask)
 
 def loss_fct1(x,args):
 
@@ -141,7 +150,7 @@ def loss_fct1(x,args):
     
     b=scat_op.eval(x,mask=mask)
 
-    l_val=scat_op.reduce_mean(isig*scat_op.square(ref-b))
+    l_val=scat_op.reduce_sum(isig*scat_op.reduce_mean(scat_op.square(ref-b)))
     
     return(l_val)
 
@@ -154,7 +163,7 @@ def loss_fct2(x,args):
     
     b=scat_op.eval(TT,image2=x,mask=mask)
     
-    l_val=scat_op.reduce_mean(isig*scat_op.square((ref-b)))
+    l_val=scat_op.reduce_sum(scat_op.reduce_mean(scat_op.square((ref-b))))
     
     return(l_val)
 
@@ -162,20 +171,21 @@ def loss_fct3(x,args):
 
     im   = args[0]
     bias = args[1]
-    mask = args[2]
-    isig = args[3]
+    refH = args[2]
+    mask = args[3]
+    isig = args[4]
     
     a=scat_op.eval(im,image2=x,mask=mask,Imaginary=False)-bias
-    b=scat_op.eval(x,image2=x,mask=mask,Imaginary=False)
     
-    l_val=scat_op.reduce_mean(isig*scat_op.square((a-b)))
+    l_val=scat_op.reduce_sum(scat_op.reduce_mean(scat_op.square((a-refH))))
     
     return(l_val)
 
 
-i1=ampmap*(d1-off)
-i2=ampmap*(d2-off)
-imap=ampmap*(di-off)
+i1=d1
+i2=d2
+imap=di
+init_map=1*di
 
 for itt in range(10):
 
@@ -193,49 +203,47 @@ for itt in range(10):
 
     bias1=bias1/nsim
     isig1=nsim/isig1
-
-    loss1=synthe.Loss(loss_fct1,refH-bias1,mask,isig1)
-
+    
     #loss2 : Txd = Tx(u+n)
     #bias2 = mean(F((T*(d+n))-F(T*d))
-    stat2_p_noise=scat_op.eval(ampmap*td,image2=(i1+i2)/2+noise[0],mask=mask,Imaginary=True)
-    stat2 =scat_op.eval(ampmap*td,image2=(i1+i2)/2,mask=mask,Imaginary=True)
+    stat2_p_noise=scat_op.eval(td,image2=imap+noise[0],mask=mask,Imaginary=True)
+    stat2 =scat_op.eval(td,image2=imap,mask=mask,Imaginary=True)
     
     bias2 = stat2_p_noise-stat2
     isig2 = scat_op.square(stat2_p_noise-stat2)
     for k in range(1,nsim):
-        stat2_p_noise=scat_op.eval(ampmap*td,image2=(i1+i2)/2+noise[k],mask=mask,Imaginary=True)
+        stat2_p_noise=scat_op.eval(td,image2=imap+noise[k],mask=mask,Imaginary=True)
         bias2 = bias2 + stat2_p_noise-stat2
         isig2 = isig2 + scat_op.square(stat2_p_noise-stat2)
 
     bias2=bias2/nsim
     isig2=nsim/isig2
 
-    loss2=synthe.Loss(loss_fct2,refX-bias2,ampmap*td,mask,isig2)
-
     #loss3 : dxu = (u+n)xu
-    stat3_p_noise=scat_op.eval(ampmap*(di-off),image2=(i1+i2)/2+noise[0],mask=mask,Imaginary=False)
-    stat3 =scat_op.eval(ampmap*(di-off),image2=(i1+i2)/2,mask=mask,Imaginary=False)
+    stat3_p_noise=scat_op.eval(di,image2=imap+noise[0],mask=mask,Imaginary=False)
+    stat3 =scat_op.eval(di,image2=imap,mask=mask,Imaginary=False)
     
     bias3 = stat3_p_noise-stat3
     isig3 = scat_op.square(stat3_p_noise-stat3)
     for k in range(1,nsim):
-        stat3_p_noise=scat_op.eval(ampmap*(di-off),image2=(i1+i2)/2+noise[k],mask=mask,Imaginary=False)
+        stat3_p_noise=scat_op.eval(di,image2=imap+noise[k],mask=mask,Imaginary=False)
         bias3 = bias3 + stat3_p_noise-stat3
         isig3 = isig3 + scat_op.square(stat3_p_noise-stat3)
 
     bias3=bias3/nsim
     isig3=nsim/isig3
 
-    loss3=synthe.Loss(loss_fct3,ampmap*(di-off),bias3,mask,scat_op.inv(isig3))
+    loss1=synthe.Loss(loss_fct1,refH-bias1,mask,isig1)
+    loss2=synthe.Loss(loss_fct2,refX-bias2,td,mask,isig2)
+    loss3=synthe.Loss(loss_fct3,di,bias3,refH-bias1,mask,isig3)
     
     sy = synthe.Synthesis([loss1,loss2,loss3])
 
-    omap=sy.run(imap,
+    omap=sy.run(init_map,
                 EVAL_FREQUENCY = 10,
                 DECAY_RATE=0.9998,
-                NUM_EPOCHS = 300,
-                LEARNING_RATE = 0.003,
+                NUM_EPOCHS = 1000,
+                LEARNING_RATE = 0.03,
                 EPSILON = 1E-16)
 
     i1=omap
