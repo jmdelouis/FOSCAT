@@ -2,6 +2,7 @@ import tensorflow as tf
 import numpy as np
 import time
 import sys
+import os
 from datetime import datetime
 from packaging import version
 
@@ -76,6 +77,15 @@ class Synthesis:
 
         ## update weights and biases
         return self.eta*(m_dw_corr/(tf.sqrt(v_dw_corr)+self.epsilon))
+
+    # ---------------------------------------------−---------
+    def getgpumem(self):
+        try:
+            os.system("nvidia-smi | awk '$2==\"N/A\"{print substr($9,1,length($9)-3),substr($11,1,length($11)-3),substr($13,1,length($13)-1)}' > smi_tmp.txt")
+            return np.loadtxt('smi_tmp.txt')
+        except:
+            return(np.zeros([1,3]))
+        
     # ---------------------------------------------−---------
     def run(self,
             x,
@@ -94,14 +104,7 @@ class Synthesis:
         start = time.time()
         
         for itt in range(NUM_EPOCHS):
-            """
-            # Set up logging.
-            stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-            logdir = 'logs/func/%s' % stamp
-            writer = tf.summary.create_file_writer(logdir)
 
-            tf.summary.trace_on(graph=True, profiler=True)
-            """
             grad=None
             ltot=np.zeros([self.number_of_loss])
             for k in range(self.number_of_loss):
@@ -112,15 +115,7 @@ class Synthesis:
                     grad=grad+g
 
                 ltot[k]=l.numpy()
-            """
-            with writer.as_default():
-                tf.summary.trace_export(
-                    name="my_func_trace",
-                    step=0,
-                    profiler_outdir=logdir)
 
-            exit(0)
-            """
             if self.nlog==self.history.shape[0]:
                 new_log=np.zeros([self.history.shape[0]*2])
                 new_log[0:self.nlog]=self.history
@@ -137,7 +132,12 @@ class Synthesis:
                     cur_loss=cur_loss+'%.3g '%(ltot[k])
                 cur_loss=cur_loss+')'
                 
-                print('Itt %d L=%s %.3fs'%(itt,cur_loss,(end-start)))
+                info_gpu=self.getgpumem()
+                mess=''
+                for k in range(info_gpu.shape[0]):
+                    mess=mess+'[GPU%d %.0f/%.0f MB %.0f%%]'%(k,info_gpu[k,0],info_gpu[k,1],info_gpu[k,2]))
+                
+                print('Itt %d L=%s %.3fs %s'%(itt,cur_loss,(end-start),mess))
                 sys.stdout.flush()
                 start = time.time()
                 

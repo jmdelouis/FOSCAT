@@ -29,7 +29,7 @@ Default_nside=256
 # DEFINE THE WORKING NSIDE
 #=================================================================================
 
-nout=64
+nout=256
 # set the default name
 outname='FOCUS%s%d'%(sys.argv[1],nout)
 
@@ -53,7 +53,7 @@ Alpha=1.0
 DAlpha=1.0
 
 #number of simulations used as reference
-nsim=10
+nsim=100
 
 #work with angle invariant statistics 
 avg_ang=False
@@ -181,13 +181,12 @@ def loss_fct3(x,args):
     
     return(l_val)
 
-
 i1=d1
 i2=d2
 imap=di
 init_map=1*di
 
-for itt in range(10):
+for itt in range(1):
 
     #loss1 : d1xd2 = (u+n1)x(u+n2)
     stat1_p_noise=scat_op.eval(i1+noise1[0],image2=i2+noise2[0],mask=mask,Imaginary=False)
