@@ -135,7 +135,7 @@ class Synthesis:
                 info_gpu=self.getgpumem()
                 mess=''
                 for k in range(info_gpu.shape[0]):
-                    mess=mess+'[GPU%d %.0f/%.0f MB %.0f%%]'%(k,info_gpu[k,0],info_gpu[k,1],info_gpu[k,2]))
+                    mess=mess+'[GPU%d %.0f/%.0f MB %.0f%%]'%(k,info_gpu[k,0],info_gpu[k,1],info_gpu[k,2])
                 
                 print('Itt %d L=%s %.3fs %s'%(itt,cur_loss,(end-start),mess))
                 sys.stdout.flush()
