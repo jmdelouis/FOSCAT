@@ -127,6 +127,12 @@ class scat:
             return x
         else:
             return x.numpy()
+
+    def std(self):
+        return np.sqrt(((self.get_np(self.S1).std())**2+(self.get_np(self.S2).std())**2+(self.get_np(self.P00).std())**2)/3)
+
+    def mean(self):
+        return (self.get_np(self.S1).mean()+self.get_np(self.S2).mean()+self.get_np(self.P00).mean())/3
         
     
 class funct(FOC.FoCUS):
@@ -242,14 +248,23 @@ class funct(FOC.FoCUS):
                     l2_image_imag=self.bk_concat([self.bk_expand_dims(conj_imag,axis=-2),l2_image_imag],axis=-2)
             
             # Convol l2_image [....,Npix_j1,....,j1,Norient,Norient]
-            c2_image_real,c2_image_imag=self.convol(l2_image,axis=axis)
+            c2_image_real,c2_image_imag=self.convol(self.relu(l2_image),axis=axis)
             if cross and Imaginary:
-                c2_image_imag_real,c2_image_imag_imag=self.convol(l2_image_imag,axis=axis)
+                c2_image_imag_real,c2_image_imag_imag=self.convol(self.relu(l2_image_imag),axis=axis)
             
             conj2=self.bk_sqrt(c2_image_real*c2_image_real+c2_image_imag*c2_image_imag)
             if cross and Imaginary:
                 conj2_imag=self.bk_sqrt(c2_image_imag_real*c2_image_imag_real+c2_image_imag_imag*c2_image_imag_imag)
             
+            
+            c2_image_real,c2_image_imag=self.convol(self.relu(-l2_image),axis=axis)
+            if cross and Imaginary:
+                c2_image_imag_real,c2_image_imag_imag=self.convol(self.relu(-l2_image_imag)),axis=axis)
+            
+            conj2=conj2-self.bk_sqrt(c2_image_real*c2_image_real+c2_image_imag*c2_image_imag)
+            if cross and Imaginary:
+                conj2_imag=conj2_imag - self.bk_sqrt(c2_image_imag_real*c2_image_imag_real+c2_image_imag_imag*c2_image_imag_imag)
+
             # Convol l_s2 [....,....,Nmask,j1,Norient,Norient]
             l_s2 = self.bk_masked_mean(conj2,vmask,axis=axis)
             if cross and Imaginary:

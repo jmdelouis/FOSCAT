@@ -130,10 +130,10 @@ import foscat.scat as sc
 import foscat.Synthesis as synthe
 
 scat_op=sc.funct(NORIENT=4,   # define the number of wavelet orientation
-                 KERNELSZ=5,  # define the kernel size (here 5x5)
+                 KERNELSZ=3,  # define the kernel size (here 5x5)
                  OSTEP=-1,     # get very large scale (nside=1)
-                 LAMBDA=1.0,
-                 all_type='float32',
+                 LAMBDA=1.2,
+                 all_type='float64',
                  TEMPLATE_PATH=scratch_path)
 
 #compute d1xd2
@@ -150,7 +150,7 @@ def loss_fct1(x,args):
     
     b=scat_op.eval(x,mask=mask)
 
-    l_val=scat_op.reduce_sum(isig*scat_op.reduce_mean(scat_op.square(ref-b)))
+    l_val=scat_op.reduce_sum(scat_op.reduce_mean(isig*scat_op.square(ref-b)))
     
     return(l_val)
 
@@ -163,7 +163,7 @@ def loss_fct2(x,args):
     
     b=scat_op.eval(TT,image2=x,mask=mask)
     
-    l_val=scat_op.reduce_sum(scat_op.reduce_mean(scat_op.square((ref-b))))
+    l_val=scat_op.reduce_sum(scat_op.reduce_mean(isig*scat_op.square((ref-b))))
     
     return(l_val)
 
@@ -176,8 +176,9 @@ def loss_fct3(x,args):
     isig = args[4]
     
     a=scat_op.eval(im,image2=x,mask=mask,Imaginary=False)-bias
+    b=scat_op.eval(x,mask=mask,Imaginary=False)
     
-    l_val=scat_op.reduce_sum(scat_op.reduce_mean(scat_op.square((a-refH))))
+    l_val=scat_op.reduce_sum(scat_op.reduce_mean(isig*scat_op.square((a-b))))
     
     return(l_val)
 
@@ -186,7 +187,7 @@ i2=d2
 imap=di
 init_map=1*di
 
-for itt in range(1):
+for itt in range(10):
 
     #loss1 : d1xd2 = (u+n1)x(u+n2)
     stat1_p_noise=scat_op.eval(i1+noise1[0],image2=i2+noise2[0],mask=mask,Imaginary=False)
@@ -219,30 +220,32 @@ for itt in range(1):
     isig2=nsim/isig2
 
     #loss3 : dxu = (u+n)xu
-    stat3_p_noise=scat_op.eval(di,image2=imap+noise[0],mask=mask,Imaginary=False)
-    stat3 =scat_op.eval(di,image2=imap,mask=mask,Imaginary=False)
-    
-    bias3 = stat3_p_noise-stat3
-    isig3 = scat_op.square(stat3_p_noise-stat3)
+    stat3_p_noise=scat_op.eval(i1+noise[0],image2=i2,mask=mask,Imaginary=False)
+    bias3 = stat3_p_noise-stat1
+    isig3 = scat_op.square(stat3_p_noise-stat1)
     for k in range(1,nsim):
-        stat3_p_noise=scat_op.eval(di,image2=imap+noise[k],mask=mask,Imaginary=False)
-        bias3 = bias3 + stat3_p_noise-stat3
-        isig3 = isig3 + scat_op.square(stat3_p_noise-stat3)
+        stat3_p_noise=scat_op.eval(i1+noise[k],image2=i2,mask=mask,Imaginary=False)
+        bias3 = bias3 + stat3_p_noise-stat1
+        isig3 = isig3 + scat_op.square(stat3_p_noise-stat1)
 
     bias3=bias3/nsim
     isig3=nsim/isig3
 
+    print("BIAS MEAN %f %f %f"%(bias1.mean(),bias2.mean(),bias3.mean()))
+    print("BIAS VAR %f %f %f"%(bias1.std(),bias2.std(),bias3.std()))
+    sys.stdout.flush()
+    
     loss1=synthe.Loss(loss_fct1,refH-bias1,mask,isig1)
     loss2=synthe.Loss(loss_fct2,refX-bias2,td,mask,isig2)
     loss3=synthe.Loss(loss_fct3,di,bias3,refH-bias1,mask,isig3)
     
-    sy = synthe.Synthesis([loss1,loss2,loss3])
+    sy = synthe.Synthesis([loss1,loss2,loss3],operation=scat_op)
 
     omap=sy.run(init_map,
                 EVAL_FREQUENCY = 10,
-                DECAY_RATE=0.9998,
+                DECAY_RATE=0.999,
                 NUM_EPOCHS = 1000,
-                LEARNING_RATE = 0.03,
+                LEARNING_RATE = 0.3,
                 EPSILON = 1E-16)
 
     i1=omap

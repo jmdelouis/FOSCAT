@@ -23,7 +23,8 @@ class Synthesis:
                  beta1=0.9,
                  beta2=0.999,
                  epsilon=1e-7,
-                 decay_rate = 0.999):
+                 decay_rate = 0.999,
+                 operation=None):
         self.loss_class=loss_list
         self.number_of_loss=len(loss_list)
         self.nlog=0
@@ -35,7 +36,8 @@ class Synthesis:
         self.epsilon = epsilon
         self.eta = eta
         self.history=np.zeros([10])
-        
+        self.operation=operation
+        self.curr_gpu=0
     
     # ---------------------------------------------−---------
     def check_dense(self,data,datasz):
@@ -49,9 +51,18 @@ class Synthesis:
     @tf.function
     def loss(self,x,loss_function):
 
-        l=loss_function.eval(x)
+        if self.operation is not None:
+            with tf.device(self.operation.gpulist[self.curr_gpu%self.operation.ngpu]):
+                print('Run on GPU %s'%(self.operation.gpulist[self.curr_gpu%self.operation.ngpu]))
+                l=loss_function.eval(x)
         
-        g=self.check_dense(tf.gradients(l,x)[0],x)
+                g=self.check_dense(tf.gradients(l,x)[0],x)
+            
+            self.curr_gpu=self.curr_gpu+1
+        else:
+            l=loss_function.eval(x)
+        
+            g=self.check_dense(tf.gradients(l,x)[0],x)
             
         return l,g
     #---------------------------------------------------------------
@@ -81,7 +92,6 @@ class Synthesis:
     # ---------------------------------------------−---------
     def getgpumem(self):
         try:
-            os.system("nvidia-smi | awk '$2==\"N/A\"{print substr($9,1,length($9)-3),substr($11,1,length($11)-3),substr($13,1,length($13)-1)}' > smi_tmp.txt")
             return np.loadtxt('smi_tmp.txt')
         except:
             return(np.zeros([1,3]))
