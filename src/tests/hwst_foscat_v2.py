@@ -15,12 +15,14 @@ if len(sys.argv)<4:
     print('<in>           : name of the 3 input data files: <in>_MONO.npy,<in>_HM1_MONO.npy,<in>_HM2_MONO.npy')
     print('<scratch_path> : name of the directory with all the input files (noise, TT,etc.) and also use for FOSCAT temporary files')
     print('<out>          : name of the directory where the computed data are stored')
+    print('<nside>        : nside of the synthesised map')
     print('============================================')
     exit(0)
 
 scratch_path = sys.argv[2]
 datapath = scratch_path
 outpath = sys.argv[3]
+nout      = int(sys.argv[4])
 
 #set the nside of input data
 Default_nside=256
