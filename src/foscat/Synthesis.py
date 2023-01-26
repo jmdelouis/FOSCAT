@@ -5,6 +5,8 @@ import sys
 import os
 from datetime import datetime
 from packaging import version
+from threading import Thread
+from threading import Event
 
 class Loss:
     
@@ -38,7 +40,17 @@ class Synthesis:
         self.history=np.zeros([10])
         self.operation=operation
         self.curr_gpu=0
+        self.event = Event()
     
+    # ---------------------------------------------−---------
+    def get_gpu(self,event,delay):
+    
+        while (1):
+            if event.is_set():
+                break
+            time.sleep(delay)
+            os.system("nvidia-smi | awk '$2==\"N/A\"{print substr($9,1,length($9)-3),substr($11,1,length($11)-3),substr($13,1,length($13)-1)}' > smi_tmp.txt")
+       
     # ---------------------------------------------−---------
     def check_dense(self,data,datasz):
         s='%s'%(type(data))
@@ -111,6 +123,13 @@ class Synthesis:
         self.decay_rate = DECAY_RATE
         self.nlog=0
         
+        # start thread that catch GPU information
+        try:
+            self.gpu_thrd = Thread(target=self.get_gpu, args=(self.event,1,))
+            self.gpu_thrd.start()
+        except:
+            print("Error: unable to start thread for GPU survey")
+            
         start = time.time()
         
         for itt in range(NUM_EPOCHS):
@@ -150,7 +169,15 @@ class Synthesis:
                 print('Itt %d L=%s %.3fs %s'%(itt,cur_loss,(end-start),mess))
                 sys.stdout.flush()
                 start = time.time()
-                
+
+        # stop thread that catch GPU information
+        self.event.set()
+        
+        try:
+            self.gpu_thrd.join()
+        except:
+            print('No thread to stop, everything is ok')
+        
         return(x)
 
     def get_history(self):

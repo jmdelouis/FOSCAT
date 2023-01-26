@@ -31,7 +31,6 @@ Default_nside=256
 # DEFINE THE WORKING NSIDE
 #=================================================================================
 
-nout=256
 # set the default name
 outname='FOCUS%s%d'%(sys.argv[1],nout)
 
@@ -178,9 +177,8 @@ def loss_fct3(x,args):
     isig = args[4]
     
     a=scat_op.eval(im,image2=x,mask=mask,Imaginary=False)-bias
-    b=scat_op.eval(x,mask=mask,Imaginary=False)
     
-    l_val=scat_op.reduce_sum(scat_op.reduce_mean(isig*scat_op.square((a-b))))
+    l_val=scat_op.reduce_sum(scat_op.reduce_mean(isig*scat_op.square((a-refH))))
     
     return(l_val)
 
@@ -189,7 +187,7 @@ i2=d2
 imap=di
 init_map=1*di
 
-for itt in range(10):
+for itt in range(5):
 
     #loss1 : d1xd2 = (u+n1)x(u+n2)
     stat1_p_noise=scat_op.eval(i1+noise1[0],image2=i2+noise2[0],mask=mask,Imaginary=False)
