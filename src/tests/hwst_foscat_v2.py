@@ -217,7 +217,7 @@ for itt in range(5):
         bias1=bias1/nsim
         isig1=nsim/isig1
     
-    if rank==1 or size=1:
+    if rank==1 or size==1:
         #loss2 : Txd = Tx(u+n)
         #bias2 = mean(F((T*(d+n))-F(T*d))
         stat2_p_noise=scat_op.eval(td,image2=imap+noise[0],mask=mask,Imaginary=True)
@@ -248,21 +248,21 @@ for itt in range(5):
 
     
     if initb1 is None or initb2 is None or initb3 is None :
-        if rank==0 or size=1:
+        if rank==0 or size==1:
             print("BIAS MEAN 0 %f"%(bias1.mean()))
             print("BIAS VAR  0 %f"%(bias1.std()))
-        if rank==1 or size=1:
+        if rank==1 or size==1:
             print("BIAS MEAN 1 %f"%(bias2.mean()))
             print("BIAS VAR  1 %f"%(bias2.std()))
-        if rank==2 or size=1:
+        if rank==2 or size==1:
             print("BIAS MEAN 2 %f"%(bias3.mean()))
             print("BIAS VAR  2 %f"%(bias3.std()))
     else:
-        if rank==0 or size=1:
+        if rank==0 or size==1:
             print("BIAS DVAR 0 %f"%((bias1-initb1).std()))
-        if rank==1 or size=1:
+        if rank==1 or size==1:
             print("BIAS DVAR 1 %f"%((bias1-initb1).std()))
-        if rank==2 or size=1:
+        if rank==2 or size==1:
             print("BIAS DVAR 1 %f"%((bias1-initb1).std()))
 
     initb1=bias1
