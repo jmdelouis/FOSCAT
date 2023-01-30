@@ -201,7 +201,7 @@ init_map=(d1+d2)/2
 
 for itt in range(5):
 
-    if rank==0:
+    if rank==0 or size==1:
         #loss1 : d1xd2 = (u+n1)x(u+n2)
         stat1_p_noise=scat_op.eval(i1+noise1[0],image2=i2+noise2[0],mask=mask,Imaginary=False)
         stat1 =scat_op.eval(i1,image2=i2,mask=mask,Imaginary=False)
@@ -217,7 +217,7 @@ for itt in range(5):
         bias1=bias1/nsim
         isig1=nsim/isig1
     
-    if rank==1:
+    if rank==1 or size=1:
         #loss2 : Txd = Tx(u+n)
         #bias2 = mean(F((T*(d+n))-F(T*d))
         stat2_p_noise=scat_op.eval(td,image2=imap+noise[0],mask=mask,Imaginary=True)
@@ -233,7 +233,7 @@ for itt in range(5):
         bias2=bias2/nsim
         isig2=nsim/isig2
 
-    if rank==2:
+    if rank==2 or size==1:
         #loss3 : dxu = (u+n)xu
         stat3_p_noise=scat_op.eval(i1+noise[0],image2=i2,mask=mask,Imaginary=False)
         bias3 = stat3_p_noise-stat1
@@ -248,21 +248,21 @@ for itt in range(5):
 
     
     if initb1 is None or initb2 is None or initb3 is None :
-        if rank==0:
+        if rank==0 or size=1:
             print("BIAS MEAN 0 %f"%(bias1.mean()))
             print("BIAS VAR  0 %f"%(bias1.std()))
-        if rank==1:
+        if rank==1 or size=1:
             print("BIAS MEAN 1 %f"%(bias2.mean()))
             print("BIAS VAR  1 %f"%(bias2.std()))
-        if rank==2:
+        if rank==2 or size=1:
             print("BIAS MEAN 2 %f"%(bias3.mean()))
             print("BIAS VAR  2 %f"%(bias3.std()))
     else:
-        if rank==0:
+        if rank==0 or size=1:
             print("BIAS DVAR 0 %f"%((bias1-initb1).std()))
-        if rank==1:
+        if rank==1 or size=1:
             print("BIAS DVAR 1 %f"%((bias1-initb1).std()))
-        if rank==2:
+        if rank==2 or size=1:
             print("BIAS DVAR 1 %f"%((bias1-initb1).std()))
 
     initb1=bias1
@@ -270,15 +270,23 @@ for itt in range(5):
     initb3=bias3
         
     sys.stdout.flush()
-    if rank==0:
+
+    if rank==0 or size==1:
         loss1=synthe.Loss(loss_fct1,refH-bias1,mask,isig1)
-        sy = synthe.Synthesis([loss1],operation=scat_op)
-    if rank==1:
+    if rank==1 or size==1:
         loss2=synthe.Loss(loss_fct2,refX-bias2,td,mask,isig2)
-        sy = synthe.Synthesis([loss2],operation=scat_op)
-    if rank==2:
+    if rank==2 or size==1:
         loss3=synthe.Loss(loss_fct3,di,bias3,refH-bias1,mask,isig3)
-        sy = synthe.Synthesis([loss3],operation=scat_op)
+
+    if size==1:
+        sy = synthe.Synthesis([loss1,loss2,loss3],operation=scat_op)
+    else:
+        if rank==0:
+            sy = synthe.Synthesis([loss1],operation=scat_op)
+        if rank==1:
+            sy = synthe.Synthesis([loss2],operation=scat_op)
+        if rank==2:
+            sy = synthe.Synthesis([loss3],operation=scat_op)
 
     omap=sy.run(init_map,
                 EVAL_FREQUENCY = 10,
