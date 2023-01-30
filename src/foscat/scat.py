@@ -173,7 +173,7 @@ class funct(FOC.FoCUS):
         else:
             vmask = self.bk_cast( mask) # [Nmask, Npix]
 
-        if self.KERNELSZ>3:
+        if self.KERNELSZ>1:
             # if the kernel size is bigger than 3 increase the binning before smoothing
             l_image1=self.up_grade(I1,nside*2,axis=axis)
             vmask=self.up_grade(vmask,nside*2,axis=1)
@@ -253,21 +253,26 @@ class funct(FOC.FoCUS):
             if cross and Imaginary:
                 c2_image_imag_real,c2_image_imag_imag=self.convol(self.bk_relu(l2_image_imag),axis=axis)
             
-            conj2=self.bk_sqrt(c2_image_real*c2_image_real+c2_image_imag*c2_image_imag)
+            conj2=self.bk_L1(c2_image_real*c2_image_real+c2_image_imag*c2_image_imag)
             if cross and Imaginary:
-                conj2_imag=self.bk_sqrt(c2_image_imag_real*c2_image_imag_real+c2_image_imag_imag*c2_image_imag_imag)
+                conj2_imag=self.bk_L1(c2_image_imag_real*c2_image_imag_real+ \
+                                      c2_image_imag_imag*c2_image_imag_imag)
             
             
             c2_image_real,c2_image_imag=self.convol(self.bk_relu(-l2_image),axis=axis)
-            if cross and Imaginary:
-                c2_image_imag_real,c2_image_imag_imag=self.convol(self.bk_relu(-l2_image_imag),axis=axis)
-            
-            conj2=conj2-self.bk_sqrt(c2_image_real*c2_image_real+c2_image_imag*c2_image_imag)
-            if cross and Imaginary:
-                conj2_imag=conj2_imag - self.bk_sqrt(c2_image_imag_real*c2_image_imag_real+c2_image_imag_imag*c2_image_imag_imag)
+            if cross:
+                if Imaginary:
+                    c2_image_imag_real,c2_image_imag_imag=self.convol(self.bk_relu(-l2_image_imag),axis=axis)
+        
+                conj2=conj2-self.bk_L1(c2_image_real*c2_image_real+ \
+                                       c2_image_imag*c2_image_imag)
+                if Imaginary:
+                    conj2_imag=conj2_imag - self.bk_L1(c2_image_imag_real*c2_image_imag_real+ \
+                                                       c2_image_imag_imag*c2_image_imag_imag)
             
             # Convol l_s2 [....,....,Nmask,j1,Norient,Norient]
             l_s2 = self.bk_masked_mean(conj2,vmask,axis=axis)
+            
             if cross and Imaginary:
                 l_imag_s2 = self.bk_masked_mean(conj2_imag,vmask,axis=axis)
             

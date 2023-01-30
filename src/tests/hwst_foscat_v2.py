@@ -24,6 +24,11 @@ datapath = scratch_path
 outpath = sys.argv[3]
 nout      = int(sys.argv[4])
 
+from mpi4py import MPI
+comm = MPI.COMM_WORLD
+size = comm.Get_size()
+rank = comm.Get_rank()
+
 #set the nside of input data
 Default_nside=256
 
@@ -134,14 +139,20 @@ scat_op=sc.funct(NORIENT=4,   # define the number of wavelet orientation
                  KERNELSZ=3,  # define the kernel size (here 5x5)
                  OSTEP=-1,     # get very large scale (nside=1)
                  LAMBDA=1.2,
-                 all_type='float64',
+                 all_type='float32',
                  TEMPLATE_PATH=scratch_path)
 
-#compute d1xd2
-refH=scat_op.eval(d1,image2=d2,Imaginary=False,mask=mask)
+if rank==0:
+    #compute d1xd2
+    refH=scat_op.eval(d1,image2=d2,Imaginary=False,mask=mask)
 
-#compute Tdxdi
-refX=scat_op.eval(td,image2=di,mask=mask)
+if rank==1:
+    #compute Tdxdi
+    refX=scat_op.eval(td,image2=di,Imaginary=True,mask=mask)
+
+initb1=None
+initb2=None
+initb3=None
 
 def loss_fct1(x,args):
 
@@ -152,7 +163,7 @@ def loss_fct1(x,args):
     b=scat_op.eval(x,mask=mask)
 
     l_val=scat_op.reduce_sum(scat_op.reduce_mean(isig*scat_op.square(ref-b)))
-    
+
     return(l_val)
 
 def loss_fct2(x,args):
@@ -162,9 +173,9 @@ def loss_fct2(x,args):
     mask = args[2]
     isig = args[3]
     
-    b=scat_op.eval(TT,image2=x,mask=mask)
+    b=scat_op.eval(TT,image2=x,mask=mask,Imaginary=True)
     
-    l_val=scat_op.reduce_sum(scat_op.reduce_mean(isig*scat_op.square((ref-b))))
+    l_val=scat_op.reduce_sum(scat_op.reduce_mean(isig*scat_op.square(ref-b)))
     
     return(l_val)
 
@@ -172,90 +183,122 @@ def loss_fct3(x,args):
 
     im   = args[0]
     bias = args[1]
-    refH = args[2]
+    ref = args[2]
     mask = args[3]
     isig = args[4]
     
     a=scat_op.eval(im,image2=x,mask=mask,Imaginary=False)-bias
+    b=scat_op.eval(x,mask=mask,Imaginary=False)
     
-    l_val=scat_op.reduce_sum(scat_op.reduce_mean(isig*scat_op.square((a-refH))))
+    l_val=scat_op.reduce_sum(scat_op.reduce_mean(isig*scat_op.square(a-b)))
     
     return(l_val)
 
 i1=d1
 i2=d2
 imap=di
-init_map=1*di
+init_map=(d1+d2)/2
 
 for itt in range(5):
 
-    #loss1 : d1xd2 = (u+n1)x(u+n2)
-    stat1_p_noise=scat_op.eval(i1+noise1[0],image2=i2+noise2[0],mask=mask,Imaginary=False)
-    stat1 =scat_op.eval(i1,image2=i2,mask=mask,Imaginary=False)
+    if rank==0:
+        #loss1 : d1xd2 = (u+n1)x(u+n2)
+        stat1_p_noise=scat_op.eval(i1+noise1[0],image2=i2+noise2[0],mask=mask,Imaginary=False)
+        stat1 =scat_op.eval(i1,image2=i2,mask=mask,Imaginary=False)
+        
+        #bias1 = mean(F((d1+n1)*(d2+n2))-F(d1*d2))
+        bias1 = stat1_p_noise-stat1
+        isig1 = scat_op.square(stat1_p_noise-stat1)
+        for k in range(1,nsim):
+            stat1_p_noise=scat_op.eval(i1+noise1[k],image2=i2+noise2[k],mask=mask,Imaginary=False)
+            bias1 = bias1 + stat1_p_noise-stat1
+            isig1 = isig1 + scat_op.square(stat1_p_noise-stat1)
+
+        bias1=bias1/nsim
+        isig1=nsim/isig1
     
-    #bias1 = mean(F((d1+n1)*(d2+n2))-F(d1*d2))
-    bias1 = stat1_p_noise-stat1
-    isig1 = scat_op.square(stat1_p_noise-stat1)
-    for k in range(1,nsim):
-        stat1_p_noise=scat_op.eval(i1+noise1[k],image2=i2+noise2[k],mask=mask,Imaginary=False)
-        bias1 = bias1 + stat1_p_noise-stat1
-        isig1 = isig1 + scat_op.square(stat1_p_noise-stat1)
+    if rank==1:
+        #loss2 : Txd = Tx(u+n)
+        #bias2 = mean(F((T*(d+n))-F(T*d))
+        stat2_p_noise=scat_op.eval(td,image2=imap+noise[0],mask=mask,Imaginary=True)
+        stat2 =scat_op.eval(td,image2=imap,mask=mask,Imaginary=True)
+        
+        bias2 = stat2_p_noise-stat2
+        isig2 = scat_op.square(stat2_p_noise-stat2)
+        for k in range(1,nsim):
+            stat2_p_noise=scat_op.eval(td,image2=imap+noise[k],mask=mask,Imaginary=True)
+            bias2 = bias2 + stat2_p_noise-stat2
+            isig2 = isig2 + scat_op.square(stat2_p_noise-stat2)
 
-    bias1=bias1/nsim
-    isig1=nsim/isig1
+        bias2=bias2/nsim
+        isig2=nsim/isig2
+
+    if rank==2:
+        #loss3 : dxu = (u+n)xu
+        stat3_p_noise=scat_op.eval(i1+noise[0],image2=i2,mask=mask,Imaginary=False)
+        bias3 = stat3_p_noise-stat1
+        isig3 = scat_op.square(stat3_p_noise-stat1)
+        for k in range(1,nsim):
+            stat3_p_noise=scat_op.eval(i1+noise[k],image2=i2,mask=mask,Imaginary=False)
+            bias3 = bias3 + stat3_p_noise-stat1
+            isig3 = isig3 + scat_op.square(stat3_p_noise-stat1)
+
+        bias3=bias3/nsim
+        isig3=nsim/isig3
+
     
-    #loss2 : Txd = Tx(u+n)
-    #bias2 = mean(F((T*(d+n))-F(T*d))
-    stat2_p_noise=scat_op.eval(td,image2=imap+noise[0],mask=mask,Imaginary=True)
-    stat2 =scat_op.eval(td,image2=imap,mask=mask,Imaginary=True)
-    
-    bias2 = stat2_p_noise-stat2
-    isig2 = scat_op.square(stat2_p_noise-stat2)
-    for k in range(1,nsim):
-        stat2_p_noise=scat_op.eval(td,image2=imap+noise[k],mask=mask,Imaginary=True)
-        bias2 = bias2 + stat2_p_noise-stat2
-        isig2 = isig2 + scat_op.square(stat2_p_noise-stat2)
+    if initb1 is None or initb2 is None or initb3 is None :
+        if rank==0:
+            print("BIAS MEAN 0 %f"%(bias1.mean()))
+            print("BIAS VAR  0 %f"%(bias1.std()))
+        if rank==1:
+            print("BIAS MEAN 1 %f"%(bias2.mean()))
+            print("BIAS VAR  1 %f"%(bias2.std()))
+        if rank==2:
+            print("BIAS MEAN 2 %f"%(bias3.mean()))
+            print("BIAS VAR  2 %f"%(bias3.std()))
+    else:
+        if rank==0:
+            print("BIAS DVAR 0 %f"%((bias1-initb1).std()))
+        if rank==1:
+            print("BIAS DVAR 1 %f"%((bias1-initb1).std()))
+        if rank==2:
+            print("BIAS DVAR 1 %f"%((bias1-initb1).std()))
 
-    bias2=bias2/nsim
-    isig2=nsim/isig2
-
-    #loss3 : dxu = (u+n)xu
-    stat3_p_noise=scat_op.eval(i1+noise[0],image2=i2,mask=mask,Imaginary=False)
-    bias3 = stat3_p_noise-stat1
-    isig3 = scat_op.square(stat3_p_noise-stat1)
-    for k in range(1,nsim):
-        stat3_p_noise=scat_op.eval(i1+noise[k],image2=i2,mask=mask,Imaginary=False)
-        bias3 = bias3 + stat3_p_noise-stat1
-        isig3 = isig3 + scat_op.square(stat3_p_noise-stat1)
-
-    bias3=bias3/nsim
-    isig3=nsim/isig3
-
-    print("BIAS MEAN %f %f %f"%(bias1.mean(),bias2.mean(),bias3.mean()))
-    print("BIAS VAR %f %f %f"%(bias1.std(),bias2.std(),bias3.std()))
+    initb1=bias1
+    initb2=bias2
+    initb3=bias3
+        
     sys.stdout.flush()
-    
-    loss1=synthe.Loss(loss_fct1,refH-bias1,mask,isig1)
-    loss2=synthe.Loss(loss_fct2,refX-bias2,td,mask,isig2)
-    loss3=synthe.Loss(loss_fct3,di,bias3,refH-bias1,mask,isig3)
-    
-    sy = synthe.Synthesis([loss1,loss2,loss3],operation=scat_op)
+    if rank==0:
+        loss1=synthe.Loss(loss_fct1,refH-bias1,mask,isig1)
+        sy = synthe.Synthesis([loss1],operation=scat_op)
+    if rank==1:
+        loss2=synthe.Loss(loss_fct2,refX-bias2,td,mask,isig2)
+        sy = synthe.Synthesis([loss2],operation=scat_op)
+    if rank==2:
+        loss3=synthe.Loss(loss_fct3,di,bias3,refH-bias1,mask,isig3)
+        sy = synthe.Synthesis([loss3],operation=scat_op)
 
     omap=sy.run(init_map,
                 EVAL_FREQUENCY = 10,
                 DECAY_RATE=0.999,
                 NUM_EPOCHS = 1000,
-                LEARNING_RATE = 0.3,
-                EPSILON = 1E-16)
+                LEARNING_RATE = 0.03,
+                EPSILON = 1E-16,
+                mpi_rank=rank,
+                mpi_size=size)
 
     i1=omap
     i2=omap
     imap=omap
+    
+    if rank==0:
+        # save the intermediate results
+        print('ITT %d DONE'%(itt))
+        sys.stdout.flush()
 
-    # save the intermediate results
-    print('ITT %d DONE'%(itt))
-    sys.stdout.flush()
-    np.save(outpath+'%sresult_%d.npy'%(outname,itt),omap/ampmap+off)
+        np.save(outpath+'%sresult_%d.npy'%(outname,itt),omap/ampmap+off)
 
 print('Computation Done')
 sys.stdout.flush()

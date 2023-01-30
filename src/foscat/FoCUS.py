@@ -27,6 +27,9 @@ class FoCUS:
             
             self.backend=tf
             self.BACKEND=self.TENSORFLOW
+            tf.config.threading.set_inter_op_parallelism_threads(1)
+            tf.config.threading.set_intra_op_parallelism_threads(1)
+
         if BACKEND=='torch':
             import torch
             self.BACKEND=self.TORCH
@@ -248,7 +251,7 @@ class FoCUS:
                 return(np.mean(data,axis))
         
     def bk_sqrt(self,data):
-        return(self.backend.sqrt(data))
+        return(self.backend.sqrt(self.backend.abs(data)))
     
     def bk_abs(self,data):
         return(self.backend.abs(data))
@@ -639,7 +642,8 @@ class FoCUS:
         if self.Idx_Neighbours[nside] is None:
             self.init_index(nside)
             
-        imX9=self.bk_expand_dims(self.bk_gather(image,self.Idx_Neighbours[nside],axis=axis),-1)
+        imX9=self.bk_expand_dims(self.bk_gather(self.bk_cast(image),
+                                                self.Idx_Neighbours[nside],axis=axis),-1)
 
         l_ww_real=self.ww_Real
         l_ww_imag=self.ww_Imag

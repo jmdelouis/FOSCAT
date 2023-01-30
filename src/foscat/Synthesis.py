@@ -27,6 +27,7 @@ class Synthesis:
                  epsilon=1e-7,
                  decay_rate = 0.999,
                  operation=None):
+
         self.loss_class=loss_list
         self.number_of_loss=len(loss_list)
         self.nlog=0
@@ -44,20 +45,36 @@ class Synthesis:
     
     # ---------------------------------------------−---------
     def get_gpu(self,event,delay):
-    
+
+        isnvidia=os.system('which nvidia-smi &> /dev/null')
+
         while (1):
             if event.is_set():
                 break
             time.sleep(delay)
-            os.system("nvidia-smi | awk '$2==\"N/A\"{print substr($9,1,length($9)-3),substr($11,1,length($11)-3),substr($13,1,length($13)-1)}' > smi_tmp.txt")
+            if isnvidia==0:
+                try:
+                    os.system("nvidia-smi | awk '$2==\"N/A\"{print substr($9,1,length($9)-3),substr($11,1,length($11)-3),substr($13,1,length($13)-1)}' > smi_tmp.txt")
+                except:
+                    nogpu=1
        
+    def stop_synthesis(self):
+        # stop thread that catch GPU information
+        self.event.set()
+        
+        try:
+            self.gpu_thrd.join()
+        except:
+            print('No thread to stop, everything is ok')
+
     # ---------------------------------------------−---------
     def check_dense(self,data,datasz):
-        s='%s'%(type(data))
-        if 'Index' in s:
-            idx=tf.cast(data.indices, tf.int32)
-            data=tf.math.bincount(idx,weights=data.values,
-                                  minlength=datasz)
+        if isinstance(data, tf.Tensor):
+            return data
+
+        idx=tf.cast(data.indices, tf.int32)
+        data=tf.math.bincount(idx,weights=data.values,
+                              minlength=datasz)
         return data
 
     @tf.function
@@ -68,7 +85,7 @@ class Synthesis:
                 print('Run on GPU %s'%(self.operation.gpulist[self.curr_gpu%self.operation.ngpu]))
                 l=loss_function.eval(x)
         
-                g=self.check_dense(tf.gradients(l,x)[0],x)
+                g=self.check_dense(tf.gradients(l,x)[0],x.shape[0])
             
             self.curr_gpu=self.curr_gpu+1
         else:
@@ -116,35 +133,50 @@ class Synthesis:
             EVAL_FREQUENCY = 100,
             DEVAL_STAT_FREQUENCY = 1000,
             LEARNING_RATE = 0.03,
-            EPSILON = 1E-7):
+            EPSILON = 1E-7,
+            mpi_size=1,
+            mpi_rank=0):
         
         self.eta=LEARNING_RATE
         self.epsilon=EPSILON
         self.decay_rate = DECAY_RATE
         self.nlog=0
         
-        # start thread that catch GPU information
-        try:
-            self.gpu_thrd = Thread(target=self.get_gpu, args=(self.event,1,))
-            self.gpu_thrd.start()
-        except:
-            print("Error: unable to start thread for GPU survey")
+        if rank==0:
+            # start thread that catch GPU information
+            try:
+                self.gpu_thrd = Thread(target=self.get_gpu, args=(self.event,1,))
+                self.gpu_thrd.start()
+            except:
+                print("Error: unable to start thread for GPU survey")
             
         start = time.time()
-        
-        for itt in range(NUM_EPOCHS):
 
+        for itt in range(NUM_EPOCHS):
             grad=None
             ltot=np.zeros([self.number_of_loss])
-            for k in range(self.number_of_loss):
-                l,g=self.loss(x,self.loss_class[k])
-                if grad is None:
-                    grad=g
-                else:
-                    grad=grad+g
+            k=rank
+            l,g=self.loss(x,self.loss_class[k])
+            if grad is None:
+                grad=g
+            else:
+                grad=grad+g
 
-                ltot[k]=l.numpy()
+            l_log=np.array([self.number_of_loss],dtype='float32')
+            l_log[rank]=l.numpy()
+            
+            if mpi_size==1:
+                ltot=l_log
+            else:
+                comm.Allreduce((l_log,MPI.FLOAT),(ltot,MPI.FLOAT))
+            
 
+            if mpi_size==1:
+                grad=g
+            else:
+                grad=np.array([self.number_of_loss],dtype='float32')
+                comm.Allreduce((g.numpy,MPI.FLOAT),(grad,MPI.FLOAT))
+            
             if self.nlog==self.history.shape[0]:
                 new_log=np.zeros([self.history.shape[0]*2])
                 new_log[0:self.nlog]=self.history
@@ -154,7 +186,7 @@ class Synthesis:
                 
             x=x-self.update(grad)
             
-            if itt%EVAL_FREQUENCY==0:
+            if itt%EVAL_FREQUENCY==0 and mpi_rank==0:
                 end = time.time()
                 cur_loss='%.3g ('%(ltot.sum())
                 for k in range(self.number_of_loss):
@@ -170,13 +202,8 @@ class Synthesis:
                 sys.stdout.flush()
                 start = time.time()
 
-        # stop thread that catch GPU information
-        self.event.set()
-        
-        try:
-            self.gpu_thrd.join()
-        except:
-            print('No thread to stop, everything is ok')
+        if rank==0:
+            self.stop_synthesis()
         
         return(x)
 
