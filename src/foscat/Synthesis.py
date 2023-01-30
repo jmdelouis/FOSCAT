@@ -159,7 +159,7 @@ class Synthesis:
             
         start = time.time()
 
-        if mpi_size==1:
+        if mpi_size>1:
             num_loss=np.zeros([1],dtype='int32')
             total_num_loss=np.zeros([1],dtype='int32')
             num_loss[0]=self.number_of_loss

@@ -24,6 +24,7 @@ datapath = scratch_path
 outpath = sys.argv[3]
 nout      = int(sys.argv[4])
 
+print('OPENMPI')
 from mpi4py import MPI
 
 comm = MPI.COMM_WORLD
