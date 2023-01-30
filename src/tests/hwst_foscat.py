@@ -29,7 +29,7 @@ Default_nside=256
 # DEFINE THE WORKING NSIDE
 #=================================================================================
 
-nout=256
+nout=32
 # set the default name
 outname='FOCUS%s%d'%(sys.argv[1],nout)
 
@@ -42,7 +42,7 @@ fc=FOC.FoCUS(NORIENT=4,
              KERNELSZ=3,
              healpix=True,
              OSTEP=0,
-             slope=1.0,
+             slope=1.2,
              TEMPLATE_PATH=scratch_path)
 
 #=================================================================================
