@@ -10,7 +10,7 @@ event = Event()
 
 # Define a function for the thread
 def get_gpu(event,delay):
-   count = 0
+    
    while (1):
        if event.is_set():
             break

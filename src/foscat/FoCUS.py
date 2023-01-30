@@ -16,7 +16,9 @@ class FoCUS:
                  OSTEP=0,
                  isMPI=False,
                  TEMPLATE_PATH='data',
-                 BACKEND='tensorflow'):
+                 BACKEND='tensorflow',
+                 mpi_size=1,
+                 mpi_rank=0):
 
         self.TENSORFLOW=1
         self.TORCH=2
@@ -27,8 +29,8 @@ class FoCUS:
             
             self.backend=tf
             self.BACKEND=self.TENSORFLOW
-            tf.config.threading.set_inter_op_parallelism_threads(1)
-            tf.config.threading.set_intra_op_parallelism_threads(1)
+            #tf.config.threading.set_inter_op_parallelism_threads(1)
+            #tf.config.threading.set_intra_op_parallelism_threads(1)
 
         if BACKEND=='torch':
             import torch
@@ -67,7 +69,7 @@ class FoCUS:
         self.padding=padding
         self.healpix=healpix
         self.OSTEP=OSTEP
-        
+        """
         if isMPI:
             from mpi4py import MPI
 
@@ -83,6 +85,7 @@ class FoCUS:
             self.size = 1
             self.rank = 0
         self.isMPI=isMPI
+        """
         
         self.all_type=all_type
         
@@ -99,7 +102,7 @@ class FoCUS:
                 
         #===========================================================================
         # INIT 
-        if self.rank==0:
+        if mpi_rank==0:
             if BACKEND=='tensorflow':
                 print("Num GPUs Available: ", len(self.backend.config.experimental.list_physical_devices('GPU')))
             sys.stdout.flush()
@@ -141,12 +144,14 @@ class FoCUS:
             except RuntimeError as e:
                 # Memory growth must be set before GPUs have been initialized
                 print(e)
-                
-        self.gpupos=(gpupos+self.rank)%self.ngpu
+
+        self.rank=mpi_rank
+        
+        self.gpupos=(gpupos+mpi_rank)%self.ngpu
         print('============================================================')
         print('==                                                        ==')
         print('==                                                        ==')
-        print('==     RUN ON GPU Rank %d : %s                          =='%(self.rank,self.gpulist[self.gpupos%self.ngpu]))
+        print('==     RUN ON GPU Rank %d : %s                          =='%(mpi_rank,self.gpulist[self.gpupos%self.ngpu]))
         print('==                                                        ==')
         print('==                                                        ==')
         print('============================================================')
@@ -210,6 +215,9 @@ class FoCUS:
     # ---------------------------------------------−---------
     # --             BACKEND DEFINITION                    --
     # ---------------------------------------------−---------
+    def bk_device(self,device_name):
+        return self.backend.device(device_name)
+        
     def bk_ones(self,shape,dtype=None):
         if dtype is None:
             dtype=self.all_type

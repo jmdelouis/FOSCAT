@@ -79,11 +79,30 @@ def main():
     scat_op=sc.funct(NORIENT=4,   # define the number of wavelet orientation
                      KERNELSZ=3,  # define the kernel size (here 5x5)
                      OSTEP=-1,     # get very large scale (nside=1)
-                     LAMBDA=1.0,
+                     LAMBDA=1.2,
                      TEMPLATE_PATH=scratch_path,
                      all_type='float32')
+
+    import time
+    for itt in range(1000):
+        start = time.time()
+        real,imag=scat_op.convol(im,is2d=False)
+        end = time.time()
+        print('isHealpix %8.2f'%((end-start)*1000))
+    for itt in range(1000):
+        start = time.time()
+        real,imag=scat_op.convol(im.reshape(4*nside,3*nside),is2d=True)
+        end = time.time()
+        print('is2D %8.2f'%((end-start)*1000))
     
-    
+    real=real.numpy().reshape(12*nside**2,4)
+    imag=imag.numpy().reshape(12*nside**2,4)
+    for i in range(4):
+        hp.mollview(real[:,i],cmap='jet',hold=False,sub=(2,4,1+i),nest=True)
+        hp.mollview(imag[:,i],cmap='jet',hold=False,sub=(2,4,5+i),nest=True)
+
+    plt.show()
+    exit(0)
     #=================================================================================
     # DEFINE A LOSS FUNCTION AND THE SYNTHESIS
     #=================================================================================

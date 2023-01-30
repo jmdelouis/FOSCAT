@@ -25,6 +25,7 @@ outpath = sys.argv[3]
 nout      = int(sys.argv[4])
 
 from mpi4py import MPI
+
 comm = MPI.COMM_WORLD
 size = comm.Get_size()
 rank = comm.Get_rank()
@@ -140,13 +141,15 @@ scat_op=sc.funct(NORIENT=4,   # define the number of wavelet orientation
                  OSTEP=-1,     # get very large scale (nside=1)
                  LAMBDA=1.2,
                  all_type='float32',
-                 TEMPLATE_PATH=scratch_path)
+                 TEMPLATE_PATH=scratch_path,
+                 mpi_rank=rank,
+                 mpi_size=size)
 
-if rank==0:
+if rank==0 or rank==2 or size==1:
     #compute d1xd2
     refH=scat_op.eval(d1,image2=d2,Imaginary=False,mask=mask)
 
-if rank==1:
+if rank==1 or size==1:
     #compute Tdxdi
     refX=scat_op.eval(td,image2=di,Imaginary=True,mask=mask)
 
@@ -183,9 +186,8 @@ def loss_fct3(x,args):
 
     im   = args[0]
     bias = args[1]
-    ref = args[2]
-    mask = args[3]
-    isig = args[4]
+    mask = args[2]
+    isig = args[3]
     
     a=scat_op.eval(im,image2=x,mask=mask,Imaginary=False)-bias
     b=scat_op.eval(x,mask=mask,Imaginary=False)
@@ -201,10 +203,12 @@ init_map=(d1+d2)/2
 
 for itt in range(5):
 
+    if rank==0 or rank==2 or size==1:
+        stat1 =scat_op.eval(i1,image2=i2,mask=mask,Imaginary=False)
+        
     if rank==0 or size==1:
         #loss1 : d1xd2 = (u+n1)x(u+n2)
         stat1_p_noise=scat_op.eval(i1+noise1[0],image2=i2+noise2[0],mask=mask,Imaginary=False)
-        stat1 =scat_op.eval(i1,image2=i2,mask=mask,Imaginary=False)
         
         #bias1 = mean(F((d1+n1)*(d2+n2))-F(d1*d2))
         bias1 = stat1_p_noise-stat1
@@ -265,9 +269,12 @@ for itt in range(5):
         if rank==2 or size==1:
             print("BIAS DVAR 1 %f"%((bias1-initb1).std()))
 
-    initb1=bias1
-    initb2=bias2
-    initb3=bias3
+    if rank==0 or size==1:
+        initb1=bias1
+    if rank==1 or size==1:
+        initb2=bias2
+    if rank==2 or size==1:
+        initb3=bias3
         
     sys.stdout.flush()
 
@@ -276,7 +283,7 @@ for itt in range(5):
     if rank==1 or size==1:
         loss2=synthe.Loss(loss_fct2,refX-bias2,td,mask,isig2)
     if rank==2 or size==1:
-        loss3=synthe.Loss(loss_fct3,di,bias3,refH-bias1,mask,isig3)
+        loss3=synthe.Loss(loss_fct3,di,bias3,mask,isig3)
 
     if size==1:
         sy = synthe.Synthesis([loss1,loss2,loss3],operation=scat_op)

@@ -141,8 +141,15 @@ class Synthesis:
         self.epsilon=EPSILON
         self.decay_rate = DECAY_RATE
         self.nlog=0
+
+        self.curr_gpu=self.curr_gpu+mpi_rank
         
-        if rank==0:
+        if mpi_size>1:
+            from mpi4py import MPI
+
+            comm = MPI.COMM_WORLD
+            
+        if mpi_rank==0:
             # start thread that catch GPU information
             try:
                 self.gpu_thrd = Thread(target=self.get_gpu, args=(self.event,1,))
@@ -152,18 +159,32 @@ class Synthesis:
             
         start = time.time()
 
+        if mpi_size==1:
+            num_loss=np.zeros([1],dtype='int32')
+            total_num_loss=np.zeros([1],dtype='int32')
+            num_loss[0]=self.number_of_loss
+            comm.Allreduce((num_loss,MPI.INT),(total_num_loss,MPI.INT))
+            total_num_loss=total_num_loss[0]
+        else:
+            total_num_loss=self.number_of_loss
+            
+        if mpi_rank==0:
+            print('Total number of loss ',total_num_loss)
+            
         for itt in range(NUM_EPOCHS):
-            grad=None
-            ltot=np.zeros([self.number_of_loss])
-            k=rank
-            l,g=self.loss(x,self.loss_class[k])
-            if grad is None:
-                grad=g
-            else:
-                grad=grad+g
-
-            l_log=np.array([self.number_of_loss],dtype='float32')
-            l_log[rank]=l.numpy()
+            g_tot=None
+            l_tot=0.0
+            for k in range(self.number_of_loss):
+                l,g=self.loss(x,self.loss_class[k])
+                if g_tot is None:
+                    g_tot=g
+                else:
+                    g_tot=g_tot+g
+                l_tot=l_tot+l.numpy()
+                
+            l_log=np.zeros([mpi_size],dtype='float32')
+            ltot=np.zeros([mpi_size],dtype='float32')
+            l_log[mpi_rank]=l.numpy()
             
             if mpi_size==1:
                 ltot=l_log
@@ -174,13 +195,14 @@ class Synthesis:
             if mpi_size==1:
                 grad=g
             else:
-                grad=np.array([self.number_of_loss],dtype='float32')
-                comm.Allreduce((g.numpy,MPI.FLOAT),(grad,MPI.FLOAT))
+                grad=np.zeros([g.shape[0]],dtype='float32')
+                comm.Allreduce((g.numpy(),MPI.FLOAT),(grad,MPI.FLOAT))
             
             if self.nlog==self.history.shape[0]:
                 new_log=np.zeros([self.history.shape[0]*2])
                 new_log[0:self.nlog]=self.history
                 self.history=new_log
+                
             self.history[self.nlog]=ltot.sum()
             self.nlog=self.nlog+1
                 
@@ -189,7 +211,7 @@ class Synthesis:
             if itt%EVAL_FREQUENCY==0 and mpi_rank==0:
                 end = time.time()
                 cur_loss='%.3g ('%(ltot.sum())
-                for k in range(self.number_of_loss):
+                for k in range(ltot.shape[0]):
                     cur_loss=cur_loss+'%.3g '%(ltot[k])
                 cur_loss=cur_loss+')'
                 
@@ -202,7 +224,7 @@ class Synthesis:
                 sys.stdout.flush()
                 start = time.time()
 
-        if rank==0:
+        if mpi_rank==0:
             self.stop_synthesis()
         
         return(x)
