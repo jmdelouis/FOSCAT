@@ -120,7 +120,7 @@ class scat:
         s1=np.load('%s_s1.npy'%(filename))
         s2=np.load('%s_s2.npy'%(filename))
         p0= np.load('%s_p0.npy'%(filename))
-        return scat(s1,s2,p0)
+        return scat(p0,s1,s2)
     
     def get_np(self,x):
         if isinstance(x, np.ndarray):
@@ -139,179 +139,177 @@ class scat:
 class funct(FOC.FoCUS):
     
     def eval(self, image1, image2=None,mask=None,Imaginary=True):
-        
-        with self.bk_device(self.gpulist[self.gpupos%self.ngpu]):
 
-            ### AUTO OR CROSS
-            cross = False
-            if image2 is not None:
-                cross = True
-            axis=1
-            # determine jmax and nside corresponding to the input map
-            im_shape = image1.shape
-            if len(image1.shape)==2:
-                npix = int(im_shape[1])  # Number of pixels
+        ### AUTO OR CROSS
+        cross = False
+        if image2 is not None:
+            cross = True
+        axis=1
+        # determine jmax and nside corresponding to the input map
+        im_shape = image1.shape
+        if len(image1.shape)==2:
+            npix = int(im_shape[1])  # Number of pixels
+        else:
+            npix = int(im_shape[0])  # Number of pixels
+
+        nside=int(np.sqrt(npix//12))
+        jmax=int(np.log(nside)/np.log(2))-self.OSTEP
+
+        ### LOCAL VARIABLES (IMAGES and MASK)
+        # Check if image1 is [Npix] or [Nbatch,Npix]
+        if len(image1.shape)==1:
+            # image1 is [Nbatch, Npix]
+            I1 = self.bk_cast(image1[None, :])  # Local image1 [Nbatch, Npix]
+            if cross:
+                I2 = self.bk_cast(image2[None, :])  # Local image2 [Nbatch, Npix]
+        else:
+            I1=self.bk_cast(image1)
+            if cross:
+                I2=self.bk_cast(image2)
+
+        # self.mask is [Nmask, Npix]
+        if mask is None:
+            vmask = self.bk_ones([1,npix],dtype=self.all_type)
+        else:
+            vmask = self.bk_cast( mask) # [Nmask, Npix]
+
+        if self.KERNELSZ>3:
+            # if the kernel size is bigger than 3 increase the binning before smoothing
+            l_image1=self.up_grade(I1,nside*2,axis=axis)
+            vmask=self.up_grade(vmask,nside*2,axis=1)
+            if cross:
+                l_image2=self.up_grade(I2,nside*2,axis=axis)
+        else:
+            l_image1=I1
+            if cross:
+                l_image2=I2
+
+        s1=None
+        s2=None
+        p00=None
+        l2_image=None
+        l2_image_imag=None
+
+        for j1 in range(jmax):
+            # Convol image along the axis defined by 'axis' using the wavelet defined at
+            # the foscat initialisation
+            #c_image_real is [....,Npix_j1,....,Norient]   
+            c_image1_real,c_image1_imag=self.convol(l_image1,axis=axis)
+            if cross:
+                c_image2_real,c_image2_imag=self.convol(l_image2,axis=axis)
             else:
-                npix = int(im_shape[0])  # Number of pixels
+                c_image2_real=c_image1_real
+                c_image2_imag=c_image1_imag
 
-            nside=int(np.sqrt(npix//12))
-            jmax=int(np.log(nside)/np.log(2))-self.OSTEP
+            # Compute (a+ib)*(a+ib)* the last c_image column is the real and imaginary part
+            conj_real=c_image1_real*c_image2_real+c_image1_imag*c_image2_imag
+            if cross and Imaginary:
+                conj_imag=c_image1_real*c_image2_imag-c_image1_imag*c_image2_real
 
-            ### LOCAL VARIABLES (IMAGES and MASK)
-            # Check if image1 is [Npix] or [Nbatch,Npix]
-            if len(image1.shape)==1:
-                # image1 is [Nbatch, Npix]
-                I1 = self.bk_cast(image1[None, :])  # Local image1 [Nbatch, Npix]
-                if cross:
-                    I2 = self.bk_cast(image2[None, :])  # Local image2 [Nbatch, Npix]
+            # Compute l_p00 [....,....,Nmask,1,Norient]  
+            l_p00_real = self.bk_expand_dims(self.bk_masked_mean(conj_real,vmask,axis=axis),-2)
+            if cross and Imaginary:
+                l_p00_imag = self.bk_expand_dims(self.bk_masked_mean(conj_imag,vmask,axis=axis),-2)
+
+            conj_real=self.bk_L1(conj_real)
+            if cross and Imaginary:
+                conj_imag=self.bk_L1(conj_imag)
+
+            # Compute l_s1 [....,....,Nmask,1,Norient] 
+            l_s1_real = self.bk_expand_dims(self.bk_masked_mean(conj_real,vmask,axis=axis),-2)
+            if cross and Imaginary:
+                l_s1_imag = self.bk_expand_dims(self.bk_masked_mean(conj_imag,vmask,axis=axis),-2)
+
+            # Concat S1,P00 [....,....,Nmask,j1,Norient] 
+            if s1 is None:
+                if cross and Imaginary:
+                    s1  = self.bk_complex(l_s1_real,l_s1_imag)
+                    p00 = self.bk_complex(l_p00_real,l_p00_imag)
+                else:
+                    s1=l_s1_real
+                    p00=l_p00_real
             else:
-                I1=self.bk_cast(image1)
-                if cross:
-                    I2=self.bk_cast(image2)
+                if cross and Imaginary:
+                    s1 =self.bk_concat([s1,self.bk_complex(l_s1_real,l_s1_imag)],axis=-2)
+                    p00=self.bk_concat([p00,self.bk_complex(l_p00_real,l_p00_imag)],axis=-2)
+                else:
+                    s1=self.bk_concat([s1,l_s1_real],axis=-2)
+                    p00=self.bk_concat([p00,l_p00_real],axis=-2)
 
-            # self.mask is [Nmask, Npix]
-            if mask is None:
-                vmask = self.bk_ones([1,npix],dtype=self.all_type)
+            # Concat l2_image [....,Npix_j1,....,j1,Norient]   
+            if l2_image is None:
+                l2_image=self.bk_expand_dims(conj_real,axis=-2)
             else:
-                vmask = self.bk_cast( mask) # [Nmask, Npix]
+                l2_image=self.bk_concat([self.bk_expand_dims(conj_real,axis=-2),l2_image],axis=-2)
 
-            if self.KERNELSZ>1:
-                # if the kernel size is bigger than 3 increase the binning before smoothing
-                l_image1=self.up_grade(I1,nside*2,axis=axis)
-                vmask=self.up_grade(vmask,nside*2,axis=1)
-                if cross:
-                    l_image2=self.up_grade(I2,nside*2,axis=axis)
+            if cross and Imaginary:
+                if l2_image_imag is None:
+                    l2_image_imag=self.bk_expand_dims(conj_imag,axis=-2)
+                else:
+                    l2_image_imag=self.bk_concat([self.bk_expand_dims(conj_imag,axis=-2),l2_image_imag],axis=-2)
+
+            # Convol l2_image [....,Npix_j1,....,j1,Norient,Norient]
+            c2_image_real,c2_image_imag=self.convol(self.bk_relu(l2_image),axis=axis)
+            if cross and Imaginary:
+                c2_image_imag_real,c2_image_imag_imag=self.convol(self.bk_relu(l2_image_imag),axis=axis)
+
+            conj2=self.bk_L1(c2_image_real*c2_image_real+c2_image_imag*c2_image_imag)
+            if cross and Imaginary:
+                conj2_imag=self.bk_L1(c2_image_imag_real*c2_image_imag_real+ \
+                                      c2_image_imag_imag*c2_image_imag_imag)
+
+
+            c2_image_real,c2_image_imag=self.convol(self.bk_relu(-l2_image),axis=axis)
+            if cross:
+                if Imaginary:
+                    c2_image_imag_real,c2_image_imag_imag=self.convol(self.bk_relu(-l2_image_imag),axis=axis)
+
+                conj2=conj2-self.bk_L1(c2_image_real*c2_image_real+ \
+                                       c2_image_imag*c2_image_imag)
+                if Imaginary:
+                    conj2_imag=conj2_imag - self.bk_L1(c2_image_imag_real*c2_image_imag_real+ \
+                                                       c2_image_imag_imag*c2_image_imag_imag)
+
+            # Convol l_s2 [....,....,Nmask,j1,Norient,Norient]
+            l_s2 = self.bk_masked_mean(conj2,vmask,axis=axis)
+
+            if cross and Imaginary:
+                l_imag_s2 = self.bk_masked_mean(conj2_imag,vmask,axis=axis)
+
+            # Concat l_s2 [....,....,Nmask,j1*(j1+1)/2,Norient,Norient]
+            if s2 is None:
+                if cross and Imaginary:
+                    s2=self.bk_complex(l_s2,l_imag_s2)
+                else:
+                    s2=l_s2
             else:
-                l_image1=I1
-                if cross:
-                    l_image2=I2
-
-            s1=None
-            s2=None
-            p00=None
-            l2_image=None
-            l2_image_imag=None
-
-            for j1 in range(jmax):
-                # Convol image along the axis defined by 'axis' using the wavelet defined at
-                # the foscat initialisation
-                #c_image_real is [....,Npix_j1,....,Norient]   
-                c_image1_real,c_image1_imag=self.convol(l_image1,axis=axis)
-                if cross:
-                    c_image2_real,c_image2_imag=self.convol(l_image2,axis=axis)
+                if cross and Imaginary:
+                    s2=self.bk_concat([s2,self.bk_complex(l_s2,l_imag_s2)],axis=-3)
                 else:
-                    c_image2_real=c_image1_real
-                    c_image2_imag=c_image1_imag
+                    s2=self.bk_concat([s2,l_s2],axis=-3)
 
-                # Compute (a+ib)*(a+ib)* the last c_image column is the real and imaginary part
-                conj_real=c_image1_real*c_image2_real+c_image1_imag*c_image2_imag
-                if cross and Imaginary:
-                    conj_imag=c_image1_real*c_image2_imag-c_image1_imag*c_image2_real
+            # Rescale vmask [Nmask,Npix_j1//4]   
+            vmask = self.smooth(vmask,axis=1)
+            vmask = self.ud_grade_2(vmask,axis=1)
 
-                # Compute l_p00 [....,....,Nmask,1,Norient]  
-                l_p00_real = self.bk_expand_dims(self.bk_masked_mean(conj_real,vmask,axis=axis),-2)
-                if cross and Imaginary:
-                    l_p00_imag = self.bk_expand_dims(self.bk_masked_mean(conj_imag,vmask,axis=axis),-2)
+            # Rescale l2_image [....,Npix_j1//4,....,j1,Norient]   
+            l2_image = self.smooth(l2_image,axis=axis)
+            l2_image = self.ud_grade_2(l2_image,axis=axis)
 
-                conj_real=self.bk_L1(conj_real)
-                if cross and Imaginary:
-                    conj_imag=self.bk_L1(conj_imag)
+            # Rescale l_image [....,Npix_j1//4,....]  
+            l_image1 = self.smooth(l_image1,axis=axis)
+            l_image1 = self.ud_grade_2(l_image1,axis=axis)
+            if cross:
+                l_image2 = self.smooth(l_image2,axis=axis)
+                l_image2 = self.ud_grade_2(l_image2,axis=axis)
+                if Imaginary:
+                    l2_image_imag = self.smooth(l2_image_imag,axis=axis)
+                    l2_image_imag = self.ud_grade_2(l2_image_imag,axis=axis)
 
-                # Compute l_s1 [....,....,Nmask,1,Norient] 
-                l_s1_real = self.bk_expand_dims(self.bk_masked_mean(conj_real,vmask,axis=axis),-2)
-                if cross and Imaginary:
-                    l_s1_imag = self.bk_expand_dims(self.bk_masked_mean(conj_imag,vmask,axis=axis),-2)
+        if len(image1.shape)==1:
+            return(scat(p00[0],s1[0],s2[0],cross))
 
-                # Concat S1,P00 [....,....,Nmask,j1,Norient] 
-                if s1 is None:
-                    if cross and Imaginary:
-                        s1  = self.bk_complex(l_s1_real,l_s1_imag)
-                        p00 = self.bk_complex(l_p00_real,l_p00_imag)
-                    else:
-                        s1=l_s1_real
-                        p00=l_p00_real
-                else:
-                    if cross and Imaginary:
-                        s1 =self.bk_concat([s1,self.bk_complex(l_s1_real,l_s1_imag)],axis=-2)
-                        p00=self.bk_concat([p00,self.bk_complex(l_p00_real,l_p00_imag)],axis=-2)
-                    else:
-                        s1=self.bk_concat([s1,l_s1_real],axis=-2)
-                        p00=self.bk_concat([p00,l_p00_real],axis=-2)
-
-                # Concat l2_image [....,Npix_j1,....,j1,Norient]   
-                if l2_image is None:
-                    l2_image=self.bk_expand_dims(conj_real,axis=-2)
-                else:
-                    l2_image=self.bk_concat([self.bk_expand_dims(conj_real,axis=-2),l2_image],axis=-2)
-
-                if cross and Imaginary:
-                    if l2_image_imag is None:
-                        l2_image_imag=self.bk_expand_dims(conj_imag,axis=-2)
-                    else:
-                        l2_image_imag=self.bk_concat([self.bk_expand_dims(conj_imag,axis=-2),l2_image_imag],axis=-2)
-
-                # Convol l2_image [....,Npix_j1,....,j1,Norient,Norient]
-                c2_image_real,c2_image_imag=self.convol(self.bk_relu(l2_image),axis=axis)
-                if cross and Imaginary:
-                    c2_image_imag_real,c2_image_imag_imag=self.convol(self.bk_relu(l2_image_imag),axis=axis)
-
-                conj2=self.bk_L1(c2_image_real*c2_image_real+c2_image_imag*c2_image_imag)
-                if cross and Imaginary:
-                    conj2_imag=self.bk_L1(c2_image_imag_real*c2_image_imag_real+ \
-                                          c2_image_imag_imag*c2_image_imag_imag)
-
-
-                c2_image_real,c2_image_imag=self.convol(self.bk_relu(-l2_image),axis=axis)
-                if cross:
-                    if Imaginary:
-                        c2_image_imag_real,c2_image_imag_imag=self.convol(self.bk_relu(-l2_image_imag),axis=axis)
-
-                    conj2=conj2-self.bk_L1(c2_image_real*c2_image_real+ \
-                                           c2_image_imag*c2_image_imag)
-                    if Imaginary:
-                        conj2_imag=conj2_imag - self.bk_L1(c2_image_imag_real*c2_image_imag_real+ \
-                                                           c2_image_imag_imag*c2_image_imag_imag)
-
-                # Convol l_s2 [....,....,Nmask,j1,Norient,Norient]
-                l_s2 = self.bk_masked_mean(conj2,vmask,axis=axis)
-
-                if cross and Imaginary:
-                    l_imag_s2 = self.bk_masked_mean(conj2_imag,vmask,axis=axis)
-
-                # Concat l_s2 [....,....,Nmask,j1*(j1+1)/2,Norient,Norient]
-                if s2 is None:
-                    if cross and Imaginary:
-                        s2=self.bk_complex(l_s2,l_imag_s2)
-                    else:
-                        s2=l_s2
-                else:
-                    if cross and Imaginary:
-                        s2=self.bk_concat([s2,self.bk_complex(l_s2,l_imag_s2)],axis=-3)
-                    else:
-                        s2=self.bk_concat([s2,l_s2],axis=-3)
-
-                # Rescale vmask [Nmask,Npix_j1//4]   
-                vmask = self.smooth(vmask,axis=1)
-                vmask = self.ud_grade_2(vmask,axis=1)
-
-                # Rescale l2_image [....,Npix_j1//4,....,j1,Norient]   
-                l2_image = self.smooth(l2_image,axis=axis)
-                l2_image = self.ud_grade_2(l2_image,axis=axis)
-
-                # Rescale l_image [....,Npix_j1//4,....]  
-                l_image1 = self.smooth(l_image1,axis=axis)
-                l_image1 = self.ud_grade_2(l_image1,axis=axis)
-                if cross:
-                    l_image2 = self.smooth(l_image2,axis=axis)
-                    l_image2 = self.ud_grade_2(l_image2,axis=axis)
-                    if Imaginary:
-                        l2_image_imag = self.smooth(l2_image_imag,axis=axis)
-                        l2_image_imag = self.ud_grade_2(l2_image_imag,axis=axis)
-
-            if len(image1.shape)==1:
-                return(scat(p00[0],s1[0],s2[0],cross))
-
-            return(scat(p00,s1,s2,cross))
+        return(scat(p00,s1,s2,cross))
 
     def square(self,x):
         # the abs make the complex value usable for reduce_sum or mean

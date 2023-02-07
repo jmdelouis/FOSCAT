@@ -25,11 +25,15 @@ outpath = sys.argv[3]
 nout      = int(sys.argv[4])
 
 print('OPENMPI')
+"""
 from mpi4py import MPI
 
 comm = MPI.COMM_WORLD
 size = comm.Get_size()
 rank = comm.Get_rank()
+"""
+size=1
+rank=0
 
 #set the nside of input data
 Default_nside=256
@@ -186,14 +190,14 @@ def loss_fct2(x,args):
 def loss_fct3(x,args):
 
     im   = args[0]
-    bias = args[1]
-    mask = args[2]
-    isig = args[3]
+    ref  = args[1]
+    bias = args[2]
+    mask = args[3]
+    isig = args[4]
     
     a=scat_op.eval(im,image2=x,mask=mask,Imaginary=False)-bias
-    b=scat_op.eval(x,mask=mask,Imaginary=False)
     
-    l_val=scat_op.reduce_sum(scat_op.reduce_mean(isig*scat_op.square(a-b)))
+    l_val=scat_op.reduce_sum(scat_op.reduce_mean(isig*scat_op.square(a-ref)))
     
     return(l_val)
 
@@ -266,9 +270,9 @@ for itt in range(5):
         if rank==0 or size==1:
             print("BIAS DVAR 0 %f"%((bias1-initb1).std()))
         if rank==1 or size==1:
-            print("BIAS DVAR 1 %f"%((bias1-initb1).std()))
+            print("BIAS DVAR 1 %f"%((bias2-initb2).std()))
         if rank==2 or size==1:
-            print("BIAS DVAR 1 %f"%((bias1-initb1).std()))
+            print("BIAS DVAR 2 %f"%((bias3-initb3).std()))
 
     if rank==0 or size==1:
         initb1=bias1
@@ -284,17 +288,21 @@ for itt in range(5):
     if rank==1 or size==1:
         loss2=synthe.Loss(loss_fct2,refX-bias2,td,mask,isig2)
     if rank==2 or size==1:
-        loss3=synthe.Loss(loss_fct3,di,bias3,mask,isig3)
+        loss3=synthe.Loss(loss_fct3,di,refH-bias1,bias3,mask,isig3)
 
     if size==1:
+        print('DO LOSS 1&3')
         sy = synthe.Synthesis([loss1,loss2,loss3],operation=scat_op)
     else:
         if rank==0:
             sy = synthe.Synthesis([loss1],operation=scat_op)
+            print('DO LOSS 1 ',rank)
         if rank==1:
             sy = synthe.Synthesis([loss2],operation=scat_op)
+            print('DO LOSS 2 ',rank)
         if rank==2:
             sy = synthe.Synthesis([loss3],operation=scat_op)
+            print('DO LOSS 3 ',rank)
 
     omap=sy.run(init_map,
                 EVAL_FREQUENCY = 10,
@@ -313,7 +321,11 @@ for itt in range(5):
         # save the intermediate results
         print('ITT %d DONE'%(itt))
         sys.stdout.flush()
-
+        (refH-bias1).save(outpath+'%s_cross_%d.npy'%(outname,itt))
+        iscat=scat_op.eval(init_map,mask=mask)
+        iscat.save(outpath+'%s_in_%d.npy'%(outname,itt))
+        oscat=scat_op.eval(omap,mask=mask)
+        oscat.save(outpath+'%s_out_%d.npy'%(outname,itt))
         np.save(outpath+'%sresult_%d.npy'%(outname,itt),omap/ampmap+off)
 
 print('Computation Done')
