@@ -293,7 +293,7 @@ class funct(FOC.FoCUS):
                 ### Image 1 : S1 = < M1 >_pix
                 # Apply the mask [Nmask, Npix_j3] and average over pixels
                 s1 = self.bk_reduce_sum(vmask[None, :, :,None] * M1[:, None, :, :],
-                                   axis=2)  # [Nbatch, Nmask, Norient3]  # [Nbatch, Nmask, Norient3]
+                                   axis=2)  # [Nbatch, Nmask, Norient3]
                 ### We store S1 for image1
                 if S1 is None:
                     S1 = s1[:, :, None, :]  # Add a dimension for NS1
@@ -337,17 +337,19 @@ class funct(FOC.FoCUS):
                 if not cross:
                     cc01, sc01 = self._compute_C01_auto(j2, cconv1, sconv1, vmask,
                                                         M1_dic, cM1convPsi_dic, sM1convPsi_dic,
-                                                        nside_j3, BATCH_SIZE, npix_j3, kersize2)
+                                                        nside_j3, BATCH_SIZE, npix_j3, kersize2)  # [Nbatch, Nmask, Norient3, Norient2]
                     ### Normalize C01 with P00 [Nbatch, Nmask, Norient]
-                    cc01 /= (P1_dic[j2][:, :, :, None] *
-                             P1_dic[j3][:, :, None, :]) ** 0.5  # [Nbatch, Nmask, Norient2, Norient3]
-                    sc01 /= (P1_dic[j2][:, :, :, None] *
-                             P1_dic[j3][:, :, None, :]) ** 0.5  # [Nbatch, Nmask, Norient2, Norient3]
+                    cc01 /= (P1_dic[j2][:, :, None, :] *
+                             P1_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
+                    sc01 /= (P1_dic[j2][:, :, None, :] *
+                             P1_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
                     ### Store C01
                     if C01 is None:
-                        C01 = self.bk_concat([cc01[:, :, None, :, :], sc01[:, :, None, :, :]], axis=2)  # Add a dimension for NC01
+                        C01 = self.bk_concat([self.bk_complex(cc01[:, :, None, :, :], sc01[:, :, None, :, :])],
+                                             axis=2)  # Add a dimension for NC01
                     else:
-                        C01 = self.bk_concat([C01, cc01[:, :, None, :, :], sc01[:, :, None, :, :]], axis=2)  # Add a dimension for NC01
+                        C01 = self.bk_concat([C01, self.bk_complex(cc01[:, :, None, :, :], sc01[:, :, None, :, :])],
+                                             axis=2)  # Add a dimension for NC01
 
                     ### C01_cross = < (I1 * Psi)_j3 x (|I2 * psi2| * Psi_j3)^* >_pix
                     ### C01_cross_bis = < (I2 * Psi)_j3 x (|I1 * psi2| * Psi_j3)^* >_pix
@@ -358,14 +360,14 @@ class funct(FOC.FoCUS):
                                                                              cM2convPsi_dic, sM2convPsi_dic,
                                                                              nside_j3, BATCH_SIZE, npix_j3, kersize2)
                     ### Normalize C01 with P00 [Nbatch, Nmask, Norient]
-                    cc01 /= (P2_dic[j2][:, :, :, None] *
-                             P1_dic[j3][:, :, None, :]) ** 0.5  # [Nbatch, Nmask, Norient2, Norient3]
-                    sc01 /= (P2_dic[j2][:, :, :, None] *
-                             P1_dic[j3][:, :, None, :]) ** 0.5  # [Nbatch, Nmask, Norient2, Norient3]
-                    cc01_bis /= (P1_dic[j2][:, :, :, None] *
-                                 P2_dic[j3][:, :, None, :]) ** 0.5  # [Nbatch, Nmask, Norient2, Norient3]
-                    sc01_bis /= (P1_dic[j2][:, :, :, None] *
-                                 P2_dic[j3][:, :, None, :]) ** 0.5  # [Nbatch, Nmask, Norient2, Norient3]
+                    cc01 /= (P2_dic[j2][:, :, None, :] *
+                             P1_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
+                    sc01 /= (P2_dic[j2][:, :, None, :] *
+                             P1_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
+                    cc01_bis /= (P1_dic[j2][:, :, None, :] *
+                                 P2_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
+                    sc01_bis /= (P1_dic[j2][:, :, None, :] *
+                                 P2_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
                     ### Store C01
                     if C01 is None:
                         C01 = self.bk_concat([
@@ -382,12 +384,12 @@ class funct(FOC.FoCUS):
                 for j1 in range(0, j2):  # j1 <= j2
                     ### C11_auto = <(|I1 * psi1| * psi3)(|I1 * psi2| * psi3)^*>
                     if not cross:
-                        cc11, sc11 = self._compute_C11_auto(j1, j2, vmask, cM1convPsi_dic, sM1convPsi_dic)
+                        cc11, sc11 = self._compute_C11_auto(j1, j2, vmask, cM1convPsi_dic, sM1convPsi_dic)  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
                         ### Normalize C11 with P00_j [Nbatch, Nmask, Norient_j]
-                        cc11 /= (P1_dic[j1][:, :, None, :, None] *
-                                 P1_dic[j2][:, :, None, None, :]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
-                        sc11 /= (P1_dic[j1][:, :, None, :, None] *
-                                 P1_dic[j2][:, :, None, None, :]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
+                        cc11 /= (P1_dic[j1][:, :, None, None, :] *
+                                 P1_dic[j2][:, :, None, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
+                        sc11 /= (P1_dic[j1][:, :, None, None, :] *
+                                 P1_dic[j2][:, :, None, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
                         # We store C11
                         if C11 is None:
                             C11 = self.bk_complex(cc11[:, :, None, :, :, :], sc11[:, :, None, :, :, :])  # Add a dimension for NC11
@@ -399,12 +401,12 @@ class funct(FOC.FoCUS):
                     else:
                         cc11, sc11 = self._compute_C11_cross(j1, j2, vmask,
                                                              cM1convPsi_dic, sM1convPsi_dic,
-                                                             cM2convPsi_dic, sM2convPsi_dic)
+                                                             cM2convPsi_dic, sM2convPsi_dic)  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
                         ### Normalize C11 with P00_j [Nbatch, Nmask, Norient_j]
-                        cc11 /= (P1_dic[j1][:, :, None, :, None] *
-                                 P2_dic[j2][:, :, None, None, :]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
-                        sc11 /= (P1_dic[j1][:, :, None, :, None] *
-                                 P2_dic[j2][:, :, None, None, :]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
+                        cc11 /= (P1_dic[j1][:, :, None, None, :] *
+                                 P2_dic[j2][:, :, None, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
+                        sc11 /= (P1_dic[j1][:, :, None, None, :] *
+                                 P2_dic[j2][:, :, None, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
                         
                         # We store C11
                         if C11 is None:
@@ -513,7 +515,7 @@ class funct(FOC.FoCUS):
         ### Compute |I1 * psi2| * Psi_j3 = M1_j2 * Psi_j3
         # Warning: M1_dic[j2] is already at j3 resolution [Nbatch, Norient3, Npix_j3]
         # self.widx2[nside_j3] is [Npix_j3 x kersize2]
-        cM1convPsi,sM1convPsi=self.convol(M1_dic[j2],axis=1)
+        cM1convPsi,sM1convPsi=self.convol(M1_dic[j2],axis=1)  # [Nbatch, Npix_j3, Norient3, Norient2]
         
         # Store it so we can use it in C11 computation
         cM1convPsi_dic[j2] = cM1convPsi  # [Nbatch, Npix_j3, Norient3, Norient2]
@@ -569,17 +571,17 @@ class funct(FOC.FoCUS):
         ### Sum over pixels and apply the mask
         cc11 = self.bk_reduce_sum(vmask[None, :, : ,None, None, None] *
                              cc11[:, None,:, :, :, :],
-                             axis=2)  # Real [Nbatch, Nmask, Norient1, Norient2, Norient3]
+                             axis=2)  # Real [Nbatch, Nmask, Norient3, Norient2, Norient1]
         sc11 = self.bk_reduce_sum(vmask[None, :, : ,None, None, None] *
                              sc11[:, None,:, :, :, :],
-                             axis=2)  # Imag [Nbatch, Nmask, Norient1, Norient2, Norient3]
+                             axis=2)  # Imag [Nbatch, Nmask, Norient3, Norient2, Norient1]
         return cc11, sc11
 
     def _compute_C11_cross(self, j1, j2, vmask, cM1convPsi_dic, sM1convPsi_dic, cM2convPsi_dic, sM2convPsi_dic):
 
         ### Compute the product (|I1 * psi1| * psi3)(|I2 * psi2| * psi3)
         # z_1 x z_2^* = (a1a2 + b1b2) + i(b1a2 - a1b2)
-        # cM1convPsi_dic[j] is [Nbatch, Norient, Norient3, Npix_j3]
+        # cM1convPsi_dic[j] is [Nbatch, Npix_j3, Norient, Norient3]
         cc11 = cM1convPsi_dic[j1][:, :, :, None, :] * cM2convPsi_dic[j2][:, :, :, :, None] + \
                sM1convPsi_dic[j1][:, :, :, None, :] * sM2convPsi_dic[j2][:, :, :, :, None]  # Real [Nbatch, Npix_j3, Norient3, Norient2, Norient1]
         sc11 = sM1convPsi_dic[j1][:, :, :, None, :] * cM2convPsi_dic[j2][:, :, :, :, None] - \
