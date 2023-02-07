@@ -260,15 +260,12 @@ class funct(FOC.FoCUS):
 
         #### COMPUTE S1, P00, C01 and C11
         nside_j3 = n0  # NSIDE start (nside_j3 = n0 / 2^j3)
-        # npix_j3 = npix  # Pixel number at each iteration on j3
         for j3 in range(Jmax):
 
             ### Make the convolution I1 * Psi_j3
             cconv1, sconv1 = self.convol(I1, axis=1)  # [Nbatch, Npix_j3, Norient3]
-            ### Take the module
-            # Module square |I1 * Psi_j3|^2
+            ### Take the module M1 = |I1 * Psi_j3|
             M1_square = cconv1 * cconv1 + sconv1 * sconv1  # [Nbatch, Npix_j3, Norient3]
-            # Module M1 = |I1 * Psi_j3|
             M1 = self.bk_sqrt(M1_square)  # [Nbatch, Npix_j3, Norient3]
             # Store M1_j3 in a dictionary
             M1_dic[j3] = M1
@@ -276,10 +273,8 @@ class funct(FOC.FoCUS):
             if cross:
                 ### Make the convolution I2 * Psi_j3
                 cconv2, sconv2 = self.convol(I2, axis=1)  # [Nbatch, Npix_j3, Norient3]
-                ### Take the module
-                # Module square |I2 * Psi_j3|^2
+                ### Take the module M2 = |I2 * Psi_j3|
                 M2_square = cconv2 * cconv2 + sconv2 * sconv2  # [Nbatch, Npix_j3, Norient3]
-                # Module M2 = |I2 * Psi_j3|
                 M2 = self.bk_sqrt(M2_square)  # [Nbatch, Npix_j3, Norient3]
                 # Store M1_j3 in a dictionary
                 M2_dic[j3] = M2
@@ -446,7 +441,8 @@ class funct(FOC.FoCUS):
                 I2 = self.ud_grade_2(I2_smooth, axis=1)
 
             ### Modules
-            for j2 in range(0, j3):  # j2 < j3
+            # !!! je sais pas pourquoi ici il faut mettre j3+1 alors qu'au dessus c'est j3
+            for j2 in range(0, j3+1):  # j2 =< j3
                 ### Dictionary M1_dic[j2]
                 M1_smooth = self.smooth(M1_dic[j2], axis=1)  # [Nbatch, Npix_j3, Norient3]
                 M1_dic[j2] = self.ud_grade_2(M1_smooth, axis=1)  # [Nbatch, Npix_j3, Norient3]
@@ -475,8 +471,10 @@ class funct(FOC.FoCUS):
     def _compute_C01_auto(self, j2, cconv1, sconv1, vmask, M1_dic, cM1convPsi_dic, sM1convPsi_dic):
         ### Compute |I1 * psi2| * Psi_j3 = M1_j2 * Psi_j3
         # Warning: M1_dic[j2] is already at j3 resolution [Nbatch, Npix_j3, Norient3]
-        cM1convPsi, sM1convPsi = self.convol(M1_dic[j2], axis=1)  # [Nbatch, Npix_j3, Norient3, Norient2]
 
+        cM1convPsi, sM1convPsi = self.convol(M1_dic[j2], axis=1)  # [Nbatch, Npix_j3, Norient3, Norient2]
+        print('cconv1', cconv1.shape)
+        print('cM1convPsi', cM1convPsi.shape)
         # Store it so we can use it in C11 computation
         cM1convPsi_dic[j2] = cM1convPsi  # [Nbatch, Npix_j3, Norient3, Norient2]
         sM1convPsi_dic[j2] = sM1convPsi  # [Nbatch, Npix_j3, Norient3, Norient2]
