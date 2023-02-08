@@ -199,10 +199,10 @@ class Synthesis:
             
 
             if mpi_size==1:
-                grad=g_tot
+                grad=g
             else:
-                grad=np.zeros([g_tot.shape[0]],dtype='float32')
-                comm.Allreduce((g_tot.numpy(),MPI.FLOAT),(grad,MPI.FLOAT))
+                grad=np.zeros([g.shape[0]],dtype='float32')
+                comm.Allreduce((g.numpy(),MPI.FLOAT),(grad,MPI.FLOAT))
             
             if self.nlog==self.history.shape[0]:
                 new_log=np.zeros([self.history.shape[0]*2])
