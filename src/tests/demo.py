@@ -11,16 +11,20 @@ import foscat.Synthesis as synthe
 
 def usage():
     print(' This software is a demo of the foscat library:')
-    print('>python demo.py -n=8 [-c|--cov][-s|--steps=3000][-x|--xstat')
+    print('>python demo.py -n=8 [-c|--cov][-s|--steps=3000][-x|--xstat][-p|--p00][-g|--gauss][-k|--k5x5]')
     print('-n : is the nside of the input map (nside max = 256 with the default map)')
-    print('--cov (optional): use scat_cov instead of scat')
-    print('--steps (optional): number of iteration, if not specified 1000')
-    print('--xstat (optional): work with cross statistics')
+    print('--cov (optional): use scat_cov instead of scat.')
+    print('--steps (optional): number of iteration, if not specified 1000.')
+    print('--xstat (optional): work with cross statistics.')
+    print('--p00   (optional): Loss only computed on p00.')
+    print('--gauss (optional): convert Venus map in gaussian field.')
+    print('--k5x5  (optional): Work with a 5x5 kernel instead of a 3x3.')
     exit(0)
     
 def main():
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "n:cs:x", ["nside", "cov","steps","xstat"])
+        opts, args = getopt.getopt(sys.argv[1:], "n:cs:xpgk", \
+                                   ["nside", "cov","steps","xstat","p00","gauss","k5x5"])
     except getopt.GetoptError as err:
         # print help information and exit:
         print(err)  # will print something like "option -a not recognized"
@@ -31,6 +35,9 @@ def main():
     nside=-1
     nstep=1000
     docross=False
+    dop00=False
+    dogauss=False
+    KERNELSZ=3
     
     for o, a in opts:
         if o in ("-c","--cov"):
@@ -41,6 +48,12 @@ def main():
             nstep=int(a[1:])
         elif o in ("-x", "--xstat"):
             docross=True
+        elif o in ("-g", "--gauss"):
+            dogauss=True
+        elif o in ("-k", "--k5x5"):
+            KERNELSZ=5
+        elif o in ("-p", "--p00"):
+            dop00=True
         else:
             assert False, "unhandled option"
 
@@ -77,16 +90,29 @@ def main():
     # Get data
     #=================================================================================
     im=dodown(np.load('Venus_256.npy'),nside)
+
+    if dogauss:
+        idx=hp.ring2nest(nside,np.arange(12*nside*nside))
+        idx1=hp.nest2ring(nside,np.arange(12*nside*nside))
+        cl=hp.anafast(im[idx])
+        im=hp.synfast(cl,nside)[idx1]
+
+        hp.mollview(im,cmap='jet',nest=True)
+        plt.show()
     
+
+    lam=1.2
+    if KERNELSZ==5:
+        lam=1.0
     #=================================================================================
     # COMPUTE THE WAVELET TRANSFORM OF THE REFERENCE MAP
     #=================================================================================
-    scat_op=sc.funct(NORIENT=4,   # define the number of wavelet orientation
-                     KERNELSZ=3,  # define the kernel size (here 5x5)
-                     OSTEP=-1,     # get very large scale (nside=1)
-                     LAMBDA=1.2,
+    scat_op=sc.funct(NORIENT=4,          # define the number of wavelet orientation
+                     KERNELSZ=KERNELSZ,  # define the kernel size
+                     OSTEP=-1,           # get very large scale (nside=1)
+                     LAMBDA=lam,
                      TEMPLATE_PATH=scratch_path,
-                     use_R_format=True,
+                     gpupos=2,
                      all_type='float32')
     
     #=================================================================================
@@ -97,13 +123,18 @@ def main():
         
         ref = args[0]
         im  = args[1]
+        #ip0 = args[2]
 
         if docross:
             learn=scat_operator.eval(im,image2=x,Imaginary=True)
         else:
             learn=scat_operator.eval(x)
-        
-        loss=scat_operator.reduce_sum(scat_operator.reduce_mean(scat_operator.square(ref-learn)))
+            
+        if dop00:
+            loss=scat_operator.bk_reduce_mean(scat_operator.bk_square(ref.P00[0,0,:]-learn.P00[0,0,:]))
+        else:
+            loss=scat_operator.reduce_sum(scat_operator.reduce_mean(scat_operator.square(ref-learn)))
+            
 
         return(loss)
 
@@ -111,16 +142,31 @@ def main():
         refX=scat_op.eval(im,image2=im,Imaginary=True)
     else:
         refX=scat_op.eval(im)
-    
+
+    imap=np.random.randn(12*nside*nside).astype('float32')
+    """
+    nstep=refX.P00.shape[2]
+    for i in range(nstep):
+        loss1=synthe.Loss(lossX,scat_op,refX,im,i)
+
+        sy = synthe.Synthesis([loss1])
+
+        #=================================================================================
+        # COMPUTE GRADIENT
+        #=================================================================================
+
+        g=sy.gradient(imap).numpy()
+        print('gradient %d computed '%(i))
+        np.save('g_demo_%d_%d.npy'%(i,nside),g)
+    exit(0)
+    """
     loss1=synthe.Loss(lossX,scat_op,refX,im)
-
+        
     sy = synthe.Synthesis([loss1])
-
     #=================================================================================
     # RUN ON SYNTHESIS
     #=================================================================================
 
-    imap=np.random.randn(12*nside*nside).astype('float32')
     
     omap=sy.run(imap,
                 DECAY_RATE=0.999,
@@ -131,8 +177,12 @@ def main():
     #=================================================================================
     # STORE RESULTS
     #=================================================================================
-    start=scat_op.eval(im,image2=imap)
-    out =scat_op.eval(im,image2=omap)
+    if docross:
+        start=scat_op.eval(im,image2=imap)
+        out =scat_op.eval(im,image2=omap)
+    else:
+        start=scat_op.eval(imap)
+        out =scat_op.eval(omap)
     
     np.save('in_demo_map_%d.npy'%(nside),im)
     np.save('st_demo_map_%d.npy'%(nside),imap)

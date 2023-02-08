@@ -228,7 +228,8 @@ class FoCUS:
             yy=(3/float(KERNELSZ))*LAMBDA*(x*np.sin(a)-y*np.cos(a))
 
             if KERNELSZ==5:
-                w_smooth=np.exp(-4*((3.0/float(KERNELSZ)*xx)**2+(3.0/float(KERNELSZ)*yy)**2))
+                w_smooth=np.exp(-2*((3.0/float(KERNELSZ)*xx)**2+(3.0/float(KERNELSZ)*yy)**2))
+                #w_smooth=np.exp(-0.5*(xx**2+yy**2))
             else:
                 w_smooth=np.exp(-0.5*(xx**2+yy**2))
         
@@ -1209,7 +1210,7 @@ class FoCUS:
             
     # ---------------------------------------------−---------
     def smooth(self,image,axis=0):
-
+    
         if self.use_R_format:
             if isinstance(image, Rformat):
                 l_image=image.get()

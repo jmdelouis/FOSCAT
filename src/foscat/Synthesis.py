@@ -26,7 +26,9 @@ class Synthesis:
                  beta1=0.9,
                  beta2=0.999,
                  epsilon=1e-7,
-                 decay_rate = 0.999):
+                 decay_rate = 0.999,
+                 mpi_size=1,
+                 mpi_rank=0):
 
         self.loss_class=loss_list
         self.number_of_loss=len(loss_list)
@@ -42,6 +44,8 @@ class Synthesis:
         self.curr_gpu=0
         self.event = Event()
         self.operation=loss_list[0].scat_operator
+        self.mpi_size=mpi_size
+        self.mpi_rank=mpi_rank
     
     # ---------------------------------------------−---------
     def get_gpu(self,event,delay):
@@ -99,6 +103,37 @@ class Synthesis:
         return l,g
     #---------------------------------------------------------------
     
+    def gradient(self,x):
+
+        if self.operation.get_use_R():
+            x=self.operation.to_R_center(x)
+            
+        g_tot=None
+        l_tot=0.0
+        for k in range(self.number_of_loss):
+            l,g=self.loss(x,self.loss_class[k])
+            if g_tot is None:
+                g_tot=g
+            else:
+                g_tot=g_tot+g
+
+        if self.mpi_size==1:
+            grad=g
+        else:
+            grad=np.zeros([g.shape[0]],dtype='float32')
+            comm.Allreduce((g.numpy(),MPI.FLOAT),(grad,MPI.FLOAT))
+            
+        operation=self.operation
+        if operation.get_use_R():
+            l_x=operation.to_R(grad,only_border=True)
+            x=operation.from_R(l_x)
+        else:
+            x=grad
+            
+        return x
+        
+    #---------------------------------------------------------------
+    
     def update(self, dw):
         ## dw are from current minibatch
         ## momentum beta 1
@@ -136,9 +171,7 @@ class Synthesis:
             EVAL_FREQUENCY = 100,
             DEVAL_STAT_FREQUENCY = 1000,
             LEARNING_RATE = 0.03,
-            EPSILON = 1E-7,
-            mpi_size=1,
-            mpi_rank=0):
+            EPSILON = 1E-7):
         
         self.eta=LEARNING_RATE
         self.epsilon=EPSILON
@@ -148,14 +181,14 @@ class Synthesis:
         if self.operation.get_use_R():
             x=self.operation.to_R_center(x)
             
-        self.curr_gpu=self.curr_gpu+mpi_rank
+        self.curr_gpu=self.curr_gpu+self.mpi_rank
         
-        if mpi_size>1:
+        if self.mpi_size>1:
             from mpi4py import MPI
 
             comm = MPI.COMM_WORLD
             
-        if mpi_rank==0:
+        if self.mpi_rank==0:
             # start thread that catch GPU information
             try:
                 self.gpu_thrd = Thread(target=self.get_gpu, args=(self.event,1,))
@@ -165,7 +198,7 @@ class Synthesis:
             
         start = time.time()
 
-        if mpi_size>1:
+        if self.mpi_size>1:
             num_loss=np.zeros([1],dtype='int32')
             total_num_loss=np.zeros([1],dtype='int32')
             num_loss[0]=self.number_of_loss
@@ -174,7 +207,7 @@ class Synthesis:
         else:
             total_num_loss=self.number_of_loss
             
-        if mpi_rank==0:
+        if self.mpi_rank==0:
             print('Total number of loss ',total_num_loss)
             
         for itt in range(NUM_EPOCHS):
@@ -188,17 +221,17 @@ class Synthesis:
                     g_tot=g_tot+g
                 l_tot=l_tot+l.numpy()
                 
-            l_log=np.zeros([mpi_size],dtype='float32')
-            ltot=np.zeros([mpi_size],dtype='float32')
-            l_log[mpi_rank]=l.numpy()
+            l_log=np.zeros([self.mpi_size],dtype='float32')
+            ltot=np.zeros([self.mpi_size],dtype='float32')
+            l_log[self.mpi_rank]=l.numpy()
             
-            if mpi_size==1:
+            if self.mpi_size==1:
                 ltot=l_log
             else:
                 comm.Allreduce((l_log,MPI.FLOAT),(ltot,MPI.FLOAT))
             
 
-            if mpi_size==1:
+            if self.mpi_size==1:
                 grad=g
             else:
                 grad=np.zeros([g.shape[0]],dtype='float32')
@@ -214,7 +247,7 @@ class Synthesis:
                 
             x=x-self.update(grad)
             
-            if itt%EVAL_FREQUENCY==0 and mpi_rank==0:
+            if itt%EVAL_FREQUENCY==0 and self.mpi_rank==0:
                 end = time.time()
                 cur_loss='%.3g ('%(ltot.sum())
                 for k in range(ltot.shape[0]):
@@ -230,7 +263,7 @@ class Synthesis:
                 sys.stdout.flush()
                 start = time.time()
 
-        if mpi_rank==0:
+        if self.mpi_rank==0:
             self.stop_synthesis()
         
         operation=self.operation
