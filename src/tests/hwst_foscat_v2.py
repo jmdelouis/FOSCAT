@@ -25,15 +25,11 @@ outpath = sys.argv[3]
 nout      = int(sys.argv[4])
 
 print('OPENMPI')
-"""
 from mpi4py import MPI
 
 comm = MPI.COMM_WORLD
 size = comm.Get_size()
 rank = comm.Get_rank()
-"""
-size=1
-rank=0
 
 #set the nside of input data
 Default_nside=256
@@ -75,7 +71,8 @@ try:
     di=np.load(outpath+'/%sdi.npy'%(outname)) 
     d1=np.load(outpath+'/%sd1.npy'%(outname)) 
     d2=np.load(outpath+'/%sd2.npy'%(outname)) 
-    td=np.load(outpath+'/%std.npy'%(outname)) 
+    td=np.load(outpath+'/%std.npy'%(outname))
+    
 except:
     td=dodown(np.load(datapath+'TT857_%d.npy'%(Default_nside)),nout)
     di=dodown(np.load(datapath+'%s_MONO.npy'%(sys.argv[1])),nout)
@@ -105,7 +102,6 @@ for i in range(len(tab)):
 mask[0,:]=1.0
 for i in range(1,len(tab)):
     mask[i,:]=mask[i,:]*mask[0,:].sum()/mask[i,:].sum()
-
     
 off=np.median(di[di>-1E10])
 d1[di<-1E10]=off
@@ -143,10 +139,11 @@ import foscat.Synthesis as synthe
 
 scat_op=sc.funct(NORIENT=4,   # define the number of wavelet orientation
                  KERNELSZ=3,  # define the kernel size (here 5x5)
-                 OSTEP=-1,     # get very large scale (nside=1)
+                 OSTEP=0,     # get very large scale (nside=1)
                  LAMBDA=1.2,
                  all_type='float32',
                  TEMPLATE_PATH=scratch_path,
+                 use_R_format=True,
                  mpi_rank=rank,
                  mpi_size=size)
 
@@ -162,42 +159,42 @@ initb1=None
 initb2=None
 initb3=None
 
-def loss_fct1(x,args):
+def loss_fct1(x,scat,args):
 
     ref  = args[0]
     mask = args[1]
     isig = args[2]
     
-    b=scat_op.eval(x,mask=mask)
+    b=scat.eval(x,mask=mask)
 
-    l_val=scat_op.reduce_sum(scat_op.reduce_mean(isig*scat_op.square(ref-b)))
+    l_val=scat.reduce_sum(scat.reduce_mean(isig*scat.square(ref-b)))
 
     return(l_val)
 
-def loss_fct2(x,args):
+def loss_fct2(x,scat,args):
 
     ref  = args[0]
     TT   = args[1]
     mask = args[2]
     isig = args[3]
     
-    b=scat_op.eval(TT,image2=x,mask=mask,Imaginary=True)
+    b=scat.eval(TT,image2=x,mask=mask,Imaginary=True)
     
-    l_val=scat_op.reduce_sum(scat_op.reduce_mean(isig*scat_op.square(ref-b)))
+    l_val=scat.reduce_sum(scat.reduce_mean(isig*scat.square(ref-b)))
     
     return(l_val)
 
-def loss_fct3(x,args):
+def loss_fct3(x,scat,args):
 
     im   = args[0]
-    ref  = args[1]
-    bias = args[2]
-    mask = args[3]
-    isig = args[4]
+    bias = args[1]
+    mask = args[2]
+    isig = args[3]
     
-    a=scat_op.eval(im,image2=x,mask=mask,Imaginary=False)-bias
+    a=scat.eval(im,image2=x,mask=mask,Imaginary=False)-bias
+    b=scat.eval(x,mask=mask,Imaginary=False)
     
-    l_val=scat_op.reduce_sum(scat_op.reduce_mean(isig*scat_op.square(a-ref)))
+    l_val=scat.reduce_sum(scat.reduce_mean(isig*scat.square(a-b)))
     
     return(l_val)
 
@@ -270,9 +267,9 @@ for itt in range(5):
         if rank==0 or size==1:
             print("BIAS DVAR 0 %f"%((bias1-initb1).std()))
         if rank==1 or size==1:
-            print("BIAS DVAR 1 %f"%((bias2-initb2).std()))
+            print("BIAS DVAR 1 %f"%((bias1-initb1).std()))
         if rank==2 or size==1:
-            print("BIAS DVAR 2 %f"%((bias3-initb3).std()))
+            print("BIAS DVAR 1 %f"%((bias1-initb1).std()))
 
     if rank==0 or size==1:
         initb1=bias1
@@ -284,31 +281,27 @@ for itt in range(5):
     sys.stdout.flush()
 
     if rank==0 or size==1:
-        loss1=synthe.Loss(loss_fct1,refH-bias1,mask,isig1)
+        loss1=synthe.Loss(loss_fct1,scat_op,refH-bias1,mask,isig1)
     if rank==1 or size==1:
-        loss2=synthe.Loss(loss_fct2,refX-bias2,td,mask,isig2)
+        loss2=synthe.Loss(loss_fct2,scat_op,refX-bias2,td,mask,isig2)
     if rank==2 or size==1:
-        loss3=synthe.Loss(loss_fct3,di,refH-bias1,bias3,mask,isig3)
+        loss3=synthe.Loss(loss_fct3,scat_op,di,bias3,mask,isig3)
 
     if size==1:
-        print('DO LOSS 1&3')
-        sy = synthe.Synthesis([loss1,loss2,loss3],operation=scat_op)
+        sy = synthe.Synthesis([loss1,loss2,loss3])
     else:
         if rank==0:
-            sy = synthe.Synthesis([loss1],operation=scat_op)
-            print('DO LOSS 1 ',rank)
+            sy = synthe.Synthesis([loss1])
         if rank==1:
-            sy = synthe.Synthesis([loss2],operation=scat_op)
-            print('DO LOSS 2 ',rank)
+            sy = synthe.Synthesis([loss2])
         if rank==2:
-            sy = synthe.Synthesis([loss3],operation=scat_op)
-            print('DO LOSS 3 ',rank)
+            sy = synthe.Synthesis([loss3])
 
     omap=sy.run(init_map,
-                EVAL_FREQUENCY = 10,
+                EVAL_FREQUENCY = 100,
                 DECAY_RATE=0.999,
                 NUM_EPOCHS = 1000,
-                LEARNING_RATE = 0.03,
+                LEARNING_RATE = 0.3,
                 EPSILON = 1E-16,
                 mpi_rank=rank,
                 mpi_size=size)
@@ -321,11 +314,7 @@ for itt in range(5):
         # save the intermediate results
         print('ITT %d DONE'%(itt))
         sys.stdout.flush()
-        (refH-bias1).save(outpath+'%s_cross_%d.npy'%(outname,itt))
-        iscat=scat_op.eval(init_map,mask=mask)
-        iscat.save(outpath+'%s_in_%d.npy'%(outname,itt))
-        oscat=scat_op.eval(omap,mask=mask)
-        oscat.save(outpath+'%s_out_%d.npy'%(outname,itt))
+
         np.save(outpath+'%sresult_%d.npy'%(outname,itt),omap/ampmap+off)
 
 print('Computation Done')

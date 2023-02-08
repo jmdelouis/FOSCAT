@@ -10,13 +10,14 @@ from threading import Event
 
 class Loss:
     
-    def __init__(self,function,*param):
+    def __init__(self,function,scat_operator,*param):
 
         self.loss_function=function
+        self.scat_operator=scat_operator
         self.args=param
 
     def eval(self,x):
-        return self.loss_function(x,self.args)
+        return self.loss_function(x,self.scat_operator,self.args)
     
 class Synthesis:
     def __init__(self,
@@ -25,8 +26,7 @@ class Synthesis:
                  beta1=0.9,
                  beta2=0.999,
                  epsilon=1e-7,
-                 decay_rate = 0.999,
-                 operation=None):
+                 decay_rate = 0.999):
 
         self.loss_class=loss_list
         self.number_of_loss=len(loss_list)
@@ -39,9 +39,9 @@ class Synthesis:
         self.epsilon = epsilon
         self.eta = eta
         self.history=np.zeros([10])
-        self.operation=operation
         self.curr_gpu=0
         self.event = Event()
+        self.operation=loss_list[0].scat_operator
     
     # ---------------------------------------------−---------
     def get_gpu(self,event,delay):
@@ -71,7 +71,7 @@ class Synthesis:
     def check_dense(self,data,datasz):
         if isinstance(data, tf.Tensor):
             return data
-
+        
         idx=tf.cast(data.indices, tf.int32)
         data=tf.math.bincount(idx,weights=data.values,
                               minlength=datasz)
@@ -80,18 +80,21 @@ class Synthesis:
     @tf.function
     def loss(self,x,loss_function):
 
-        if self.operation is not None:
-            with tf.device(self.operation.gpulist[self.curr_gpu%self.operation.ngpu]):
-                print('Run on GPU %s'%(self.operation.gpulist[self.curr_gpu%self.operation.ngpu]))
-                l=loss_function.eval(x)
+        operation=loss_function.scat_operator
         
-                g=self.check_dense(tf.gradients(l,x)[0],x.shape[0])
+        with tf.device(operation.gpulist[(operation.gpupos+self.curr_gpu)%operation.ngpu]):
+            print('Run on GPU %s'%(operation.gpulist[(operation.gpupos+self.curr_gpu)%operation.ngpu]))
+            
+            if operation.get_use_R():
+                l_x=operation.to_R(x,only_border=True)
+            else:
+                l_x=x
+                
+            l=loss_function.eval(l_x)
+            
+            g=self.check_dense(tf.gradients(l,x)[0],x.shape[0])
             
             self.curr_gpu=self.curr_gpu+1
-        else:
-            l=loss_function.eval(x)
-        
-            g=self.check_dense(tf.gradients(l,x)[0],x)
             
         return l,g
     #---------------------------------------------------------------
@@ -142,6 +145,9 @@ class Synthesis:
         self.decay_rate = DECAY_RATE
         self.nlog=0
 
+        if self.operation.get_use_R():
+            x=self.operation.to_R_center(x)
+            
         self.curr_gpu=self.curr_gpu+mpi_rank
         
         if mpi_size>1:
@@ -193,10 +199,10 @@ class Synthesis:
             
 
             if mpi_size==1:
-                grad=g_tot
+                grad=g
             else:
-                grad=np.zeros([g_tot.shape[0]],dtype='float32')
-                comm.Allreduce((g_tot.numpy(),MPI.FLOAT),(grad,MPI.FLOAT))
+                grad=np.zeros([g.shape[0]],dtype='float32')
+                comm.Allreduce((g.numpy(),MPI.FLOAT),(grad,MPI.FLOAT))
             
             if self.nlog==self.history.shape[0]:
                 new_log=np.zeros([self.history.shape[0]*2])
@@ -227,6 +233,11 @@ class Synthesis:
         if mpi_rank==0:
             self.stop_synthesis()
         
+        operation=self.operation
+        if operation.get_use_R():
+            l_x=operation.to_R(x,only_border=True)
+            x=operation.from_R(l_x)
+            
         return(x)
 
     def get_history(self):

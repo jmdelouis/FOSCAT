@@ -11,15 +11,16 @@ import foscat.Synthesis as synthe
 
 def usage():
     print(' This software is a demo of the foscat library:')
-    print('>python demo.py -n=8 [-c|--cov][-s|--steps=3000]')
+    print('>python demo.py -n=8 [-c|--cov][-s|--steps=3000][-x|--xstat')
     print('-n : is the nside of the input map (nside max = 256 with the default map)')
     print('--cov (optional): use scat_cov instead of scat')
     print('--steps (optional): number of iteration, if not specified 1000')
+    print('--xstat (optional): work with cross statistics')
     exit(0)
     
 def main():
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "n:cs:", ["nside", "cov","steps"])
+        opts, args = getopt.getopt(sys.argv[1:], "n:cs:x", ["nside", "cov","steps","xstat"])
     except getopt.GetoptError as err:
         # print help information and exit:
         print(err)  # will print something like "option -a not recognized"
@@ -29,6 +30,8 @@ def main():
     cov=False
     nside=-1
     nstep=1000
+    docross=False
+    
     for o, a in opts:
         if o in ("-c","--cov"):
             cov = True
@@ -36,6 +39,8 @@ def main():
             nside=int(a[1:])
         elif o in ("-s", "--steps"):
             nstep=int(a[1:])
+        elif o in ("-x", "--xstat"):
+            docross=True
         else:
             assert False, "unhandled option"
 
@@ -72,7 +77,7 @@ def main():
     # Get data
     #=================================================================================
     im=dodown(np.load('Venus_256.npy'),nside)
-
+    
     #=================================================================================
     # COMPUTE THE WAVELET TRANSFORM OF THE REFERENCE MAP
     #=================================================================================
@@ -81,45 +86,33 @@ def main():
                      OSTEP=-1,     # get very large scale (nside=1)
                      LAMBDA=1.2,
                      TEMPLATE_PATH=scratch_path,
+                     use_R_format=True,
                      all_type='float32')
-
-    import time
-    for itt in range(1000):
-        start = time.time()
-        real,imag=scat_op.convol(im,is2d=False)
-        end = time.time()
-        print('isHealpix %8.2f'%((end-start)*1000))
-    for itt in range(1000):
-        start = time.time()
-        real,imag=scat_op.convol(im.reshape(4*nside,3*nside),is2d=True)
-        end = time.time()
-        print('is2D %8.2f'%((end-start)*1000))
     
-    real=real.numpy().reshape(12*nside**2,4)
-    imag=imag.numpy().reshape(12*nside**2,4)
-    for i in range(4):
-        hp.mollview(real[:,i],cmap='jet',hold=False,sub=(2,4,1+i),nest=True)
-        hp.mollview(imag[:,i],cmap='jet',hold=False,sub=(2,4,5+i),nest=True)
-
-    plt.show()
-    exit(0)
     #=================================================================================
     # DEFINE A LOSS FUNCTION AND THE SYNTHESIS
     #=================================================================================
-
-    def lossX(x,args):
-
+    
+    def lossX(x,scat_operator,args):
+        
         ref = args[0]
         im  = args[1]
 
-        learn=scat_op.eval(im,image2=x)
-
-        loss=scat_op.reduce_sum(scat_op.bk_square(ref-learn))
+        if docross:
+            learn=scat_operator.eval(im,image2=x,Imaginary=True)
+        else:
+            learn=scat_operator.eval(x)
+        
+        loss=scat_operator.reduce_sum(scat_operator.reduce_mean(scat_operator.square(ref-learn)))
 
         return(loss)
 
-    refX=scat_op.eval(im,image2=im)
-    loss1=synthe.Loss(lossX,refX,im.astype('float32'))
+    if docross:
+        refX=scat_op.eval(im,image2=im,Imaginary=True)
+    else:
+        refX=scat_op.eval(im)
+    
+    loss1=synthe.Loss(lossX,scat_op,refX,im)
 
     sy = synthe.Synthesis([loss1])
 
@@ -128,19 +121,19 @@ def main():
     #=================================================================================
 
     imap=np.random.randn(12*nside*nside).astype('float32')
-
+    
     omap=sy.run(imap,
                 DECAY_RATE=0.999,
                 NUM_EPOCHS = nstep,
-                LEARNING_RATE = 0.03,
-                EPSILON = 1E-16)
+                LEARNING_RATE = 0.3,
+                EPSILON = 1E-7)
 
     #=================================================================================
     # STORE RESULTS
     #=================================================================================
-    start=scat_op.eval(im.astype('float32'),image2=imap.astype('float32'))
-    out =scat_op.eval(im.astype('float32'),image2=omap.numpy().astype('float32'))
-
+    start=scat_op.eval(im,image2=imap)
+    out =scat_op.eval(im,image2=omap)
+    
     np.save('in_demo_map_%d.npy'%(nside),im)
     np.save('st_demo_map_%d.npy'%(nside),imap)
     np.save('out_demo_map_%d.npy'%(nside),omap)

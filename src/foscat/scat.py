@@ -145,33 +145,51 @@ class funct(FOC.FoCUS):
         if image2 is not None:
             cross = True
         axis=1
+        
         # determine jmax and nside corresponding to the input map
         im_shape = image1.shape
-        if len(image1.shape)==2:
-            npix = int(im_shape[1])  # Number of pixels
+        if self.use_R_format and isinstance(image1,FOC.Rformat):
+            if len(image1.shape)==4:
+                nside=im_shape[2]-2*self.R_off
+                npix = 12*nside*nside # Number of pixels
+            else:
+                nside=im_shape[1]-2*self.R_off
+                npix = 12*nside*nside  # Number of pixels
         else:
-            npix = int(im_shape[0])  # Number of pixels
+            if len(image1.shape)==2:
+                npix = int(im_shape[1])  # Number of pixels
+            else:
+                npix = int(im_shape[0])  # Number of pixels
 
-        nside=int(np.sqrt(npix//12))
+            nside=int(np.sqrt(npix//12))
         jmax=int(np.log(nside)/np.log(2))-self.OSTEP
 
         ### LOCAL VARIABLES (IMAGES and MASK)
         # Check if image1 is [Npix] or [Nbatch,Npix]
-        if len(image1.shape)==1:
+        if len(image1.shape)==1 or (len(image1.shape)==3 and isinstance(image1,FOC.Rformat)):
             # image1 is [Nbatch, Npix]
-            I1 = self.bk_cast(image1[None, :])  # Local image1 [Nbatch, Npix]
+            I1 = self.bk_cast(self.bk_expand_dims(image1,0))  # Local image1 [Nbatch, Npix]
             if cross:
-                I2 = self.bk_cast(image2[None, :])  # Local image2 [Nbatch, Npix]
+                I2 = self.bk_cast(self.bk_expand_dims(image2,0))  # Local image2 [Nbatch, Npix]
         else:
             I1=self.bk_cast(image1)
             if cross:
                 I2=self.bk_cast(image2)
-
+                
         # self.mask is [Nmask, Npix]
         if mask is None:
             vmask = self.bk_ones([1,npix],dtype=self.all_type)
+            if self.use_R_format:
+                vmask = self.to_R(vmask,axis=1)
         else:
             vmask = self.bk_cast( mask) # [Nmask, Npix]
+            if self.use_R_format:
+                vmask=self.to_R(vmask,axis=1)
+
+        if self.use_R_format:
+            I1=self.to_R(I1,axis=axis)
+            if cross:
+                I2=self.to_R(I2,axis=axis)
 
         if self.KERNELSZ>3:
             # if the kernel size is bigger than 3 increase the binning before smoothing
@@ -193,7 +211,7 @@ class funct(FOC.FoCUS):
         for j1 in range(jmax):
             # Convol image along the axis defined by 'axis' using the wavelet defined at
             # the foscat initialisation
-            #c_image_real is [....,Npix_j1,....,Norient]   
+            #c_image_real is [....,Npix_j1,....,Norient]
             c_image1_real,c_image1_imag=self.convol(l_image1,axis=axis)
             if cross:
                 c_image2_real,c_image2_imag=self.convol(l_image2,axis=axis)
@@ -236,29 +254,30 @@ class funct(FOC.FoCUS):
                     s1=self.bk_concat([s1,l_s1_real],axis=-2)
                     p00=self.bk_concat([p00,l_p00_real],axis=-2)
 
-            # Concat l2_image [....,Npix_j1,....,j1,Norient]   
+            # Concat l2_image [....,Npix_j1,....,j1,Norient]
             if l2_image is None:
-                l2_image=self.bk_expand_dims(conj_real,axis=-2)
+                l2_image=self.bk_expand_dims(self.update_R_border(conj_real,axis=axis),axis=-2)
             else:
-                l2_image=self.bk_concat([self.bk_expand_dims(conj_real,axis=-2),l2_image],axis=-2)
-
+                l2_image=self.bk_concat([self.bk_expand_dims(self.update_R_border(conj_real,axis=axis),axis=-2),l2_image],axis=-2)
+            
             if cross and Imaginary:
                 if l2_image_imag is None:
-                    l2_image_imag=self.bk_expand_dims(conj_imag,axis=-2)
+                    l2_image_imag=self.bk_expand_dims(self.update_R_border(conj_imag,axis=axis),axis=-2)
                 else:
-                    l2_image_imag=self.bk_concat([self.bk_expand_dims(conj_imag,axis=-2),l2_image_imag],axis=-2)
+                    l2_image_imag=self.bk_concat([self.bk_expand_dims(self.update_R_border(conj_imag,axis=axis)
+                                                                      ,axis=-2),l2_image_imag],axis=-2)
 
             # Convol l2_image [....,Npix_j1,....,j1,Norient,Norient]
-            c2_image_real,c2_image_imag=self.convol(self.bk_relu(l2_image),axis=axis)
+            c2_image_real,c2_image_imag=self.convol(l2_image,axis=axis)
             if cross and Imaginary:
-                c2_image_imag_real,c2_image_imag_imag=self.convol(self.bk_relu(l2_image_imag),axis=axis)
+                c2_image_imag_real,c2_image_imag_imag=self.convol(l2_image_imag,axis=axis)
 
             conj2=self.bk_L1(c2_image_real*c2_image_real+c2_image_imag*c2_image_imag)
             if cross and Imaginary:
                 conj2_imag=self.bk_L1(c2_image_imag_real*c2_image_imag_real+ \
                                       c2_image_imag_imag*c2_image_imag_imag)
 
-
+            """
             c2_image_real,c2_image_imag=self.convol(self.bk_relu(-l2_image),axis=axis)
             if cross:
                 if Imaginary:
@@ -269,7 +288,7 @@ class funct(FOC.FoCUS):
                 if Imaginary:
                     conj2_imag=conj2_imag - self.bk_L1(c2_image_imag_real*c2_image_imag_real+ \
                                                        c2_image_imag_imag*c2_image_imag_imag)
-
+            """
             # Convol l_s2 [....,....,Nmask,j1,Norient,Norient]
             l_s2 = self.bk_masked_mean(conj2,vmask,axis=axis)
 
@@ -288,25 +307,26 @@ class funct(FOC.FoCUS):
                 else:
                     s2=self.bk_concat([s2,l_s2],axis=-3)
 
-            # Rescale vmask [Nmask,Npix_j1//4]   
-            vmask = self.smooth(vmask,axis=1)
-            vmask = self.ud_grade_2(vmask,axis=1)
+            if j1!=jmax-1:
+                # Rescale vmask [Nmask,Npix_j1//4]   
+                vmask = self.smooth(vmask,axis=1)
+                vmask = self.ud_grade_2(vmask,axis=1)
 
-            # Rescale l2_image [....,Npix_j1//4,....,j1,Norient]   
-            l2_image = self.smooth(l2_image,axis=axis)
-            l2_image = self.ud_grade_2(l2_image,axis=axis)
+                # Rescale l2_image [....,Npix_j1//4,....,j1,Norient]   
+                l2_image = self.smooth(l2_image,axis=axis)
+                l2_image = self.ud_grade_2(l2_image,axis=axis)
 
-            # Rescale l_image [....,Npix_j1//4,....]  
-            l_image1 = self.smooth(l_image1,axis=axis)
-            l_image1 = self.ud_grade_2(l_image1,axis=axis)
-            if cross:
-                l_image2 = self.smooth(l_image2,axis=axis)
-                l_image2 = self.ud_grade_2(l_image2,axis=axis)
-                if Imaginary:
-                    l2_image_imag = self.smooth(l2_image_imag,axis=axis)
-                    l2_image_imag = self.ud_grade_2(l2_image_imag,axis=axis)
+                # Rescale l_image [....,Npix_j1//4,....]  
+                l_image1 = self.smooth(l_image1,axis=axis)
+                l_image1 = self.ud_grade_2(l_image1,axis=axis)
+                if cross:
+                    l_image2 = self.smooth(l_image2,axis=axis)
+                    l_image2 = self.ud_grade_2(l_image2,axis=axis)
+                    if Imaginary:
+                        l2_image_imag = self.smooth(l2_image_imag,axis=axis)
+                        l2_image_imag = self.ud_grade_2(l2_image_imag,axis=axis)
 
-        if len(image1.shape)==1:
+        if len(image1.shape)==1 or (len(image1.shape)==3 and isinstance(image1,FOC.Rformat)):
             return(scat(p00[0],s1[0],s2[0],cross))
 
         return(scat(p00,s1,s2,cross))
