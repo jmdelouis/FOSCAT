@@ -212,20 +212,9 @@ class funct(FOC.FoCUS):
 
         ### PARAMETERS
         npix = image1.shape[-1]  # image1 is [Npix] or [Nbatch, Npix]
-        # im_shape = image1.shape
-        # if len(im_shape) == 2:  # Check if we have one or more images
-        #     npix = int(im_shape[1])  # Number of pixels
-        #     BATCH_SIZE = im_shape[0]  # Number of images
-        # else:
-        #     npix = int(im_shape[0])  # Number of pixels
-        #     BATCH_SIZE = 1
-
         n0 = int(np.sqrt(npix / 12))  # NSIDE
         J = int(np.log(np.sqrt(npix / 12)) / np.log(2))  # Number of j scales
         Jmax = J - self.OSTEP  # Maximal scale
-
-        # # self.KERNELSZ is the number of pixel on one side (3, 5, 7...)
-        # kersize2 = self.KERNELSZ ** 2  # Kernel size square (9, 25, 49...)
 
         ### LOCAL VARIABLES (IMAGES and MASK)
         if len(image1.shape) == 1:  # If image1 is [Npix], we add a dimension for Nbatch
@@ -276,7 +265,7 @@ class funct(FOC.FoCUS):
                 ### Take the module M2 = |I2 * Psi_j3|
                 M2_square = cconv2 * cconv2 + sconv2 * sconv2  # [Nbatch, Npix_j3, Norient3]
                 M2 = self.bk_sqrt(M2_square)  # [Nbatch, Npix_j3, Norient3]
-                # Store M1_j3 in a dictionary
+                # Store M2_j3 in a dictionary
                 M2_dic[j3] = M2
 
             ####### S1 and P00
@@ -440,17 +429,19 @@ class funct(FOC.FoCUS):
                                                   self.bk_complex(cc11[:, :, None, :, :, :],
                                                                   sc11[:, :, None, :, :, :])],
                                                  axis=2)  # Add a dimension for NC11
-
+            alpha = 1
             ###### Reshape for next iteration on j3
             ### Image I1, 
             # downscale the I1 [Nbatch, Npix_j3]
             I1_smooth = self.smooth(I1, axis=1)
             I1 = self.ud_grade_2(I1_smooth, axis=1)
+            I1 *= 2 ** alpha
 
             ### Image I2
             if cross:
                 I2_smooth = self.smooth(I2, axis=1)
                 I2 = self.ud_grade_2(I2_smooth, axis=1)
+                I2 *= 2 ** alpha
 
             ### Modules
             # !!! je sais pas pourquoi ici il faut mettre j3+1 alors qu'au dessus c'est j3
@@ -458,12 +449,13 @@ class funct(FOC.FoCUS):
                 ### Dictionary M1_dic[j2]
                 M1_smooth = self.smooth(M1_dic[j2], axis=1)  # [Nbatch, Npix_j3, Norient3]
                 M1_dic[j2] = self.ud_grade_2(M1_smooth, axis=1)  # [Nbatch, Npix_j3, Norient3]
+                # M1_dic[j2] *= 2 ** alpha
 
                 ### Dictionary M2_dic[j2]
                 if cross:
                     M2_smooth = self.smooth(M2_dic[j2], axis=1)  # [Nbatch, Npix_j3, Norient3]
                     M2_dic[j2] = self.ud_grade_2(M2_smooth, axis=1)  # [Nbatch, Npix_j3, Norient3]
-
+                    # M2_dic[j2] *= 2 ** alpha
             ### Mask
             vmask = self.ud_grade_2(vmask, axis=1)
 
