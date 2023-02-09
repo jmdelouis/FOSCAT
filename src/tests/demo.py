@@ -112,6 +112,7 @@ def main():
                      OSTEP=-1,           # get very large scale (nside=1)
                      LAMBDA=lam,
                      TEMPLATE_PATH=scratch_path,
+                     slope=1.0,
                      gpupos=2,
                      all_type='float32')
     

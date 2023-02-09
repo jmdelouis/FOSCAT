@@ -26,12 +26,20 @@ outpath = sys.argv[3]
 nout      = int(sys.argv[4])
 docov     = (sys.argv[5]=='Y')
 
-from mpi4py import MPI
+try:
+    from mpi4py import MPI
 
-comm = MPI.COMM_WORLD
-size = comm.Get_size()
-rank = comm.Get_rank()
-
+    comm = MPI.COMM_WORLD
+    size = comm.Get_size()
+    rank = comm.Get_rank()
+    if size>1:
+        print('Use mpi facilities')
+    isMPI=True
+except:
+    size=1
+    rank=0
+    isMPI=False
+    
 #set the nside of input data
 Default_nside=256
 
@@ -148,7 +156,7 @@ scat_op=sc.funct(NORIENT=4,   # define the number of wavelet orientation
                  all_type='float32',
                  TEMPLATE_PATH=scratch_path,
                  use_R_format=True,
-                 isMPI=True,
+                 isMPI=isMPI,
                  mpi_rank=rank,
                  mpi_size=size)
 
@@ -170,7 +178,7 @@ def loss_fct1(x,scat,args):
     mask = args[1]
     isig = args[2]
     
-    b=scat.eval(x,mask=mask)
+    b=scat.eval(x,image2=x,mask=mask)
 
     l_val=scat.reduce_sum(scat.reduce_mean(isig*scat.square(ref-b)))
 
@@ -197,7 +205,7 @@ def loss_fct3(x,scat,args):
     isig = args[3]
     
     a=scat.eval(im,image2=x,mask=mask,Imaginary=False)-bias
-    b=scat.eval(x,mask=mask,Imaginary=False)
+    b=scat.eval(x,image2=x,mask=mask,Imaginary=False)
     
     l_val=scat.reduce_sum(scat.reduce_mean(isig*scat.square(a-b)))
     

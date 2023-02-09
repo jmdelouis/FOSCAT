@@ -199,6 +199,28 @@ class scat_cov:
 
         return scat_cov(p0, c01, c11, s1=s1)
 
+    def std(self):
+        if self.S1 is not None:
+            return np.sqrt(((abs(self.get_np(self.S1)).std())**2+
+                            (abs(self.get_np(self.C01)).std())**2+
+                            (abs(self.get_np(self.C11)).std())**2+
+                            (abs(self.get_np(self.P00)).std())**2)/4)
+        else:
+            return np.sqrt(((abs(self.get_np(self.C01)).std())**2+
+                            (abs(self.get_np(self.C11)).std())**2+
+                            (abs(self.get_np(self.P00)).std())**2)/3)
+
+    def mean(self):
+        if self.S1 is not None:
+            return (abs(self.get_np(self.S1)).mean()+ \
+                    abs(self.get_np(self.C01)).mean()+ \
+                    abs(self.get_np(self.C11)).mean()+
+                    abs(self.get_np(self.P00)).mean())/4
+        else:
+            return (abs(self.get_np(self.C01)).mean()+ \
+                    abs(self.get_np(self.C11)).mean()+
+                    abs(self.get_np(self.P00)).mean())/3
+        
 
 class funct(FOC.FoCUS):
 
