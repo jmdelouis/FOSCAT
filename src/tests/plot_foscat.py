@@ -37,16 +37,19 @@ d1=np.load(outpath+'/%sd1.npy'%(outname))
 d2=np.load(outpath+'/%sd2.npy'%(outname))
 rr=np.load(outpath+'/%sresult_%d.npy'%(outname,step))
 
-smod=sc.read(outpath+'/%s_cross_%d.npy'%(outname,step))
-sin=sc.read(outpath+'/%s_in_%d.npy'%(outname,step))
-sout=sc.read(outpath+'/%s_out_%d.npy'%(outname,step))
+try:
+    smod=sc.read(outpath+'/%s_cross_%d.npy'%(outname,step))
+    sin=sc.read(outpath+'/%s_in_%d.npy'%(outname,step))
+    sout=sc.read(outpath+'/%s_out_%d.npy'%(outname,step))
 
-smod.plot(name='Model',lw=4)
-sin.plot(name='In',hold=False,color='red')
-sout.plot(name='Out',hold=False,color='yellow')
-(smod-sin).plot(name='Diff In',hold=False,color='grey')
-(smod-sout).plot(name='Diff Out',hold=False,color='darkgrey')
-
+    smod.plot(name='Model',lw=4)
+    sin.plot(name='In',hold=False,color='red')
+    sout.plot(name='Out',hold=False,color='yellow')
+    (smod-sin).plot(name='Diff In',hold=False,color='grey')
+    (smod-sout).plot(name='Diff Out',hold=False,color='darkgrey')
+except:
+    print('no scat computed')
+    
 amp=300
 amp2=amp/5
 

@@ -26,9 +26,7 @@ class Synthesis:
                  beta1=0.9,
                  beta2=0.999,
                  epsilon=1e-7,
-                 decay_rate = 0.999,
-                 mpi_size=1,
-                 mpi_rank=0):
+                 decay_rate = 0.999):
 
         self.loss_class=loss_list
         self.number_of_loss=len(loss_list)
@@ -44,8 +42,8 @@ class Synthesis:
         self.curr_gpu=0
         self.event = Event()
         self.operation=loss_list[0].scat_operator
-        self.mpi_size=mpi_size
-        self.mpi_rank=mpi_rank
+        self.mpi_size=self.operation.mpi_size
+        self.mpi_rank=self.operation.mpi_rank
     
     # ---------------------------------------------−---------
     def get_gpu(self,event,delay):

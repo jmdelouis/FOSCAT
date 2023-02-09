@@ -72,6 +72,30 @@ class scat_cov:
                             (self.C11 / other),
                             s1=s1)
 
+
+    def __rtruediv__(self, other):
+        assert isinstance(other, float) or isinstance(other, int) or \
+               isinstance(other, bool) or isinstance(other, scat_cov)
+
+        if self.S1 is None:
+            s1 = None
+        else:
+            if isinstance(other, scat_cov):
+                s1 = self.S1 / other.S1
+            else:
+                s1 = self.S1 / other
+
+        if isinstance(other, scat_cov):
+            return scat_cov((self.P00 / other.P00),
+                            (self.C01 / other.C01),
+                            (self.C11 / other.C11),
+                            s1=s1)
+        else:
+            return scat_cov((self.P00 / other),
+                            (self.C01 / other),
+                            (self.C11 / other),
+                            s1=s1)
+
     def __sub__(self, other):
         assert isinstance(other, float) or isinstance(other, int) or \
                isinstance(other, bool) or isinstance(other, scat_cov)

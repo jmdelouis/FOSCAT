@@ -71,6 +71,9 @@ class FoCUS:
         self.TORCH=2
         self.NUMPY=3
         self.isMPI=isMPI
+
+        self.mpi_size=mpi_size
+        self.mpi_rank=mpi_rank
         
         if BACKEND=='tensorflow':
             import tensorflow as tf

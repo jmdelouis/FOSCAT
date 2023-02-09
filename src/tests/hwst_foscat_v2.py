@@ -7,15 +7,16 @@ import healpy as hp
 # DEFINE A PATH FOR scratch data
 # The data are storred using a default nside to minimize the needed storage
 #=================================================================================
-#python hwst_foscat_v2.py EE0256 /export/home/jmdeloui/heal_cnn/ /home1/scratch/jmdeloui/heal_cnn/
-if len(sys.argv)<4:
+#python hwst_foscat_v2.py EE0256 /export/home/jmdeloui/heal_cnn/ /home1/scratch/jmdeloui/heal_cnn/ N
+if len(sys.argv)<5:
     print('\nhwst_foscat usage:\n')
-    print('python hwst_foscat <in> <scratch_path> <out>')
+    print('python hwst_foscat <in> <scratch_path> <out> <cov>')
     print('============================================')
     print('<in>           : name of the 3 input data files: <in>_MONO.npy,<in>_HM1_MONO.npy,<in>_HM2_MONO.npy')
     print('<scratch_path> : name of the directory with all the input files (noise, TT,etc.) and also use for FOSCAT temporary files')
     print('<out>          : name of the directory where the computed data are stored')
     print('<nside>        : nside of the synthesised map')
+    print('<cov>          : if Y use scat_cov istead of scat')
     print('============================================')
     exit(0)
 
@@ -23,8 +24,8 @@ scratch_path = sys.argv[2]
 datapath = scratch_path
 outpath = sys.argv[3]
 nout      = int(sys.argv[4])
+docov     = (sys.argv[5]=='Y')
 
-print('OPENMPI')
 from mpi4py import MPI
 
 comm = MPI.COMM_WORLD
@@ -133,17 +134,21 @@ for i in range(nsim):
     noise2[i]-=np.mean(noise[i])
     noise[i] -=np.mean(noise[i])
 
-
-import foscat.scat as sc
+if docov:
+    import foscat.scat_cov as sc
+else:
+    import foscat.scat as sc
+    
 import foscat.Synthesis as synthe
 
 scat_op=sc.funct(NORIENT=4,   # define the number of wavelet orientation
-                 KERNELSZ=3,  # define the kernel size (here 5x5)
-                 OSTEP=0,     # get very large scale (nside=1)
-                 LAMBDA=1.2,
+                 KERNELSZ=5,  # define the kernel size (here 5x5)
+                 OSTEP=-1,     # get very large scale (nside=1)
+                 LAMBDA=1.0,
                  all_type='float32',
                  TEMPLATE_PATH=scratch_path,
                  use_R_format=True,
+                 isMPI=True,
                  mpi_rank=rank,
                  mpi_size=size)
 
@@ -302,9 +307,7 @@ for itt in range(5):
                 DECAY_RATE=0.999,
                 NUM_EPOCHS = 1000,
                 LEARNING_RATE = 0.3,
-                EPSILON = 1E-16,
-                mpi_rank=rank,
-                mpi_size=size)
+                EPSILON = 1E-16)
 
     i1=omap
     i2=omap
@@ -313,9 +316,19 @@ for itt in range(5):
     if rank==0:
         # save the intermediate results
         print('ITT %d DONE'%(itt))
+        l_outpath=outpath
         sys.stdout.flush()
+        if docov:
+            l_outpath=outpath+'_cov_'
 
-        np.save(outpath+'%sresult_%d.npy'%(outname,itt),omap/ampmap+off)
+        sin = scat_op.eval(di,image2=di)
+        sout = scat_op.eval(omap,image2=omap)
+        refH.save(l_outpath+'/%s_cross_%d.npy'%(outname,step))
+        sin.save( l_outpath+'/%s_in_%d.npy'%(outname,step))
+        sout.save(l_outpath+'/%s_out_%d.npy'%(outname,step))
+        np.save(  l_outpath+'%sresult_%d.npy'%(outname,itt),omap/ampmap+off)
+            
+        np.save(l_outpath+'%slog_%d.npy'%(outname,itt),sy.get_history())
 
 print('Computation Done')
 sys.stdout.flush()
