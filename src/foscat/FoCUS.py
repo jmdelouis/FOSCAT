@@ -119,6 +119,10 @@ class FoCUS:
         
         self.padding=padding
         self.healpix=healpix
+        if OSTEP<-1:
+            print('Warning : OSTEP can not be smaller than -1')
+            exit(0)
+            
         self.OSTEP=OSTEP
         self.use_R_format=use_R_format
         
@@ -581,6 +585,12 @@ class FoCUS:
                 #print(r_idx[lidx,:].reshape(5,5))
                 #print(r_idx2[lidx,:].reshape(3,3))
                 #fidx4[k,-off,0]=np.where(fidx==r_idx[lidx,0])[0]
+
+            fidx = (fidx+12*nside*nside)%(12*nside*nside)
+            fidx1 = (fidx1+12*nside*nside)%(12*nside*nside)
+            fidx2 = (fidx2+12*nside*nside)%(12*nside*nside)
+            fidx3 = (fidx3+12*nside*nside)%(12*nside*nside)
+            fidx4 = (fidx4+12*nside*nside)%(12*nside*nside)
             
             np.save('%s/%s_%d_FIDX.npy'%(self.TEMPLATE_PATH,outname,nside),fidx)
             print('%s/%s_%d_FIDX.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside))

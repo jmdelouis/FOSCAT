@@ -321,11 +321,12 @@ for itt in range(5):
         if docov:
             l_outpath=outpath+'_cov_'
 
-        sin = scat_op.eval(di,image2=di)
-        sout = scat_op.eval(omap,image2=omap)
-        refH.save(l_outpath+'/%s_cross_%d.npy'%(outname,step))
-        sin.save( l_outpath+'/%s_in_%d.npy'%(outname,step))
-        sout.save(l_outpath+'/%s_out_%d.npy'%(outname,step))
+        sin = scat_op.eval(di,image2=di,mask=mask,Imaginary=False)
+        sout = scat_op.eval(omap,image2=omap,mask=mask,Imaginary=False)
+        
+        refH.save(l_outpath+'/%s_cross_%d.npy'%(outname,itt))
+        sin.save( l_outpath+'/%s_in_%d.npy'%(outname,itt))
+        sout.save(l_outpath+'/%s_out_%d.npy'%(outname,itt))
         np.save(  l_outpath+'%sresult_%d.npy'%(outname,itt),omap/ampmap+off)
             
         np.save(l_outpath+'%slog_%d.npy'%(outname,itt),sy.get_history())

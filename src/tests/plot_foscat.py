@@ -69,18 +69,20 @@ tab=['08','06','04','02']
 plt.figure(figsize=(12,12))
 
 for i in range(len(tab)):
-    mm=np.mean(np.load(scratch_path+'/MASK_GAL%s_256.npy'%(tab[i])).reshape(12*nside**2,(256//nside)**2),1)
+    mm=np.mean(np.load(scratch_path+'/MASK_GAL%s_256.npy'%(tab[i])).reshape(12*nside**2,(256//nside)**2),1)[idx]
 
-    clin=hp.anafast(1E6*(mm*di)[idx])
-    clout=hp.anafast(1E6*(mm*rr)[idx])
-    cldiff=hp.anafast(1E6*(mm*(di[idx]-rr[idx])))
-    clx=hp.anafast(1E6*(mm*d1)[idx],map2=1E6*(mm*d2)[idx])
-    clox=hp.anafast(1E6*(mm*di)[idx],map2=1E6*(mm*rr)[idx])
+    mm=hp.smoothing(mm,5/180.*np.pi)
+    
+    clin=hp.anafast(1E6*mm*di[idx])
+    clout=hp.anafast(1E6*mm*rr[idx])
+    cldiff=hp.anafast(1E6*mm*(di[idx]-rr[idx]))
+    clx=hp.anafast(1E6*mm*d1[idx],map2=1E6*mm*d2[idx])
+    clox=hp.anafast(1E6*mm*di[idx],map2=1E6*mm*rr[idx])
     if ref is not None:
-        clr=hp.anafast(1E6*(mm*(ref-rr))[idx])
-    cln=hp.anafast(1E6*(mm*(di-rr))[idx])
+        clr=hp.anafast(1E6*mm*(ref-rr)[idx])
+    cln=hp.anafast(1E6*mm*(di-rr)[idx])
     if ref is not None:
-        clauto=hp.anafast(1E6*(mm*(ref))[idx])
+        clauto=hp.anafast(1E6*mm*(ref)[idx])
 
     plt.subplot(2,2,1+i)
     plt.plot(clin,   color='blue',  label='d*d fsky=%.2f'%(mm.mean()))
