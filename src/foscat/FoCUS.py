@@ -63,7 +63,7 @@ class FoCUS:
                  isMPI=False,
                  TEMPLATE_PATH='data',
                  BACKEND='tensorflow',
-                 use_R_format=False,
+                 use_R_format=True,
                  mpi_size=1,
                  mpi_rank=0):
 
@@ -228,8 +228,8 @@ class FoCUS:
             yy=(3/float(KERNELSZ))*LAMBDA*(x*np.sin(a)-y*np.cos(a))
 
             if KERNELSZ==5:
-                w_smooth=np.exp(-2*((3.0/float(KERNELSZ)*xx)**2+(3.0/float(KERNELSZ)*yy)**2))
-                #w_smooth=np.exp(-0.5*(xx**2+yy**2))
+                #w_smooth=np.exp(-2*((3.0/float(KERNELSZ)*xx)**2+(3.0/float(KERNELSZ)*yy)**2))
+                w_smooth=np.exp(-(xx**2+yy**2))
             else:
                 w_smooth=np.exp(-0.5*(xx**2+yy**2))
         
@@ -486,7 +486,7 @@ class FoCUS:
         
         outname='BRD%d'%(self.R_off)
         try:
-            fidx =np.load('%s/%s_%d_FIDX.npy'%(self.TEMPLATE_PATH,outname,nside))
+            fidx =np.load('%s/%s_%d_FIDX3333.npy'%(self.TEMPLATE_PATH,outname,nside))
             fidx1=np.load('%s/%s_%d_FIDX1.npy'%(self.TEMPLATE_PATH,outname,nside))
             fidx2=np.load('%s/%s_%d_FIDX2.npy'%(self.TEMPLATE_PATH,outname,nside))
             fidx3=np.load('%s/%s_%d_FIDX3.npy'%(self.TEMPLATE_PATH,outname,nside))
@@ -508,9 +508,10 @@ class FoCUS:
                           [0,3,11,8],[1,0,8,9],[2,1,9,10],[3,2,10,11],
                           [5,4,11,9],[6,5,8,10],[7,6,9,11],[4,7,10,8]])
 
-            if self.Idx_Neighbours[nside] is None:
-                self.init_index(nside)
-
+            #if self.Idx_Neighbours[nside] is None:
+            r_idx=self.init_index(nside,kernel=5)
+            r_idx2=self.init_index(nside,kernel=3)
+            
             fidx1=np.zeros([12,off,nside],dtype='int')
             fidx2=np.zeros([12,off,nside],dtype='int')
             fidx3=np.zeros([12,nside+2*off,off],dtype='int')
@@ -539,14 +540,46 @@ class FoCUS:
 
             for k in range(12):
                 lidx=fidx.reshape(12,nside,nside)[k,0,0]
-                fidx3[k,off-1,off-1]=np.where(fidx==self.Idx_Neighbours[nside][lidx,8])[0]
+                fidx3[k,0,0]=np.where(fidx==r_idx[lidx,24])[0]
+                fidx3[k,0,1]=np.where(fidx==r_idx[lidx,23])[0]
+                fidx3[k,1,0]=np.where(fidx==r_idx[lidx,19])[0]
+                fidx3[k,1,1]=np.where(fidx==r_idx2[lidx,8])[0]
+                #print('+++',k)
+                #print(fidx.reshape(12,nside,nside)[k,0:3,0:3],':',fidx[fidx1[k,:,0:3]],':',fidx[fidx3[k,0:5,:]])
+                #print(r_idx[lidx,:].reshape(5,5))
+                #print(r_idx2[lidx,:].reshape(3,3))
                 lidx=fidx.reshape(12,nside,nside)[k,-1,0]
-                fidx3[k,-off,off-1]=np.where(fidx==self.Idx_Neighbours[nside][lidx,2])[0]
+                fidx3[k,-1,0]=np.where(fidx==r_idx[lidx,4])[0]
+                fidx3[k,-1,1]=np.where(fidx==r_idx[lidx,3])[0]
+                fidx3[k,-2,0]=np.where(fidx==r_idx[lidx,9])[0]
+                fidx3[k,-2,1]=np.where(fidx==r_idx2[lidx,2])[0]
+                #print('====',k)
+                #print(fidx.reshape(12,nside,nside)[k,-3:,0:3],':',fidx[fidx2[k,:,0:3]],':',fidx[fidx3[k,-5:,:]])
+                #print(r_idx[lidx,:].reshape(5,5))
+                #print(r_idx2[lidx,:].reshape(3,3))
+                #fidx4[k,off-1,0]=np.where(fidx==r_idx[lidx,6])[0]
                 lidx=fidx.reshape(12,nside,nside)[k,0,-1]
-                fidx4[k,off-1,0]=np.where(fidx==self.Idx_Neighbours[nside][lidx,6])[0]
+                fidx4[k,0,0]=np.where(fidx==r_idx[lidx,21])[0]
+                fidx4[k,0,1]=np.where(fidx==r_idx[lidx,20])[0]
+                fidx4[k,1,1]=np.where(fidx==r_idx[lidx,15])[0]
+                fidx4[k,1,0]=np.where(fidx==r_idx2[lidx,6])[0]
+                #print('====',k)
+                #print(fidx.reshape(12,nside,nside)[k,0:3,-3:],':',fidx[fidx1[k,:,-2:]],':',fidx[fidx4[k,0:5,:]])
+                #print(r_idx[lidx,:].reshape(5,5))
+                #print(r_idx2[lidx,:].reshape(3,3))
+                #fidx4[k,off-1,0]=np.where(fidx==r_idx[lidx,6])[0]
                 lidx=fidx.reshape(12,nside,nside)[k,-1,-1]
-                fidx4[k,-off,0]=np.where(fidx==self.Idx_Neighbours[nside][lidx,0])[0] # OK
-
+                fidx4[k,-1,1]=np.where(fidx==r_idx[lidx,0])[0]
+                fidx4[k,-1,0]=np.where(fidx==r_idx[lidx,1])[0]
+                fidx4[k,-2,1]=np.where(fidx==r_idx[lidx,5])[0]
+                fidx4[k,-2,0]=np.where(fidx==r_idx2[lidx,0])[0]
+                #print('+++',k)
+                #print(fidx.reshape(12,nside,nside)[k,-3:,-3:],':',fidx[fidx2[k,:,-3:]],':',fidx[fidx4[k,-5:,:]])
+                #print(r_idx[lidx,:].reshape(5,5))
+                #print(r_idx2[lidx,:].reshape(3,3))
+                #fidx4[k,-off,0]=np.where(fidx==r_idx[lidx,0])[0]
+            
+            """
             np.save('%s/%s_%d_FIDX.npy'%(self.TEMPLATE_PATH,outname,nside),fidx)
             print('%s/%s_%d_FIDX.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside))
             np.save('%s/%s_%d_FIDX1.npy'%(self.TEMPLATE_PATH,outname,nside),fidx1)
@@ -558,7 +591,7 @@ class FoCUS:
             np.save('%s/%s_%d_FIDX4.npy'%(self.TEMPLATE_PATH,outname,nside),fidx4)
             print('%s/%s_%d_FIDX4.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside))
             sys.stdout.flush()
-        
+            """
         self.nest2R[nside]=fidx
         self.nest2R1[nside]=fidx1
         self.nest2R2[nside]=fidx2
@@ -920,12 +953,31 @@ class FoCUS:
         res=self.backend.repeat(self.backend.repeat(l_image,2,axis=axis+1),2,axis=axis+2)
 
         y00=res
+        y10=self.backend.roll(res,-1,axis=axis+1)
+        y01=self.backend.roll(res,-1,axis=axis+2)
+        y11=self.backend.roll(y10,-1,axis=axis+2)
+        #imout is [....,12,2*nside+4*R_off,2*nside+4*R_off,...]
+        imout=(0.25*y00+0.25*y10+0.25*y01+0.25*y11)
+        
         y10=self.backend.roll(res,1,axis=axis+1)
         y01=self.backend.roll(res,1,axis=axis+2)
         y11=self.backend.roll(y10,1,axis=axis+2)
-
         #imout is [....,12,2*nside+4*R_off,2*nside+4*R_off,...]
-        imout=(0.25*y00+0.25*y10+0.25*y01+0.25*y11)
+        imout=imout+(0.25*y00+0.25*y10+0.25*y01+0.25*y11)
+        
+        y10=self.backend.roll(res,1,axis=axis+1)
+        y01=self.backend.roll(res,-1,axis=axis+2)
+        y11=self.backend.roll(y10,-1,axis=axis+2)
+        #imout is [....,12,2*nside+4*R_off,2*nside+4*R_off,...]
+        imout=imout+(0.25*y00+0.25*y10+0.25*y01+0.25*y11)
+        
+        y10=self.backend.roll(res,-1,axis=axis+1)
+        y01=self.backend.roll(res,1,axis=axis+2)
+        y11=self.backend.roll(y10,1,axis=axis+2)
+        #imout is [....,12,2*nside+4*R_off,2*nside+4*R_off,...]
+        imout=imout+(0.25*y00+0.25*y10+0.25*y01+0.25*y11)
+
+        imout=imout/4
         
         #reshape imout [NPRE,to cut axes
         if axis==0:
@@ -1000,14 +1052,20 @@ class FoCUS:
         return(imout)
 
     # ---------------------------------------------−---------
-    def init_index(self,nside):
+    def init_index(self,nside,kernel=-1):
+        
+        if kernel==-1:
+            l_kernel=self.KERNELSZ
+        else:
+            l_kernel=kernel
+            
         try:
-            tmp=np.load('%s/W%d_%d_IDX.npy'%(self.TEMPLATE_PATH,self.KERNELSZ**2,nside))
+            tmp=np.load('%s/W%d_%d_IDX.npy'%(self.TEMPLATE_PATH,l_kernel**2,nside))
         except:
-            if self.KERNELSZ**2==9:
+            if l_kernel**2==9:
                 if self.rank==0:
                     self.comp_idx_w9(nside)
-            elif self.KERNELSZ**2==25:
+            elif l_kernel**2==25:
                 if self.rank==0:
                     self.comp_idx_w25(nside)
             else:
@@ -1015,12 +1073,15 @@ class FoCUS:
                     print('Only 3x3 and 5x5 kernel have been developped for Healpix and you ask for %dx%d'%(KERNELSZ,KERNELSZ))
                     exit(0)
             self.barrier()
-            tmp=np.load('%s/W%d_%d_IDX.npy'%(self.TEMPLATE_PATH,self.KERNELSZ**2,nside))
-                    
-        if self.BACKEND==self.TORCH:
-            self.Idx_Neighbours[nside]=tmp.as_type('int64')
+            tmp=np.load('%s/W%d_%d_IDX.npy'%(self.TEMPLATE_PATH,l_kernel**2,nside))
+
+        if kernel==-1:
+            if self.BACKEND==self.TORCH:
+                self.Idx_Neighbours[nside]=tmp.as_type('int64')
+            else:
+                self.Idx_Neighbours[nside]=tmp
         else:
-            self.Idx_Neighbours[nside]=tmp
+            return tmp
         
     # ---------------------------------------------−---------
     # Compute x [....,a,....] to [....,a*a,....]
