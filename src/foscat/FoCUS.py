@@ -486,7 +486,7 @@ class FoCUS:
         
         outname='BRD%d'%(self.R_off)
         try:
-            fidx =np.load('%s/%s_%d_FIDX3333.npy'%(self.TEMPLATE_PATH,outname,nside))
+            fidx =np.load('%s/%s_%d_FIDX.npy'%(self.TEMPLATE_PATH,outname,nside))
             fidx1=np.load('%s/%s_%d_FIDX1.npy'%(self.TEMPLATE_PATH,outname,nside))
             fidx2=np.load('%s/%s_%d_FIDX2.npy'%(self.TEMPLATE_PATH,outname,nside))
             fidx3=np.load('%s/%s_%d_FIDX3.npy'%(self.TEMPLATE_PATH,outname,nside))
@@ -579,7 +579,6 @@ class FoCUS:
                 #print(r_idx2[lidx,:].reshape(3,3))
                 #fidx4[k,-off,0]=np.where(fidx==r_idx[lidx,0])[0]
             
-            """
             np.save('%s/%s_%d_FIDX.npy'%(self.TEMPLATE_PATH,outname,nside),fidx)
             print('%s/%s_%d_FIDX.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside))
             np.save('%s/%s_%d_FIDX1.npy'%(self.TEMPLATE_PATH,outname,nside),fidx1)
@@ -591,7 +590,7 @@ class FoCUS:
             np.save('%s/%s_%d_FIDX4.npy'%(self.TEMPLATE_PATH,outname,nside),fidx4)
             print('%s/%s_%d_FIDX4.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside))
             sys.stdout.flush()
-            """
+            
         self.nest2R[nside]=fidx
         self.nest2R1[nside]=fidx1
         self.nest2R2[nside]=fidx2
