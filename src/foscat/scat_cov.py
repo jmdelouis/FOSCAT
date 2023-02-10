@@ -449,7 +449,7 @@ class funct(FOC.FoCUS):
                                                   self.bk_complex(cc11[:, :, None, :, :, :],
                                                                   sc11[:, :, None, :, :, :])],
                                                  axis=2)  # Add a dimension for NC11
-            alpha = 1
+            alpha = 0
             ###### Reshape for next iteration on j3
             ### Image I1,
             # downscale the I1 [Nbatch, Npix_j3]
