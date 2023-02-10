@@ -116,10 +116,10 @@ class Synthesis:
                 g_tot=g_tot+g
 
         if self.mpi_size==1:
-            grad=g
+            grad=g_tot
         else:
-            grad=np.zeros([g.shape[0]],dtype='float32')
-            comm.Allreduce((g.numpy(),MPI.FLOAT),(grad,MPI.FLOAT))
+            grad=np.zeros([g_tot.shape[0]],dtype='float32')
+            comm.Allreduce((g_tot.numpy(),MPI.FLOAT),(grad,MPI.FLOAT))
             
         operation=self.operation
         if operation.get_use_R():
@@ -230,10 +230,10 @@ class Synthesis:
             
 
             if self.mpi_size==1:
-                grad=g
+                grad=g_tot
             else:
-                grad=np.zeros([g.shape[0]],dtype='float32')
-                comm.Allreduce((g.numpy(),MPI.FLOAT),(grad,MPI.FLOAT))
+                grad=np.zeros([g_tot.shape[0]],dtype='float32')
+                comm.Allreduce((g_tot.numpy(),MPI.FLOAT),(grad,MPI.FLOAT))
             
             if self.nlog==self.history.shape[0]:
                 new_log=np.zeros([self.history.shape[0]*2])
