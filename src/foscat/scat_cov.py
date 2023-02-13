@@ -283,7 +283,7 @@ class scat_cov:
 
 class funct(FOC.FoCUS):
 
-    def eval(self, image1, image2=None, mask=None, Imaginary=True):
+    def eval(self, image1, image2=None, mask=None, norm=None, target=None):
         """
         Calculates the scattering correlations for a batch of images. Mean are done over pixels.
         mean of modulus:
@@ -305,6 +305,10 @@ class funct(FOC.FoCUS):
         image2: tensor
             Second image. If not None, we compute cross-scattering covariance coefficients.
         mask:
+        norm: None or str
+            If None, no normalization is applied, if 'auto', normalize by the P00_target.
+        target: tensor
+            Target image used for normalization.
         Returns
         -------
         S1, P00, C01, C11 normalized
@@ -377,6 +381,7 @@ class funct(FOC.FoCUS):
         nside_j3 = nside  # NSIDE start (nside_j3 = nside / 2^j3)
         for j3 in range(Jmax):
 
+            ####### S1 and P00
             ### Make the convolution I1 * Psi_j3
             cconv1, sconv1 = self.convol(I1, axis=1)  # [Nbatch, Npix_j3, Norient3]
             ### Take the module M1 = |I1 * Psi_j3|
@@ -385,24 +390,13 @@ class funct(FOC.FoCUS):
             # Store M1_j3 in a dictionary
             M1_dic[j3] = self.update_R_border(M1, axis=axis)
 
-            if cross:
-                ### Make the convolution I2 * Psi_j3
-                cconv2, sconv2 = self.convol(I2, axis=1)  # [Nbatch, Npix_j3, Norient3]
-                ### Take the module M2 = |I2 * Psi_j3|
-                M2_square = cconv2 * cconv2 + sconv2 * sconv2  # [Nbatch, Npix_j3, Norient3]
-                M2 = self.bk_sqrt(M2_square)  # [Nbatch, Npix_j3, Norient3]
-                # Store M2_j3 in a dictionary
-                M2_dic[j3] = self.update_R_border(M2, axis=axis)
-            
-            ####### S1 and P00
             ### P00_auto = < M1^2 >_pix
             # Apply the mask [Nmask, Npix_j3] and average over pixels
             p00 = self.bk_masked_mean(M1_square, vmask, axis=1)
-
             # We store it for normalisation of C01 and C11
             P1_dic[j3] = p00  # [Nbatch, Nmask, Norient3]
 
-            if not cross:
+            if not cross:  # Auto
                 # We store P00_auto to return it [Nbatch, Nmask, NP00, Norient3]
                 if P00 is None:
                     P00 = p00[:, :, None, :]  # Add a dimension for NP00
@@ -419,7 +413,15 @@ class funct(FOC.FoCUS):
                 else:
                     S1 = self.bk_concat([S1, s1[:, :, None, :]], axis=2)
 
-            else:
+            else:  # Cross
+                ### Make the convolution I2 * Psi_j3
+                cconv2, sconv2 = self.convol(I2, axis=1)  # [Nbatch, Npix_j3, Norient3]
+                ### Take the module M2 = |I2 * Psi_j3|
+                M2_square = cconv2 * cconv2 + sconv2 * sconv2  # [Nbatch, Npix_j3, Norient3]
+                M2 = self.bk_sqrt(M2_square)  # [Nbatch, Npix_j3, Norient3]
+                # Store M2_j3 in a dictionary
+                M2_dic[j3] = self.update_R_border(M2, axis=axis)
+
                 ### P00_auto = < M2^2 >_pix
                 p00 = self.bk_masked_mean(M2_square, vmask, axis=1)  # [Nbatch, Nmask, Norient3]
                 # We store it for normalisation
