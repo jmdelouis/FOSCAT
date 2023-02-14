@@ -283,7 +283,7 @@ class scat_cov:
 
 class funct(FOC.FoCUS):
 
-    def eval(self, image1, image2=None, mask=None, norm=None, target=None):
+    def eval(self, image1, image2=None, mask=None, norm=None):
         """
         Calculates the scattering correlations for a batch of images. Mean are done over pixels.
         mean of modulus:
@@ -306,9 +306,8 @@ class funct(FOC.FoCUS):
             Second image. If not None, we compute cross-scattering covariance coefficients.
         mask:
         norm: None or str
-            If None, no normalization is applied, if 'auto', normalize by the P00_target.
-        target: tensor
-            Target image used for normalization.
+            If None no normalization is applied, if 'auto' normalize by the reference P00,
+            if 'self' normalize by the current P00.
         Returns
         -------
         S1, P00, C01, C11 normalized
@@ -370,12 +369,28 @@ class funct(FOC.FoCUS):
         # Normalize the masks because they have different pixel numbers
         # vmask /= self.bk_reduce_sum(vmask, axis=1)[:, None]  # [Nmask, Npix]
 
-        ### COEFFS INITIALIZATION
+        ### INITIALIZATION
+        # Coefficients
         S1, P00, C01, C11, C10 = None, None, None, None, None
+
+        # Dictionaries for C01 computation
         M1_dic = {}  # M stands for Module M1 = |I1 * Psi|
-        P1_dic = {}  # P1_dic will store P00 of image 1 for C01, C11 normalizations
         if cross:
-            M2_dic, P2_dic = {}, {}
+            M2_dic = {}
+
+        # P00 for normalization
+        cond_init_P1_dic = (norm == 'self') or ((norm == 'auto') and (self.P1_dic is None))
+        cond_take_self_P1_dic = (norm == 'auto') and (self.P1_dic is not None)
+        if norm is None:
+            pass
+        elif cond_init_P1_dic:
+            P1_dic = {}
+            if cross:
+                P2_dic = {}
+        elif cond_take_self_P1_dic:
+            P1_dic = self.P1_dic
+            if cross:
+                P2_dic = self.P2_dic
 
         #### COMPUTE S1, P00, C01 and C11
         nside_j3 = nside  # NSIDE start (nside_j3 = nside / 2^j3)
@@ -390,13 +405,16 @@ class funct(FOC.FoCUS):
             # Store M1_j3 in a dictionary
             M1_dic[j3] = self.update_R_border(M1, axis=axis)
 
-            ### P00_auto = < M1^2 >_pix
-            # Apply the mask [Nmask, Npix_j3] and average over pixels
-            p00 = self.bk_masked_mean(M1_square, vmask, axis=1)
-            # We store it for normalisation of C01 and C11
-            P1_dic[j3] = p00  # [Nbatch, Nmask, Norient3]
-
             if not cross:  # Auto
+                ### P00_auto = < M1^2 >_pix
+                # Apply the mask [Nmask, Npix_j3] and average over pixels
+                p00 = self.bk_masked_mean(M1_square, vmask, axis=1)
+                if cond_init_P1_dic:
+                    # We fill P1_dic with P00 for normalisation of C01 and C11
+                    P1_dic[j3] = p00  # [Nbatch, Nmask, Norient3]
+                if norm == 'auto':  # Normalize P00
+                    p00 /= P1_dic[j3]
+
                 # We store P00_auto to return it [Nbatch, Nmask, NP00, Norient3]
                 if P00 is None:
                     P00 = p00[:, :, None, :]  # Add a dimension for NP00
@@ -407,6 +425,9 @@ class funct(FOC.FoCUS):
                 ### Image 1 : S1 = < M1 >_pix
                 # Apply the mask [Nmask, Npix_j3] and average over pixels
                 s1 = self.bk_masked_mean(M1, vmask, axis=1)  # [Nbatch, Nmask, Norient3]
+                ### Normalize S1
+                if norm is not None:
+                    s1 /= (P1_dic[j3]) ** 0.5
                 ### We store S1 for image1  [Nbatch, Nmask, NS1, Norient3]
                 if S1 is None:
                     S1 = s1[:, :, None, :]  # Add a dimension for NS1
@@ -423,9 +444,14 @@ class funct(FOC.FoCUS):
                 M2_dic[j3] = self.update_R_border(M2, axis=axis)
 
                 ### P00_auto = < M2^2 >_pix
-                p00 = self.bk_masked_mean(M2_square, vmask, axis=1)  # [Nbatch, Nmask, Norient3]
-                # We store it for normalisation
-                P2_dic[j3] = p00  # [Nbatch, Nmask, Norient3]
+                # Not returned, only for normalization
+                if cond_init_P1_dic:
+                    # Apply the mask [Nmask, Npix_j3] and average over pixels
+                    p1 = self.bk_masked_mean(M1_square, vmask, axis=1)  # [Nbatch, Nmask, Norient3]
+                    p2 = self.bk_masked_mean(M2_square, vmask, axis=1)  # [Nbatch, Nmask, Norient3]
+                    # We fill P1_dic with P00 for normalisation of C01 and C11
+                    P1_dic[j3] = p1  # [Nbatch, Nmask, Norient3]
+                    P2_dic[j3] = p2  # [Nbatch, Nmask, Norient3]
 
                 ### P00_cross = < (I1 * Psi_j3) (I2 * Psi_j3)^* >_pix
                 # z_1 x z_2^* = (a1a2 + b1b2) + i(b1a2 - a1b2)
@@ -435,7 +461,11 @@ class funct(FOC.FoCUS):
                 p00_real = self.bk_masked_mean(p00_real, vmask, axis=1)
                 p00_imag = self.bk_masked_mean(p00_imag, vmask, axis=1)
 
-                ### We store P00_cross as complex [Nbatch, Nmask, NP00, Norient3]
+                ### Normalize P00_cross
+                if norm == 'auto':
+                    p00_real /= (P1_dic[j3] * P2_dic[j3])**0.5
+
+                ### Store P00_cross as complex [Nbatch, Nmask, NP00, Norient3]
                 if P00 is None:
                     P00 = self.bk_complex(p00_real[:, :, None, :],
                                           p00_imag[:, :, None, :])  # Add a dimension for NP00
@@ -462,10 +492,11 @@ class funct(FOC.FoCUS):
                                                    cM1convPsi_dic,
                                                    sM1convPsi_dic)  # [Nbatch, Nmask, Norient3, Norient2]
                     ### Normalize C01 with P00_j [Nbatch, Nmask, Norient_j]
-                    cc01 /= (P1_dic[j2][:, :, None, :] *
-                             P1_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
-                    sc01 /= (P1_dic[j2][:, :, None, :] *
-                             P1_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
+                    if norm is not None:
+                        cc01 /= (P1_dic[j2][:, :, None, :] *
+                                 P1_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
+                        sc01 /= (P1_dic[j2][:, :, None, :] *
+                                 P1_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
                     ### Store C01 as a complex [Nbatch, Nmask, NC01, Norient3, Norient2]
                     if C01 is None:
                         C01 = self.bk_concat([self.bk_complex(cc01[:, :, None, :, :], sc01[:, :, None, :, :])],
@@ -488,14 +519,15 @@ class funct(FOC.FoCUS):
                                                    M1_dic,
                                                    cM1convPsi_dic, sM1convPsi_dic)
                     ### Normalize C01 and C10 with P00_j [Nbatch, Nmask, Norient_j]
-                    cc01 /= (P2_dic[j2][:, :, None, :] *
-                             P1_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
-                    sc01 /= (P2_dic[j2][:, :, None, :] *
-                             P1_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
-                    cc10 /= (P1_dic[j2][:, :, None, :] *
-                             P2_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
-                    sc10 /= (P1_dic[j2][:, :, None, :] *
-                             P2_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
+                    if norm is not None:
+                        cc01 /= (P2_dic[j2][:, :, None, :] *
+                                 P1_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
+                        sc01 /= (P2_dic[j2][:, :, None, :] *
+                                 P1_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
+                        cc10 /= (P1_dic[j2][:, :, None, :] *
+                                 P2_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
+                        sc10 /= (P1_dic[j2][:, :, None, :] *
+                                 P2_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
                     ### Store C01 and C10 as a complex [Nbatch, Nmask, NC01, Norient3, Norient2]
                     if C01 is None:
                         C01 = self.bk_concat([self.bk_complex(cc01[:, :, None, :, :], sc01[:, :, None, :, :])],
@@ -524,12 +556,13 @@ class funct(FOC.FoCUS):
                                                        sM2convPsi_dic=None
                                                        )  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
                         ### Normalize C11 with P00_j [Nbatch, Nmask, Norient_j]
-                        cc11 /= (P1_dic[j1][:, :, None, None, :] *
-                                 P1_dic[j2][:, :, None, :,
-                                 None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
-                        sc11 /= (P1_dic[j1][:, :, None, None, :] *
-                                 P1_dic[j2][:, :, None, :,
-                                 None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
+                        if norm is not None:
+                            cc11 /= (P1_dic[j1][:, :, None, None, :] *
+                                     P1_dic[j2][:, :, None, :,
+                                     None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
+                            sc11 /= (P1_dic[j1][:, :, None, None, :] *
+                                     P1_dic[j2][:, :, None, :,
+                                     None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
                         ### Store C11 as a complex [Nbatch, Nmask, NC11, Norient3, Norient2, Norient1]
                         if C11 is None:
                             C11 = self.bk_complex(cc11[:, :, None, :, :, :],
@@ -549,10 +582,11 @@ class funct(FOC.FoCUS):
                                                        sM2convPsi_dic=sM2convPsi_dic
                                                        )  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
                         ### Normalize C11 with P00_j [Nbatch, Nmask, Norient_j]
-                        cc11 /= (P1_dic[j1][:, :, None, None, :] *
-                                 P2_dic[j2][:, :, None, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
-                        sc11 /= (P1_dic[j1][:, :, None, None, :] *
-                                 P2_dic[j2][:, :, None, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
+                        if norm is not None:
+                            cc11 /= (P1_dic[j1][:, :, None, None, :] *
+                                     P2_dic[j2][:, :, None, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
+                            sc11 /= (P1_dic[j1][:, :, None, None, :] *
+                                     P2_dic[j2][:, :, None, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
                         ### Store C11 as a complex [Nbatch, Nmask, NC11, Norient3, Norient2, Norient1]
                         if C11 is None:
                             C11 = self.bk_complex(cc11[:, :, None, :, :, :],
@@ -576,7 +610,6 @@ class funct(FOC.FoCUS):
                     I2 = self.ud_grade_2(I2_smooth, axis=1)
 
                 ### Modules
-                # !!! je sais pas pourquoi ici il faut mettre j3+1 alors qu'au dessus c'est j3
                 for j2 in range(0, j3 + 1):  # j2 =< j3
                     ### Dictionary M1_dic[j2]
                     M1_smooth = self.smooth(M1_dic[j2], axis=1)  # [Nbatch, Npix_j3, Norient3]
@@ -592,14 +625,21 @@ class funct(FOC.FoCUS):
                 ### NSIDE_j3
                 nside_j3 = nside_j3 // 2
 
-        ###### Normalize S1 and P00
-        #P00 = self.bk_log(P00)
-        
+        ### Store P1_dic and P2_dic in self
+        if (norm == 'auto') and (self.P1_dic is None):
+            self.P1_dic = P1_dic
+            if cross:
+                self.P2_dic = P2_dic
+
         if not cross:
-            # S1 = self.bk_log(S1)
             return scat_cov(P00, C01, C11, s1=S1)
         else:
             return scat_cov(P00, C01, C11, c10=C10)
+
+    def clean_norm(self):
+        self.P1_dic = None
+        self.P2_dic = None
+        return
 
     def _compute_C01(self, j2, cconv, sconv,
                      vmask, M_dic,
