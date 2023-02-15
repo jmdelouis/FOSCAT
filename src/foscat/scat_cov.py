@@ -379,15 +379,14 @@ class funct(FOC.FoCUS):
             M2_dic = {}
 
         # P00 for normalization
-        cond_init_P1_dic = (norm == 'self') or ((norm == 'auto') and (self.P1_dic is None))
-        cond_take_self_P1_dic = (norm == 'auto') and (self.P1_dic is not None)
+        cond_init_P1_dic = ((norm == 'self') or ((norm == 'auto') and (self.P1_dic is None)))
         if norm is None:
             pass
         elif cond_init_P1_dic:
             P1_dic = {}
             if cross:
                 P2_dic = {}
-        elif cond_take_self_P1_dic:
+        elif (norm == 'auto') and (self.P1_dic is not None):
             P1_dic = self.P1_dic
             if cross:
                 P2_dic = self.P2_dic
