@@ -67,6 +67,10 @@ class FoCUS:
                  mpi_size=1,
                  mpi_rank=0):
 
+        # P00 coeff for normalization for scat_cov
+        self.P1_dic = None
+        self.P2_dic = None
+
         self.TENSORFLOW=1
         self.TORCH=2
         self.NUMPY=3

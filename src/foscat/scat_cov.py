@@ -8,11 +8,12 @@ def read(filename):
 
 
 class scat_cov:
-    def __init__(self, p00, c01, c11, s1=None):
+    def __init__(self, p00, c01, c11, s1=None, c10=None):
         self.P00 = p00
         self.C01 = c01
         self.C11 = c11
         self.S1 = s1
+        self.C10 = c10
 
     def get_S1(self):
         return self.S1
@@ -22,6 +23,9 @@ class scat_cov:
 
     def get_C01(self):
         return self.C01
+
+    def get_C10(self):
+        return self.C10
 
     def get_C11(self):
         return self.C11
@@ -38,16 +42,24 @@ class scat_cov:
             else:
                 s1 = self.S1 + other
 
+        if self.C10 is None:
+            c10 = None
+        else:
+            if isinstance(other, scat_cov):
+                c10 = self.C10 + other.C10
+            else:
+                c10 = self.C10 + other
+
         if isinstance(other, scat_cov):
             return scat_cov((self.P00 + other.P00),
                             (self.C01 + other.C01),
                             (self.C11 + other.C11),
-                            s1=s1)
+                            s1=s1, c10=c10)
         else:
             return scat_cov((self.P00 + other),
                             (self.C01 + other),
                             (self.C11 + other),
-                            s1=s1)
+                            s1=s1, c10=c10)
 
     def __truediv__(self, other):
         assert isinstance(other, float) or isinstance(other, int) or \
@@ -61,17 +73,24 @@ class scat_cov:
             else:
                 s1 = self.S1 / other
 
+        if self.C10 is None:
+            c10 = None
+        else:
+            if isinstance(other, scat_cov):
+                c10 = self.C10 / other.C10
+            else:
+                c10 = self.C10 / other
+
         if isinstance(other, scat_cov):
             return scat_cov((self.P00 / other.P00),
                             (self.C01 / other.C01),
                             (self.C11 / other.C11),
-                            s1=s1)
+                            s1=s1, c10=c10)
         else:
             return scat_cov((self.P00 / other),
                             (self.C01 / other),
                             (self.C11 / other),
-                            s1=s1)
-
+                            s1=s1, c10=c10)
 
     def __rtruediv__(self, other):
         assert isinstance(other, float) or isinstance(other, int) or \
@@ -85,16 +104,24 @@ class scat_cov:
             else:
                 s1 = self.S1 / other
 
+        if self.C10 is None:
+            c10 = None
+        else:
+            if isinstance(other, scat_cov):
+                c10 = self.C10 / other.C10
+            else:
+                c10 = self.C10 / other
+
         if isinstance(other, scat_cov):
             return scat_cov((self.P00 / other.P00),
                             (self.C01 / other.C01),
                             (self.C11 / other.C11),
-                            s1=s1)
+                            s1=s1, c10=c10)
         else:
             return scat_cov((self.P00 / other),
                             (self.C01 / other),
                             (self.C11 / other),
-                            s1=s1)
+                            s1=s1, c10=c10)
 
     def __sub__(self, other):
         assert isinstance(other, float) or isinstance(other, int) or \
@@ -108,20 +135,30 @@ class scat_cov:
                     s1 = None
                 else:
                     s1 = self.S1 - other.S1
-
             else:
                 s1 = self.S1 - other
+
+        if self.C10 is None:
+            c10 = None
+        else:
+            if isinstance(other, scat_cov):
+                if other.C10 is None:
+                    c10 = None
+                else:
+                    c10 = self.C10 - other.C10
+            else:
+                c10 = self.C10 - other
 
         if isinstance(other, scat_cov):
             return scat_cov((self.P00 - other.P00),
                             (self.C01 - other.C01),
                             (self.C11 - other.C11),
-                            s1=s1)
+                            s1=s1, c10=c10)
         else:
             return scat_cov((self.P00 - other),
                             (self.C01 - other),
                             (self.C11 - other),
-                            s1=s1)
+                            s1=s1, c10=c10)
 
     def __mul__(self, other):
         assert isinstance(other, float) or isinstance(other, int) or \
@@ -135,16 +172,24 @@ class scat_cov:
             else:
                 s1 = self.S1 * other
 
+        if self.C10 is None:
+            c10 = None
+        else:
+            if isinstance(other, scat_cov):
+                c10 = self.C10 * other.C10
+            else:
+                c10 = self.C10 * other
+
         if isinstance(other, scat_cov):
             return scat_cov((self.P00 * other.P00),
                             (self.C01 * other.C01),
                             (self.C11 * other.C11),
-                            s1=s1)
+                            s1=s1, c10=c10)
         else:
             return scat_cov((self.P00 * other),
                             (self.C01 * other),
                             (self.C11 * other),
-                            s1=s1)
+                            s1=s1, c10=c10)
 
     def plot(self, name=None, hold=True, color='blue', lw=1):
 
@@ -161,14 +206,19 @@ class scat_cov:
             plt.plot(abs(self.get_np(self.S1)).flatten(), color=color, label=r'%s $S_1$' % (name), lw=lw)
             plt.yscale('log')
             plt.legend()
+
         plt.subplot(2, 2, 2)
         plt.plot(abs(self.get_np(self.P00)).flatten(), color=color, label=r'%s $P_{00}$' % (name), lw=lw)
         plt.yscale('log')
         plt.legend()
+
         plt.subplot(2, 2, 3)
         plt.plot(abs(self.get_np(self.C01)).flatten(), color=color, label=r'%s $C_{01}$' % (name), lw=lw)
+        if self.C10 is not None:
+            plt.plot(abs(self.get_np(self.C10)).flatten(), color=color, label=r'%s $C_{10}$' % (name), lw=lw)
         plt.yscale('log')
         plt.legend()
+
         plt.subplot(2, 2, 4)
         plt.plot(abs(self.get_np(self.C11)).flatten(), color=color, label=r'%s $C_{11}$' % (name), lw=lw)
         plt.yscale('log')
@@ -181,8 +231,10 @@ class scat_cov:
             return x.numpy()
 
     def save(self, filename):
-        if self.S1 is not None:
+        if self.S1 is not None:  # Auto
             np.save('%s_s1.npy' % filename, self.get_S1().numpy())
+        else:  # Cross
+            np.save('%s_c10.npy' % filename, self.get_C10().numpy())
         np.save('%s_c01.npy' % filename, self.get_C01().numpy())
         np.save('%s_c11.npy' % filename, self.get_C11().numpy())
         np.save('%s_p0.npy' % filename, self.get_P00().numpy())
@@ -193,16 +245,45 @@ class scat_cov:
         except:
             s1 = None
 
+        try:
+            c10 = np.load('%s_c10.npy' % filename)
+        except:
+            c10 = None
+
         c01 = np.load('%s_c01.npy' % filename)
         c11 = np.load('%s_c11.npy' % filename)
         p0 = np.load('%s_p0.npy' % filename)
 
-        return scat_cov(p0, c01, c11, s1=s1)
+        return scat_cov(p0, c01, c11, s1=s1, c10=c10)
 
+    def std(self):
+        if self.S1 is not None:  # Auto
+            return np.sqrt(((abs(self.get_np(self.S1)).std()) ** 2 +
+                            (abs(self.get_np(self.C01)).std()) ** 2 +
+                            (abs(self.get_np(self.C11)).std()) ** 2 +
+                            (abs(self.get_np(self.P00)).std()) ** 2 ) / 4)
+        else:  # Cross
+            return np.sqrt(((abs(self.get_np(self.C01)).std()) ** 2 +
+                            (abs(self.get_np(self.C10)).std()) ** 2 +
+                            (abs(self.get_np(self.C11)).std()) ** 2 +
+                            (abs(self.get_np(self.P00)).std()) ** 2) / 4)
+
+    def mean(self):
+        if self.S1 is not None:  # Auto
+            return (abs(self.get_np(self.S1)).mean() +
+                    abs(self.get_np(self.C01)).mean() +
+                    abs(self.get_np(self.C11)).mean() +
+                    abs(self.get_np(self.P00)).mean()) / 4
+        else:  # Cross
+            return (abs(self.get_np(self.C01)).mean() +
+                    abs(self.get_np(self.C10)).mean() +
+                    abs(self.get_np(self.C11)).mean() +
+                    abs(self.get_np(self.P00)).mean()) / 4
+        
 
 class funct(FOC.FoCUS):
 
-    def eval(self, image1, image2=None, mask=None, Imaginary=True):
+    def eval(self, image1, image2=None, mask=None, norm=None):
         """
         Calculates the scattering correlations for a batch of images. Mean are done over pixels.
         mean of modulus:
@@ -224,6 +305,9 @@ class funct(FOC.FoCUS):
         image2: tensor
             Second image. If not None, we compute cross-scattering covariance coefficients.
         mask:
+        norm: None or str
+            If None no normalization is applied, if 'auto' normalize by the reference P00,
+            if 'self' normalize by the current P00.
         Returns
         -------
         S1, P00, C01, C11 normalized
@@ -285,17 +369,33 @@ class funct(FOC.FoCUS):
         # Normalize the masks because they have different pixel numbers
         # vmask /= self.bk_reduce_sum(vmask, axis=1)[:, None]  # [Nmask, Npix]
 
-        ### COEFFS INITIALIZATION
-        S1, P00, C01, C11 = None, None, None, None
+        ### INITIALIZATION
+        # Coefficients
+        S1, P00, C01, C11, C10 = None, None, None, None, None
+
+        # Dictionaries for C01 computation
         M1_dic = {}  # M stands for Module M1 = |I1 * Psi|
-        P1_dic = {}  # P1_dic will store P00 of image 1 for C01, C11 normalizations
         if cross:
-            M2_dic, P2_dic = {}, {}
+            M2_dic = {}
+
+        # P00 for normalization
+        cond_init_P1_dic = ((norm == 'self') or ((norm == 'auto') and (self.P1_dic is None)))
+        if norm is None:
+            pass
+        elif cond_init_P1_dic:
+            P1_dic = {}
+            if cross:
+                P2_dic = {}
+        elif (norm == 'auto') and (self.P1_dic is not None):
+            P1_dic = self.P1_dic
+            if cross:
+                P2_dic = self.P2_dic
 
         #### COMPUTE S1, P00, C01 and C11
         nside_j3 = nside  # NSIDE start (nside_j3 = nside / 2^j3)
         for j3 in range(Jmax):
 
+            ####### S1 and P00
             ### Make the convolution I1 * Psi_j3
             cconv1, sconv1 = self.convol(I1, axis=1)  # [Nbatch, Npix_j3, Norient3]
             ### Take the module M1 = |I1 * Psi_j3|
@@ -304,24 +404,16 @@ class funct(FOC.FoCUS):
             # Store M1_j3 in a dictionary
             M1_dic[j3] = self.update_R_border(M1, axis=axis)
 
-            if cross:
-                ### Make the convolution I2 * Psi_j3
-                cconv2, sconv2 = self.convol(I2, axis=1)  # [Nbatch, Npix_j3, Norient3]
-                ### Take the module M2 = |I2 * Psi_j3|
-                M2_square = cconv2 * cconv2 + sconv2 * sconv2  # [Nbatch, Npix_j3, Norient3]
-                M2 = self.bk_sqrt(M2_square)  # [Nbatch, Npix_j3, Norient3]
-                # Store M2_j3 in a dictionary
-                M2_dic[j3] = self.update_R_border(M2, axis=axis)
-            
-            ####### S1 and P00
-            ### P00_auto = < M1^2 >_pix
-            # Apply the mask [Nmask, Npix_j3] and average over pixels
-            p00 = self.bk_masked_mean(M1_square, vmask, axis=1)
+            if not cross:  # Auto
+                ### P00_auto = < M1^2 >_pix
+                # Apply the mask [Nmask, Npix_j3] and average over pixels
+                p00 = self.bk_masked_mean(M1_square, vmask, axis=1)
+                if cond_init_P1_dic:
+                    # We fill P1_dic with P00 for normalisation of C01 and C11
+                    P1_dic[j3] = p00  # [Nbatch, Nmask, Norient3]
+                if norm == 'auto':  # Normalize P00
+                    p00 /= P1_dic[j3]
 
-            # We store it for normalisation of C01 and C11
-            P1_dic[j3] = p00  # [Nbatch, Nmask, Norient3]
-
-            if not cross:
                 # We store P00_auto to return it [Nbatch, Nmask, NP00, Norient3]
                 if P00 is None:
                     P00 = p00[:, :, None, :]  # Add a dimension for NP00
@@ -332,17 +424,33 @@ class funct(FOC.FoCUS):
                 ### Image 1 : S1 = < M1 >_pix
                 # Apply the mask [Nmask, Npix_j3] and average over pixels
                 s1 = self.bk_masked_mean(M1, vmask, axis=1)  # [Nbatch, Nmask, Norient3]
+                ### Normalize S1
+                if norm is not None:
+                    s1 /= (P1_dic[j3]) ** 0.5
                 ### We store S1 for image1  [Nbatch, Nmask, NS1, Norient3]
                 if S1 is None:
                     S1 = s1[:, :, None, :]  # Add a dimension for NS1
                 else:
                     S1 = self.bk_concat([S1, s1[:, :, None, :]], axis=2)
 
-            else:
+            else:  # Cross
+                ### Make the convolution I2 * Psi_j3
+                cconv2, sconv2 = self.convol(I2, axis=1)  # [Nbatch, Npix_j3, Norient3]
+                ### Take the module M2 = |I2 * Psi_j3|
+                M2_square = cconv2 * cconv2 + sconv2 * sconv2  # [Nbatch, Npix_j3, Norient3]
+                M2 = self.bk_sqrt(M2_square)  # [Nbatch, Npix_j3, Norient3]
+                # Store M2_j3 in a dictionary
+                M2_dic[j3] = self.update_R_border(M2, axis=axis)
+
                 ### P00_auto = < M2^2 >_pix
-                p00 = self.bk_masked_mean(M2_square, vmask, axis=1)  # [Nbatch, Nmask, Norient3]
-                # We store it for normalisation
-                P2_dic[j3] = p00  # [Nbatch, Nmask, Norient3]
+                # Not returned, only for normalization
+                if cond_init_P1_dic:
+                    # Apply the mask [Nmask, Npix_j3] and average over pixels
+                    p1 = self.bk_masked_mean(M1_square, vmask, axis=1)  # [Nbatch, Nmask, Norient3]
+                    p2 = self.bk_masked_mean(M2_square, vmask, axis=1)  # [Nbatch, Nmask, Norient3]
+                    # We fill P1_dic with P00 for normalisation of C01 and C11
+                    P1_dic[j3] = p1  # [Nbatch, Nmask, Norient3]
+                    P2_dic[j3] = p2  # [Nbatch, Nmask, Norient3]
 
                 ### P00_cross = < (I1 * Psi_j3) (I2 * Psi_j3)^* >_pix
                 # z_1 x z_2^* = (a1a2 + b1b2) + i(b1a2 - a1b2)
@@ -352,7 +460,11 @@ class funct(FOC.FoCUS):
                 p00_real = self.bk_masked_mean(p00_real, vmask, axis=1)
                 p00_imag = self.bk_masked_mean(p00_imag, vmask, axis=1)
 
-                ### We store P00_cross as complex [Nbatch, Nmask, NP00, Norient3]
+                ### Normalize P00_cross
+                if norm == 'auto':
+                    p00_real /= (P1_dic[j3] * P2_dic[j3])**0.5
+
+                ### Store P00_cross as complex [Nbatch, Nmask, NP00, Norient3]
                 if P00 is None:
                     P00 = self.bk_complex(p00_real[:, :, None, :],
                                           p00_imag[:, :, None, :])  # Add a dimension for NP00
@@ -379,10 +491,11 @@ class funct(FOC.FoCUS):
                                                    cM1convPsi_dic,
                                                    sM1convPsi_dic)  # [Nbatch, Nmask, Norient3, Norient2]
                     ### Normalize C01 with P00_j [Nbatch, Nmask, Norient_j]
-                    cc01 /= (P1_dic[j2][:, :, None, :] *
-                             P1_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
-                    sc01 /= (P1_dic[j2][:, :, None, :] *
-                             P1_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
+                    if norm is not None:
+                        cc01 /= (P1_dic[j2][:, :, None, :] *
+                                 P1_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
+                        sc01 /= (P1_dic[j2][:, :, None, :] *
+                                 P1_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
                     ### Store C01 as a complex [Nbatch, Nmask, NC01, Norient3, Norient2]
                     if C01 is None:
                         C01 = self.bk_concat([self.bk_complex(cc01[:, :, None, :, :], sc01[:, :, None, :, :])],
@@ -392,37 +505,44 @@ class funct(FOC.FoCUS):
                                              axis=2)  # Add a dimension for NC01
 
                 ### C01_cross = < (I1 * Psi)_j3 x (|I2 * Psi_j2| * Psi_j3)^* >_pix
-                ### C01_cross_inv = < (I2 * Psi)_j3 x (|I1 * Psi_j2| * Psi_j3)^* >_pix
+                ### C10_cross = < (I2 * Psi)_j3 x (|I1 * Psi_j2| * Psi_j3)^* >_pix
                 else:
                     cc01, sc01 = self._compute_C01(j2,
                                                    cconv1, sconv1,
                                                    vmask,
                                                    M2_dic,
                                                    cM2convPsi_dic, sM2convPsi_dic)
-                    cc01_inv, sc01_inv = self._compute_C01(j2,
-                                                           cconv2, sconv2,
-                                                           vmask,
-                                                           M1_dic,
-                                                           cM1convPsi_dic, sM1convPsi_dic)
-                    ### Normalize C01 with P00_j [Nbatch, Nmask, Norient_j]
-                    cc01 /= (P2_dic[j2][:, :, None, :] *
-                             P1_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
-                    sc01 /= (P2_dic[j2][:, :, None, :] *
-                             P1_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
-                    cc01_inv /= (P1_dic[j2][:, :, None, :] *
+                    cc10, sc10 = self._compute_C01(j2,
+                                                   cconv2, sconv2,
+                                                   vmask,
+                                                   M1_dic,
+                                                   cM1convPsi_dic, sM1convPsi_dic)
+                    ### Normalize C01 and C10 with P00_j [Nbatch, Nmask, Norient_j]
+                    if norm is not None:
+                        cc01 /= (P2_dic[j2][:, :, None, :] *
+                                 P1_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
+                        sc01 /= (P2_dic[j2][:, :, None, :] *
+                                 P1_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
+                        cc10 /= (P1_dic[j2][:, :, None, :] *
                                  P2_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
-                    sc01_inv /= (P1_dic[j2][:, :, None, :] *
+                        sc10 /= (P1_dic[j2][:, :, None, :] *
                                  P2_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
-                    ### Store C01 as a complex [Nbatch, Nmask, NC01, Norient3, Norient2]
+                    ### Store C01 and C10 as a complex [Nbatch, Nmask, NC01, Norient3, Norient2]
                     if C01 is None:
-                        C01 = self.bk_concat([self.bk_complex(cc01[:, :, None, :, :], sc01[:, :, None, :, :]),
-                                              self.bk_complex(cc01_inv[:, :, None, :, :], sc01_inv[:, :, None, :, :])],
+                        C01 = self.bk_concat([self.bk_complex(cc01[:, :, None, :, :], sc01[:, :, None, :, :])],
                                              axis=2)  # Add a dimension for NC01
                     else:
                         C01 = self.bk_concat([C01,
-                                              self.bk_complex(cc01[:, :, None, :, :], sc01[:, :, None, :, :]),
-                                              self.bk_complex(cc01_inv[:, :, None, :, :], sc01_inv[:, :, None, :, :])],
+                                              self.bk_complex(cc01[:, :, None, :, :], sc01[:, :, None, :, :])],
+                                              axis=2)  # Add a dimension for NC01
+                    if C10 is None:
+                        C10 = self.bk_concat([self.bk_complex(cc10[:, :, None, :, :], sc10[:, :, None, :, :])],
                                              axis=2)  # Add a dimension for NC01
+                    else:
+                        C10 = self.bk_concat([C10,
+                                             self.bk_complex(cc10[:, :, None, :, :], sc10[:, :, None, :, :])],
+                                             axis=2)  # Add a dimension for NC01
+
 
                 ##### C11
                 for j1 in range(0, j2):  # j1 < j2
@@ -435,12 +555,13 @@ class funct(FOC.FoCUS):
                                                        sM2convPsi_dic=None
                                                        )  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
                         ### Normalize C11 with P00_j [Nbatch, Nmask, Norient_j]
-                        cc11 /= (P1_dic[j1][:, :, None, None, :] *
-                                 P1_dic[j2][:, :, None, :,
-                                 None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
-                        sc11 /= (P1_dic[j1][:, :, None, None, :] *
-                                 P1_dic[j2][:, :, None, :,
-                                 None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
+                        if norm is not None:
+                            cc11 /= (P1_dic[j1][:, :, None, None, :] *
+                                     P1_dic[j2][:, :, None, :,
+                                     None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
+                            sc11 /= (P1_dic[j1][:, :, None, None, :] *
+                                     P1_dic[j2][:, :, None, :,
+                                     None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
                         ### Store C11 as a complex [Nbatch, Nmask, NC11, Norient3, Norient2, Norient1]
                         if C11 is None:
                             C11 = self.bk_complex(cc11[:, :, None, :, :, :],
@@ -460,10 +581,11 @@ class funct(FOC.FoCUS):
                                                        sM2convPsi_dic=sM2convPsi_dic
                                                        )  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
                         ### Normalize C11 with P00_j [Nbatch, Nmask, Norient_j]
-                        cc11 /= (P1_dic[j1][:, :, None, None, :] *
-                                 P2_dic[j2][:, :, None, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
-                        sc11 /= (P1_dic[j1][:, :, None, None, :] *
-                                 P2_dic[j2][:, :, None, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
+                        if norm is not None:
+                            cc11 /= (P1_dic[j1][:, :, None, None, :] *
+                                     P2_dic[j2][:, :, None, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
+                            sc11 /= (P1_dic[j1][:, :, None, None, :] *
+                                     P2_dic[j2][:, :, None, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
                         ### Store C11 as a complex [Nbatch, Nmask, NC11, Norient3, Norient2, Norient1]
                         if C11 is None:
                             C11 = self.bk_complex(cc11[:, :, None, :, :, :],
@@ -487,7 +609,6 @@ class funct(FOC.FoCUS):
                     I2 = self.ud_grade_2(I2_smooth, axis=1)
 
                 ### Modules
-                # !!! je sais pas pourquoi ici il faut mettre j3+1 alors qu'au dessus c'est j3
                 for j2 in range(0, j3 + 1):  # j2 =< j3
                     ### Dictionary M1_dic[j2]
                     M1_smooth = self.smooth(M1_dic[j2], axis=1)  # [Nbatch, Npix_j3, Norient3]
@@ -503,14 +624,21 @@ class funct(FOC.FoCUS):
                 ### NSIDE_j3
                 nside_j3 = nside_j3 // 2
 
-        ###### Normalize S1 and P00
-        #P00 = self.bk_log(P00)
-        
+        ### Store P1_dic and P2_dic in self
+        if (norm == 'auto') and (self.P1_dic is None):
+            self.P1_dic = P1_dic
+            if cross:
+                self.P2_dic = P2_dic
+
         if not cross:
-            S1 = self.bk_log(S1)
             return scat_cov(P00, C01, C11, s1=S1)
         else:
-            return scat_cov(P00, C01, C11)
+            return scat_cov(P00, C01, C11, c10=C10)
+
+    def clean_norm(self):
+        self.P1_dic = None
+        self.P2_dic = None
+        return
 
     def _compute_C01(self, j2, cconv, sconv,
                      vmask, M_dic,
