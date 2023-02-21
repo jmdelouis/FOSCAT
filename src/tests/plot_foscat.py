@@ -36,6 +36,7 @@ di=np.load(outpath+'/%sdi.npy'%(outname))
 d1=np.load(outpath+'/%sd1.npy'%(outname))
 d2=np.load(outpath+'/%sd2.npy'%(outname))
 rr=np.load(outpath+'/%sresult_%d.npy'%(outname,step))
+print(outpath+'/%sresult_%d.npy'%(outname,step))
 
 try:
     smod=sc.read(outpath+'/%s_cross_%d.npy'%(outname,step))

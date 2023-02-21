@@ -26,11 +26,24 @@ outpath = sys.argv[3]
 nout      = int(sys.argv[4])
 docov     = (sys.argv[5]=='Y')
 
-from mpi4py import MPI
+test_mpi=False
+for ienv in os.environ:
+    if 'OMPI_' in ienv:
+        test_mpi=True
+    if 'PMI_' in ienv:
+        test_mpi=True
+if test_mpi:
+    print('MPI used')
+    from mpi4py import MPI
 
-comm = MPI.COMM_WORLD
-size = comm.Get_size()
-rank = comm.Get_rank()
+    comm = MPI.COMM_WORLD
+    size = comm.Get_size()
+    rank = comm.Get_rank()
+else:
+    print('no MPI use')
+    size=1
+    rank=0
+
 
 #set the nside of input data
 Default_nside=256
@@ -146,11 +159,9 @@ scat_op=sc.funct(NORIENT=4,   # define the number of wavelet orientation
                  OSTEP=-1,     # get very large scale (nside=1)
                  LAMBDA=1.0,
                  all_type='float32',
+                 isMPI=test_mpi,
                  TEMPLATE_PATH=scratch_path,
-                 use_R_format=True,
-                 isMPI=True,
-                 mpi_rank=rank,
-                 mpi_size=size)
+                 use_R_format=True)
 
 if rank==0 or rank==2 or size==1:
     #compute d1xd2
