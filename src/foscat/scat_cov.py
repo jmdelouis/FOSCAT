@@ -21,6 +21,9 @@ class scat_cov:
     def get_P00(self):
         return self.P00
 
+    def reset_P00(self):
+        self.P00=0*self.P00
+
     def get_C01(self):
         return self.C01
 

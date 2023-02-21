@@ -26,7 +26,14 @@ outpath = sys.argv[3]
 nout      = int(sys.argv[4])
 docov     = (sys.argv[5]=='Y')
 
-try:
+test_mpi=False
+for ienv in os.environ:
+    if 'OMPI_' in ienv:
+        test_mpi=True
+    if 'PMI_' in ienv:
+        test_mpi=True
+        
+if test_mpi:
     from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
@@ -35,7 +42,7 @@ try:
     if size>1:
         print('Use mpi facilities')
     isMPI=True
-except:
+else:
     size=1
     rank=0
     isMPI=False
@@ -149,16 +156,25 @@ else:
     
 import foscat.Synthesis as synthe
 
-scat_op=sc.funct(NORIENT=4,   # define the number of wavelet orientation
-                 KERNELSZ=5,  # define the kernel size (here 5x5)
-                 OSTEP=-1,     # get very large scale (nside=1)
-                 LAMBDA=1.0,
-                 all_type='float32',
-                 TEMPLATE_PATH=scratch_path,
-                 use_R_format=True,
-                 isMPI=isMPI,
-                 mpi_rank=rank,
-                 mpi_size=size)
+if isMPI:
+    scat_op=sc.funct(NORIENT=4,   # define the number of wavelet orientation
+                     KERNELSZ=5,  # define the kernel size (here 5x5)
+                     OSTEP=-1,     # get very large scale (nside=1)
+                     LAMBDA=1.0,
+                     all_type='float32',
+                     TEMPLATE_PATH=scratch_path,
+                     use_R_format=True,
+                     isMPI=True,
+                     mpi_rank=rank,
+                     mpi_size=size)
+else:
+    scat_op=sc.funct(NORIENT=4,   # define the number of wavelet orientation
+                     KERNELSZ=5,  # define the kernel size (here 5x5)
+                     OSTEP=-1,     # get very large scale (nside=1)
+                     LAMBDA=1.0,
+                     all_type='float32',
+                     TEMPLATE_PATH=scratch_path,
+                     use_R_format=True)
 
 if rank==0 or rank==2 or size==1:
     #compute d1xd2
@@ -178,7 +194,7 @@ def loss_fct1(x,scat,args):
     mask = args[1]
     isig = args[2]
     
-    b=scat.eval(x,image2=x,mask=mask)
+    b=scat.eval(x,image2=x,mask=mask,Imaginary=False)
 
     l_val=scat.reduce_sum(scat.reduce_mean(isig*scat.square(ref-b)))
 
@@ -235,6 +251,7 @@ for itt in range(5):
 
         bias1=bias1/nsim
         isig1=nsim/isig1
+        bias1.reset_P00()
     
     if rank==1 or size==1:
         #loss2 : Txd = Tx(u+n)
@@ -251,6 +268,8 @@ for itt in range(5):
 
         bias2=bias2/nsim
         isig2=nsim/isig2
+        bias2.reset_P00()
+    
 
     if rank==2 or size==1:
         #loss3 : dxu = (u+n)xu
@@ -264,6 +283,7 @@ for itt in range(5):
 
         bias3=bias3/nsim
         isig3=nsim/isig3
+        bias3.reset_P00()
 
     
     if initb1 is None or initb2 is None or initb3 is None :

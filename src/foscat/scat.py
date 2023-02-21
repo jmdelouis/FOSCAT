@@ -22,6 +22,9 @@ class scat:
     def get_P00(self):
         return(self.P00)
 
+    def reset_P00(self):
+        self.P00=0*self.P00
+
     def __add__(self,other):
         assert isinstance(other, float) or isinstance(other, int) or \
             isinstance(other, bool) or isinstance(other, scat)
