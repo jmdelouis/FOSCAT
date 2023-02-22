@@ -26,7 +26,8 @@ class Synthesis:
                  beta1=0.9,
                  beta2=0.999,
                  epsilon=1e-7,
-                 decay_rate = 0.999):
+                 decay_rate = 0.999,
+                 MAXNUMLOSS=10):
 
         self.loss_class=loss_list
         self.number_of_loss=len(loss_list)
@@ -44,6 +45,7 @@ class Synthesis:
         self.operation=loss_list[0].scat_operator
         self.mpi_size=self.operation.mpi_size
         self.mpi_rank=self.operation.mpi_rank
+        self.MAXNUMLOSS=MAXNUMLOSS
     
     # ---------------------------------------------−---------
     def get_gpu(self,event,delay):
@@ -207,6 +209,9 @@ class Synthesis:
             
         if self.mpi_rank==0:
             print('Total number of loss ',total_num_loss)
+        
+        l_log=-np.ones([self.mpi_size*self.MAXNUMLOSS],dtype='float32')
+        ltot=-np.ones([self.mpi_size*self.MAXNUMLOSS],dtype='float32')
             
         for itt in range(NUM_EPOCHS):
             g_tot=None
@@ -219,9 +224,8 @@ class Synthesis:
                     g_tot=g_tot+g
                 l_tot=l_tot+l.numpy()
                 
-            l_log=np.zeros([self.mpi_size],dtype='float32')
-            ltot=np.zeros([self.mpi_size],dtype='float32')
-            l_log[self.mpi_rank]=l.numpy()
+            
+                l_log[self.mpi_rank*self.MAXNUMLOSS+k]=l.numpy()
             
             if self.mpi_size==1:
                 ltot=l_log
@@ -240,16 +244,16 @@ class Synthesis:
                 new_log[0:self.nlog]=self.history
                 self.history=new_log
                 
-            self.history[self.nlog]=ltot.sum()
+            self.history[self.nlog]=ltot[ltot!=-1].sum()
             self.nlog=self.nlog+1
                 
             x=x-self.update(grad)
             
             if itt%EVAL_FREQUENCY==0 and self.mpi_rank==0:
                 end = time.time()
-                cur_loss='%.3g ('%(ltot.sum())
-                for k in range(ltot.shape[0]):
-                    cur_loss=cur_loss+'%.3g '%(ltot[k])
+                cur_loss='%.3g ('%(ltot[ltot!=-1].sum())
+                for k in ltot[ltot!=-1]:
+                    cur_loss=cur_loss+'%.3g '%(k)
                 cur_loss=cur_loss+')'
                 
                 info_gpu=self.getgpumem()

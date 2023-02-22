@@ -286,7 +286,7 @@ class scat_cov:
 
 class funct(FOC.FoCUS):
 
-    def eval(self, image1, image2=None, mask=None, norm=None):
+    def eval(self, image1, image2=None, mask=None, norm=None, Auto=True):
         """
         Calculates the scattering correlations for a batch of images. Mean are done over pixels.
         mean of modulus:
@@ -311,6 +311,9 @@ class funct(FOC.FoCUS):
         norm: None or str
             If None no normalization is applied, if 'auto' normalize by the reference P00,
             if 'self' normalize by the current P00.
+        all_cross: False or True
+            If False compute all the coefficient even the Imaginary part,
+            If True return only the terms computable in the auto case.
         Returns
         -------
         S1, P00, C01, C11 normalized
@@ -319,6 +322,9 @@ class funct(FOC.FoCUS):
         cross = False
         if image2 is not None:
             cross = True
+            all_cross=Auto
+        else:
+            all_cross=False
 
         ### PARAMETERS
         axis = 1
@@ -468,12 +474,18 @@ class funct(FOC.FoCUS):
                     p00_real /= (P1_dic[j3] * P2_dic[j3])**0.5
 
                 ### Store P00_cross as complex [Nbatch, Nmask, NP00, Norient3]
-                if P00 is None:
-                    P00 = self.bk_complex(p00_real[:, :, None, :],
-                                          p00_imag[:, :, None, :])  # Add a dimension for NP00
+                if all_cross:
+                    if P00 is None:
+                        P00 = self.bk_complex(p00_real[:, :, None, :],
+                                              p00_imag[:, :, None, :])  # Add a dimension for NP00
+                    else:
+                        P00 = self.bk_concat([P00, self.bk_complex(p00_real[:, :, None, :],
+                                                                   p00_imag[:, :, None, :])], axis=2)
                 else:
-                    P00 = self.bk_concat([P00, self.bk_complex(p00_real[:, :, None, :],
-                                                               p00_imag[:, :, None, :])], axis=2)
+                    if P00 is None:
+                        P00 = p00_real[:, :, None, :]  # Add a dimension for NP00
+                    else:
+                        P00 = self.bk_concat([P00, p00_real[:, :, None, :]], axis=2)
 
             # Initialize dictionaries for |I1*Psi_j| * Psi_j3
             cM1convPsi_dic = {}
@@ -501,11 +513,10 @@ class funct(FOC.FoCUS):
                                  P1_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
                     ### Store C01 as a complex [Nbatch, Nmask, NC01, Norient3, Norient2]
                     if C01 is None:
-                        C01 = self.bk_concat([self.bk_complex(cc01[:, :, None, :, :], sc01[:, :, None, :, :])],
-                                             axis=2)  # Add a dimension for NC01
+                        C01 = self.bk_complex(cc01[:, :, None, :, :], sc01[:, :, None, :, :])  # Add a dimension for NC01
                     else:
                         C01 = self.bk_concat([C01, self.bk_complex(cc01[:, :, None, :, :], sc01[:, :, None, :, :])],
-                                             axis=2)  # Add a dimension for NC01
+                                                 axis=2)  # Add a dimension for NC01
 
                 ### C01_cross = < (I1 * Psi)_j3 x (|I2 * Psi_j2| * Psi_j3)^* >_pix
                 ### C10_cross = < (I2 * Psi)_j3 x (|I1 * Psi_j2| * Psi_j3)^* >_pix
@@ -537,14 +548,15 @@ class funct(FOC.FoCUS):
                     else:
                         C01 = self.bk_concat([C01,
                                               self.bk_complex(cc01[:, :, None, :, :], sc01[:, :, None, :, :])],
-                                              axis=2)  # Add a dimension for NC01
+                                             axis=2)  # Add a dimension for NC01
                     if C10 is None:
                         C10 = self.bk_concat([self.bk_complex(cc10[:, :, None, :, :], sc10[:, :, None, :, :])],
                                              axis=2)  # Add a dimension for NC01
                     else:
                         C10 = self.bk_concat([C10,
-                                             self.bk_complex(cc10[:, :, None, :, :], sc10[:, :, None, :, :])],
+                                              self.bk_complex(cc10[:, :, None, :, :], sc10[:, :, None, :, :])],
                                              axis=2)  # Add a dimension for NC01
+                        
 
 
                 ##### C11

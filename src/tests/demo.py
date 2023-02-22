@@ -11,10 +11,11 @@ import foscat.Synthesis as synthe
 
 def usage():
     print(' This software is a demo of the foscat library:')
-    print('>python demo.py -n=8 [-c|--cov][-s|--steps=3000][-x|--xstat][-p|--p00][-g|--gauss][-k|--k5x5]')
+    print('>python demo.py -n=8 [-c|--cov][-s|--steps=3000][-S=1234|--seed=1234][-x|--xstat][-p|--p00][-g|--gauss][-k|--k5x5]')
     print('-n : is the nside of the input map (nside max = 256 with the default map)')
     print('--cov (optional): use scat_cov instead of scat.')
     print('--steps (optional): number of iteration, if not specified 1000.')
+    print('--seed  (optional): seed of the random generator.')
     print('--xstat (optional): work with cross statistics.')
     print('--p00   (optional): Loss only computed on p00.')
     print('--gauss (optional): convert Venus map in gaussian field.')
@@ -23,8 +24,8 @@ def usage():
     
 def main():
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "n:cs:xpgk", \
-                                   ["nside", "cov","steps","xstat","p00","gauss","k5x5"])
+        opts, args = getopt.getopt(sys.argv[1:], "n:cS:s:xpgk", \
+                                   ["nside", "cov","seed","steps","xstat","p00","gauss","k5x5"])
     except getopt.GetoptError as err:
         # print help information and exit:
         print(err)  # will print something like "option -a not recognized"
@@ -38,6 +39,7 @@ def main():
     dop00=False
     dogauss=False
     KERNELSZ=3
+    seed=1234
     
     for o, a in opts:
         if o in ("-c","--cov"):
@@ -46,6 +48,9 @@ def main():
             nside=int(a[1:])
         elif o in ("-s", "--steps"):
             nstep=int(a[1:])
+        elif o in ("-S", "--seed"):
+            seed=int(a[1:])
+            print('Use SEED = ',seed)
         elif o in ("-x", "--xstat"):
             docross=True
         elif o in ("-g", "--gauss"):
@@ -59,6 +64,7 @@ def main():
 
     if nside<2 or nside!=2**(int(np.log(nside)/np.log(2))) or nside>256:
         print('nside should be a power of 2 and in [2,...,256]')
+        usage()
         exit(0)
 
     print('Work with nside=%d'%(nside))
@@ -90,16 +96,23 @@ def main():
     # Get data
     #=================================================================================
     im=dodown(np.load('Venus_256.npy'),nside)
+    
+    #=================================================================================
+    # Generate a random noise with the same coloured than the input data
+    #=================================================================================
 
+    idx=hp.ring2nest(nside,np.arange(12*nside*nside))
+    idx1=hp.nest2ring(nside,np.arange(12*nside*nside))
+    cl=hp.anafast(im[idx])
+    
     if dogauss:
-        idx=hp.ring2nest(nside,np.arange(12*nside*nside))
-        idx1=hp.nest2ring(nside,np.arange(12*nside*nside))
-        cl=hp.anafast(im[idx])
+        np.random.seed(seed+1)
         im=hp.synfast(cl,nside)[idx1]
-
         hp.mollview(im,cmap='jet',nest=True)
         plt.show()
-    
+        
+    np.random.seed(seed)
+    imap=hp.synfast(cl,nside)[idx1]
 
     lam=1.2
     if KERNELSZ==5:
@@ -114,6 +127,7 @@ def main():
                      TEMPLATE_PATH=scratch_path,
                      slope=1.0,
                      gpupos=2,
+                     use_R_format=True,
                      all_type='float32')
     
     #=================================================================================
@@ -144,7 +158,6 @@ def main():
     else:
         refX=scat_op.eval(im)
 
-    imap=np.random.randn(12*nside*nside).astype('float32')
     """
     nstep=refX.P00.shape[2]
     for i in range(nstep):
@@ -170,10 +183,10 @@ def main():
 
     
     omap=sy.run(imap,
-                DECAY_RATE=0.999,
+                DECAY_RATE=0.9999,
                 NUM_EPOCHS = nstep,
                 LEARNING_RATE = 0.3,
-                EPSILON = 1E-7)
+                EPSILON = 1E-10)
 
     #=================================================================================
     # STORE RESULTS
