@@ -149,6 +149,8 @@ for i in range(nsim):
     noise2[i]-=np.mean(noise[i])
     noise[i] -=np.mean(noise[i])
 
+sig_noise=1/(np.std(noise,0)**2)
+
 if docov:
     import foscat.scat_cov as sc
 else:
@@ -158,10 +160,10 @@ import foscat.Synthesis as synthe
 
 if isMPI:
     scat_op=sc.funct(NORIENT=4,   # define the number of wavelet orientation
-                     KERNELSZ=5,  # define the kernel size (here 5x5)
+                     KERNELSZ=3,  # define the kernel size (here 5x5)
                      OSTEP=-1,     # get very large scale (nside=1)
                      LAMBDA=1.0,
-                     all_type='float32',
+                     all_type='float64',
                      TEMPLATE_PATH=scratch_path,
                      use_R_format=True,
                      isMPI=True,
@@ -169,10 +171,10 @@ if isMPI:
                      mpi_size=size)
 else:
     scat_op=sc.funct(NORIENT=4,   # define the number of wavelet orientation
-                     KERNELSZ=5,  # define the kernel size (here 5x5)
+                     KERNELSZ=3,  # define the kernel size (here 5x5)
                      OSTEP=-1,     # get very large scale (nside=1)
                      LAMBDA=1.0,
-                     all_type='float32',
+                     all_type='float64',
                      TEMPLATE_PATH=scratch_path,
                      use_R_format=True)
 
@@ -215,15 +217,18 @@ def loss_fct2(x,scat,args):
 
 def loss_fct3(x,scat,args):
 
-    im   = args[0]
-    bias = args[1]
-    mask = args[2]
-    isig = args[3]
+    ref  = args[0]
+    im   = scat.to_R(args[1])
+    bias = args[2]
+    mask = args[3]
+    isig = args[4]
+    nsig = args[5]
     
     a=scat.eval(im,image2=x,mask=mask,Imaginary=False)-bias
-    b=scat.eval(x,image2=x,mask=mask,Imaginary=False)
     
-    l_val=scat.reduce_sum(scat.reduce_mean(isig*scat.square(a-b)))
+    l_val=scat.reduce_sum(scat.reduce_mean(isig*scat.square(a-ref)))
+
+    l_val=l_val+scat.bk_reduce_mean(nsig*scat.bk_square(im-x))
     
     return(l_val)
 
@@ -269,7 +274,6 @@ for itt in range(5):
         bias2=bias2/nsim
         isig2=nsim/isig2
         bias2.reset_P00()
-    
 
     if rank==2 or size==1:
         #loss3 : dxu = (u+n)xu
@@ -300,9 +304,9 @@ for itt in range(5):
         if rank==0 or size==1:
             print("BIAS DVAR 0 %f"%((bias1-initb1).std()))
         if rank==1 or size==1:
-            print("BIAS DVAR 1 %f"%((bias1-initb1).std()))
+            print("BIAS DVAR 1 %f"%((bias2-initb2).std()))
         if rank==2 or size==1:
-            print("BIAS DVAR 1 %f"%((bias1-initb1).std()))
+            print("BIAS DVAR 2 %f"%((bias3-initb3).std()))
 
     if rank==0 or size==1:
         initb1=bias1
@@ -318,7 +322,7 @@ for itt in range(5):
     if rank==1 or size==1:
         loss2=synthe.Loss(loss_fct2,scat_op,refX-bias2,td,mask,isig2)
     if rank==2 or size==1:
-        loss3=synthe.Loss(loss_fct3,scat_op,di,bias3,mask,isig3)
+        loss3=synthe.Loss(loss_fct3,scat_op,refH-bias1,di,bias3,mask,isig3,sig_noise)
 
     if size==1:
         sy = synthe.Synthesis([loss1,loss2,loss3])
