@@ -158,10 +158,10 @@ import foscat.Synthesis as synthe
 
 if isMPI:
     scat_op=sc.funct(NORIENT=4,   # define the number of wavelet orientation
-                     KERNELSZ=5,  # define the kernel size (here 5x5)
+                     KERNELSZ=3,  # define the kernel size (here 5x5)
                      OSTEP=-1,     # get very large scale (nside=1)
                      LAMBDA=1.0,
-                     all_type='float32',
+                     all_type='float64',
                      TEMPLATE_PATH=scratch_path,
                      use_R_format=True,
                      isMPI=True,
@@ -169,16 +169,16 @@ if isMPI:
                      mpi_size=size)
 else:
     scat_op=sc.funct(NORIENT=4,   # define the number of wavelet orientation
-                     KERNELSZ=5,  # define the kernel size (here 5x5)
+                     KERNELSZ=3,  # define the kernel size (here 5x5)
                      OSTEP=-1,     # get very large scale (nside=1)
                      LAMBDA=1.0,
-                     all_type='float32',
+                     all_type='float64',
                      TEMPLATE_PATH=scratch_path,
                      use_R_format=True)
 
 if rank==0 or rank==2 or size==1:
     #compute d1xd2
-    refH=scat_op.eval(d1,image2=d2,Imaginary=False,mask=mask)
+    refH=scat_op.eval(d1,image2=d2,Auto=True,mask=mask)
 
 if rank==1 or size==1:
     #compute Tdxdi
@@ -194,7 +194,7 @@ def loss_fct1(x,scat,args):
     mask = args[1]
     isig = args[2]
     
-    b=scat.eval(x,image2=x,mask=mask,Imaginary=False)
+    b=scat.eval(x,image2=x,mask=mask,Auto=True)
 
     l_val=scat.reduce_sum(scat.reduce_mean(isig*scat.square(ref-b)))
 
@@ -220,8 +220,8 @@ def loss_fct3(x,scat,args):
     mask = args[2]
     isig = args[3]
     
-    a=scat.eval(im,image2=x,mask=mask,Imaginary=False)-bias
-    b=scat.eval(x,image2=x,mask=mask,Imaginary=False)
+    a=scat.eval(im,image2=x,mask=mask,Auto=True)-bias
+    b=scat.eval(x,image2=x,mask=mask,Auto=True)
     
     l_val=scat.reduce_sum(scat.reduce_mean(isig*scat.square(a-b)))
     
@@ -235,17 +235,17 @@ init_map=(d1+d2)/2
 for itt in range(5):
 
     if rank==0 or rank==2 or size==1:
-        stat1 =scat_op.eval(i1,image2=i2,mask=mask,Imaginary=False)
+        stat1 =scat_op.eval(i1,image2=i2,mask=mask,Auto=True)
         
     if rank==0 or size==1:
         #loss1 : d1xd2 = (u+n1)x(u+n2)
-        stat1_p_noise=scat_op.eval(i1+noise1[0],image2=i2+noise2[0],mask=mask,Imaginary=False)
+        stat1_p_noise=scat_op.eval(i1+noise1[0],image2=i2+noise2[0],mask=mask,Auto=True)
         
         #bias1 = mean(F((d1+n1)*(d2+n2))-F(d1*d2))
         bias1 = stat1_p_noise-stat1
         isig1 = scat_op.square(stat1_p_noise-stat1)
         for k in range(1,nsim):
-            stat1_p_noise=scat_op.eval(i1+noise1[k],image2=i2+noise2[k],mask=mask,Imaginary=False)
+            stat1_p_noise=scat_op.eval(i1+noise1[k],image2=i2+noise2[k],mask=mask,Auto=True)
             bias1 = bias1 + stat1_p_noise-stat1
             isig1 = isig1 + scat_op.square(stat1_p_noise-stat1)
 
@@ -273,11 +273,11 @@ for itt in range(5):
 
     if rank==2 or size==1:
         #loss3 : dxu = (u+n)xu
-        stat3_p_noise=scat_op.eval(i1+noise[0],image2=i2,mask=mask,Imaginary=False)
+        stat3_p_noise=scat_op.eval(i1+noise[0],image2=i2,mask=mask,Auto=True)
         bias3 = stat3_p_noise-stat1
         isig3 = scat_op.square(stat3_p_noise-stat1)
         for k in range(1,nsim):
-            stat3_p_noise=scat_op.eval(i1+noise[k],image2=i2,mask=mask,Imaginary=False)
+            stat3_p_noise=scat_op.eval(i1+noise[k],image2=i2,mask=mask,Auto=True)
             bias3 = bias3 + stat3_p_noise-stat1
             isig3 = isig3 + scat_op.square(stat3_p_noise-stat1)
 
@@ -349,8 +349,8 @@ for itt in range(5):
         if docov:
             l_outpath=outpath+'_cov_'
 
-        sin = scat_op.eval(di,image2=di,mask=mask,Imaginary=False)
-        sout = scat_op.eval(omap,image2=omap,mask=mask,Imaginary=False)
+        sin = scat_op.eval(di,image2=di,mask=mask,Auto=True)
+        sout = scat_op.eval(omap,image2=omap,mask=mask,Auto=True)
         
         refH.save(l_outpath+'/%s_cross_%d.npy'%(outname,itt))
         sin.save( l_outpath+'/%s_in_%d.npy'%(outname,itt))
