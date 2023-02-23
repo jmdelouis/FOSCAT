@@ -11,7 +11,7 @@ import foscat.Synthesis as synthe
 
 def usage():
     print(' This software is a demo of the foscat library:')
-    print('>python demo.py -n=8 [-c|--cov][-s|--steps=3000][-S=1234|--seed=1234][-x|--xstat][-p|--p00][-g|--gauss][-k|--k5x5]')
+    print('>python demo.py -n=8 [-c|--cov][-s|--steps=3000][-S=1234|--seed=1234][-x|--xstat][-p|--p00][-g|--gauss][-k|--k5x5][-d|--data][-o|--out]')
     print('-n : is the nside of the input map (nside max = 256 with the default map)')
     print('--cov (optional): use scat_cov instead of scat.')
     print('--steps (optional): number of iteration, if not specified 1000.')
@@ -20,12 +20,14 @@ def usage():
     print('--p00   (optional): Loss only computed on p00.')
     print('--gauss (optional): convert Venus map in gaussian field.')
     print('--k5x5  (optional): Work with a 5x5 kernel instead of a 3x3.')
+    print('--data  (optional): If not specified use Venu_256.npy.')
+    print('--out   (optional): If not specified save in *_demo_*.')
     exit(0)
     
 def main():
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "n:cS:s:xpgk", \
-                                   ["nside", "cov","seed","steps","xstat","p00","gauss","k5x5"])
+        opts, args = getopt.getopt(sys.argv[1:], "n:cS:s:xpgkd:o:", \
+                                   ["nside", "cov","seed","steps","xstat","p00","gauss","k5x5","data","out"])
     except getopt.GetoptError as err:
         # print help information and exit:
         print(err)  # will print something like "option -a not recognized"
@@ -40,6 +42,8 @@ def main():
     dogauss=False
     KERNELSZ=3
     seed=1234
+    outname='demo'
+    data="Venus_256.npy"
     
     for o, a in opts:
         if o in ("-c","--cov"):
@@ -51,6 +55,12 @@ def main():
         elif o in ("-S", "--seed"):
             seed=int(a[1:])
             print('Use SEED = ',seed)
+        elif o in ("-o", "--out"):
+            outname=a[1:]
+            print('Save data in ',outname)
+        elif o in ("-d", "--data"):
+            data=a[1:]
+            print('Read data from ',data)
         elif o in ("-x", "--xstat"):
             docross=True
         elif o in ("-g", "--gauss"):
@@ -81,7 +91,6 @@ def main():
     # The data are storred using a default nside to minimize the needed storage
     #=================================================================================
     scratch_path = '../data'
-    outname='TEST_EE'
 
     #=================================================================================
     # Function to reduce the data used in the FoCUS algorithm 
@@ -95,7 +104,7 @@ def main():
     #=================================================================================
     # Get data
     #=================================================================================
-    im=dodown(np.load('Venus_256.npy'),nside)
+    im=dodown(np.load(data),nside)
     
     #=================================================================================
     # Generate a random noise with the same coloured than the input data
@@ -125,7 +134,7 @@ def main():
                      OSTEP=-1,           # get very large scale (nside=1)
                      LAMBDA=lam,
                      TEMPLATE_PATH=scratch_path,
-                     slope=1.0,
+                     slope=0.5,
                      gpupos=2,
                      use_R_format=True,
                      all_type='float32')
@@ -183,10 +192,10 @@ def main():
 
     
     omap=sy.run(imap,
-                DECAY_RATE=0.9999,
+                DECAY_RATE=0.9995,
                 NUM_EPOCHS = nstep,
-                LEARNING_RATE = 0.3,
-                EPSILON = 1E-10)
+                LEARNING_RATE = 0.03,
+                EPSILON = 1E-15)
 
     #=================================================================================
     # STORE RESULTS
@@ -198,14 +207,14 @@ def main():
         start=scat_op.eval(imap)
         out =scat_op.eval(omap)
     
-    np.save('in_demo_map_%d.npy'%(nside),im)
-    np.save('st_demo_map_%d.npy'%(nside),imap)
-    np.save('out_demo_map_%d.npy'%(nside),omap)
-    np.save('out_demo_log_%d.npy'%(nside),sy.get_history())
+    np.save('in_%s_map_%d.npy'%(outname,nside),im)
+    np.save('st_%s_map_%d.npy'%(outname,nside),imap)
+    np.save('out_%s_map_%d.npy'%(outname,nside),omap)
+    np.save('out_%s_log_%d.npy'%(outname,nside),sy.get_history())
 
-    refX.save('in_demo_%d'%(nside))
-    start.save('st_demo_%d'%(nside))
-    out.save('out_demo_%d'%(nside))
+    refX.save('in_%s_%d'%(outname,nside))
+    start.save('st_%s_%d'%(outname,nside))
+    out.save('out_%s_%d'%(outname,nside))
 
     print('Computation Done')
     sys.stdout.flush()

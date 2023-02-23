@@ -148,6 +148,16 @@ class FoCUS:
         self.isMPI=isMPI
         """
         
+        if isMPI:
+            from mpi4py import MPI
+            
+            if all_type=='float32':
+                self.MPI_ALL_TYPE=MPI.FLOAT
+            else:
+                self.MPI_ALL_TYPE=MPI.DOUBLE
+        else:
+            self.MPI_ALL_TYPE=None
+            
         self.all_type=all_type
         
             
@@ -307,6 +317,12 @@ class FoCUS:
 
         self.loss={}
 
+    def get_type(self):
+        return self.all_type
+
+    def get_mpi_type(self):
+        return self.MPI_ALL_TYPE
+    
     def get_use_R(self):
         return self.use_R_format
     
@@ -330,6 +346,10 @@ class FoCUS:
             return self.backend.sign(x)*self.backend.sqrt(self.backend.sign(x)*x)
         
     def bk_reduce_sum(self,data,axis=None):
+        
+        if isinstance(data,Rformat):
+            return self.bk_reduce_sum(data.get())
+        
         if axis is None:
             if self.BACKEND==self.TENSORFLOW:
                 return(self.backend.reduce_sum(data))
@@ -346,6 +366,10 @@ class FoCUS:
                 return(np.sum(data,axis))
         
     def bk_reduce_mean(self,data,axis=None):
+        
+        if isinstance(data,Rformat):
+            return self.bk_reduce_mean(data.get())
+        
         if axis is None:
             if self.BACKEND==self.TENSORFLOW:
                 return(self.backend.reduce_mean(data))

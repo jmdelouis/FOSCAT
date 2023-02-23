@@ -10,11 +10,12 @@ from threading import Event
 
 class Loss:
     
-    def __init__(self,function,scat_operator,*param):
+    def __init__(self,function,scat_operator,*param,Rformat=True):
 
         self.loss_function=function
         self.scat_operator=scat_operator
         self.args=param
+        self.Rformat=Rformat
 
     def eval(self,x):
         return self.loss_function(x,self.scat_operator,self.args)
@@ -70,6 +71,7 @@ class Synthesis:
             self.gpu_thrd.join()
         except:
             print('No thread to stop, everything is ok')
+            sys.stdout.flush()
 
     # ---------------------------------------------−---------
     def check_dense(self,data,datasz):
@@ -89,7 +91,7 @@ class Synthesis:
         with tf.device(operation.gpulist[(operation.gpupos+self.curr_gpu)%operation.ngpu]):
             print('Run on GPU %s'%(operation.gpulist[(operation.gpupos+self.curr_gpu)%operation.ngpu]))
             
-            if operation.get_use_R():
+            if operation.get_use_R() and loss_function.Rformat:
                 l_x=operation.to_R(x,only_border=True)
             else:
                 l_x=x
@@ -209,10 +211,12 @@ class Synthesis:
             
         if self.mpi_rank==0:
             print('Total number of loss ',total_num_loss)
+            sys.stdout.flush()
         
-        l_log=-np.ones([self.mpi_size*self.MAXNUMLOSS],dtype='float32')
-        ltot=-np.ones([self.mpi_size*self.MAXNUMLOSS],dtype='float32')
-            
+        l_log=np.zeros([self.mpi_size*self.MAXNUMLOSS],dtype='float32')
+        l_log[self.mpi_rank*self.MAXNUMLOSS:(self.mpi_rank+1)*self.MAXNUMLOSS]=-1.0
+        ltot=1.0*l_log
+        
         for itt in range(NUM_EPOCHS):
             g_tot=None
             l_tot=0.0
@@ -236,8 +240,9 @@ class Synthesis:
             if self.mpi_size==1:
                 grad=g_tot
             else:
-                grad=np.zeros([g_tot.shape[0]],dtype='float32')
-                comm.Allreduce((g_tot.numpy(),MPI.FLOAT),(grad,MPI.FLOAT))
+                grad=np.zeros([g_tot.shape[0]],dtype=self.operation.get_type())
+                comm.Allreduce((g_tot.numpy().astype(self.operation.get_type()),self.operation.get_mpi_type()),
+                               (grad,self.operation.get_mpi_type()))
             
             if self.nlog==self.history.shape[0]:
                 new_log=np.zeros([self.history.shape[0]*2])

@@ -149,8 +149,25 @@ for i in range(nsim):
     noise2[i]-=np.mean(noise[i])
     noise[i] -=np.mean(noise[i])
 
-sig_noise=1/(np.std(noise,0)**2)
+sig_noise=1/(np.mean(noise**2,0))
+"""
+y,x=np.histogram(sig_noise*(noise[10]**2),range=[0,20],bins=1000)
 
+from scipy.stats import chi2
+rv = chi2(1.0)
+
+import tensorflow as tf
+for i in range(10):
+    print(np.mean(sig_noise*(noise[i]**2)))
+    hist = tf.histogram_fixed_width(sig_noise*(noise[i]**2),[1,30], nbins=31)
+    plt.plot(hist.numpy(),color='blue')
+vhist = 12*nout*nout*rv.pdf(np.arange(29)+1.5)
+
+plt.plot(vhist,color='red')
+plt.yscale('log')
+plt.show()
+exit(0)
+"""
 if docov:
     import foscat.scat_cov as sc
 else:
@@ -184,7 +201,7 @@ if rank==0 or rank==2 or size==1:
 
 if rank==1 or size==1:
     #compute Tdxdi
-    refX=scat_op.eval(td,image2=di,Imaginary=True,mask=mask)
+    refX=scat_op.eval(td,image2=di,Auto=False,mask=mask)
 
 initb1=None
 initb2=None
@@ -209,7 +226,7 @@ def loss_fct2(x,scat,args):
     mask = args[2]
     isig = args[3]
     
-    b=scat.eval(TT,image2=x,mask=mask,Imaginary=True)
+    b=scat.eval(TT,image2=x,mask=mask,Auto=False)
     
     l_val=scat.reduce_sum(scat.reduce_mean(isig*scat.square(ref-b)))
     
@@ -218,32 +235,38 @@ def loss_fct2(x,scat,args):
 def loss_fct3(x,scat,args):
 
     ref  = args[0]
-    im   = scat.to_R(args[1])
+    im   = args[1]
     bias = args[2]
     mask = args[3]
     isig = args[4]
-    nsig = args[5]
+
     
     a=scat.eval(im,image2=x,mask=mask,Auto=True)-bias
     b=scat.eval(x,image2=x,mask=mask,Auto=True)
     
     l_val=scat.reduce_sum(scat.reduce_mean(isig*scat.square(a-ref)))
 
-    l_val=l_val+scat.bk_reduce_mean(nsig*scat.bk_square(im-x))
+    return(l_val)
+
+def loss_fct4(x,scat,args):
+
+    im   = scat.to_R_center(args[0])
+    nsig = scat.to_R_center(args[1])
+    
+    l_val=scat.bk_square(scat.bk_reduce_mean(nsig*scat.bk_square(im-x))-1)
     
     return(l_val)
 
 i1=d1
 i2=d2
 imap=di
-init_map=(d1+d2)/2
+init_map=((d1+d2)/2).astype('float64')
 
 for itt in range(5):
 
     if rank==0 or rank==2 or size==1:
         stat1 =scat_op.eval(i1,image2=i2,mask=mask,Auto=True)
         
-    if rank==0 or size==1:
         #loss1 : d1xd2 = (u+n1)x(u+n2)
         stat1_p_noise=scat_op.eval(i1+noise1[0],image2=i2+noise2[0],mask=mask,Auto=True)
         
@@ -262,13 +285,13 @@ for itt in range(5):
     if rank==1 or size==1:
         #loss2 : Txd = Tx(u+n)
         #bias2 = mean(F((T*(d+n))-F(T*d))
-        stat2_p_noise=scat_op.eval(td,image2=imap+noise[0],mask=mask,Imaginary=True)
-        stat2 =scat_op.eval(td,image2=imap,mask=mask,Imaginary=True)
+        stat2_p_noise=scat_op.eval(td,image2=imap+noise[0],mask=mask,Auto=False)
+        stat2 =scat_op.eval(td,image2=imap,mask=mask,Auto=False)
         
         bias2 = stat2_p_noise-stat2
         isig2 = scat_op.square(stat2_p_noise-stat2)
         for k in range(1,nsim):
-            stat2_p_noise=scat_op.eval(td,image2=imap+noise[k],mask=mask,Imaginary=True)
+            stat2_p_noise=scat_op.eval(td,image2=imap+noise[k],mask=mask,Auto=False)
             bias2 = bias2 + stat2_p_noise-stat2
             isig2 = isig2 + scat_op.square(stat2_p_noise-stat2)
 
@@ -323,17 +346,19 @@ for itt in range(5):
     if rank==1 or size==1:
         loss2=synthe.Loss(loss_fct2,scat_op,refX-bias2,td,mask,isig2)
     if rank==2 or size==1:
-        loss3=synthe.Loss(loss_fct3,scat_op,refH-bias1,di,bias3,mask,isig3,sig_noise)
+        loss3=synthe.Loss(loss_fct3,scat_op,refH-bias1,di.astype('float64'),bias3,mask,isig3)
+        loss4=synthe.Loss(loss_fct4,scat_op,di.astype('float64'),sig_noise,Rformat=False)
+               
 
     if size==1:
-        sy = synthe.Synthesis([loss1,loss2,loss3])
+        sy = synthe.Synthesis([loss1,loss2,loss3,loss4])
     else:
         if rank==0:
             sy = synthe.Synthesis([loss1])
         if rank==1:
             sy = synthe.Synthesis([loss2])
         if rank==2:
-            sy = synthe.Synthesis([loss3])
+            sy = synthe.Synthesis([loss3,loss4])
 
     omap=sy.run(init_map,
                 EVAL_FREQUENCY = 100,

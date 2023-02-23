@@ -6,14 +6,17 @@ import getopt
 
 def usage():
     print(' This software plots the demo results:')
-    print('>python plotdemo.py -n=8 [-c|cov]')
+    print('>python plotdemo.py -n=8 [-c|cov] [-o|--out] [-c|--cmap] [-g|--geo]')
     print('-n : is the nside of the input map (nside max = 256 with the default map)')
-    print('-cov (optional): use scat_cov instead of scat')
+    print('--cov     (optional): use scat_cov instead of scat')
+    print('--out     (optional): If not specified save in *_demo_*.')
+    print('--map=jet (optional): If not specified use cmap=jet')
+    print('--geo     (optional): If specified use cartview')
     exit(0)
     
 def main():
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "n:c", ["nside", "cov"])
+        opts, args = getopt.getopt(sys.argv[1:], "n:co:m:g", ["nside", "cov","out","map","geo"])
     except getopt.GetoptError as err:
         # print help information and exit:
         print(err)  # will print something like "option -a not recognized"
@@ -22,12 +25,23 @@ def main():
 
     cov=False
     nside=-1
+    outname='demo'
+    cmap='jet'
+    docart=False
+    
     for o, a in opts:
         if o in ("-c","--cov"):
             cov = True
+        elif o in ("-g","--geo"):
+            docart=True
+        elif o in ("-m","--map"):
+            cmap=a[1:]
         elif o in ("-n", "--nside"):
             nside=int(a[1:])
+        elif o in ("-o", "--out"):
+            outname=a[1:]
         else:
+            print(o,a)
             assert False, "unhandled option"
 
     if nside<2 or nside!=2**(int(np.log(nside)/np.log(2))) or nside>256:
@@ -41,11 +55,11 @@ def main():
     else:
         import foscat.scat as sc
 
-    refX  = sc.read('in_demo_%d'%(nside))
-    start = sc.read('st_demo_%d'%(nside))
-    out   = sc.read('out_demo_%d'%(nside))
+    refX  = sc.read('in_%s_%d'%(outname,nside))
+    start = sc.read('st_%s_%d'%(outname,nside))
+    out   = sc.read('out_%s_%d'%(outname,nside))
 
-    log= np.load('out_demo_log_%d.npy'%(nside))
+    log= np.load('out_%s_log_%d.npy'%(outname,nside))
     plt.figure(figsize=(6,6))
     plt.plot(np.arange(log.shape[0])+1,log,color='black')
     plt.xscale('log')
@@ -56,16 +70,22 @@ def main():
     out.plot(name='Output',color='red',hold=False)
     (refX-out).plot(name='Diff',color='purple',hold=False)
 
-    im = np.load('in_demo_map_%d.npy'%(nside))
-    sm = np.load('st_demo_map_%d.npy'%(nside))
-    om = np.load('out_demo_map_%d.npy'%(nside))
+    im = np.load('in_%s_map_%d.npy'%(outname,nside))
+    sm = np.load('st_%s_map_%d.npy'%(outname,nside))
+    om = np.load('out_%s_map_%d.npy'%(outname,nside))
 
     idx=hp.ring2nest(nside,np.arange(12*nside**2))
     plt.figure(figsize=(10,6))
-    hp.mollview(im[idx],cmap='jet',min=-3,max=3,hold=False,sub=(2,2,1),nest=False,title='Model')
-    hp.mollview(sm,cmap='jet',min=-3,max=3,hold=False,sub=(2,2,2),nest=True,title='Start')
-    hp.mollview(om,cmap='jet',min=-3,max=3,hold=False,sub=(2,2,3),nest=True,title='Output')
-    hp.mollview(im-om,cmap='jet',min=-3,max=3,hold=False,sub=(2,2,4),nest=True,title='Diff')
+    if docart:
+        hp.cartview(im[idx],cmap=cmap,min=-3,max=3,hold=False,sub=(2,2,1),nest=False,title='Model')
+        hp.cartview(sm,cmap=cmap,min=-3,max=3,hold=False,sub=(2,2,2),nest=True,title='Start')
+        hp.cartview(om,cmap=cmap,min=-3,max=3,hold=False,sub=(2,2,3),nest=True,title='Output')
+        hp.cartview(im-om,cmap=cmap,min=-3,max=3,hold=False,sub=(2,2,4),nest=True,title='Diff')
+    else:
+        hp.mollview(im[idx],cmap=cmap,min=-3,max=3,hold=False,sub=(2,2,1),nest=False,title='Model')
+        hp.mollview(sm,cmap=cmap,min=-3,max=3,hold=False,sub=(2,2,2),nest=True,title='Start')
+        hp.mollview(om,cmap=cmap,min=-3,max=3,hold=False,sub=(2,2,3),nest=True,title='Output')
+        hp.mollview(im-om,cmap=cmap,min=-3,max=3,hold=False,sub=(2,2,4),nest=True,title='Diff')
 
     cli=hp.anafast((im-np.median(im))[idx])
     clo=hp.anafast((om-np.median(om))[idx])
