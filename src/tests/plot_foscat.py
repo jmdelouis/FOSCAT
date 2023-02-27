@@ -23,14 +23,46 @@ nside        = int(sys.argv[4])
 step         = int(sys.argv[5])
 
 idx=hp.ring2nest(nside,np.arange(12*nside**2))
-outname='FOCUS%s%d'%(sys.argv[1],nside)
+outname='FOCUS_5x5%s%d'%(sys.argv[1],nside)
 
 print(outname)
+
+ampmap=36522.24321517236
 
 try:
     ref=np.mean(np.load(datapath+'%s_REF.npy'%(sys.argv[1])).reshape(12*nside**2,(256//nside)**2),1)
 except:
     ref=None
+
+scat_op=sc.funct(NORIENT=4,   # define the number of wavelet orientation
+                 KERNELSZ=3,  # define the kernel size (here 5x5)
+                 OSTEP=-1,     # get very large scale (nside=1)
+                 LAMBDA=1.2,
+                 all_type='float64',
+                 use_R_format=True)
+
+#=================================================================================
+# Function to reduce the data used in the FoCUS algorithm 
+#=================================================================================
+def dodown(a,nout):
+    nin=int(np.sqrt(a.shape[0]//12))
+    if nin==nout:
+        return(a)
+    return(np.mean(a.reshape(12*nout*nout,(nin//nout)**2),1))
+
+nin=nside
+tab=['MASK_GAL11_%d.npy'%(nin),'MASK_GAL09_%d.npy'%(nin),'MASK_GAL08_%d.npy'%(nin),'MASK_GAL06_%d.npy'%(nin),'MASK_GAL04_%d.npy'%(nin)]
+mask=np.ones([len(tab),12*nside**2])
+for i in range(len(tab)):
+    mask[i,:]=dodown(np.load(datapath+tab[i]),nside)
+
+#set the first mask to 1
+mask[0,:]=1.0
+for i in range(1,len(tab)):
+    mask[i,:]=mask[i,:]*mask[0,:].sum()/mask[i,:].sum()
+    
+scref=scat_op.eval((ref+6.981021657074907e-05)*ampmap,mask=mask)
+
 td=np.load(outpath+'/%std.npy'%(outname))
 di=np.load(outpath+'/%sdi.npy'%(outname))
 d1=np.load(outpath+'/%sd1.npy'%(outname))
@@ -42,12 +74,16 @@ try:
     smod=sc.read(outpath+'/%s_cross_%d.npy'%(outname,step))
     sin=sc.read(outpath+'/%s_in_%d.npy'%(outname,step))
     sout=sc.read(outpath+'/%s_out_%d.npy'%(outname,step))
+    b1=sc.read(outpath+'/%s_bias1_%d.npy'%(outname,step))
+    b2=sc.read(outpath+'/%s_bias2_%d.npy'%(outname,step))
+    b3=sc.read(outpath+'/%s_bias3_%d.npy'%(outname,step))
 
-    smod.plot(name='Model',lw=4)
+    scref.plot(name='Model',lw=4)
+    smod.plot(name='cross',hold=False,color='purple')
+    (smod-b1).plot(name='cross debias',hold=False,color='orange')
     sin.plot(name='In',hold=False,color='red')
     sout.plot(name='Out',hold=False,color='yellow')
-    (smod-sin).plot(name='Diff In',hold=False,color='grey')
-    (smod-sout).plot(name='Diff Out',hold=False,color='darkgrey')
+    (scref-sout).plot(name='Diff Out',hold=False,color='black')
 except:
     print('no scat computed')
     

@@ -194,7 +194,7 @@ class scat_cov:
                             (self.C11 * other),
                             s1=s1, c10=c10)
 
-    def plot(self, name=None, hold=True, color='blue', lw=1):
+    def plot(self, name=None, hold=True, color='blue', lw=1, legend=True):
 
         import matplotlib.pyplot as plt
 
@@ -206,24 +206,38 @@ class scat_cov:
 
         if self.S1 is not None:
             plt.subplot(2, 2, 1)
-            plt.plot(abs(self.get_np(self.S1)).flatten(), color=color, label=r'%s $S_1$' % (name), lw=lw)
+            if legend:
+                plt.plot(abs(self.get_np(self.S1)).flatten(), color=color, label=r'%s $S_1$' % (name), lw=lw)
+            else:
+                plt.plot(abs(self.get_np(self.S1)).flatten(), color=color, lw=lw)
             plt.yscale('log')
             plt.legend()
 
         plt.subplot(2, 2, 2)
-        plt.plot(abs(self.get_np(self.P00)).flatten(), color=color, label=r'%s $P_{00}$' % (name), lw=lw)
+        if legend:
+            plt.plot(abs(self.get_np(self.P00)).flatten(), color=color, label=r'%s $P_{00}$' % (name), lw=lw)
+        else:
+            plt.plot(abs(self.get_np(self.P00)).flatten(), color=color, lw=lw)
         plt.yscale('log')
         plt.legend()
 
         plt.subplot(2, 2, 3)
-        plt.plot(abs(self.get_np(self.C01)).flatten(), color=color, label=r'%s $C_{01}$' % (name), lw=lw)
-        if self.C10 is not None:
-            plt.plot(abs(self.get_np(self.C10)).flatten(), color=color, label=r'%s $C_{10}$' % (name), lw=lw)
+        if legend:
+            plt.plot(abs(self.get_np(self.C01)).flatten(), color=color, label=r'%s $C_{01}$' % (name), lw=lw)
+            if self.C10 is not None:
+                plt.plot(abs(self.get_np(self.C10)).flatten(), color=color, label=r'%s $C_{10}$' % (name), lw=lw)
+        else:
+            plt.plot(abs(self.get_np(self.C01)).flatten(), color=color, lw=lw)
+            if self.C10 is not None:
+                plt.plot(abs(self.get_np(self.C10)).flatten(), color=color, lw=lw)
         plt.yscale('log')
         plt.legend()
 
         plt.subplot(2, 2, 4)
-        plt.plot(abs(self.get_np(self.C11)).flatten(), color=color, label=r'%s $C_{11}$' % (name), lw=lw)
+        if legend:
+            plt.plot(abs(self.get_np(self.C11)).flatten(), color=color, label=r'%s $C_{11}$' % (name), lw=lw)
+        else:
+            plt.plot(abs(self.get_np(self.C11)).flatten(), color=color, lw=lw)
         plt.yscale('log')
         plt.legend()
 
