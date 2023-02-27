@@ -157,7 +157,7 @@ def main():
         if dop00:
             loss=scat_operator.bk_reduce_mean(scat_operator.bk_square(ref.P00[0,0,:]-learn.P00[0,0,:]))
         else:
-            loss=scat_operator.reduce_sum(scat_operator.reduce_mean(scat_operator.square(ref-learn)))
+            loss=scat_operator.reduce_mean(scat_operator.reduce_sum(scat_operator.square(ref-learn)))
             
 
         return(loss)
@@ -194,7 +194,7 @@ def main():
     omap=sy.run(imap,
                 DECAY_RATE=0.9995,
                 NUM_EPOCHS = nstep,
-                LEARNING_RATE = 0.03,
+                LEARNING_RATE = 0.1,
                 EPSILON = 1E-15)
 
     #=================================================================================

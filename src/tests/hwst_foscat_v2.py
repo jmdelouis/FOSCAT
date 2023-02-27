@@ -55,7 +55,7 @@ Default_nside=256
 #=================================================================================
 
 # set the default name
-outname='FOCUS%s%d'%(sys.argv[1],nout)
+outname='FOCUS_5x5%s%d'%(sys.argv[1],nout)
 
 #=================================================================================
 # Function to reduce the data used in the FoCUS algorithm 
@@ -129,6 +129,8 @@ di[di<-1E10]=off
 # compute amplitude to normalize the dynamic range
 ampmap=1/dodown(np.load(scratch_path+'%s_NOISE%03d_full.npy'%(sys.argv[1][0:6],0)).flatten(),nout).std()
 
+print('AMPMAP ',ampmap,off)
+
 # rescale maps to ease the convergence
 d1=ampmap*(d1-off)
 d2=ampmap*(d2-off)
@@ -177,7 +179,7 @@ import foscat.Synthesis as synthe
 
 if isMPI:
     scat_op=sc.funct(NORIENT=4,   # define the number of wavelet orientation
-                     KERNELSZ=3,  # define the kernel size (here 5x5)
+                     KERNELSZ=5,  # define the kernel size (here 5x5)
                      OSTEP=-1,     # get very large scale (nside=1)
                      LAMBDA=1.0,
                      all_type='float64',
@@ -188,7 +190,7 @@ if isMPI:
                      mpi_size=size)
 else:
     scat_op=sc.funct(NORIENT=4,   # define the number of wavelet orientation
-                     KERNELSZ=3,  # define the kernel size (here 5x5)
+                     KERNELSZ=5,  # define the kernel size (here 5x5)
                      OSTEP=-1,     # get very large scale (nside=1)
                      LAMBDA=1.0,
                      all_type='float64',
@@ -215,7 +217,7 @@ def loss_fct1(x,scat,args):
     
     b=scat.eval(x,image2=x,mask=mask,Auto=True)
 
-    l_val=scat.reduce_sum(scat.reduce_mean(isig*scat.square(ref-b)))
+    l_val=scat.reduce_sum(isig*scat.square(ref-b))
 
     return(l_val)
 
@@ -228,7 +230,7 @@ def loss_fct2(x,scat,args):
     
     b=scat.eval(TT,image2=x,mask=mask,Auto=False)
     
-    l_val=scat.reduce_sum(scat.reduce_mean(isig*scat.square(ref-b)))
+    l_val=scat.reduce_sum(isig*scat.square(ref-b))
     
     return(l_val)
 
@@ -244,7 +246,7 @@ def loss_fct3(x,scat,args):
     a=scat.eval(im,image2=x,mask=mask,Auto=True)-bias
     b=scat.eval(x,image2=x,mask=mask,Auto=True)
     
-    l_val=scat.reduce_sum(scat.reduce_mean(isig*scat.square(a-ref)))
+    l_val=scat.reduce_sum(isig*scat.square(a-ref))
 
     return(l_val)
 
@@ -253,7 +255,7 @@ def loss_fct4(x,scat,args):
     im   = scat.to_R_center(args[0])
     nsig = scat.to_R_center(args[1])
     
-    l_val=scat.bk_square(scat.bk_reduce_mean(nsig*scat.bk_square(im-x))-1)
+    l_val=100*scat.bk_square(scat.bk_reduce_mean(nsig*scat.bk_square(im-x))-1)
     
     return(l_val)
 
@@ -279,7 +281,8 @@ for itt in range(5):
             isig1 = isig1 + scat_op.square(stat1_p_noise-stat1)
 
         bias1=bias1/nsim
-        isig1=nsim/isig1
+        isig1=isig1/nsim-scat_op.square(bias1)
+        isig1=1/isig1
         bias1.reset_P00()
     
     if rank==1 or size==1:
@@ -296,7 +299,8 @@ for itt in range(5):
             isig2 = isig2 + scat_op.square(stat2_p_noise-stat2)
 
         bias2=bias2/nsim
-        isig2=nsim/isig2
+        isig2=isig2/nsim-scat_op.square(bias2)
+        isig2=1/isig2
         bias2.reset_P00()
 
     if rank==2 or size==1:
@@ -310,7 +314,8 @@ for itt in range(5):
             isig3 = isig3 + scat_op.square(stat3_p_noise-stat1)
 
         bias3=bias3/nsim
-        isig3=nsim/isig3
+        isig3=isig3/nsim-scat_op.square(bias3)
+        isig3=1/isig3
         bias3.reset_P00()
 
     
@@ -332,12 +337,21 @@ for itt in range(5):
         if rank==2 or size==1:
             print("BIAS DVAR 2 %f"%((bias3-initb3).std()))
 
+    l_outpath=outpath
+    if docov:
+        l_outpath=outpath+'_cov_'
     if rank==0 or size==1:
         initb1=bias1
+        bias1.save(l_outpath+'/%s_bias1_%d.npy'%(outname,itt))
+        isig1.save(l_outpath+'/%s_isig1_%d.npy'%(outname,itt))
     if rank==1 or size==1:
         initb2=bias2
+        bias2.save(l_outpath+'/%s_bias2_%d.npy'%(outname,itt))
+        isig2.save(l_outpath+'/%s_isig2_%d.npy'%(outname,itt))
     if rank==2 or size==1:
         initb3=bias3
+        bias3.save(l_outpath+'/%s_bias3_%d.npy'%(outname,itt))
+        isig3.save(l_outpath+'/%s_isig3_%d.npy'%(outname,itt))
         
     sys.stdout.flush()
 
@@ -367,9 +381,9 @@ for itt in range(5):
                 LEARNING_RATE = 0.3,
                 EPSILON = 1E-16)
 
-    i1=omap
-    i2=omap
-    imap=omap
+    i1=1*omap
+    i2=1*omap
+    imap=1*omap
     
     if rank==0:
         # save the intermediate results

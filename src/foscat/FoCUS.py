@@ -201,9 +201,9 @@ class FoCUS:
                     logical_gpus = self.backend.config.experimental.list_logical_devices('GPU')
                     print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
                     sys.stdout.flush()
-                    gpuname=logical_gpus[gpupos].name
-                    self.gpulist={}
                     self.ngpu=len(logical_gpus)
+                    gpuname=logical_gpus[gpupos%self.ngpu].name
+                    self.gpulist={}
                     for i in range(self.ngpu):
                         self.gpulist[i]=logical_gpus[i].name
                 if BACKEND=='torch':

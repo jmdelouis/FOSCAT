@@ -91,7 +91,7 @@ class scat:
                         (self.S1* other), \
                         (self.S2* other))
 
-    def plot(self,name=None,hold=True,color='blue',lw=1):
+    def plot(self,name=None,hold=True,color='blue',lw=1,legend=True):
 
         import matplotlib.pyplot as plt
         
@@ -102,15 +102,24 @@ class scat:
             plt.figure(figsize=(8,8))
         
         plt.subplot(3,1,1)
-        plt.plot(self.get_np(abs(self.S1)).flatten(),color=color,label=r'%s $S_1$'%(name),lw=lw)
+        if legend:
+            plt.plot(self.get_np(abs(self.S1)).flatten(),color=color,label=r'%s $S_1$'%(name),lw=lw)
+        else:
+            plt.plot(self.get_np(abs(self.S1)).flatten(),color=color,lw=lw)
         plt.yscale('log')
         plt.legend()
         plt.subplot(3,1,2)
-        plt.plot(self.get_np(abs(self.P00)).flatten(),color=color,label=r'%s $P_{00}$'%(name),lw=lw)
+        if legend:
+            plt.plot(self.get_np(abs(self.P00)).flatten(),color=color,label=r'%s $P_{00}$'%(name),lw=lw)
+        else:
+            plt.plot(self.get_np(abs(self.P00)).flatten(),color=color,lw=lw)
         plt.yscale('log')
         plt.legend()
         plt.subplot(3,1,3)
-        plt.plot(self.get_np(abs(self.S2)).flatten(),color=color,label=r'%s $S_2$'%(name),lw=lw)
+        if legend:
+            plt.plot(self.get_np(abs(self.S2)).flatten(),color=color,label=r'%s $S_2$'%(name),lw=lw)
+        else:
+            plt.plot(self.get_np(abs(self.S2)).flatten(),color=color,lw=lw)
         plt.yscale('log')
         plt.legend()
         
@@ -275,27 +284,26 @@ class funct(FOC.FoCUS):
                                                                       ,axis=-2),l2_image_imag],axis=-2)
 
             # Convol l2_image [....,Npix_j1,....,j1,Norient,Norient]
-            c2_image_real,c2_image_imag=self.convol(l2_image,axis=axis)
+            c2_image_real,c2_image_imag=self.convol(self.bk_relu(l2_image),axis=axis)
             if all_cross:
-                c2_image_imag_real,c2_image_imag_imag=self.convol(l2_image_imag,axis=axis)
+                c2_image_imag_real,c2_image_imag_imag=self.convol(self.bk_relu(l2_image_imag),axis=axis)
 
             conj2=self.bk_L1(c2_image_real*c2_image_real+c2_image_imag*c2_image_imag)
             if all_cross:
                 conj2_imag=self.bk_L1(c2_image_imag_real*c2_image_imag_real+ \
                                       c2_image_imag_imag*c2_image_imag_imag)
 
-            """
             c2_image_real,c2_image_imag=self.convol(self.bk_relu(-l2_image),axis=axis)
             if cross:
-                if Imaginary:
+                if all_cross:
                     c2_image_imag_real,c2_image_imag_imag=self.convol(self.bk_relu(-l2_image_imag),axis=axis)
 
                 conj2=conj2-self.bk_L1(c2_image_real*c2_image_real+ \
                                        c2_image_imag*c2_image_imag)
-                if Imaginary:
+                if all_cross:
                     conj2_imag=conj2_imag - self.bk_L1(c2_image_imag_real*c2_image_imag_real+ \
                                                        c2_image_imag_imag*c2_image_imag_imag)
-            """
+
             # Convol l_s2 [....,....,Nmask,j1,Norient,Norient]
             l_s2 = self.bk_masked_mean(conj2,vmask,axis=axis)
 
