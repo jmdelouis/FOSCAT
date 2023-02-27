@@ -17,6 +17,7 @@ if len(sys.argv)<5:
     print('<out>          : name of the directory where the computed data are stored')
     print('<nside>        : nside of the synthesised map')
     print('<cov>          : if Y use scat_cov istead of scat')
+    print('<kernelsz>     : kernelsz of the convolution')
     print('============================================')
     exit(0)
 
@@ -25,6 +26,7 @@ datapath = scratch_path
 outpath = sys.argv[3]
 nout      = int(sys.argv[4])
 docov     = (sys.argv[5]=='Y')
+kernelsz  = int(sys.argv[6])
 
 test_mpi=False
 for ienv in os.environ:
@@ -55,7 +57,15 @@ Default_nside=256
 #=================================================================================
 
 # set the default name
-outname='FOCUS_5x5%s%d'%(sys.argv[1],nout)
+if kernelsz==5:
+    outname='FOCUS_5x5%s%d'%(sys.argv[1],nout)
+else:
+    outname='FOCUS%s%d'%(sys.argv[1],nout)
+
+if kernelsz==3:
+    lam=1.2
+else:
+    lam=1.0
 
 #=================================================================================
 # Function to reduce the data used in the FoCUS algorithm 
@@ -152,24 +162,7 @@ for i in range(nsim):
     noise[i] -=np.mean(noise[i])
 
 sig_noise=1/(np.mean(noise**2,0))
-"""
-y,x=np.histogram(sig_noise*(noise[10]**2),range=[0,20],bins=1000)
 
-from scipy.stats import chi2
-rv = chi2(1.0)
-
-import tensorflow as tf
-for i in range(10):
-    print(np.mean(sig_noise*(noise[i]**2)))
-    hist = tf.histogram_fixed_width(sig_noise*(noise[i]**2),[1,30], nbins=31)
-    plt.plot(hist.numpy(),color='blue')
-vhist = 12*nout*nout*rv.pdf(np.arange(29)+1.5)
-
-plt.plot(vhist,color='red')
-plt.yscale('log')
-plt.show()
-exit(0)
-"""
 if docov:
     import foscat.scat_cov as sc
 else:
@@ -179,9 +172,9 @@ import foscat.Synthesis as synthe
 
 if isMPI:
     scat_op=sc.funct(NORIENT=4,   # define the number of wavelet orientation
-                     KERNELSZ=5,  # define the kernel size (here 5x5)
+                     KERNELSZ=kernelsz,  # define the kernel size (here 5x5)
                      OSTEP=-1,     # get very large scale (nside=1)
-                     LAMBDA=1.0,
+                     LAMBDA=lam,
                      all_type='float64',
                      TEMPLATE_PATH=scratch_path,
                      use_R_format=True,
@@ -190,9 +183,9 @@ if isMPI:
                      mpi_size=size)
 else:
     scat_op=sc.funct(NORIENT=4,   # define the number of wavelet orientation
-                     KERNELSZ=5,  # define the kernel size (here 5x5)
+                     KERNELSZ=kernelsz,  # define the kernel size (here 5x5)
                      OSTEP=-1,     # get very large scale (nside=1)
-                     LAMBDA=1.0,
+                     LAMBDA=lam,
                      all_type='float64',
                      TEMPLATE_PATH=scratch_path,
                      use_R_format=True)
@@ -283,7 +276,7 @@ for itt in range(5):
         bias1=bias1/nsim
         isig1=isig1/nsim-scat_op.square(bias1)
         isig1=1/isig1
-        bias1.reset_P00()
+        #bias1.reset_P00()
     
     if rank==1 or size==1:
         #loss2 : Txd = Tx(u+n)
@@ -301,7 +294,7 @@ for itt in range(5):
         bias2=bias2/nsim
         isig2=isig2/nsim-scat_op.square(bias2)
         isig2=1/isig2
-        bias2.reset_P00()
+        #bias2.reset_P00()
 
     if rank==2 or size==1:
         #loss3 : dxu = (u+n)xu
@@ -316,7 +309,7 @@ for itt in range(5):
         bias3=bias3/nsim
         isig3=isig3/nsim-scat_op.square(bias3)
         isig3=1/isig3
-        bias3.reset_P00()
+        #bias3.reset_P00()
 
     
     if initb1 is None or initb2 is None or initb3 is None :

@@ -13,6 +13,7 @@ if len(sys.argv)<4:
     print('<out>          : name of the directory where the computed data are stored')
     print('<nside>        : nside of the synthesised map')
     print('<step>         : iteration number to plot')
+    print('<kernelsz>     : kernelsz of the convolution')
     print('============================================')
     exit(0)
 
@@ -21,9 +22,13 @@ datapath     = scratch_path
 outpath      = sys.argv[3]
 nside        = int(sys.argv[4])
 step         = int(sys.argv[5])
+kernelsz     = int(sys.argv[6])
 
 idx=hp.ring2nest(nside,np.arange(12*nside**2))
-outname='FOCUS_5x5%s%d'%(sys.argv[1],nside)
+if kernelsz==5:
+    outname='FOCUS_5x5%s%d'%(sys.argv[1],nside)
+else:
+    outname='FOCUS%s%d'%(sys.argv[1],nside)
 
 print(outname)
 
@@ -34,10 +39,14 @@ try:
 except:
     ref=None
 
+if kernelsz==3:
+    lam=1.2
+else:
+    lam=1.0
 scat_op=sc.funct(NORIENT=4,   # define the number of wavelet orientation
-                 KERNELSZ=3,  # define the kernel size (here 5x5)
+                 KERNELSZ=kernelsz,  # define the kernel size (here 5x5)
                  OSTEP=-1,     # get very large scale (nside=1)
-                 LAMBDA=1.2,
+                 LAMBDA=lam,
                  all_type='float64',
                  use_R_format=True)
 
