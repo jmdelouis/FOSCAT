@@ -134,8 +134,8 @@ def main():
                      OSTEP=-1,           # get very large scale (nside=1)
                      LAMBDA=lam,
                      TEMPLATE_PATH=scratch_path,
-                     slope=0.5,
-                     gpupos=2,
+                     slope=1.0,
+                     gpupos=0,
                      use_R_format=True,
                      all_type='float32')
     
@@ -157,7 +157,7 @@ def main():
         if dop00:
             loss=scat_operator.bk_reduce_mean(scat_operator.bk_square(ref.P00[0,0,:]-learn.P00[0,0,:]))
         else:
-            loss=scat_operator.reduce_sum(scat_operator.reduce_mean(scat_operator.square(ref-learn)))
+            loss=scat_operator.reduce_sum(scat_operator.square(ref-learn))
             
 
         return(loss)
@@ -167,22 +167,6 @@ def main():
     else:
         refX=scat_op.eval(im)
 
-    """
-    nstep=refX.P00.shape[2]
-    for i in range(nstep):
-        loss1=synthe.Loss(lossX,scat_op,refX,im,i)
-
-        sy = synthe.Synthesis([loss1])
-
-        #=================================================================================
-        # COMPUTE GRADIENT
-        #=================================================================================
-
-        g=sy.gradient(imap).numpy()
-        print('gradient %d computed '%(i))
-        np.save('g_demo_%d_%d.npy'%(i,nside),g)
-    exit(0)
-    """
     loss1=synthe.Loss(lossX,scat_op,refX,im)
         
     sy = synthe.Synthesis([loss1])
@@ -192,9 +176,9 @@ def main():
 
     
     omap=sy.run(imap,
-                DECAY_RATE=0.9995,
+                DECAY_RATE=0.99975,
                 NUM_EPOCHS = nstep,
-                LEARNING_RATE = 0.03,
+                LEARNING_RATE = 0.1,
                 EPSILON = 1E-15)
 
     #=================================================================================
