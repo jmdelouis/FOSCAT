@@ -28,6 +28,8 @@ nout      = int(sys.argv[4])
 docov     = (sys.argv[5]=='Y')
 kernelsz  = int(sys.argv[6])
 
+dtype='float32'
+
 test_mpi=False
 for ienv in os.environ:
     if 'OMPI_' in ienv:
@@ -58,9 +60,9 @@ Default_nside=256
 
 # set the default name
 if kernelsz==5:
-    outname='FOCUS_5x5%s%d'%(sys.argv[1],nout)
+    outname='FOCUSs_5x5%s%d'%(sys.argv[1],nout)
 else:
-    outname='FOCUS%s%d'%(sys.argv[1],nout)
+    outname='FOCUSs%s%d'%(sys.argv[1],nout)
 
 if kernelsz==3:
     lam=1.2
@@ -148,9 +150,9 @@ di=ampmap*(di-off)
 td=ampmap*(td)
 
 #compute all noise map statistics
-noise=np.zeros([nsim,12*nout*nout],dtype='float64')
-noise1=np.zeros([nsim,12*nout*nout],dtype='float64')
-noise2=np.zeros([nsim,12*nout*nout],dtype='float64')
+noise=np.zeros([nsim,12*nout*nout],dtype=dtype)
+noise1=np.zeros([nsim,12*nout*nout],dtype=dtype)
+noise2=np.zeros([nsim,12*nout*nout],dtype=dtype)
 for i in range(nsim):
     noise[i] =ampmap*dodown(np.load(scratch_path+'%s_NOISE%03d_full.npy'%(sys.argv[1][0:6],i)).flatten(),nout)
     noise1[i]=ampmap*dodown(np.load(scratch_path+'%s_NOISE%03d_hm1.npy'%(sys.argv[1][0:6],i)).flatten(),nout)
@@ -175,7 +177,7 @@ if isMPI:
                      KERNELSZ=kernelsz,  # define the kernel size (here 5x5)
                      OSTEP=-1,     # get very large scale (nside=1)
                      LAMBDA=lam,
-                     all_type='float64',
+                     all_type=dtype,
                      TEMPLATE_PATH=scratch_path,
                      use_R_format=True,
                      isMPI=True,
@@ -186,7 +188,7 @@ else:
                      KERNELSZ=kernelsz,  # define the kernel size (here 5x5)
                      OSTEP=-1,     # get very large scale (nside=1)
                      LAMBDA=lam,
-                     all_type='float64',
+                     all_type=dtype,
                      TEMPLATE_PATH=scratch_path,
                      use_R_format=True)
 
@@ -255,7 +257,7 @@ def loss_fct4(x,scat,args):
 i1=d1
 i2=d2
 imap=di
-init_map=((d1+d2)/2).astype('float64')
+init_map=((d1+d2)/2).astype(dtype)
 
 for itt in range(5):
 
@@ -353,8 +355,8 @@ for itt in range(5):
     if rank==1 or size==1:
         loss2=synthe.Loss(loss_fct2,scat_op,refX-bias2,td,mask,isig2)
     if rank==2 or size==1:
-        loss3=synthe.Loss(loss_fct3,scat_op,refH-bias1,di.astype('float64'),bias3,mask,isig3)
-        loss4=synthe.Loss(loss_fct4,scat_op,di.astype('float64'),sig_noise,Rformat=False)
+        loss3=synthe.Loss(loss_fct3,scat_op,refH-bias1,di.astype(dtype),bias3,mask,isig3)
+        loss4=synthe.Loss(loss_fct4,scat_op,di.astype(dtype),sig_noise,Rformat=False)
                
 
     if size==1:
