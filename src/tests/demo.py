@@ -129,7 +129,7 @@ def main():
     #=================================================================================
     # COMPUTE THE WAVELET TRANSFORM OF THE REFERENCE MAP
     #=================================================================================
-    scat_op=sc.funct(NORIENT=1,          # define the number of wavelet orientation
+    scat_op=sc.funct(NORIENT=4,          # define the number of wavelet orientation
                      KERNELSZ=KERNELSZ,  # define the kernel size
                      OSTEP=-1,           # get very large scale (nside=1)
                      LAMBDA=lam,

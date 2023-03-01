@@ -216,11 +216,9 @@ def loss_fct1(x,scat,args):
     p00  = args[3]
     
     b=scat.eval(x,image2=x,mask=mask,Auto=True)
-
-    print(isig.P00,ref.P00,b.P00)
     
     if p00==True:
-        l_val=scat.bk_reduce_sum(scat.bk_abs(isig.P00*scat.bk_square(ref.P00-b.P00)))
+        l_val=scat.bk_reduce_sum(scat.bk_abs(isig.P00*scat.bk_square(scat.bk_abs(ref.P00-b.P00))))
     else:
         l_val=scat.reduce_sum(scat.reduce_mean(isig*scat.square(ref-b)))
 
@@ -236,7 +234,7 @@ def loss_fct2(x,scat,args):
     
     b=scat.eval(TT,image2=x,mask=mask,Auto=False)
     if p00==True:
-        l_val=scat.bk_reduce_sum(scat.bk_abs(isig.P00*scat.bk_square(ref.P00-b.P00)))
+        l_val=scat.bk_reduce_sum(scat.bk_abs(isig.P00*scat.bk_square(scat.bk_abs(ref.P00-b.P00))))
     else:
         l_val=scat.reduce_sum(scat.reduce_mean(isig*scat.square(ref-b)))
     if docov:
@@ -257,7 +255,7 @@ def loss_fct3(x,scat,args):
     a=scat.eval(im,image2=x,mask=mask,Auto=True)-bias
     
     if p00==True:
-        l_val=scat.bk_reduce_sum(scat.bk_abs(isig.P00*scat.bk_square(ref.P00-a.P00)))
+        l_val=scat.bk_reduce_sum(scat.bk_abs(isig.P00*scat.bk_square(scat.bk_abs(ref.P00-a.P00))))
     else:
         l_val=scat.reduce_sum(scat.reduce_mean(isig*scat.square(a-ref)))
 
@@ -367,14 +365,16 @@ for itt in range(5):
         
     sys.stdout.flush()
 
+    #================================================================
+    # BEGIN LEARN BY CONSTRAINING ONLY P00
+
     if rank==0 or size==1:
-        loss1=synthe.Loss(loss_fct1,scat_op,refH-bias1,mask,isig1,itt==0)
+        loss1=synthe.Loss(loss_fct1,scat_op,refH-bias1,mask,isig1,True)
     if rank==1 or size==1:
-        loss2=synthe.Loss(loss_fct2,scat_op,refX-bias2,td,mask,isig2,itt==0)
+        loss2=synthe.Loss(loss_fct2,scat_op,refX-bias2,td,mask,isig2,True)
     if rank==2 or size==1:
-        loss3=synthe.Loss(loss_fct3,scat_op,refH-bias1,di.astype(dtype),bias3,mask,isig3,itt==0)
+        loss3=synthe.Loss(loss_fct3,scat_op,refH-bias1,di.astype(dtype),bias3,mask,isig3,True)
         loss4=synthe.Loss(loss_fct4,scat_op,di.astype(dtype),sig_noise,Rformat=False)
-               
 
     if size==1:
         sy = synthe.Synthesis([loss1,loss2,loss3,loss4])
@@ -386,12 +386,40 @@ for itt in range(5):
         if rank==2:
             sy = synthe.Synthesis([loss3,loss4])
 
+    NUM_EPOCHS=100
+
+    omap=sy.run(init_map,
+                EVAL_FREQUENCY = 100,
+                DECAY_RATE=0.999,
+                NUM_EPOCHS = NUM_EPOCHS,
+                LEARNING_RATE = 0.3,
+                EPSILON = 1E-16)
+    
     if docov:
         NUM_EPOCHS=1000+500*itt
     else:
         NUM_EPOCHS=2000+500*itt
+    #================================================================
+    # START THE REAL RUN
+    if rank==0 or size==1:
+        loss1=synthe.Loss(loss_fct1,scat_op,refH-bias1,mask,isig1,False)
+    if rank==1 or size==1:
+        loss2=synthe.Loss(loss_fct2,scat_op,refX-bias2,td,mask,isig2,False)
+    if rank==2 or size==1:
+        loss3=synthe.Loss(loss_fct3,scat_op,refH-bias1,di.astype(dtype),bias3,mask,isig3,False)
+        loss4=synthe.Loss(loss_fct4,scat_op,di.astype(dtype),sig_noise,Rformat=False)
 
-    omap=sy.run(init_map,
+    if size==1:
+        sy = synthe.Synthesis([loss1,loss2,loss3,loss4])
+    else:
+        if rank==0:
+            sy = synthe.Synthesis([loss1])
+        if rank==1:
+            sy = synthe.Synthesis([loss2])
+        if rank==2:
+            sy = synthe.Synthesis([loss3,loss4])
+
+    omap=sy.run(omap,
                 EVAL_FREQUENCY = 100,
                 DECAY_RATE=0.999,
                 NUM_EPOCHS = NUM_EPOCHS,
