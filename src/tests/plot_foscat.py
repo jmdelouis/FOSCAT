@@ -81,11 +81,6 @@ if ref is not None:
     scref=scat_op.eval((ref+6.981021657074907e-05)*ampmap,mask=mask)
 else:
     scref=None
-
-if ref is not None:
-    scref=scat_op.eval((ref+6.981021657074907e-05)*ampmap,mask=mask)
-else:
-    scref=None
     
 td=np.load(outpath+'/%std.npy'%(outname))
 di=np.load(outpath+'/%sdi.npy'%(outname))

@@ -243,26 +243,47 @@ class FoCUS:
         x=np.repeat(np.arange(KERNELSZ)-KERNELSZ//2,KERNELSZ).reshape(KERNELSZ,KERNELSZ)
         y=x.T
 
-        for i in range(NORIENT):
-            a=i/float(NORIENT)*np.pi
-            xx=(3/float(KERNELSZ))*LAMBDA*(x*np.cos(a)+y*np.sin(a))
-            yy=(3/float(KERNELSZ))*LAMBDA*(x*np.sin(a)-y*np.cos(a))
+        if NORIENT==1:
+            xx=(3/float(KERNELSZ))*LAMBDA*x
+            yy=(3/float(KERNELSZ))*LAMBDA*y
 
             if KERNELSZ==5:
                 #w_smooth=np.exp(-2*((3.0/float(KERNELSZ)*xx)**2+(3.0/float(KERNELSZ)*yy)**2))
                 w_smooth=np.exp(-(xx**2+yy**2))
+                tmp=np.exp(-2*(xx**2+yy**2))-0.25*np.exp(-0.5*(xx**2+yy**2))
             else:
                 w_smooth=np.exp(-0.5*(xx**2+yy**2))
-        
-            tmp=np.cos(yy*np.pi)*w_smooth
-            wwc[:,i]=tmp.flatten()-tmp.mean()
-            tmp=np.sin(yy*np.pi)*w_smooth
-            wws[:,i]=tmp.flatten()-tmp.mean()
-            sigma=np.sqrt((wwc[:,i]**2).mean())
-            wwc[:,i]/=sigma
-            wws[:,i]/=sigma
+                tmp=np.exp(-2*(xx**2+yy**2))-0.25*np.exp(-0.5*(xx**2+yy**2))
+
+            wwc[:,0]=tmp.flatten()-tmp.mean()
+            tmp=0*w_smooth
+            wws[:,0]=tmp.flatten()
+            sigma=np.sqrt((wwc[:,0]**2).mean())
+            wwc[:,0]/=sigma
+            wws[:,0]/=sigma
 
             w_smooth=w_smooth.flatten()
+        else:
+            for i in range(NORIENT):
+                a=i/float(NORIENT)*np.pi
+                xx=(3/float(KERNELSZ))*LAMBDA*(x*np.cos(a)+y*np.sin(a))
+                yy=(3/float(KERNELSZ))*LAMBDA*(x*np.sin(a)-y*np.cos(a))
+
+                if KERNELSZ==5:
+                    #w_smooth=np.exp(-2*((3.0/float(KERNELSZ)*xx)**2+(3.0/float(KERNELSZ)*yy)**2))
+                    w_smooth=np.exp(-(xx**2+yy**2))
+                else:
+                    w_smooth=np.exp(-0.5*(xx**2+yy**2))
+
+                tmp=np.cos(yy*np.pi)*w_smooth
+                wwc[:,i]=tmp.flatten()-tmp.mean()
+                tmp=np.sin(yy*np.pi)*w_smooth
+                wws[:,i]=tmp.flatten()-tmp.mean()
+                sigma=np.sqrt((wwc[:,i]**2).mean())
+                wwc[:,i]/=sigma
+                wws[:,i]/=sigma
+
+                w_smooth=w_smooth.flatten()
         
         self.w_smooth=slope*(w_smooth/w_smooth.sum()).astype(self.all_type)
         self.ww_Real=wwc.astype(self.all_type)

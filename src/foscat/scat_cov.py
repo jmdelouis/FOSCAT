@@ -250,7 +250,7 @@ class scat_cov:
     def save(self, filename):
         if self.S1 is not None:  # Auto
             np.save('%s_s1.npy' % filename, self.get_S1().numpy())
-        else:  # Cross
+        if self.C10 is not None:  # Cross
             np.save('%s_c10.npy' % filename, self.get_C10().numpy())
         np.save('%s_c01.npy' % filename, self.get_C01().numpy())
         np.save('%s_c11.npy' % filename, self.get_C11().numpy())
