@@ -44,7 +44,7 @@ if test_mpi:
     size = comm.Get_size()
     rank = comm.Get_rank()
     if size>1:
-        print('Use mpi facilities')
+        print('Use mpi facilities',rank,size)
     isMPI=True
 else:
     size=1
@@ -60,9 +60,9 @@ Default_nside=256
 
 # set the default name
 if kernelsz==5:
-    outname='FOCUSs_5x5%s%d'%(sys.argv[1],nout)
+    outname='FOCUS_5x5%s%d'%(sys.argv[1],nout)
 else:
-    outname='FOCUSs%s%d'%(sys.argv[1],nout)
+    outname='FOCUS%s%d'%(sys.argv[1],nout)
 
 if kernelsz==3:
     lam=1.2
@@ -107,11 +107,15 @@ except:
     d1=dodown(np.load(datapath+'%s_HM1_MONO.npy'%(sys.argv[1])),nout)
     d2=dodown(np.load(datapath+'%s_HM2_MONO.npy'%(sys.argv[1])),nout)
 
-    np.save(outpath+'/%std.npy'%(outname),td)
-    np.save(outpath+'/%sdi.npy'%(outname),di)
-    np.save(outpath+'/%sd1.npy'%(outname),d1)
-    np.save(outpath+'/%sd2.npy'%(outname),d2)
+    if rank==0:
+        np.save(outpath+'/%std.npy'%(outname),td)
+        np.save(outpath+'/%sdi.npy'%(outname),di)
+        np.save(outpath+'/%sd1.npy'%(outname),d1)
+        np.save(outpath+'/%sd2.npy'%(outname),d2)
     
+    if test_mpi:
+        comm.Barrier()
+        
     td=np.load(outpath+'/%std.npy'%(outname)) 
     di=np.load(outpath+'/%sdi.npy'%(outname)) 
     d1=np.load(outpath+'/%sd1.npy'%(outname)) 
@@ -209,10 +213,16 @@ def loss_fct1(x,scat,args):
     ref  = args[0]
     mask = args[1]
     isig = args[2]
+    p00  = args[3]
     
     b=scat.eval(x,image2=x,mask=mask,Auto=True)
 
-    l_val=scat.reduce_sum(isig*scat.square(ref-b))
+    print(isig.P00,ref.P00,b.P00)
+    
+    if p00==True:
+        l_val=scat.bk_reduce_sum(scat.bk_abs(isig.P00*scat.bk_square(ref.P00-b.P00)))
+    else:
+        l_val=scat.reduce_sum(scat.reduce_mean(isig*scat.square(ref-b)))
 
     return(l_val)
 
@@ -222,12 +232,17 @@ def loss_fct2(x,scat,args):
     TT   = args[1]
     mask = args[2]
     isig = args[3]
+    p00  = args[4]
     
     b=scat.eval(TT,image2=x,mask=mask,Auto=False)
-    
-    l_val=scat.reduce_sum(isig*scat.square(ref-b))
-    
-    return(l_val)
+    if p00==True:
+        l_val=scat.bk_reduce_sum(scat.bk_abs(isig.P00*scat.bk_square(ref.P00-b.P00)))
+    else:
+        l_val=scat.reduce_sum(scat.reduce_mean(isig*scat.square(ref-b)))
+    if docov:
+        return(l_val*1E-5)
+    else:
+        return(l_val)
 
 def loss_fct3(x,scat,args):
 
@@ -236,12 +251,15 @@ def loss_fct3(x,scat,args):
     bias = args[2]
     mask = args[3]
     isig = args[4]
+    p00  = args[5]
 
     
     a=scat.eval(im,image2=x,mask=mask,Auto=True)-bias
-    b=scat.eval(x,image2=x,mask=mask,Auto=True)
     
-    l_val=scat.reduce_sum(isig*scat.square(a-ref))
+    if p00==True:
+        l_val=scat.bk_reduce_sum(scat.bk_abs(isig.P00*scat.bk_square(ref.P00-a.P00)))
+    else:
+        l_val=scat.reduce_sum(scat.reduce_mean(isig*scat.square(a-ref)))
 
     return(l_val)
 
@@ -333,8 +351,7 @@ for itt in range(5):
             print("BIAS DVAR 2 %f"%((bias3-initb3).std()))
 
     l_outpath=outpath
-    if docov:
-        l_outpath=outpath+'_cov_'
+    
     if rank==0 or size==1:
         initb1=bias1
         bias1.save(l_outpath+'/%s_bias1_%d.npy'%(outname,itt))
@@ -351,11 +368,11 @@ for itt in range(5):
     sys.stdout.flush()
 
     if rank==0 or size==1:
-        loss1=synthe.Loss(loss_fct1,scat_op,refH-bias1,mask,isig1)
+        loss1=synthe.Loss(loss_fct1,scat_op,refH-bias1,mask,isig1,itt==0)
     if rank==1 or size==1:
-        loss2=synthe.Loss(loss_fct2,scat_op,refX-bias2,td,mask,isig2)
+        loss2=synthe.Loss(loss_fct2,scat_op,refX-bias2,td,mask,isig2,itt==0)
     if rank==2 or size==1:
-        loss3=synthe.Loss(loss_fct3,scat_op,refH-bias1,di.astype(dtype),bias3,mask,isig3)
+        loss3=synthe.Loss(loss_fct3,scat_op,refH-bias1,di.astype(dtype),bias3,mask,isig3,itt==0)
         loss4=synthe.Loss(loss_fct4,scat_op,di.astype(dtype),sig_noise,Rformat=False)
                
 
@@ -369,10 +386,15 @@ for itt in range(5):
         if rank==2:
             sy = synthe.Synthesis([loss3,loss4])
 
+    if docov:
+        NUM_EPOCHS=1000+500*itt
+    else:
+        NUM_EPOCHS=2000+500*itt
+    
     omap=sy.run(init_map,
                 EVAL_FREQUENCY = 100,
                 DECAY_RATE=0.999,
-                NUM_EPOCHS = 1000,
+                NUM_EPOCHS = NUM_EPOCHS,
                 LEARNING_RATE = 0.3,
                 EPSILON = 1E-16)
 
@@ -385,8 +407,6 @@ for itt in range(5):
         print('ITT %d DONE'%(itt))
         l_outpath=outpath
         sys.stdout.flush()
-        if docov:
-            l_outpath=outpath+'_cov_'
 
         sin = scat_op.eval(di,image2=di,mask=mask,Auto=True)
         sout = scat_op.eval(omap,image2=omap,mask=mask,Auto=True)
@@ -398,6 +418,9 @@ for itt in range(5):
             
         np.save(l_outpath+'%slog_%d.npy'%(outname,itt),sy.get_history())
 
+    if test_mpi:
+        comm.Barrier()
+        
 print('Computation Done')
 sys.stdout.flush()
 
