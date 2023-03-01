@@ -59,7 +59,7 @@ def dodown(a,nout):
         return(a)
     return(np.mean(a.reshape(12*nout*nout,(nin//nout)**2),1))
 
-nin=nside
+nin=256
 tab=['MASK_GAL11_%d.npy'%(nin),'MASK_GAL09_%d.npy'%(nin),'MASK_GAL08_%d.npy'%(nin),'MASK_GAL06_%d.npy'%(nin),'MASK_GAL04_%d.npy'%(nin)]
 mask=np.ones([len(tab),12*nside**2])
 for i in range(len(tab)):
@@ -70,7 +70,10 @@ mask[0,:]=1.0
 for i in range(1,len(tab)):
     mask[i,:]=mask[i,:]*mask[0,:].sum()/mask[i,:].sum()
     
-scref=scat_op.eval((ref+6.981021657074907e-05)*ampmap,mask=mask)
+if ref is not None:
+    scref=scat_op.eval((ref+6.981021657074907e-05)*ampmap,mask=mask)
+else:
+    scref=None
 
 td=np.load(outpath+'/%std.npy'%(outname))
 di=np.load(outpath+'/%sdi.npy'%(outname))
@@ -87,12 +90,15 @@ try:
     b2=sc.read(outpath+'/%s_bias2_%d.npy'%(outname,step))
     b3=sc.read(outpath+'/%s_bias3_%d.npy'%(outname,step))
 
-    scref.plot(name='Model',lw=4)
+    if ref is not None:
+        scref.plot(name='Model',lw=4)
+
     smod.plot(name='cross',hold=False,color='purple')
     (smod-b1).plot(name='cross debias',hold=False,color='orange')
     sin.plot(name='In',hold=False,color='red')
     sout.plot(name='Out',hold=False,color='yellow')
-    (scref-sout).plot(name='Diff Out',hold=False,color='black')
+    if ref is not None:
+        (scref-sout).plot(name='Diff Out',hold=False,color='black')
 except:
     print('no scat computed')
     

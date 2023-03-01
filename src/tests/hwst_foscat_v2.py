@@ -60,9 +60,9 @@ Default_nside=256
 
 # set the default name
 if kernelsz==5:
-    outname='FOCUSs_5x5%s%d'%(sys.argv[1],nout)
+    outname='FOCUS_5x5%s%d'%(sys.argv[1],nout)
 else:
-    outname='FOCUSs%s%d'%(sys.argv[1],nout)
+    outname='FOCUS%s%d'%(sys.argv[1],nout)
 
 if kernelsz==3:
     lam=1.2
@@ -369,10 +369,12 @@ for itt in range(5):
         if rank==2:
             sy = synthe.Synthesis([loss3,loss4])
 
+    NUM_EPOCHS=1000+500*itt
+
     omap=sy.run(init_map,
                 EVAL_FREQUENCY = 100,
                 DECAY_RATE=0.999,
-                NUM_EPOCHS = 1000,
+                NUM_EPOCHS = NUM_EPOCHS,
                 LEARNING_RATE = 0.3,
                 EPSILON = 1E-16)
 
