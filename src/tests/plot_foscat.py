@@ -76,6 +76,11 @@ for i in range(len(tab)):
 mask[0,:]=1.0
 for i in range(1,len(tab)):
     mask[i,:]=mask[i,:]*mask[0,:].sum()/mask[i,:].sum()
+    
+if ref is not None:
+    scref=scat_op.eval((ref+6.981021657074907e-05)*ampmap,mask=mask)
+else:
+    scref=None
 
 if ref is not None:
     scref=scat_op.eval((ref+6.981021657074907e-05)*ampmap,mask=mask)
@@ -99,7 +104,7 @@ try:
 
     if ref is not None:
         scref.plot(name='Model',lw=4)
-        
+
     smod.plot(name='cross',hold=False,color='purple')
     (smod-b1).plot(name='cross debias',hold=False,color='orange')
     sin.plot(name='In',hold=False,color='red')
@@ -107,6 +112,7 @@ try:
     
     if ref is not None:
         (scref-sout).plot(name='Diff Out',hold=False,color='black')
+        
 except:
     print('no scat computed')
     

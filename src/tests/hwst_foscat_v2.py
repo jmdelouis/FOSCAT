@@ -390,7 +390,7 @@ for itt in range(5):
         NUM_EPOCHS=1000+500*itt
     else:
         NUM_EPOCHS=2000+500*itt
-    
+
     omap=sy.run(init_map,
                 EVAL_FREQUENCY = 100,
                 DECAY_RATE=0.999,
