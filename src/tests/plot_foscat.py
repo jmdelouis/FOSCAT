@@ -2,7 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import healpy as hp
 import sys        
-import foscat.scat as sc
 
 if len(sys.argv)<4:
     print('\nhwst_foscat usage:\n')
@@ -13,6 +12,7 @@ if len(sys.argv)<4:
     print('<out>          : name of the directory where the computed data are stored')
     print('<nside>        : nside of the synthesised map')
     print('<step>         : iteration number to plot')
+    print('<cov>          : if Y use scat_cov istead of scat')
     print('<kernelsz>     : kernelsz of the convolution')
     print('============================================')
     exit(0)
@@ -22,8 +22,14 @@ datapath     = scratch_path
 outpath      = sys.argv[3]
 nside        = int(sys.argv[4])
 step         = int(sys.argv[5])
-kernelsz     = int(sys.argv[6])
+docov        = (sys.argv[6]=='Y')
+kernelsz     = int(sys.argv[7])
 
+if docov:
+    import foscat.scat_cov as sc
+else:
+    import foscat.scat as sc
+    
 idx=hp.ring2nest(nside,np.arange(12*nside**2))
 if kernelsz==5:
     outname='FOCUS_5x5%s%d'%(sys.argv[1],nside)
@@ -43,6 +49,7 @@ if kernelsz==3:
     lam=1.2
 else:
     lam=1.0
+    
 scat_op=sc.funct(NORIENT=4,   # define the number of wavelet orientation
                  KERNELSZ=kernelsz,  # define the kernel size (here 5x5)
                  OSTEP=-1,     # get very large scale (nside=1)
@@ -59,7 +66,7 @@ def dodown(a,nout):
         return(a)
     return(np.mean(a.reshape(12*nout*nout,(nin//nout)**2),1))
 
-nin=nside
+nin=256
 tab=['MASK_GAL11_%d.npy'%(nin),'MASK_GAL09_%d.npy'%(nin),'MASK_GAL08_%d.npy'%(nin),'MASK_GAL06_%d.npy'%(nin),'MASK_GAL04_%d.npy'%(nin)]
 mask=np.ones([len(tab),12*nside**2])
 for i in range(len(tab)):
@@ -69,9 +76,12 @@ for i in range(len(tab)):
 mask[0,:]=1.0
 for i in range(1,len(tab)):
     mask[i,:]=mask[i,:]*mask[0,:].sum()/mask[i,:].sum()
-    
-scref=scat_op.eval((ref+6.981021657074907e-05)*ampmap,mask=mask)
 
+if ref is not None:
+    scref=scat_op.eval((ref+6.981021657074907e-05)*ampmap,mask=mask)
+else:
+    scref=None
+    
 td=np.load(outpath+'/%std.npy'%(outname))
 di=np.load(outpath+'/%sdi.npy'%(outname))
 d1=np.load(outpath+'/%sd1.npy'%(outname))
@@ -87,12 +97,16 @@ try:
     b2=sc.read(outpath+'/%s_bias2_%d.npy'%(outname,step))
     b3=sc.read(outpath+'/%s_bias3_%d.npy'%(outname,step))
 
-    scref.plot(name='Model',lw=4)
+    if ref is not None:
+        scref.plot(name='Model',lw=4)
+        
     smod.plot(name='cross',hold=False,color='purple')
     (smod-b1).plot(name='cross debias',hold=False,color='orange')
     sin.plot(name='In',hold=False,color='red')
     sout.plot(name='Out',hold=False,color='yellow')
-    (scref-sout).plot(name='Diff Out',hold=False,color='black')
+    
+    if ref is not None:
+        (scref-sout).plot(name='Diff Out',hold=False,color='black')
 except:
     print('no scat computed')
     
