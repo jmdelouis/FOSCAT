@@ -186,6 +186,7 @@ if isMPI:
                      use_R_format=True,
                      isMPI=True,
                      mpi_rank=rank,
+                     SHOWGPU=True,
                      mpi_size=size)
 else:
     scat_op=sc.funct(NORIENT=4,   # define the number of wavelet orientation
@@ -193,6 +194,7 @@ else:
                      OSTEP=-1,     # get very large scale (nside=1)
                      LAMBDA=lam,
                      all_type=dtype,
+                     SHOWGPU=True,
                      TEMPLATE_PATH=scratch_path,
                      use_R_format=True)
 

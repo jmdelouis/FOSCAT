@@ -6,46 +6,61 @@ class Rformat:
     def __init__(self,
                  im,
                  off,
-                 axis):
+                 axis,
+                 chans=12):
         self.data=im
         self.shape=im.shape
         self.axis=axis
         self.off=off
+        self.chans=chans
         self.nside=im.shape[axis+1]-2*off
 
     def get(self):
         return self.data
+    
+    def get_data(self):
+        if self.axis==0:
+            return self.data[:,self.off:-self.off,self.off:-self.off]
+        if self.axis==1:
+            return self.data[:,:,self.off:-self.off,self.off:-self.off]
+        if self.axis==2:
+            return self.data[:,:,:,self.off:-self.off,self.off:-self.off]
+        if self.axis==3:
+            return self.data[:,:,:,:,self.off:-self.off,self.off:-self.off]
+
+        print('get_data is implemented till axis==3 and axis=',self.axis)
+        exit(0)
 
     def __add__(self,other):
         assert isinstance(other, float) or isinstance(other, int) or \
             isinstance(other, bool) or isinstance(other, Rformat)
         
         if isinstance(other, Rformat):
-            return Rformat(self.get()+other.get(),self.off,self.axis)
+            return Rformat(self.get()+other.get(),self.off,self.axis,chans=self.chans)
         else:
-            return Rformat(self.get()+other,self.off,self.axis)
+            return Rformat(self.get()+other,self.off,self.axis,chans=self.chans)
 
     def __sub__(self,other):
         assert isinstance(other, float) or isinstance(other, int) or \
             isinstance(other, bool) or isinstance(other, Rformat)
         
         if isinstance(other, Rformat):
-            return Rformat(self.get()-other.get(),self.off,self.axis)
+            return Rformat(self.get()-other.get(),self.off,self.axis,chans=self.chans)
         else:
-            return Rformat(self.get()-other,self.off,self.axis)
+            return Rformat(self.get()-other,self.off,self.axis,chans=self.chans)
             
     def __neg__(self):
         
-        return Rformat(-self.get(),self.off,self.axis)
+        return Rformat(-self.get(),self.off,self.axis,chans=self.chans)
 
     def __mul__(self,other):
         assert isinstance(other, float) or isinstance(other, int) or \
             isinstance(other, bool) or isinstance(other, Rformat)
         
         if isinstance(other, Rformat):
-            return Rformat(self.get()*other.get(),self.off,self.axis)
+            return Rformat(self.get()*other.get(),self.off,self.axis,chans=self.chans)
         else:
-            return Rformat(self.get()*other,self.off,self.axis)
+            return Rformat(self.get()*other,self.off,self.axis,chans=self.chans)
 
             
 class FoCUS:
@@ -64,6 +79,7 @@ class FoCUS:
                  TEMPLATE_PATH='data',
                  BACKEND='tensorflow',
                  use_R_format=True,
+                 chans=12,
                  mpi_size=1,
                  mpi_rank=0):
 
@@ -129,6 +145,7 @@ class FoCUS:
             
         self.OSTEP=OSTEP
         self.use_R_format=use_R_format
+        self.chans=chans
         
         """
         if isMPI:
@@ -230,66 +247,94 @@ class FoCUS:
         
         self.NORIENT=NORIENT
         self.LAMBDA=LAMBDA
-        self.KERNELSZ=KERNELSZ
         self.slope=slope
         
-        self.R_off=(self.KERNELSZ-1)//2
+        self.R_off=(KERNELSZ-1)//2
         if (self.R_off//2)*2<self.R_off:
             self.R_off+=1
-
-        wwc=np.zeros([KERNELSZ**2,NORIENT]).astype(all_type)
-        wws=np.zeros([KERNELSZ**2,NORIENT]).astype(all_type)
-
-        x=np.repeat(np.arange(KERNELSZ)-KERNELSZ//2,KERNELSZ).reshape(KERNELSZ,KERNELSZ)
-        y=x.T
-
-        if NORIENT==1:
+            
+        self.ww_Real  = {} 
+        self.ww_Imag  = {} 
+        self.ww_RealT = {} 
+        self.ww_ImagT = {}
+        
+        if KERNELSZ>5:
+            for i in range(nstep_max):
+                lout=(2**i)
+                all_nmax=128
+                self.ww_Real[lout]=np.load('ALLWAVE_%d_%d_Wr.npy'%(lout,all_nmax)).astype(self.all_type)
+                self.ww_Imag[lout]=np.load('ALLWAVE_%d_%d_Wi.npy'%(lout,all_nmax)).astype(self.all_type)
+                
+            KERNELSZ=5
+            x=np.repeat(np.arange(KERNELSZ)-KERNELSZ//2,KERNELSZ).reshape(KERNELSZ,KERNELSZ)
+            y=x.T
             xx=(3/float(KERNELSZ))*LAMBDA*x
             yy=(3/float(KERNELSZ))*LAMBDA*y
-
-            if KERNELSZ==5:
-                #w_smooth=np.exp(-2*((3.0/float(KERNELSZ)*xx)**2+(3.0/float(KERNELSZ)*yy)**2))
-                w_smooth=np.exp(-(xx**2+yy**2))
-                tmp=np.exp(-2*(xx**2+yy**2))-0.25*np.exp(-0.5*(xx**2+yy**2))
-            else:
-                w_smooth=np.exp(-0.5*(xx**2+yy**2))
-                tmp=np.exp(-2*(xx**2+yy**2))-0.25*np.exp(-0.5*(xx**2+yy**2))
-
-            wwc[:,0]=tmp.flatten()-tmp.mean()
-            tmp=0*w_smooth
-            wws[:,0]=tmp.flatten()
-            sigma=np.sqrt((wwc[:,0]**2).mean())
-            wwc[:,0]/=sigma
-            wws[:,0]/=sigma
-
-            w_smooth=w_smooth.flatten()
+            w_smooth=np.exp(-(xx**2+yy**2)).flatten()
+            self.do_wigner=True
         else:
-            for i in range(NORIENT):
-                a=i/float(NORIENT)*np.pi
-                xx=(3/float(KERNELSZ))*LAMBDA*(x*np.cos(a)+y*np.sin(a))
-                yy=(3/float(KERNELSZ))*LAMBDA*(x*np.sin(a)-y*np.cos(a))
+            self.do_wigner=False
+            wwc=np.zeros([KERNELSZ**2,NORIENT]).astype(all_type)
+            wws=np.zeros([KERNELSZ**2,NORIENT]).astype(all_type)
+
+            x=np.repeat(np.arange(KERNELSZ)-KERNELSZ//2,KERNELSZ).reshape(KERNELSZ,KERNELSZ)
+            y=x.T
+
+            if NORIENT==1:
+                xx=(3/float(KERNELSZ))*LAMBDA*x
+                yy=(3/float(KERNELSZ))*LAMBDA*y
 
                 if KERNELSZ==5:
                     #w_smooth=np.exp(-2*((3.0/float(KERNELSZ)*xx)**2+(3.0/float(KERNELSZ)*yy)**2))
                     w_smooth=np.exp(-(xx**2+yy**2))
+                    tmp=np.exp(-2*(xx**2+yy**2))-0.25*np.exp(-0.5*(xx**2+yy**2))
                 else:
                     w_smooth=np.exp(-0.5*(xx**2+yy**2))
+                    tmp=np.exp(-2*(xx**2+yy**2))-0.25*np.exp(-0.5*(xx**2+yy**2))
 
-                tmp=np.cos(yy*np.pi)*w_smooth
-                wwc[:,i]=tmp.flatten()-tmp.mean()
-                tmp=np.sin(yy*np.pi)*w_smooth
-                wws[:,i]=tmp.flatten()-tmp.mean()
-                sigma=np.sqrt((wwc[:,i]**2).mean())
-                wwc[:,i]/=sigma
-                wws[:,i]/=sigma
+                wwc[:,0]=tmp.flatten()-tmp.mean()
+                tmp=0*w_smooth
+                wws[:,0]=tmp.flatten()
+                sigma=np.sqrt((wwc[:,0]**2).mean())
+                wwc[:,0]/=sigma
+                wws[:,0]/=sigma
 
                 w_smooth=w_smooth.flatten()
+            else:
+                for i in range(NORIENT):
+                    a=i/float(NORIENT)*np.pi
+                    xx=(3/float(KERNELSZ))*LAMBDA*(x*np.cos(a)+y*np.sin(a))
+                    yy=(3/float(KERNELSZ))*LAMBDA*(x*np.sin(a)-y*np.cos(a))
+
+                    if KERNELSZ==5:
+                        #w_smooth=np.exp(-2*((3.0/float(KERNELSZ)*xx)**2+(3.0/float(KERNELSZ)*yy)**2))
+                        w_smooth=np.exp(-(xx**2+yy**2))
+                    else:
+                        w_smooth=np.exp(-0.5*(xx**2+yy**2))
+
+                    tmp=np.cos(yy*np.pi)*w_smooth
+                    wwc[:,i]=tmp.flatten()-tmp.mean()
+                    tmp=np.sin(yy*np.pi)*w_smooth
+                    wws[:,i]=tmp.flatten()-tmp.mean()
+                    sigma=np.sqrt((wwc[:,i]**2).mean())
+                    wwc[:,i]/=sigma
+                    wws[:,i]/=sigma
+
+                    w_smooth=w_smooth.flatten()
         
+        self.KERNELSZ=KERNELSZ
         self.w_smooth=slope*(w_smooth/w_smooth.sum()).astype(self.all_type)
-        self.ww_Real=wwc.astype(self.all_type)
-        self.ww_Imag=wws.astype(self.all_type)
-        self.ww_RealT=wwc.astype(self.all_type)
-        self.ww_ImagT=wws.astype(self.all_type)
+        for i in range(nstep_max):
+            lout=(2**i)
+            if not self.do_wigner:
+                self.ww_Real[lout]=wwc.astype(self.all_type)
+                self.ww_Imag[lout]=wws.astype(self.all_type)
+                self.ww_RealT[lout]=wwc.astype(self.all_type)
+                self.ww_ImagT[lout]=wws.astype(self.all_type)
+            else:
+                self.ww_RealT[lout]=np.zeros([KERNELSZ**2,NORIENT]).astype(all_type)
+                self.ww_ImagT[lout]=np.zeros([KERNELSZ**2,NORIENT]).astype(all_type)
+        
         tab=[0,1,2,3]
         def trans_kernel(a):
             b=1*a.reshape(KERNELSZ,KERNELSZ)
@@ -300,11 +345,14 @@ class FoCUS:
 
         self.ww_SmoothT = self.w_smooth.reshape(KERNELSZ,KERNELSZ,1)
         
-        for i in range(NORIENT):
-            self.ww_RealT[:,i]=trans_kernel(self.ww_Real[:,tab[i]])
-            self.ww_ImagT[:,i]=trans_kernel(self.ww_Imag[:,tab[i]])
+        if not self.do_wigner:
+            for i in range(nstep_max):
+                for i in range(NORIENT):
+                    self.ww_RealT[lout][:,i]=trans_kernel(self.ww_Real[lout][:,tab[i]])
+                    self.ww_ImagT[lout][:,i]=trans_kernel(self.ww_Imag[lout][:,tab[i]])
           
         self.Idx_Neighbours={}
+        self.Idx_convol={}
         self.pix_interp_val={}
         self.weight_interp_val={}
         self.ring2nest={}
@@ -328,6 +376,7 @@ class FoCUS:
                 self.weight_interp_val[lout][lout2]=None
             self.ring2nest[lout]=None
             self.Idx_Neighbours[lout]=None
+            self.Idx_convol[lout]=None
             self.nest2R[lout]=None
             self.nest2R1[lout]=None
             self.nest2R2[lout]=None
@@ -362,7 +411,7 @@ class FoCUS:
         if isinstance(x,Rformat):
             return Rformat(self.backend.sign(x.get())* \
                            self.backend.sqrt(self.backend.sign(x.get())*x.get()),
-                           x.off,x.axis)
+                           x.off,x.axis,chans=self.chans)
         else:
             return self.backend.sign(x)*self.backend.sqrt(self.backend.sign(x)*x)
         
@@ -409,20 +458,20 @@ class FoCUS:
     def bk_sqrt(self,data):
         
         if isinstance(data,Rformat):
-            return Rformat(self.bk_sqrt(data.get()),data.off,0)
+            return Rformat(self.bk_sqrt(data.get()),data.off,0,chans=self.chans)
         
         return(self.backend.sqrt(self.backend.abs(data)))
     
     def bk_abs(self,data):
         
         if isinstance(data,Rformat):
-            return Rformat(self.bk_abs(data.get()),data.off,0)
+            return Rformat(self.bk_abs(data.get()),data.off,0,chans=self.chans)
         return(self.backend.abs(data))
         
     def bk_square(self,data):
         
         if isinstance(data,Rformat):
-            return Rformat(self.bk_square(data.get()),data.off,0)
+            return Rformat(self.bk_square(data.get()),data.off,0,chans=self.chans)
         
         if self.BACKEND==self.TENSORFLOW:
             return(self.backend.square(data))
@@ -467,7 +516,7 @@ class FoCUS:
 
     def bk_reshape(self,data,shape):
         if isinstance(data,Rformat):
-            return Rformat(self.bk_reshape(data.get(),shape),data.off,0)
+            return Rformat(self.bk_reshape(data.get(),shape),data.off,0,chans=self.chans)
         
         return(self.backend.reshape(data,shape))
     
@@ -480,7 +529,7 @@ class FoCUS:
                 l_axis=data.axis+1
             else:
                 l_axis=data.axis
-            return Rformat(self.bk_expand_dims(data.get(),axis=axis),data.off,l_axis)
+            return Rformat(self.bk_expand_dims(data.get(),axis=axis),data.off,l_axis,chans=self.chans)
             
         if self.BACKEND==self.TENSORFLOW:
             return(self.backend.expand_dims(data,axis=axis))
@@ -500,7 +549,7 @@ class FoCUS:
     def bk_concat(self,data,axis=None):
         if isinstance(data[0],Rformat):
             l_data=[idata.get() for idata in data]
-            return Rformat(self.bk_concat(l_data,axis=axis),data[0].off,data[0].axis)
+            return Rformat(self.bk_concat(l_data,axis=axis),data[0].off,data[0].axis,chans=self.chans)
                 
         if axis is None:
             return(self.backend.concat(data))
@@ -509,7 +558,7 @@ class FoCUS:
         
     def bk_relu(self,x):
         if isinstance(x,Rformat):
-            return Rformat(self.bk_relu(x.get()),x.off,x.axis)
+            return Rformat(self.bk_relu(x.get()),x.off,x.axis,chans=self.chans)
         
         if self.BACKEND==self.TENSORFLOW:
             return self.backend.nn.relu(x)
@@ -520,7 +569,7 @@ class FoCUS:
         
     def bk_cast(self,x):
         if isinstance(x,Rformat):
-            return Rformat(self.bk_cast(x.get()),x.off,x.axis)
+            return Rformat(self.bk_cast(x.get()),x.off,x.axis,chans=self.chans)
         
         if self.BACKEND==self.TENSORFLOW:
             return self.backend.cast(x,self.all_bk_type)
@@ -535,122 +584,150 @@ class FoCUS:
     # convert all numpy array in the used bakcend format (e.g. Rformat if it is used)
     def conv_to_FoCUS(self,x,axis=0):
         if self.use_R_format and isinstance(x,np.ndarray):
-            return(self.to_R(x,axis))
+            return(self.to_R(x,axis,chans=self.chans))
         return x
         
-    def calc_R_index(self,nside):
-        
+    def calc_R_index(self,nside,chans=12):
+        # if chans=12 healpix sinon chans=1
+
         outname='BRD%d'%(self.R_off)
         try:
-            fidx =np.load('%s/%s_%d_FIDX.npy'%(self.TEMPLATE_PATH,outname,nside))
-            fidx1=np.load('%s/%s_%d_FIDX1.npy'%(self.TEMPLATE_PATH,outname,nside))
-            fidx2=np.load('%s/%s_%d_FIDX2.npy'%(self.TEMPLATE_PATH,outname,nside))
-            fidx3=np.load('%s/%s_%d_FIDX3.npy'%(self.TEMPLATE_PATH,outname,nside))
-            fidx4=np.load('%s/%s_%d_FIDX4.npy'%(self.TEMPLATE_PATH,outname,nside))
+            fidx =np.load('%s/%s_%d_%d_FIDX.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
+            fidx1=np.load('%s/%s_%d_%d_FIDX1.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
+            fidx2=np.load('%s/%s_%d_%d_FIDX2.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
+            fidx3=np.load('%s/%s_%d_%d_FIDX3.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
+            fidx4=np.load('%s/%s_%d_%d_FIDX4.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
         except:
             nstep=int(np.log(nside)/np.log(2))
-            yy=(np.arange(12*nside*nside)//nside)%nside
-            xx=nside-1-np.arange(12*nside*nside)%nside
-            idx=(nside*nside)*(np.arange(12*nside*nside)//(nside*nside))
+            yy=(np.arange(chans*nside*nside)//nside)%nside
+            xx=nside-1-np.arange(chans*nside*nside)%nside
+            idx=(nside*nside)*(np.arange(chans*nside*nside)//(nside*nside))
 
-            for i in range(nstep):
-                idx=idx+(((xx)//(2**i))%2)*(4**i)+2*((yy//(2**i))%2)*(4**i)
-
+            if chans==12:
+                for i in range(nstep):
+                    idx=idx+(((xx)//(2**i))%2)*(4**i)+2*((yy//(2**i))%2)*(4**i)
+            else:
+                idx=yy*nside+nside-1-xx
+                
             off=self.R_off
 
             fidx=idx
 
-            tab=np.array([[1,3,4,5],[2,0,5,6],[3,1,6,7],[0,2,7,4],
-                          [0,3,11,8],[1,0,8,9],[2,1,9,10],[3,2,10,11],
-                          [5,4,11,9],[6,5,8,10],[7,6,9,11],[4,7,10,8]])
+            if chans==12:
+                tab=np.array([[1,3,4,5],[2,0,5,6],[3,1,6,7],[0,2,7,4],
+                              [0,3,11,8],[1,0,8,9],[2,1,9,10],[3,2,10,11],
+                              [5,4,11,9],[6,5,8,10],[7,6,9,11],[4,7,10,8]])
 
-            #if self.Idx_Neighbours[nside] is None:
-            r_idx=self.init_index(nside,kernel=5)
-            r_idx2=self.init_index(nside,kernel=3)
+                #if self.Idx_Neighbours[nside] is None:
+                r_idx=self.init_index(nside,kernel=5)
+                r_idx2=self.init_index(nside,kernel=3)
+
+                fidx1=np.zeros([12,off,nside],dtype='int')
+                fidx2=np.zeros([12,off,nside],dtype='int')
+                fidx3=np.zeros([12,nside+2*off,off],dtype='int')
+                fidx4=np.zeros([12,nside+2*off,off],dtype='int')
+
+                lidx=np.arange(nside,dtype='int')
+                lidx2=np.arange(off*nside,dtype='int')
+
+                for i in range(0,4):
+                    fidx1[i,:,:]=(tab[i,3]*(nside*nside)+(nside-off+lidx2//nside)*nside+lidx2%nside).reshape(off,nside)
+                    fidx2[i,:,:]=(tab[i,1]*(nside*nside)+(nside-1-lidx2%nside)*nside+lidx2//nside).reshape(off,nside)
+                    fidx3[i,off:-off,:]=(tab[i,0]*(nside*nside)+(nside-off+lidx2%off)*nside+nside-1-lidx2//off).reshape(nside,off)
+                    fidx4[i,off:-off,:]=(tab[i,2]*(nside*nside)+(lidx2//off)*nside+lidx2%off).reshape(nside,off)
+
+                for i in range(4,8):
+                    fidx1[i,:,:]=(tab[i,3]*(nside*nside)+(nside-off+lidx2//nside)*nside+lidx2%nside).reshape(off,nside)
+                    fidx2[i,:,:]=(tab[i,1]*(nside*nside)+(lidx2//nside)*nside+lidx2%nside).reshape(off,nside)
+                    fidx3[i,off:-off,:]=(tab[i,0]*(nside*nside)+(lidx2//2)*nside+nside-off+lidx2%2).reshape(nside,off)
+                    fidx4[i,off:-off,:]=(tab[i,2]*(nside*nside)+(lidx2//2)*nside+lidx2%2).reshape(nside,off)
+
+                for i in range(8,12):
+                    fidx1[i,:,:]=(tab[i,3]*(nside*nside)+(nside-1-lidx2%nside)*nside+nside-off+lidx2//nside).reshape(off,nside)
+                    fidx2[i,:,:]=(tab[i,1]*(nside*nside)+(lidx2//nside)*nside+lidx2%nside).reshape(off,nside)
+                    fidx3[i,off:-off,:]=(tab[i,0]*(nside*nside)+(lidx2//2)*nside+nside-off+lidx2%2).reshape(nside,off)
+                    fidx4[i,off:-off,:]=(tab[i,2]*(nside*nside)+(lidx2%2)*nside+nside-1-lidx2//2).reshape(nside,off)
+
+                for k in range(12):
+                    lidx=fidx.reshape(12,nside,nside)[k,0,0]
+                    fidx3[k,0,0]=np.where(fidx==r_idx[lidx,24])[0]
+                    fidx3[k,0,1]=np.where(fidx==r_idx[lidx,23])[0]
+                    fidx3[k,1,0]=np.where(fidx==r_idx[lidx,19])[0]
+                    fidx3[k,1,1]=np.where(fidx==r_idx2[lidx,8])[0]
+                    #print('+++',k)
+                    #print(fidx.reshape(12,nside,nside)[k,0:3,0:3],':',fidx[fidx1[k,:,0:3]],':',fidx[fidx3[k,0:5,:]])
+                    #print(r_idx[lidx,:].reshape(5,5))
+                    #print(r_idx2[lidx,:].reshape(3,3))
+                    lidx=fidx.reshape(12,nside,nside)[k,-1,0]
+                    fidx3[k,-1,0]=np.where(fidx==r_idx[lidx,4])[0]
+                    fidx3[k,-1,1]=np.where(fidx==r_idx[lidx,3])[0]
+                    fidx3[k,-2,0]=np.where(fidx==r_idx[lidx,9])[0]
+                    fidx3[k,-2,1]=np.where(fidx==r_idx2[lidx,2])[0]
+                    #print('====',k)
+                    #print(fidx.reshape(12,nside,nside)[k,-3:,0:3],':',fidx[fidx2[k,:,0:3]],':',fidx[fidx3[k,-5:,:]])
+                    #print(r_idx[lidx,:].reshape(5,5))
+                    #print(r_idx2[lidx,:].reshape(3,3))
+                    #fidx4[k,off-1,0]=np.where(fidx==r_idx[lidx,6])[0]
+                    lidx=fidx.reshape(12,nside,nside)[k,0,-1]
+                    fidx4[k,0,0]=np.where(fidx==r_idx[lidx,21])[0]
+                    fidx4[k,0,1]=np.where(fidx==r_idx[lidx,20])[0]
+                    fidx4[k,1,1]=np.where(fidx==r_idx[lidx,15])[0]
+                    fidx4[k,1,0]=np.where(fidx==r_idx2[lidx,6])[0]
+                    #print('====',k)
+                    #print(fidx.reshape(12,nside,nside)[k,0:3,-3:],':',fidx[fidx1[k,:,-2:]],':',fidx[fidx4[k,0:5,:]])
+                    #print(r_idx[lidx,:].reshape(5,5))
+                    #print(r_idx2[lidx,:].reshape(3,3))
+                    #fidx4[k,off-1,0]=np.where(fidx==r_idx[lidx,6])[0]
+                    lidx=fidx.reshape(12,nside,nside)[k,-1,-1]
+                    fidx4[k,-1,1]=np.where(fidx==r_idx[lidx,0])[0]
+                    fidx4[k,-1,0]=np.where(fidx==r_idx[lidx,1])[0]
+                    fidx4[k,-2,1]=np.where(fidx==r_idx[lidx,5])[0]
+                    fidx4[k,-2,0]=np.where(fidx==r_idx2[lidx,0])[0]
+                    #print('+++',k)
+                    #print(fidx.reshape(12,nside,nside)[k,-3:,-3:],':',fidx[fidx2[k,:,-3:]],':',fidx[fidx4[k,-5:,:]])
+                    #print(r_idx[lidx,:].reshape(5,5))
+                    #print(r_idx2[lidx,:].reshape(3,3))
+                    #fidx4[k,-off,0]=np.where(fidx==r_idx[lidx,0])[0]
+
+                fidx = (fidx+12*nside*nside)%(12*nside*nside)
+                fidx1 = (fidx1+12*nside*nside)%(12*nside*nside)
+                fidx2 = (fidx2+12*nside*nside)%(12*nside*nside)
+                fidx3 = (fidx3+12*nside*nside)%(12*nside*nside)
+                fidx4 = (fidx4+12*nside*nside)%(12*nside*nside)
+            else:
+                ll_idx=np.arange(nside,dtype='int')
+                fidx1=np.zeros([1,off,nside],dtype='int')
+                fidx2=np.zeros([1,off,nside],dtype='int')
+                fidx3=np.zeros([1,nside+2*off,off],dtype='int')
+                fidx4=np.zeros([1,nside+2*off,off],dtype='int')
+                for i in range(2):
+                    fidx1[0,i,:] = (nside-off+i)*nside+ll_idx
+                    fidx2[0,i,:] = i*nside+ll_idx
+                    fidx3[0,off:-off,i] = nside-2+i+nside*ll_idx
+                    fidx4[0,off:-off,i] = i+nside*ll_idx
+
+                    for j in range(2):
+                        fidx3[0,j,i]=nside-2+i+nside*(nside-2+j)
+                        fidx3[0,nside+off+j,i]=nside-2+i+nside*(j)
+                        fidx4[0,j,i]=i+nside*(nside-2+j)
+                        fidx4[0,nside+off+j,i]=i+nside*(j)
+                    
+                fidx = (fidx+nside*nside)%(nside*nside)
+                fidx1 = (fidx1+nside*nside)%(nside*nside)
+                fidx2 = (fidx2+nside*nside)%(nside*nside)
+                fidx3 = (fidx3+nside*nside)%(nside*nside)
+                fidx4 = (fidx4+nside*nside)%(nside*nside)
             
-            fidx1=np.zeros([12,off,nside],dtype='int')
-            fidx2=np.zeros([12,off,nside],dtype='int')
-            fidx3=np.zeros([12,nside+2*off,off],dtype='int')
-            fidx4=np.zeros([12,nside+2*off,off],dtype='int')
-
-            lidx=np.arange(nside,dtype='int')
-            lidx2=np.arange(off*nside,dtype='int')
-
-            for i in range(0,4):
-                fidx1[i,:,:]=(tab[i,3]*(nside*nside)+(nside-off+lidx2//nside)*nside+lidx2%nside).reshape(off,nside)
-                fidx2[i,:,:]=(tab[i,1]*(nside*nside)+(nside-1-lidx2%nside)*nside+lidx2//nside).reshape(off,nside)
-                fidx3[i,off:-off,:]=(tab[i,0]*(nside*nside)+(nside-off+lidx2%off)*nside+nside-1-lidx2//off).reshape(nside,off)
-                fidx4[i,off:-off,:]=(tab[i,2]*(nside*nside)+(lidx2//off)*nside+lidx2%off).reshape(nside,off)
-
-            for i in range(4,8):
-                fidx1[i,:,:]=(tab[i,3]*(nside*nside)+(nside-off+lidx2//nside)*nside+lidx2%nside).reshape(off,nside)
-                fidx2[i,:,:]=(tab[i,1]*(nside*nside)+(lidx2//nside)*nside+lidx2%nside).reshape(off,nside)
-                fidx3[i,off:-off,:]=(tab[i,0]*(nside*nside)+(lidx2//2)*nside+nside-off+lidx2%2).reshape(nside,off)
-                fidx4[i,off:-off,:]=(tab[i,2]*(nside*nside)+(lidx2//2)*nside+lidx2%2).reshape(nside,off)
-
-            for i in range(8,12):
-                fidx1[i,:,:]=(tab[i,3]*(nside*nside)+(nside-1-lidx2%nside)*nside+nside-off+lidx2//nside).reshape(off,nside)
-                fidx2[i,:,:]=(tab[i,1]*(nside*nside)+(lidx2//nside)*nside+lidx2%nside).reshape(off,nside)
-                fidx3[i,off:-off,:]=(tab[i,0]*(nside*nside)+(lidx2//2)*nside+nside-off+lidx2%2).reshape(nside,off)
-                fidx4[i,off:-off,:]=(tab[i,2]*(nside*nside)+(lidx2%2)*nside+nside-1-lidx2//2).reshape(nside,off)
-
-            for k in range(12):
-                lidx=fidx.reshape(12,nside,nside)[k,0,0]
-                fidx3[k,0,0]=np.where(fidx==r_idx[lidx,24])[0]
-                fidx3[k,0,1]=np.where(fidx==r_idx[lidx,23])[0]
-                fidx3[k,1,0]=np.where(fidx==r_idx[lidx,19])[0]
-                fidx3[k,1,1]=np.where(fidx==r_idx2[lidx,8])[0]
-                #print('+++',k)
-                #print(fidx.reshape(12,nside,nside)[k,0:3,0:3],':',fidx[fidx1[k,:,0:3]],':',fidx[fidx3[k,0:5,:]])
-                #print(r_idx[lidx,:].reshape(5,5))
-                #print(r_idx2[lidx,:].reshape(3,3))
-                lidx=fidx.reshape(12,nside,nside)[k,-1,0]
-                fidx3[k,-1,0]=np.where(fidx==r_idx[lidx,4])[0]
-                fidx3[k,-1,1]=np.where(fidx==r_idx[lidx,3])[0]
-                fidx3[k,-2,0]=np.where(fidx==r_idx[lidx,9])[0]
-                fidx3[k,-2,1]=np.where(fidx==r_idx2[lidx,2])[0]
-                #print('====',k)
-                #print(fidx.reshape(12,nside,nside)[k,-3:,0:3],':',fidx[fidx2[k,:,0:3]],':',fidx[fidx3[k,-5:,:]])
-                #print(r_idx[lidx,:].reshape(5,5))
-                #print(r_idx2[lidx,:].reshape(3,3))
-                #fidx4[k,off-1,0]=np.where(fidx==r_idx[lidx,6])[0]
-                lidx=fidx.reshape(12,nside,nside)[k,0,-1]
-                fidx4[k,0,0]=np.where(fidx==r_idx[lidx,21])[0]
-                fidx4[k,0,1]=np.where(fidx==r_idx[lidx,20])[0]
-                fidx4[k,1,1]=np.where(fidx==r_idx[lidx,15])[0]
-                fidx4[k,1,0]=np.where(fidx==r_idx2[lidx,6])[0]
-                #print('====',k)
-                #print(fidx.reshape(12,nside,nside)[k,0:3,-3:],':',fidx[fidx1[k,:,-2:]],':',fidx[fidx4[k,0:5,:]])
-                #print(r_idx[lidx,:].reshape(5,5))
-                #print(r_idx2[lidx,:].reshape(3,3))
-                #fidx4[k,off-1,0]=np.where(fidx==r_idx[lidx,6])[0]
-                lidx=fidx.reshape(12,nside,nside)[k,-1,-1]
-                fidx4[k,-1,1]=np.where(fidx==r_idx[lidx,0])[0]
-                fidx4[k,-1,0]=np.where(fidx==r_idx[lidx,1])[0]
-                fidx4[k,-2,1]=np.where(fidx==r_idx[lidx,5])[0]
-                fidx4[k,-2,0]=np.where(fidx==r_idx2[lidx,0])[0]
-                #print('+++',k)
-                #print(fidx.reshape(12,nside,nside)[k,-3:,-3:],':',fidx[fidx2[k,:,-3:]],':',fidx[fidx4[k,-5:,:]])
-                #print(r_idx[lidx,:].reshape(5,5))
-                #print(r_idx2[lidx,:].reshape(3,3))
-                #fidx4[k,-off,0]=np.where(fidx==r_idx[lidx,0])[0]
-
-            fidx = (fidx+12*nside*nside)%(12*nside*nside)
-            fidx1 = (fidx1+12*nside*nside)%(12*nside*nside)
-            fidx2 = (fidx2+12*nside*nside)%(12*nside*nside)
-            fidx3 = (fidx3+12*nside*nside)%(12*nside*nside)
-            fidx4 = (fidx4+12*nside*nside)%(12*nside*nside)
-            
-            np.save('%s/%s_%d_FIDX.npy'%(self.TEMPLATE_PATH,outname,nside),fidx)
-            print('%s/%s_%d_FIDX.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside))
-            np.save('%s/%s_%d_FIDX1.npy'%(self.TEMPLATE_PATH,outname,nside),fidx1)
-            print('%s/%s_%d_FIDX1.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside))
-            np.save('%s/%s_%d_FIDX2.npy'%(self.TEMPLATE_PATH,outname,nside),fidx2)
-            print('%s/%s_%d_FIDX2.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside))
-            np.save('%s/%s_%d_FIDX3.npy'%(self.TEMPLATE_PATH,outname,nside),fidx3)
-            print('%s/%s_%d_FIDX3.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside))
-            np.save('%s/%s_%d_FIDX4.npy'%(self.TEMPLATE_PATH,outname,nside),fidx4)
-            print('%s/%s_%d_FIDX4.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside))
+            np.save('%s/%s_%d_%d_FIDX.npy'%(self.TEMPLATE_PATH,outname,nside,chans),fidx)
+            print('%s/%s_%d_%d_FIDX.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
+            np.save('%s/%s_%d_%d_FIDX1.npy'%(self.TEMPLATE_PATH,outname,nside,chans),fidx1)
+            print('%s/%s_%d_%d_FIDX1.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
+            np.save('%s/%s_%d_%d_FIDX2.npy'%(self.TEMPLATE_PATH,outname,nside,chans),fidx2)
+            print('%s/%s_%d_%d_FIDX2.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
+            np.save('%s/%s_%d_%d_FIDX3.npy'%(self.TEMPLATE_PATH,outname,nside,chans),fidx3)
+            print('%s/%s_%d_%d_FIDX3.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
+            np.save('%s/%s_%d_%d_FIDX4.npy'%(self.TEMPLATE_PATH,outname,nside,chans),fidx4)
+            print('%s/%s_%d_%d_FIDX4.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
             sys.stdout.flush()
             
         self.nest2R[nside]=fidx
@@ -659,9 +736,13 @@ class FoCUS:
         self.nest2R3[nside]=fidx3
         self.nest2R4[nside]=fidx4
     
-    def calc_R_inv_index(self,nside):
+    def calc_R_inv_index(self,nside,chans=12):
         nstep=int(np.log(nside)/np.log(2))
         idx=np.arange(nside*nside)
+        
+        if chans==1:
+            return (self.R_off+idx//nside)*(nside+2*self.R_off)+self.R_off+idx%nside
+        
         xx=np.zeros([nside*nside],dtype='int')
         yy=np.zeros([nside*nside],dtype='int')
         
@@ -680,7 +761,7 @@ class FoCUS:
         nside=im.shape[axis+1]-2*self.R_off
         
         if self.nest2R[nside] is None:
-            self.calc_R_index(nside)
+            self.calc_R_index(nside,chans=self.chans)
             
         if axis==0:
             im_center=im.get()[:,self.R_off:-self.R_off,self.R_off:-self.R_off]
@@ -693,7 +774,7 @@ class FoCUS:
 
         shape=list(im.shape)
         
-        oshape=shape[0:axis]+[12*nside*nside]
+        oshape=shape[0:axis]+[self.chans*nside*nside]
         if len(shape)>axis+3:
             oshape=oshape+shape[axis+3:]
 
@@ -705,81 +786,117 @@ class FoCUS:
             
         imout=self.bk_concat([v1,im_center,v2],axis=axis+1)
         imout=self.bk_concat([v3,imout,v4],axis=axis+2)
-        return Rformat(imout,self.R_off,axis)
+        return Rformat(imout,self.R_off,axis,chans=self.chans)
         
-    def to_R_center(self,im,axis=0):
+    def to_R_center(self,im,axis=0,chans=12):
         if isinstance(im,Rformat):
             return im
         
-        nside=int(np.sqrt(im.shape[axis]//12))
+        if chans==12:
+            nside=int(np.sqrt(im.shape[axis]//chans))
+        else:
+            nside=im.shape[axis]
         
-        if self.nest2R[nside] is None:
-            self.calc_R_index(nside)
+        if chans==1:
+            lim=self.reduce_dim(im,axis=axis)
+        else:
+            lim=im
             
-        im_center=self.bk_gather(im,self.nest2R[nside],axis=axis)
-        return self.bk_reshape(im_center,[12*nside*nside])
+        if self.nest2R[nside] is None:
+            self.calc_R_index(nside,chans=chans)
         
-    def to_R(self,im,axis=0,only_border=False):
+        im_center=self.bk_gather(lim,self.nest2R[nside],axis=axis)
+        
+        return self.bk_reshape(im_center,[chans*nside*nside])
+        
+    def to_R(self,im,axis=0,only_border=False,chans=12):
         if isinstance(im,Rformat):
             return im
-        
-        nside=int(np.sqrt(im.shape[axis]//12))
+
+        if chans==1 and len(im.shape)>1:
+            nside=im.shape[axis]
+        else:
+            nside=int(np.sqrt(im.shape[axis]//chans))
         
         if self.nest2R[nside] is None:
-            self.calc_R_index(nside)
+            self.calc_R_index(nside,chans=chans)
                 
         if only_border:
-            v1=self.bk_gather(im,self.nest2R1[nside],axis=axis)
-            v2=self.bk_gather(im,self.nest2R2[nside],axis=axis)
-            v3=self.bk_gather(im,self.nest2R3[nside],axis=axis)
-            v4=self.bk_gather(im,self.nest2R4[nside],axis=axis)
+            
+            if chans==1 and len(im.shape)>1:
+                lim=self.reduce_dim(im,axis=axis)
+            else:
+                lim=im
+                
+            v1=self.bk_gather(lim,self.nest2R1[nside],axis=axis)
+            v2=self.bk_gather(lim,self.nest2R2[nside],axis=axis)
+            v3=self.bk_gather(lim,self.nest2R3[nside],axis=axis)
+            v4=self.bk_gather(lim,self.nest2R4[nside],axis=axis)
             
             if axis==0:
-                im_center=self.bk_reshape(im,[12,nside,nside])
+                im_center=self.bk_reshape(im,[chans,nside,nside])
             if axis==1:
-                im_center=self.bk_reshape(im,[im.shape[0],12,nside,nside])
+                im_center=self.bk_reshape(im,[im.shape[0],chans,nside,nside])
             if axis==2:
-                im_center=self.bk_reshape(im,[im.shape[0],im.shape[1],12,nside,nside])
+                im_center=self.bk_reshape(im,[im.shape[0],im.shape[1],chans,nside,nside])
             if axis==3:
-                im_center=self.bk_reshape(im,[im.shape[0],im.shape[1],im.shape[2],12,nside,nside])
+                im_center=self.bk_reshape(im,[im.shape[0],im.shape[1],im.shape[2],chans,nside,nside])
                 
             imout=self.bk_concat([v1,im_center,v2],axis=axis+1)
             imout=self.bk_concat([v3,imout,v4],axis=axis+2)
 
-            return Rformat(imout,self.R_off,axis)
+            return Rformat(imout,self.R_off,axis,chans=chans)
         
         else:
-            im_center=self.bk_gather(im,self.nest2R[nside],axis=axis)
+            if chans==1:
+                im_center=self.reduce_dim(im,axis=axis)
+            else:
+                im_center=self.bk_gather(im,self.nest2R[nside],axis=axis)
             v1=self.bk_gather(im_center,self.nest2R1[nside],axis=axis)
             v2=self.bk_gather(im_center,self.nest2R2[nside],axis=axis)
             v3=self.bk_gather(im_center,self.nest2R3[nside],axis=axis)
             v4=self.bk_gather(im_center,self.nest2R4[nside],axis=axis)
 
             shape=list(im.shape)
-            oshape=shape[0:axis]+[12,nside,nside]
+            oshape=shape[0:axis]+[chans,nside,nside]
 
-            if axis+1<len(shape):
-                oshape=oshape+shape[axis+1:]
+            if chans==1:
+                if axis+2<len(shape):
+                    oshape=oshape+shape[axis+2:]
+            else:
+                if axis+1<len(shape):
+                    oshape=oshape+shape[axis+1:]
             
             im_center=self.bk_reshape(im_center,oshape)
-            
+
             imout=self.bk_concat([v1,im_center,v2],axis=axis+1)
             imout=self.bk_concat([v3,imout,v4],axis=axis+2)
-            return Rformat(imout,self.R_off,axis)
+            return Rformat(imout,self.R_off,axis,chans=chans)
     
     def from_R(self,im,axis=0):
         if not isinstance(im,Rformat):
             print('fromR function only works with Rformat class')
             
         image=im.get()
-        nside=image.shape[axis+1]-self.R_off*2
+        if im.chans==1:
+            if axis==0:
+                im_center=im.get()[0,self.R_off:-self.R_off,self.R_off:-self.R_off]
+            if axis==1:
+                im_center=im.get()[0,:,self.R_off:-self.R_off,self.R_off:-self.R_off]
+            if axis==2:
+                im_center=im.get()[0,:,:,self.R_off:-self.R_off,self.R_off:-self.R_off]
+            if axis==3:
+                im_center=im.get()[0,:,:,:,self.R_off:-self.R_off,self.R_off:-self.R_off]
+            return im_center
+        else:
+            nside=image.shape[axis+1]-self.R_off*2
         
-        if self.inv_nest2R[nside] is None:
-            self.inv_nest2R[nside]=self.calc_R_inv_index(nside)
+            if self.inv_nest2R[nside] is None:
+                self.inv_nest2R[nside]=self.calc_R_inv_index(nside,chans=im.chans)
 
-        res=self.reduce_dim(self.reduce_dim(image,axis=axis),axis=axis)
-        
-        return self.bk_gather(res,self.inv_nest2R[nside],axis=axis)
+            res=self.reduce_dim(self.reduce_dim(image,axis=axis),axis=axis)
+
+            return self.bk_gather(res,self.inv_nest2R[nside],axis=axis)
         
     def corr_idx_wXX(self,x,y):
         idx=np.where(x==-1)[0]
@@ -926,40 +1043,40 @@ class FoCUS:
             if isinstance(im, Rformat):
                 l_image=im.get()
             else:
-                l_image=self.to_R(im,axis=axis).get()
+                l_image=self.to_R(im,axis=axis,chans=self.chans).get()
 
             lout=int(l_image.shape[axis+1]-2*self.R_off)
             
             if self.nest2R[lout//2] is None:
-                self.calc_R_index(lout//2)
+                self.calc_R_index(lout//2,chans=self.chans)
                 
             shape=list(im.shape)
             
             if axis==0:
                 l_image=l_image[:,self.R_off:-self.R_off,self.R_off:-self.R_off]
-                oshape=[12,lout//2,2,lout//2,2]
-                oshape2=[12*(lout//2)*(lout//2)]
+                oshape=[self.chans,lout//2,2,lout//2,2]
+                oshape2=[self.chans*(lout//2)*(lout//2)]
                 if len(shape)>3:
                     oshape=oshape+shape[3:]
                     oshape2=oshape2+shape[3:]
             if axis==1:
                 l_image=l_image[:,:,self.R_off:-self.R_off,self.R_off:-self.R_off]
-                oshape=[shape[0],12,lout//2,2,lout//2,2]
-                oshape2=[shape[0],12*(lout//2)*(lout//2)]
+                oshape=[shape[0],self.chans,lout//2,2,lout//2,2]
+                oshape2=[shape[0],self.chans*(lout//2)*(lout//2)]
                 if len(shape)>4:
                     oshape=oshape+shape[4:]
                     oshape2=oshape2+shape[4:]
             if axis==2:
                 l_image=l_image[:,:,:,self.R_off:-self.R_off,self.R_off:-self.R_off]
-                oshape=[shape[0],shape[1],12,lout//2,2,lout//2,2]
-                oshape2=[shape[0],shape[1],12*(lout//2)*(lout//2)]
+                oshape=[shape[0],shape[1],self.chans,lout//2,2,lout//2,2]
+                oshape2=[shape[0],shape[1],self.chans*(lout//2)*(lout//2)]
                 if len(shape)>5:
                     oshape=oshape+shape[5:]
                     oshape2=oshape2+shape[5:]
             if axis==3:
                 l_image=l_image[:,:,:,:,self.R_off:-self.R_off,self.R_off:-self.R_off]
-                oshape=[shape[0],shape[1],shape[2],12,lout//2,2,lout//2,2]
-                oshape2=[shape[0],shape[1],shape[2],12*(lout//2)*(lout//2)]
+                oshape=[shape[0],shape[1],shape[2],self.chans,lout//2,2,lout//2,2]
+                oshape2=[shape[0],shape[1],shape[2],self.chans*(lout//2)*(lout//2)]
                 if len(shape)>6:
                     oshape=oshape+shape[6:]
                     oshape2=oshape2+shape[6:]
@@ -979,7 +1096,7 @@ class FoCUS:
             imout=self.bk_concat([v1,l_image,v2],axis=axis+1)
             imout=self.bk_concat([v3,imout,v4],axis=axis+2)
 
-            imout=Rformat(imout,self.R_off,axis)
+            imout=Rformat(imout,self.R_off,axis,chans=self.chans)
             
             if not isinstance(im, Rformat):
                 imout=self.from_R(imout,axis=axis)
@@ -1060,7 +1177,7 @@ class FoCUS:
             if isinstance(im, Rformat):
                 l_image=im.get()
             else:
-                l_image=self.to_R(im,axis=axis).get()
+                l_image=self.to_R(im,axis=axis,chans=self.chans).get()
 
             lout=int(l_image.shape[axis+1]-2*self.R_off)
             
@@ -1073,7 +1190,7 @@ class FoCUS:
                 for i in range(1,nscale):
                     imout=self.up_grade_2_R_format(imout,axis=axis)
                         
-            imout=Rformat(imout,self.R_off,axis)
+            imout=Rformat(imout,self.R_off,axis,chans=self.chans)
             
             if not isinstance(im, Rformat):
                 imout=self.from_R(imout,axis=axis)
@@ -1113,6 +1230,46 @@ class FoCUS:
         return(imout)
 
     # ---------------------------------------------−---------
+    def computeWigner(self,nside,lmax=1.5,all_nmax=128):
+        
+        nmax=np.min([12*nside**2,all_nmax])
+        lidx=hp.ring2nest(nside,np.arange(12*nside**2))
+        th,ph=hp.pix2ang(nside,np.arange(12*nside**2),nest=True)
+        a=np.exp(-0.1*(nside**2)*((th-np.pi/2)**2+(ph-np.pi)**2))+ \
+           np.exp(-0.1*(nside**2)*((th-np.pi/2)**2+(ph+np.pi)**2))
+        filter=a*np.cos(lmax*(nside+1)*(th-np.pi/2))
+        tmp=hp.anafast(filter[lidx])
+        norm=1/np.sqrt(tmp.max())
+        filter*=norm
+        tmp=hp.anafast(filter[lidx])
+        tot[0:tmp.shape[0]]+=tmp
+        plt.plot(tmp)
+        wr=np.zeros([12*nside**2,nmax,4])
+        wi=np.zeros([12*nside**2,nmax,4])
+        iii=np.zeros([12*nside**2,nmax],dtype='int')
+            
+        for l in range(12*nside**2):
+            wwr=np.zeros([12*nside**2,4])
+            wwi=np.zeros([12*nside**2,4])
+            for k in range(4):
+                r=hp.Rotator(rot=((np.pi-ph[l])/np.pi*180,(np.pi/2-th[l])/np.pi*180,45*k))
+                th2,ph2=r(th,ph)
+                a=np.exp(-0.1*(nside**2)*((th2-np.pi/2)**2+(ph2-np.pi)**2))+ \
+                   np.exp(-0.1*(nside**2)*((th2-np.pi/2)**2+(ph2+np.pi)**2))
+                wwr[:,k]=norm*a*np.cos(lmax*(nside+1)*(th2-np.pi/2))
+                wwi[:,k]=norm*a*np.sin(lmax*(nside+1)*(th2-np.pi/2))
+
+            idx=np.argsort(-np.sum(abs(wwr+complex(0,1)*wwi),1))
+            wr[l,:,:]=wwr[idx[0:nmax],:]
+            wi[l,:,:]=wwi[idx[0:nmax],:]
+            iii[l,:]=idx[0:nmax]
+
+        print('Write ALLWAVE_%d_%d_W.npy'%(nside,k),wr.shape[1]/(12*nside**2))
+        np.save('ALLWAVE_%d_%d_Wr.npy'%(nside,all_nmax),wr)
+        np.save('ALLWAVE_%d_%d_Wi.npy'%(nside,all_nmax),wi)
+        np.save('ALLWAVE_%d_%d_I.npy'%(nside,all_nmax),iii)
+        
+    # ---------------------------------------------−---------
     def init_index(self,nside,kernel=-1):
         
         if kernel==-1:
@@ -1136,12 +1293,23 @@ class FoCUS:
             self.barrier()
             tmp=np.load('%s/W%d_%d_IDX.npy'%(self.TEMPLATE_PATH,l_kernel**2,nside))
 
+                
         if kernel==-1:
             if self.BACKEND==self.TORCH:
                 self.Idx_Neighbours[nside]=tmp.as_type('int64')
             else:
                 self.Idx_Neighbours[nside]=tmp
+
+        
+        if self.do_wigner:
+            try:
+                self.Idx_convol[nside]=np.load('ALLWAVE_%d_%d_I.npy'%(nside,128))
+            except:
+                self.computeWigner(nside)
         else:
+                self.Idx_convol[nside]=self.Idx_Neighbours[nside]
+                
+        if kernel!=-1:
             return tmp
         
     # ---------------------------------------------−---------
@@ -1226,7 +1394,8 @@ class FoCUS:
     # ---------------------------------------------−---------
     # convert tensor x [....,a,b,....] to [....,a*b,....]
     def reduce_dim(self,x,axis=0):
-        shape=x.shape.as_list()
+        shape=list(x.shape)
+        
         if axis<0:
             laxis=len(shape)+axis
         else:
@@ -1258,6 +1427,8 @@ class FoCUS:
             o_shape=shape[0]
             for k in range(1,axis+1):
                 o_shape=o_shape*shape[k]
+        else:
+            o_shape=1
                 
         if len(shape)>axis+3:
             ishape=shape[axis+3]
@@ -1279,13 +1450,13 @@ class FoCUS:
         else:
             oshape=[o_shape,shape[axis+1],shape[axis+2],1]
             l_ww=self.bk_reshape(ww,[self.KERNELSZ,self.KERNELSZ,1,norient])
-        
+
             res=self.backend.nn.conv2d(self.bk_reshape(image,oshape),
                                        l_ww,
                                        strides=[1, 1, 1, 1],
                                        padding='SAME')
 
-        return Rformat(self.bk_reshape(res,shape+[norient]),self.R_off,axis)
+        return Rformat(self.bk_reshape(res,shape+[norient]),self.R_off,axis,chans=self.chans)
     
     # ---------------------------------------------−---------
     def convol(self,image,axis=0):
@@ -1295,12 +1466,13 @@ class FoCUS:
             if isinstance(image, Rformat):
                 l_image=image
             else:
-                l_image=self.to_R(image,axis=axis)
+                l_image=self.to_R(image,axis=axis,chans=self.chans)
             
-            rr=self.conv2d(l_image.get(),self.ww_RealT,axis=axis)
-            ii=self.conv2d(l_image.get(),self.ww_ImagT,axis=axis)
+            nside=l_image.shape[axis+1]-2*self.R_off
+            
+            rr=self.conv2d(l_image.get(),self.ww_RealT[nside],axis=axis)
+            ii=self.conv2d(l_image.get(),self.ww_ImagT[nside],axis=axis)
                 
-            
             if not isinstance(image, Rformat):
                 rr=self.from_R(rr,axis=axis)
                 ii=self.from_R(ii,axis=axis)
@@ -1308,17 +1480,24 @@ class FoCUS:
         else:
             nside=int(np.sqrt(image.shape[axis]//12))
 
-            if self.Idx_Neighbours[nside] is None:
+            if self.Idx_convol[nside] is None:
                 self.init_index(nside)
 
             imX9=self.bk_expand_dims(self.bk_gather(self.bk_cast(image),
-                                                    self.Idx_Neighbours[nside],axis=axis),-1)
+                                                    self.Idx_convol[nside],axis=axis),-1)
 
-            l_ww_real=self.ww_Real
-            l_ww_imag=self.ww_Imag
-            for i in range(axis+1):
-                l_ww_real=self.bk_expand_dims(l_ww_real,0)
-                l_ww_imag=self.bk_expand_dims(l_ww_imag,0)
+            l_ww_real=self.ww_Real[nside]
+            l_ww_imag=self.ww_Imag[nside]
+
+            if self.do_wigner:
+                for i in range(axis):
+                    l_ww_real=self.bk_expand_dims(l_ww_real,0)
+                    l_ww_imag=self.bk_expand_dims(l_ww_imag,0)
+            else:
+                for i in range(axis+1):
+                    l_ww_real=self.bk_expand_dims(l_ww_real,0)
+                    l_ww_imag=self.bk_expand_dims(l_ww_imag,0)
+                    
 
             for i in range(axis+2,len(imX9.shape)-1):
                 l_ww_real=self.bk_expand_dims(l_ww_real,axis+2)
@@ -1337,8 +1516,10 @@ class FoCUS:
             if isinstance(image, Rformat):
                 l_image=image.get()
             else:
-                l_image=self.to_R(image,axis=axis).get()
+                l_image=self.to_R(image,axis=axis,chans=self.chans).get()
                 
+            nside=l_image.shape[axis+1]-2*self.R_off
+            
             res=self.conv2d(l_image,self.ww_SmoothT,axis=axis)
 
             res=self.bk_reshape(res,l_image.shape)
@@ -1360,7 +1541,7 @@ class FoCUS:
         
             for i in range(axis+2,len(imX9.shape)):
                 l_w_smooth=self.bk_expand_dims(l_w_smooth,axis+2)
-                            
+
             res=self.bk_reduce_sum(l_w_smooth*imX9,axis+1)
         return(res)
     
@@ -1373,8 +1554,8 @@ class FoCUS:
         return(self.NORIENT)
     
     # ---------------------------------------------−---------
-    def get_ww(self):
-        return(self.ww_Real,self.ww_Imag)
+    def get_ww(self,nside=0):
+        return(self.ww_Real[nside],self.ww_Imag[nside])
     
     # ---------------------------------------------−---------
     def plot_ww(self):

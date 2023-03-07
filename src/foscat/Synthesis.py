@@ -92,7 +92,7 @@ class Synthesis:
             print('Run on GPU %s'%(operation.gpulist[(operation.gpupos+self.curr_gpu)%operation.ngpu]))
             
             if operation.get_use_R() and loss_function.Rformat:
-                l_x=operation.to_R(x,only_border=True)
+                l_x=operation.to_R(x,only_border=True,chans=operation.chans)
             else:
                 l_x=x
                 
@@ -108,7 +108,7 @@ class Synthesis:
     def gradient(self,x):
 
         if self.operation.get_use_R():
-            x=self.operation.to_R_center(x)
+            x=self.operation.to_R_center(x,chans=operation.chans)
             
         g_tot=None
         l_tot=0.0
@@ -127,7 +127,7 @@ class Synthesis:
             
         operation=self.operation
         if operation.get_use_R():
-            l_x=operation.to_R(grad,only_border=True)
+            l_x=operation.to_R(grad,only_border=True,chans=operation.chans)
             x=operation.from_R(l_x)
         else:
             x=grad
@@ -173,7 +173,8 @@ class Synthesis:
             EVAL_FREQUENCY = 100,
             DEVAL_STAT_FREQUENCY = 1000,
             LEARNING_RATE = 0.03,
-            EPSILON = 1E-7):
+            EPSILON = 1E-7,
+            SHOWGPU=False):
         
         self.eta=LEARNING_RATE
         self.epsilon=EPSILON
@@ -181,7 +182,7 @@ class Synthesis:
         self.nlog=0
 
         if self.operation.get_use_R():
-            x=self.operation.to_R_center(x)
+            x=self.operation.to_R_center(x,chans=self.operation.chans)
             
         self.curr_gpu=self.curr_gpu+self.mpi_rank
         
@@ -190,7 +191,7 @@ class Synthesis:
 
             comm = MPI.COMM_WORLD
             
-        if self.mpi_rank==0:
+        if self.mpi_rank==0 and SHOWGPU:
             # start thread that catch GPU information
             try:
                 self.gpu_thrd = Thread(target=self.get_gpu, args=(self.event,1,))
@@ -261,21 +262,22 @@ class Synthesis:
                     cur_loss=cur_loss+'%.3g '%(k)
                 cur_loss=cur_loss+')'
                 
-                info_gpu=self.getgpumem()
                 mess=''
-                for k in range(info_gpu.shape[0]):
-                    mess=mess+'[GPU%d %.0f/%.0f MB %.0f%%]'%(k,info_gpu[k,0],info_gpu[k,1],info_gpu[k,2])
+                if SHOWGPU:
+                    info_gpu=self.getgpumem()
+                    for k in range(info_gpu.shape[0]):
+                        mess=mess+'[GPU%d %.0f/%.0f MB %.0f%%]'%(k,info_gpu[k,0],info_gpu[k,1],info_gpu[k,2])
                 
                 print('Itt %d L=%s %.3fs %s'%(itt,cur_loss,(end-start),mess))
                 sys.stdout.flush()
                 start = time.time()
 
-        if self.mpi_rank==0:
+        if self.mpi_rank==0 and SHOWGPU:
             self.stop_synthesis()
         
         operation=self.operation
         if operation.get_use_R():
-            l_x=operation.to_R(x,only_border=True)
+            l_x=operation.to_R(x,only_border=True,chans=self.operation.chans)
             x=operation.from_R(l_x)
             
         return(x)

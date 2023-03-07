@@ -167,22 +167,27 @@ class funct(FOC.FoCUS):
         if self.use_R_format and isinstance(image1,FOC.Rformat):
             if len(image1.shape)==4:
                 nside=im_shape[2]-2*self.R_off
-                npix = 12*nside*nside # Number of pixels
+                npix = self.chans*nside*nside # Number of pixels
             else:
                 nside=im_shape[1]-2*self.R_off
-                npix = 12*nside*nside  # Number of pixels
+                npix = self.chans*nside*nside  # Number of pixels
         else:
             if len(image1.shape)==2:
                 npix = int(im_shape[1])  # Number of pixels
             else:
                 npix = int(im_shape[0])  # Number of pixels
 
-            nside=int(np.sqrt(npix//12))
+            if self.chans==1:
+                nside=im_shape[axis]
+                npix=nside*nside
+            else:
+                nside=int(np.sqrt(npix//self.chans))
+                
         jmax=int(np.log(nside)/np.log(2))-self.OSTEP
 
         ### LOCAL VARIABLES (IMAGES and MASK)
         # Check if image1 is [Npix] or [Nbatch,Npix]
-        if len(image1.shape)==1 or (len(image1.shape)==3 and isinstance(image1,FOC.Rformat)):
+        if len(image1.shape)==1 or (len(image1.shape)==2 and self.chans==1) or (len(image1.shape)==3 and isinstance(image1,FOC.Rformat)):
             # image1 is [Nbatch, Npix]
             I1 = self.bk_cast(self.bk_expand_dims(image1,0))  # Local image1 [Nbatch, Npix]
             if cross:
@@ -194,18 +199,23 @@ class funct(FOC.FoCUS):
                 
         # self.mask is [Nmask, Npix]
         if mask is None:
-            vmask = self.bk_ones([1,npix],dtype=self.all_type)
+            if self.chans==1:
+                vmask = self.bk_ones([1,nside,nside],dtype=self.all_type)
+            else:
+                vmask = self.bk_ones([1,npix],dtype=self.all_type)
+            
             if self.use_R_format:
-                vmask = self.to_R(vmask,axis=1)
+                vmask = self.to_R(vmask,axis=1,chans=self.chans)
         else:
             vmask = self.bk_cast( mask) # [Nmask, Npix]
+            
             if self.use_R_format:
-                vmask=self.to_R(vmask,axis=1)
+                vmask=self.to_R(vmask,axis=1,chans=self.chans)
 
         if self.use_R_format:
-            I1=self.to_R(I1,axis=axis)
+            I1=self.to_R(I1,axis=axis,chans=self.chans)
             if cross:
-                I2=self.to_R(I2,axis=axis)
+                I2=self.to_R(I2,axis=axis,chans=self.chans)
 
         if self.KERNELSZ>3:
             # if the kernel size is bigger than 3 increase the binning before smoothing
