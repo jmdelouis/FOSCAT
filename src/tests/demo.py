@@ -70,9 +70,9 @@ def main():
             dogauss=True
         elif o in ("-k", "--k5x5"):
             KERNELSZ=5
-        elif o in ("-K", "--k128"):
-            KERNELSZ=128
-            instep=7
+        elif o in ("-K", "--k64"):
+            KERNELSZ=64
+            instep=8
         elif o in ("-p", "--p00"):
             dop00=True
         else:
@@ -133,9 +133,11 @@ def main():
     if KERNELSZ==5:
         lam=1.0
 
+    l_slope=1.0
     r_format=True
-    if KERNELSZ==128:
+    if KERNELSZ==64:
         r_format=False
+        l_slope=4.0
     #=================================================================================
     # COMPUTE THE WAVELET TRANSFORM OF THE REFERENCE MAP
     #=================================================================================
@@ -144,11 +146,10 @@ def main():
                      OSTEP=-1,           # get very large scale (nside=1)
                      LAMBDA=lam,
                      TEMPLATE_PATH=scratch_path,
-                     slope=1.0,
-                     gpupos=0,
+                     slope=l_slope,
+                     gpupos=2,
                      use_R_format=r_format,
-                     all_type='float64',
-                     SHOWGPU=True,
+                     all_type='float32',
                      nstep_max=instep)
     
     #=================================================================================
@@ -186,12 +187,12 @@ def main():
     # RUN ON SYNTHESIS
     #=================================================================================
 
-    
     omap=sy.run(imap,
                 DECAY_RATE=0.9995,
                 NUM_EPOCHS = nstep,
                 LEARNING_RATE = 0.03,
-                EPSILON = 1E-15)
+                EPSILON = 1E-15,
+                SHOWGPU=True)
 
     #=================================================================================
     # STORE RESULTS

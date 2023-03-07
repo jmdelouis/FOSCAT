@@ -73,21 +73,20 @@ def main():
     im = np.load('in2d_%s_map_%d.npy'%(outname,nside))
     sm = np.load('st2d_%s_map_%d.npy'%(outname,nside))
     om = np.load('out2d_%s_map_%d.npy'%(outname,nside))
-    mm = np.load('mask_%s_map_%d.npy'%(outname,nside))[0]
 
     n=im.shape[0]
     plt.figure(figsize=(10,6))
     plt.subplot(2,2,1)
-    plt.imshow((im/mm)[n//2-n//4:n//2+n//4,n//2-n//4:n//2+n//4],cmap='jet',vmin=-3,vmax=3,origin='lower',aspect='auto')
+    plt.imshow(im,cmap='jet',vmin=-3,vmax=3,origin='lower',aspect='auto')
     plt.title('Model')
     plt.subplot(2,2,2)
-    plt.imshow((sm/mm)[n//2-n//4:n//2+n//4,n//2-n//4:n//2+n//4],cmap='jet',vmin=-3,vmax=3,origin='lower',aspect='auto')
+    plt.imshow(sm,cmap='jet',vmin=-3,vmax=3,origin='lower',aspect='auto')
     plt.title('Start')
     plt.subplot(2,2,3)
-    plt.imshow((om/mm)[n//2-n//4:n//2+n//4,n//2-n//4:n//2+n//4],cmap='jet',vmin=-3,vmax=3,origin='lower',aspect='auto')
+    plt.imshow(om,cmap='jet',vmin=-3,vmax=3,origin='lower',aspect='auto')
     plt.title('Synthesis')
     plt.subplot(2,2,4)
-    plt.imshow(((im-om)/mm)[n//2-n//4:n//2+n//4,n//2-n//4:n//2+n//4],cmap='jet',vmin=-3,vmax=3,origin='lower',aspect='auto')
+    plt.imshow(sm-om,cmap='jet',vmin=-3,vmax=3,origin='lower',aspect='auto')
     plt.title('Start-Synthesis')
     plt.show()
 

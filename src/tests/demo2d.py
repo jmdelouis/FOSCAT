@@ -96,18 +96,9 @@ def main():
     # Get data
     #=================================================================================
     im=np.load(data)
-    im=im[im.shape[0]//2-nside//2:im.shape[0]//2+nside//2,im.shape[1]//2-nside//2:im.shape[1]//2+nside//2]
-
-    mask=np.ones([1,nside,nside])
-    mask[0,:,:]=np.isnan(im)==False
-    mask[0,0:nside//4,:]=0.0
-    mask[0,-nside//4:,:]=0.0
-    mask[0,:,0:nside//4]=0.0
-    mask[0,:,-nside//4:]=0.0
-    im[np.isnan(im)]=np.median(im[np.isnan(im)==False])
-    im=im-np.median(im)
+    im=np.sum(np.sum(im.reshape(nside,im.shape[0]//nside,nside,im.shape[0]//nside),3),1)
     im=im/im.std()
-    print(im.shape)
+
     #=================================================================================
     # Generate a random noise with the same coloured than the input data
     #=================================================================================
@@ -128,8 +119,11 @@ def main():
                      gpupos=2,
                      use_R_format=True,
                      chans=1,
-                     SHOWGPU=True,
+                     DODIV=True,
                      all_type='float64')
+
+    scat_op.plot_ww()
+    plt.show()
     
     #=================================================================================
     # DEFINE A LOSS FUNCTION AND THE SYNTHESIS
@@ -139,12 +133,11 @@ def main():
         
         ref = args[0]
         im  = args[1]
-        mask = args[2]
 
         if docross:
-            learn=scat_operator.eval(im,image2=x,Imaginary=True,mask=mask)
+            learn=scat_operator.eval(im,image2=x,Imaginary=True)
         else:
-            learn=scat_operator.eval(x,mask=mask)
+            learn=scat_operator.eval(x)
             
         if dop00:
             loss=scat_operator.bk_reduce_mean(scat_operator.bk_square(ref.P00[0,0,:]-learn.P00[0,0,:]))
@@ -153,22 +146,12 @@ def main():
 
         return(loss)
 
-    def loss_norm(x,scat_operator,args):
-        
-        im = args[0]
-        
-        ims = scat_op.up_grade(scat_op.ud_grade_2(scat_op.ud_grade_2(im)),nside)
-        xs = scat_op.up_grade(scat_op.ud_grade_2(scat_op.ud_grade_2(x)),nside)
-        
-        return scat_operator.bk_reduce_sum(scat_operator.bk_square(ims-xs.get_data()))
-
     if docross:
-        refX=scat_op.eval(im,image2=im,Imaginary=True,mask=mask)
+        refX=scat_op.eval(im,image2=im,Imaginary=True,)
     else:
-        refX=scat_op.eval(im,mask=mask)
+        refX=scat_op.eval(im)
 
-    loss1=synthe.Loss(lossX,scat_op,refX,im,mask)
-    loss2=synthe.Loss(loss_norm,scat_op,im)
+    loss1=synthe.Loss(lossX,scat_op,refX,im)
         
     sy = synthe.Synthesis([loss1])
     #=================================================================================
@@ -176,28 +159,28 @@ def main():
     #=================================================================================
     np.random.seed(seed)
     
-    imap=scat_op.up_grade(scat_op.ud_grade_2(scat_op.ud_grade_2(im)),nside).numpy()
+    imap=np.random.randn(nside,nside)
     
     omap=sy.run(imap,
                 DECAY_RATE=0.9995,
                 NUM_EPOCHS = nstep,
-                LEARNING_RATE = 0.01,
-                EPSILON = 1E-15)
+                LEARNING_RATE = 0.3,
+                EPSILON = 1E-15,
+                SHOWGPU=True)
 
     #=================================================================================
     # STORE RESULTS
     #=================================================================================
     if docross:
-        start=scat_op.eval(im,image2=imap,mask=mask)
-        out =scat_op.eval(im,image2=omap,mask=mask)
+        start=scat_op.eval(im,image2=imap)
+        out =scat_op.eval(im,image2=omap)
     else:
-        start=scat_op.eval(imap,mask=mask)
-        out =scat_op.eval(omap,mask=mask)
+        start=scat_op.eval(imap)
+        out =scat_op.eval(omap)
     
     np.save('in2d_%s_map_%d.npy'%(outname,nside),im)
     np.save('st2d_%s_map_%d.npy'%(outname,nside),imap)
     np.save('out2d_%s_map_%d.npy'%(outname,nside),omap)
-    np.save('mask_%s_map_%d.npy'%(outname,nside),mask)
     np.save('out2d_%s_log_%d.npy'%(outname,nside),sy.get_history())
 
     refX.save('in2d_%s_%d'%(outname,nside))

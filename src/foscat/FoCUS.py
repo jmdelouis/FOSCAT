@@ -80,6 +80,7 @@ class FoCUS:
                  BACKEND='tensorflow',
                  use_R_format=True,
                  chans=12,
+                 DODIV=False,
                  mpi_size=1,
                  mpi_rank=0):
 
@@ -244,8 +245,12 @@ class FoCUS:
         print('==                                                        ==')
         print('============================================================')
         sys.stdout.flush()
-        
-        self.NORIENT=NORIENT
+
+        l_NORIENT=NORIENT
+        if DODIV:
+            l_NORIENT=NORIENT+2
+            
+        self.NORIENT=l_NORIENT
         self.LAMBDA=LAMBDA
         self.slope=slope
         
@@ -274,8 +279,8 @@ class FoCUS:
             self.do_wigner=True
         else:
             self.do_wigner=False
-            wwc=np.zeros([KERNELSZ**2,NORIENT]).astype(all_type)
-            wws=np.zeros([KERNELSZ**2,NORIENT]).astype(all_type)
+            wwc=np.zeros([KERNELSZ**2,l_NORIENT]).astype(all_type)
+            wws=np.zeros([KERNELSZ**2,l_NORIENT]).astype(all_type)
 
             x=np.repeat(np.arange(KERNELSZ)-KERNELSZ//2,KERNELSZ).reshape(KERNELSZ,KERNELSZ)
             y=x.T
@@ -311,14 +316,37 @@ class FoCUS:
                         w_smooth=np.exp(-(xx**2+yy**2))
                     else:
                         w_smooth=np.exp(-0.5*(xx**2+yy**2))
+                    tmp1=np.cos(yy*np.pi)*w_smooth
+                    tmp2=np.sin(yy*np.pi)*w_smooth
 
-                    tmp=np.cos(yy*np.pi)*w_smooth
-                    wwc[:,i]=tmp.flatten()-tmp.mean()
-                    tmp=np.sin(yy*np.pi)*w_smooth
-                    wws[:,i]=tmp.flatten()-tmp.mean()
+                    wwc[:,i]=tmp1.flatten()-tmp1.mean()
+                    wws[:,i]=tmp2.flatten()-tmp2.mean()
                     sigma=np.sqrt((wwc[:,i]**2).mean())
                     wwc[:,i]/=sigma
                     wws[:,i]/=sigma
+                    
+                    if DODIV and i==0:
+                        r=(xx**2+yy**2)
+                        theta=np.arctan2(yy,xx)
+                        theta[KERNELSZ//2,KERNELSZ//2]=0.0
+                        tmp1=r*np.cos(2*theta)*w_smooth
+                        tmp2=r*np.sin(2*theta)*w_smooth
+                        
+                        wwc[:,NORIENT]=tmp1.flatten()-tmp1.mean()
+                        wws[:,NORIENT]=tmp2.flatten()-tmp2.mean()
+                        sigma=np.sqrt((wwc[:,NORIENT]**2).mean())
+                        
+                        wwc[:,NORIENT]/=sigma
+                        wws[:,NORIENT]/=sigma
+                        tmp1=r*np.cos(2*theta+np.pi)
+                        tmp2=r*np.sin(2*theta+np.pi)
+                        
+                        wwc[:,NORIENT+1]=tmp1.flatten()-tmp1.mean()
+                        wws[:,NORIENT+1]=tmp2.flatten()-tmp2.mean()
+                        sigma=np.sqrt((wwc[:,NORIENT+1]**2).mean())
+                        wwc[:,NORIENT+1]/=sigma
+                        wws[:,NORIENT+1]/=sigma
+                        
 
                     w_smooth=w_smooth.flatten()
         
@@ -332,10 +360,9 @@ class FoCUS:
                 self.ww_RealT[lout]=wwc.astype(self.all_type)
                 self.ww_ImagT[lout]=wws.astype(self.all_type)
             else:
-                self.ww_RealT[lout]=np.zeros([KERNELSZ**2,NORIENT]).astype(all_type)
-                self.ww_ImagT[lout]=np.zeros([KERNELSZ**2,NORIENT]).astype(all_type)
+                self.ww_RealT[lout]=np.zeros([KERNELSZ**2,l_NORIENT]).astype(all_type)
+                self.ww_ImagT[lout]=np.zeros([KERNELSZ**2,l_NORIENT]).astype(all_type)
         
-        tab=[0,1,2,3]
         def trans_kernel(a):
             b=1*a.reshape(KERNELSZ,KERNELSZ)
             for i in range(KERNELSZ):
@@ -347,9 +374,9 @@ class FoCUS:
         
         if not self.do_wigner:
             for i in range(nstep_max):
-                for i in range(NORIENT):
-                    self.ww_RealT[lout][:,i]=trans_kernel(self.ww_Real[lout][:,tab[i]])
-                    self.ww_ImagT[lout][:,i]=trans_kernel(self.ww_Imag[lout][:,tab[i]])
+                for i in range(l_NORIENT):
+                    self.ww_RealT[lout][:,i]=trans_kernel(self.ww_Real[lout][:,i])
+                    self.ww_ImagT[lout][:,i]=trans_kernel(self.ww_Imag[lout][:,i])
           
         self.Idx_Neighbours={}
         self.Idx_convol={}
@@ -1554,7 +1581,7 @@ class FoCUS:
         return(self.NORIENT)
     
     # ---------------------------------------------−---------
-    def get_ww(self,nside=0):
+    def get_ww(self,nside=1):
         return(self.ww_Real[nside],self.ww_Imag[nside])
     
     # ---------------------------------------------−---------
@@ -1565,9 +1592,9 @@ class FoCUS:
         npt=int(np.sqrt(c.shape[0]))
         for i in range(c.shape[1]):
             plt.subplot(2,c.shape[1],1+i)
-            plt.imshow(c[:,i].reshape(npt,npt),cmap='Greys',vmin=-0.5,vmax=1.0)
+            plt.imshow(c[:,i].reshape(npt,npt),cmap='jet',vmin=-c.max(),vmax=c.max())
             plt.subplot(2,c.shape[1],1+i+c.shape[1])
-            plt.imshow(s[:,i].reshape(npt,npt),cmap='Greys',vmin=-0.5,vmax=1.0)
+            plt.imshow(s[:,i].reshape(npt,npt),cmap='jet',vmin=-c.max(),vmax=c.max())
             sys.stdout.flush()
         plt.show()
         
