@@ -246,15 +246,15 @@ class scat_cov:
             return x
         else:
             return x.numpy()
-
+        
     def save(self, filename):
         if self.S1 is not None:  # Auto
-            np.save('%s_s1.npy' % filename, self.get_S1().numpy())
+            np.save('%s_s1.npy' % filename, self.get_np(self.get_S1()))
         if self.C10 is not None:  # Cross
-            np.save('%s_c10.npy' % filename, self.get_C10().numpy())
-        np.save('%s_c01.npy' % filename, self.get_C01().numpy())
-        np.save('%s_c11.npy' % filename, self.get_C11().numpy())
-        np.save('%s_p0.npy' % filename, self.get_P00().numpy())
+            np.save('%s_c10.npy' % filename, self.get_np(self.get_C10()))
+        np.save('%s_c01.npy' % filename, self.get_np(self.get_C01()))
+        np.save('%s_c11.npy' % filename, self.get_np(self.get_C11()))
+        np.save('%s_p0.npy' % filename, self.get_np(self.get_P00()))
 
     def read(self, filename):
         try:
@@ -296,6 +296,179 @@ class scat_cov:
                     abs(self.get_np(self.C10)).mean() +
                     abs(self.get_np(self.C11)).mean() +
                     abs(self.get_np(self.P00)).mean()) / 4
+
+    def get_nscale(self):
+        return self.P00.shape[2]
+    
+    def get_norient(self):
+        return self.P00.shape[3]
+
+    def add_data_from_log_slope(self,y,n,ds=3):
+        if len(y)<ds:
+            if len(y)==1:
+                return(np.repeat(y[0],n))
+            if len(y)==2:
+                a=np.polyfit(np.arange(2),np.log(y[0:2]),1)
+        else:
+            a=np.polyfit(np.arange(ds),np.log(y[0:ds]),1)
+        return np.exp((np.arange(n)-1-n)*a[0]+a[1])
+
+    def add_data_from_slope(self,y,n,ds=3):
+        if len(y)<ds:
+            if len(y)==1:
+                return(np.repeat(y[0],n))
+            if len(y)==2:
+                a=np.polyfit(np.arange(2),y[0:2],1)
+        else:
+            a=np.polyfit(np.arange(ds),y[0:ds],1)
+        return (np.arange(n)-1-n)*a[0]+a[1]
+    
+    def up_grade(self,nscale,ds=3):
+        noff=nscale-self.P00.shape[2]
+        if noff==0:
+            return scat_cov((self.P00),
+                            (self.C01),
+                            (self.C11),
+                            s1=self.S1,
+                            c10=self.C10)
+        
+        inscale=self.P00.shape[2]
+        p00=np.zeros([self.P00.shape[0],self.P00.shape[1],nscale,self.P00.shape[3]],dtype='complex')
+        p00[:,:,noff:,:]=self.P00.numpy()
+        for i in range(self.P00.shape[0]):
+            for j in range(self.P00.shape[1]):
+                for k in range(self.P00.shape[3]):
+                    p00[i,j,0:noff,k]=self.add_data_from_log_slope(p00[i,j,noff:,k],noff,ds=ds)
+                    
+        s1=np.zeros([self.S1.shape[0],self.S1.shape[1],nscale,self.S1.shape[3]])
+        s1[:,:,noff:,:]=self.S1.numpy()
+        for i in range(self.S1.shape[0]):
+            for j in range(self.S1.shape[1]):
+                for k in range(self.S1.shape[3]):
+                    s1[i,j,0:noff,k]=self.add_data_from_log_slope(s1[i,j,noff:,k],noff,ds=ds)
+
+        nout=0
+        for i in range(1,nscale):
+            nout=nout+i
+            
+        c01=np.zeros([self.C01.shape[0],self.C01.shape[1], \
+                      nout,self.C01.shape[3],self.C01.shape[4]],dtype='complex')
+                     
+        jo1=np.zeros([nout])
+        jo2=np.zeros([nout])
+
+        n=0
+        for i in range(1,nscale):
+            jo1[n:n+i]=np.arange(i)
+            jo2[n:n+i]=i
+            n=n+i
+            
+        j1=np.zeros([self.C01.shape[2]])
+        j2=np.zeros([self.C01.shape[2]])
+        
+        n=0
+        for i in range(1,self.P00.shape[2]):
+            j1[n:n+i]=np.arange(i)
+            j2[n:n+i]=i
+            n=n+i
+
+        for i in range(self.C01.shape[0]):
+            for j in range(self.C01.shape[1]):
+                for k in range(self.C01.shape[3]):
+                    for l in range(self.C01.shape[4]):
+                        for ij in range(noff+1,nscale):
+                            idx=np.where(jo2==ij)[0]
+                            c01[i,j,idx[noff:],k,l]=self.C01.numpy()[i,j,j2==ij-noff,k,l]
+                            c01[i,j,idx[:noff],k,l]=self.add_data_from_slope(self.C01.numpy()[i,j,j2==ij-noff,k,l],noff,ds=ds)
+
+                        for ij in range(nscale):
+                            idx=np.where(jo1==ij)[0]
+                            if idx.shape[0]>noff:
+                                c01[i,j,idx[:noff],k,l]=self.add_data_from_slope(c01[i,j,idx[noff:],k,l],noff,ds=ds)
+                            else:
+                                c01[i,j,idx,k,l]=np.mean(c01[i,j,jo1==ij-1,k,l])
+
+        
+        nout=0
+        for j3 in range(nscale):
+            for j2 in range(0,j3):
+                for j1 in range(0,j2):
+                    nout=nout+1
+
+        c11=np.zeros([self.C11.shape[0],self.C11.shape[1], \
+                      nout,self.C11.shape[3], \
+                      self.C11.shape[4],self.C11.shape[5]],dtype='complex')
+                     
+        jo1=np.zeros([nout])
+        jo2=np.zeros([nout])
+        jo3=np.zeros([nout])
+
+        nout=0
+        for j3 in range(nscale):
+            for j2 in range(0,j3):
+                for j1 in range(0,j2):
+                    jo1[nout]=j1
+                    jo2[nout]=j2
+                    jo3[nout]=j3
+                    nout=nout+1
+
+        ncross=self.C11.shape[2]
+        jj1=np.zeros([ncross])
+        jj2=np.zeros([ncross])
+        jj3=np.zeros([ncross])
+        
+        n=0
+        for j3 in range(inscale):
+            for j2 in range(0,j3):
+                for j1 in range(0,j2):
+                    jj1[n]=j1
+                    jj2[n]=j2
+                    jj3[n]=j3
+                    n=n+1
+
+        n=0
+        for j3 in range(nscale):
+            for j2 in range(j3):
+                idx=np.where((jj3==j3)*(jj2==j2))[0]
+                if idx.shape[0]>0:
+                    idx2=np.where((jo3==j3+noff)*(jo2==j2+noff))[0]
+                    for i in range(self.C11.shape[0]):
+                        for j in range(self.C11.shape[1]):
+                            for k in range(self.C11.shape[3]):
+                                for l in range(self.C11.shape[4]):
+                                    for m in range(self.C11.shape[5]):
+                                        c11[i,j,idx2[noff:],k,l,m]=self.C11.numpy()[i,j,idx,k,l,m]
+                                        c11[i,j,idx2[:noff],k,l,m]=self.add_data_from_log_slope(self.C11.numpy()[i,j,idx,k,l,m],noff,ds=ds)
+
+        idx=np.where(abs(c11[0,0,:,0,0,0])==0)[0]
+        for iii in idx:
+            iii1=np.where((jo1==jo1[iii]+1)*(jo2==jo2[iii]+1)*(jo3==jo3[iii]+1))[0]
+            iii2=np.where((jo1==jo1[iii]+2)*(jo2==jo2[iii]+2)*(jo3==jo3[iii]+2))[0]
+            if iii2.shape[0]>0:
+                for i in range(self.C11.shape[0]):
+                    for j in range(self.C11.shape[1]):
+                        for k in range(self.C11.shape[3]):
+                            for l in range(self.C11.shape[4]):
+                                for m in range(self.C11.shape[5]):
+                                    c11[i,j,iii,k,l,m]=self.add_data_from_slope(c11[i,j,[iii1,iii2],k,l,m],1,ds=2)[0]
+        
+        idx=np.where(abs(c11[0,0,:,0,0,0])==0)[0]
+        for iii in idx:
+            iii1=np.where((jo1==jo1[iii])*(jo2==jo2[iii])*(jo3==jo3[iii]-1))[0]
+            iii2=np.where((jo1==jo1[iii])*(jo2==jo2[iii])*(jo3==jo3[iii]-2))[0]
+            if iii2.shape[0]>0:
+                for i in range(self.C11.shape[0]):
+                    for j in range(self.C11.shape[1]):
+                        for k in range(self.C11.shape[3]):
+                            for l in range(self.C11.shape[4]):
+                                for m in range(self.C11.shape[5]):
+                                    c11[i,j,iii,k,l,m]=self.add_data_from_slope(c11[i,j,[iii1,iii2],k,l,m],1,ds=2)[0]
+
+        return scat_cov( (p00),
+                         (c01),
+                         (c11),
+                        s1=(s1))
+        
         
 
 class funct(FOC.FoCUS):

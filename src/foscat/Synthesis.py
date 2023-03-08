@@ -84,7 +84,7 @@ class Synthesis:
         return data
 
     @tf.function
-    def loss(self,x,loss_function):
+    def loss(self,x,loss_function,grd_mask=None):
 
         operation=loss_function.scat_operator
         
@@ -97,8 +97,11 @@ class Synthesis:
                 l_x=x
                 
             l=loss_function.eval(l_x)
-            
-            g=self.check_dense(tf.gradients(l,x)[0],x.shape[0])
+            if grd_mask is None:
+                g=self.check_dense(tf.gradients(l,x)[0],x.shape[0])
+            else:
+                idx=np.where(grd_mask>0)[0]
+                g=self.check_dense(tf.gradients(l,tf.gather(x,idx))[0],x.shape[0])
             
             self.curr_gpu=self.curr_gpu+1
             
@@ -174,6 +177,7 @@ class Synthesis:
             DEVAL_STAT_FREQUENCY = 1000,
             LEARNING_RATE = 0.03,
             EPSILON = 1E-7,
+            grd_mask=None,
             SHOWGPU=False):
         
         self.eta=LEARNING_RATE
@@ -222,13 +226,16 @@ class Synthesis:
             g_tot=None
             l_tot=0.0
             for k in range(self.number_of_loss):
-                l,g=self.loss(x,self.loss_class[k])
+                l,g=self.loss(x,self.loss_class[k],grd_mask=grd_mask)
+                g=g.numpy()
+                g[np.isnan(g)]=0.0
                 if g_tot is None:
                     g_tot=g
                 else:
                     g_tot=g_tot+g
+
+                    
                 l_tot=l_tot+l.numpy()
-                
             
                 l_log[self.mpi_rank*self.MAXNUMLOSS+k]=l.numpy()
             
