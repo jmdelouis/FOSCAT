@@ -11,7 +11,7 @@ import foscat.Synthesis as synthe
 
 def usage():
     print(' This software is a demo of the foscat library:')
-    print('>python demo.py -n=8 [-c|--cov][-s|--steps=3000][-S=1234|--seed=1234][-x|--xstat][-p|--p00][-g|--gauss][-k|--k5x5][-d|--data][-o|--out][-K|--k128]')
+    print('>python demo.py -n=8 [-c|--cov][-s|--steps=3000][-S=1234|--seed=1234][-x|--xstat][-p|--p00][-g|--gauss][-k|--k5x5][-d|--data][-o|--out][-K|--k128][-r|--orient]')
     print('-n : is the nside of the input map (nside max = 256 with the default map)')
     print('--cov (optional): use scat_cov instead of scat.')
     print('--steps (optional): number of iteration, if not specified 1000.')
@@ -23,12 +23,13 @@ def usage():
     print('--k128  (optional): Work with 128 pixel kernel reproducing wignercomputation instead of a 3x3.')
     print('--data  (optional): If not specified use Venu_256.npy.')
     print('--out   (optional): If not specified save in *_demo_*.')
+    print('--orient(optional): If not specified use 4 orientation')
     exit(0)
     
 def main():
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "n:cS:s:xpgkd:o:K", \
-                                   ["nside", "cov","seed","steps","xstat","p00","gauss","k5x5","data","out","k128"])
+        opts, args = getopt.getopt(sys.argv[1:], "n:cS:s:xpgkd:o:Kr:", \
+                                   ["nside", "cov","seed","steps","xstat","p00","gauss","k5x5","data","out","k128","orient"])
     except getopt.GetoptError as err:
         # print help information and exit:
         print(err)  # will print something like "option -a not recognized"
@@ -47,6 +48,7 @@ def main():
     outname='demo'
     data="Venus_256.npy"
     instep=16
+    norient=4
     
     for o, a in opts:
         if o in ("-c","--cov"):
@@ -73,6 +75,9 @@ def main():
         elif o in ("-K", "--k64"):
             KERNELSZ=64
             instep=8
+        elif o in ("-r", "--orient"):
+            norient=int(a[1:])
+            print('Use %d orientations'%(norient))
         elif o in ("-p", "--p00"):
             dop00=True
         else:
@@ -111,7 +116,10 @@ def main():
     # Get data
     #=================================================================================
     im=dodown(np.load(data),nside)
-    
+    mask=np.ones([1,im.shape[0]])
+    mask[0,:]=(im!=hp.UNSEEN)
+    im[im==hp.UNSEEN]=0.0
+
     #=================================================================================
     # Generate a random noise with the same coloured than the input data
     #=================================================================================
@@ -160,12 +168,12 @@ def main():
         
         ref = args[0]
         im  = args[1]
-        #ip0 = args[2]
+        mask = args[2]
 
         if docross:
-            learn=scat_operator.eval(im,image2=x,Imaginary=True)
+            learn=scat_operator.eval(im,image2=x,Imaginary=True,mask=mask)
         else:
-            learn=scat_operator.eval(x)
+            learn=scat_operator.eval(x,mask=mask)
             
         if dop00:
             loss=scat_operator.bk_reduce_mean(scat_operator.bk_square(ref.P00[0,0,:]-learn.P00[0,0,:]))
@@ -176,11 +184,11 @@ def main():
         return(loss)
 
     if docross:
-        refX=scat_op.eval(im,image2=im,Imaginary=True)
+        refX=scat_op.eval(im,image2=im,Imaginary=True,mask=mask)
     else:
-        refX=scat_op.eval(im)
-
-    loss1=synthe.Loss(lossX,scat_op,refX,im)
+        refX=scat_op.eval(im,mask=mask)
+    
+    loss1=synthe.Loss(lossX,scat_op,refX,im,mask)
         
     sy = synthe.Synthesis([loss1])
     #=================================================================================
@@ -198,13 +206,14 @@ def main():
     # STORE RESULTS
     #=================================================================================
     if docross:
-        start=scat_op.eval(im,image2=imap)
-        out =scat_op.eval(im,image2=omap)
+        start=scat_op.eval(im,image2=imap,mask=mask)
+        out =scat_op.eval(im,image2=omap,mask=mask)
     else:
-        start=scat_op.eval(imap)
-        out =scat_op.eval(omap)
+        start=scat_op.eval(imap,mask=mask)
+        out =scat_op.eval(omap,mask=mask)
     
     np.save('in_%s_map_%d.npy'%(outname,nside),im)
+    np.save('mm_%s_map_%d.npy'%(outname,nside),mask[0])
     np.save('st_%s_map_%d.npy'%(outname,nside),imap)
     np.save('out_%s_map_%d.npy'%(outname,nside),omap)
     np.save('out_%s_log_%d.npy'%(outname,nside),sy.get_history())

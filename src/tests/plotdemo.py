@@ -6,17 +6,19 @@ import getopt
 
 def usage():
     print(' This software plots the demo results:')
-    print('>python plotdemo.py -n=8 [-c|cov] [-o|--out] [-c|--cmap] [-g|--geo]')
+    print('>python plotdemo.py -n=8 [-c|cov] [-o|--out] [-c|--cmap] [-g|--geo] [-i|--vmin] [-a|--vmax]')
     print('-n : is the nside of the input map (nside max = 256 with the default map)')
-    print('--cov     (optional): use scat_cov instead of scat')
-    print('--out     (optional): If not specified save in *_demo_*.')
-    print('--map=jet (optional): If not specified use cmap=jet')
-    print('--geo     (optional): If specified use cartview')
+    print('--cov|-c     (optional): use scat_cov instead of scat')
+    print('--out|-o     (optional): If not specified save in *_demo_*.')
+    print('--map=jet|-m (optional): If not specified use cmap=jet')
+    print('--geo|-g     (optional): If specified use cartview')
+    print('--vmin|-i    (optional): specify the minimum value')
+    print('--vmax|-a    (optional): specify the maximum value')
     exit(0)
     
 def main():
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "n:co:m:g", ["nside", "cov","out","map","geo"])
+        opts, args = getopt.getopt(sys.argv[1:], "n:co:m:gi:a:", ["nside", "cov","out","map","geo","vmin","vmax"])
     except getopt.GetoptError as err:
         # print help information and exit:
         print(err)  # will print something like "option -a not recognized"
@@ -28,6 +30,8 @@ def main():
     outname='demo'
     cmap='jet'
     docart=False
+    vmin=-3
+    vmax= 3
     
     for o, a in opts:
         if o in ("-c","--cov"):
@@ -40,6 +44,10 @@ def main():
             nside=int(a[1:])
         elif o in ("-o", "--out"):
             outname=a[1:]
+        elif o in ("-i", "--vmin"):
+            vmin=float(a[1:])
+        elif o in ("-a", "--vmax"):
+            vmax=float(a[1:])
         else:
             print(o,a)
             assert False, "unhandled option"
@@ -71,25 +79,29 @@ def main():
     (refX-out).plot(name='Diff',color='purple',hold=False)
 
     im = np.load('in_%s_map_%d.npy'%(outname,nside))
+    try:
+        mm = np.load('mm_%s_map_%d.npy'%(outname,nside))
+    except:
+        mm = np.ones([im.shape[0]])
     sm = np.load('st_%s_map_%d.npy'%(outname,nside))
     om = np.load('out_%s_map_%d.npy'%(outname,nside))
 
     idx=hp.ring2nest(nside,np.arange(12*nside**2))
     plt.figure(figsize=(10,6))
     if docart:
-        hp.cartview(im[idx],cmap=cmap,min=-3,max=3,hold=False,sub=(2,2,1),nest=False,title='Model')
-        hp.cartview(sm,cmap=cmap,min=-3,max=3,hold=False,sub=(2,2,2),nest=True,title='Start')
-        hp.cartview(om,cmap=cmap,min=-3,max=3,hold=False,sub=(2,2,3),nest=True,title='Output')
-        hp.cartview(im-om,cmap=cmap,min=-3,max=3,hold=False,sub=(2,2,4),nest=True,title='Diff')
+        hp.cartview(im[idx]/mm[idx],cmap=cmap,min=vmin,max=vmax,hold=False,sub=(2,2,1),nest=False,title='Model')
+        hp.cartview(sm/mm,cmap=cmap,min=vmin,max=vmax,hold=False,sub=(2,2,2),nest=True,title='Start')
+        hp.cartview(om/mm,cmap=cmap,min=vmin,max=vmax,hold=False,sub=(2,2,3),nest=True,title='Output')
+        hp.cartview((im-om)/mm,cmap=cmap,min=vmin,max=vmax,hold=False,sub=(2,2,4),nest=True,title='Diff')
     else:
-        hp.mollview(im[idx],cmap=cmap,min=-3,max=3,hold=False,sub=(2,2,1),nest=False,title='Model')
-        hp.mollview(sm,cmap=cmap,min=-3,max=3,hold=False,sub=(2,2,2),nest=True,title='Start')
-        hp.mollview(om,cmap=cmap,min=-3,max=3,hold=False,sub=(2,2,3),nest=True,title='Output')
-        hp.mollview(im-om,cmap=cmap,min=-3,max=3,hold=False,sub=(2,2,4),nest=True,title='Diff')
+        hp.mollview(im[idx]/mm[idx],cmap=cmap,min=vmin,max=vmax,hold=False,sub=(2,2,1),nest=False,title='Model')
+        hp.mollview(sm/mm,cmap=cmap,min=vmin,max=vmax,hold=False,sub=(2,2,2),nest=True,title='Start')
+        hp.mollview(om/mm,cmap=cmap,min=vmin,max=vmax,hold=False,sub=(2,2,3),nest=True,title='Output')
+        hp.mollview((im-om)/mm,cmap=cmap,min=vmin,max=vmax,hold=False,sub=(2,2,4),nest=True,title='Diff')
 
-    cli=hp.anafast((im-np.median(im))[idx])
-    clo=hp.anafast((om-np.median(om))[idx])
-    cldiff=hp.anafast((im-om-np.median(om))[idx])
+    cli=hp.anafast((mm*(im-np.median(im)))[idx])
+    clo=hp.anafast((mm*(om-np.median(om)))[idx])
+    cldiff=hp.anafast((mm*(im-om-np.median(om)))[idx])
 
     plt.figure(figsize=(6,6))
     plt.plot(cli,color='blue',label=r'Model',lw=6)
