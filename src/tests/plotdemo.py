@@ -27,7 +27,7 @@ def main():
 
     cov=False
     nside=-1
-    outname='demo'
+    outname='multi'
     cmap='jet'
     docart=False
     vmin=-3

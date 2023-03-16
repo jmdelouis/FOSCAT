@@ -32,7 +32,7 @@ class Rformat:
         exit(0)
 
     def __add__(self,other):
-        assert isinstance(other, float) or isinstance(other, int) or \
+        assert isinstance(other, float) or isinstance(other, np.float32) or isinstance(other, int) or \
             isinstance(other, bool) or isinstance(other, Rformat)
         
         if isinstance(other, Rformat):
@@ -41,7 +41,7 @@ class Rformat:
             return Rformat(self.get()+other,self.off,self.axis,chans=self.chans)
 
     def __sub__(self,other):
-        assert isinstance(other, float) or isinstance(other, int) or \
+        assert isinstance(other, float) or isinstance(other, np.float32) or isinstance(other, int) or \
             isinstance(other, bool) or isinstance(other, Rformat)
         
         if isinstance(other, Rformat):
@@ -54,7 +54,7 @@ class Rformat:
         return Rformat(-self.get(),self.off,self.axis,chans=self.chans)
 
     def __mul__(self,other):
-        assert isinstance(other, float) or isinstance(other, int) or \
+        assert isinstance(other, float) or isinstance(other, np.float32) or isinstance(other, int) or \
             isinstance(other, bool) or isinstance(other, Rformat)
         
         if isinstance(other, Rformat):
@@ -422,6 +422,9 @@ class FoCUS:
     
     def get_use_R(self):
         return self.use_R_format
+    
+    def is_R(self,data):
+        return isinstance(data,Rformat)
     
     # ---------------------------------------------−---------
     # --             BACKEND DEFINITION                    --

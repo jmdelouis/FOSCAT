@@ -34,7 +34,7 @@ class scat_cov:
         return self.C11
 
     def __add__(self, other):
-        assert isinstance(other, float) or isinstance(other, int) or \
+        assert isinstance(other, float)  or isinstance(other, np.float32) or isinstance(other, int) or \
                isinstance(other, bool) or isinstance(other, scat_cov)
 
         if self.S1 is None:
@@ -65,7 +65,7 @@ class scat_cov:
                             s1=s1, c10=c10)
 
     def __truediv__(self, other):
-        assert isinstance(other, float) or isinstance(other, int) or \
+        assert isinstance(other, float)  or isinstance(other, np.float32) or isinstance(other, int) or \
                isinstance(other, bool) or isinstance(other, scat_cov)
 
         if self.S1 is None:
@@ -96,7 +96,7 @@ class scat_cov:
                             s1=s1, c10=c10)
 
     def __rtruediv__(self, other):
-        assert isinstance(other, float) or isinstance(other, int) or \
+        assert isinstance(other, float)  or isinstance(other, np.float32) or isinstance(other, int) or \
                isinstance(other, bool) or isinstance(other, scat_cov)
 
         if self.S1 is None:
@@ -127,7 +127,7 @@ class scat_cov:
                             s1=s1, c10=c10)
 
     def __sub__(self, other):
-        assert isinstance(other, float) or isinstance(other, int) or \
+        assert isinstance(other, float)  or isinstance(other, np.float32) or isinstance(other, int) or \
                isinstance(other, bool) or isinstance(other, scat_cov)
 
         if self.S1 is None:
@@ -164,7 +164,7 @@ class scat_cov:
                             s1=s1, c10=c10)
 
     def __mul__(self, other):
-        assert isinstance(other, float) or isinstance(other, int) or \
+        assert isinstance(other, float)  or isinstance(other, np.float32) or isinstance(other, int) or \
                isinstance(other, bool) or isinstance(other, scat_cov)
 
         if self.S1 is None:

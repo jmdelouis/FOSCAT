@@ -10,12 +10,13 @@ from threading import Event
 
 class Loss:
     
-    def __init__(self,function,scat_operator,*param,Rformat=True):
+    def __init__(self,function,scat_operator,*param,Rformat=True,name=''):
 
         self.loss_function=function
         self.scat_operator=scat_operator
         self.args=param
         self.Rformat=Rformat
+        self.name=name
 
     def eval(self,x):
         return self.loss_function(x,self.scat_operator,self.args)
@@ -87,19 +88,36 @@ class Synthesis:
     def loss(self,x,loss_function):
 
         operation=loss_function.scat_operator
-        
-        with tf.device(operation.gpulist[(operation.gpupos+self.curr_gpu)%operation.ngpu]):
-            print('Run on GPU %s'%(operation.gpulist[(operation.gpupos+self.curr_gpu)%operation.ngpu]))
+
+        nx=1
+        if len(x.shape)>1:
+            nx=x.shape[0]
             
-            if operation.get_use_R() and loss_function.Rformat:
-                l_x=operation.to_R(x,only_border=True,chans=operation.chans)
-            else:
-                l_x=x
+        with tf.device(operation.gpulist[(operation.gpupos+self.curr_gpu)%operation.ngpu]):
+            print('%s Run on GPU %s'%(loss_function.name,operation.gpulist[(operation.gpupos+self.curr_gpu)%operation.ngpu]))
+
+            if nx>1:
+                l_x={}
+            for i in range(nx):
+                if nx==1:
+                    if operation.get_use_R() and loss_function.Rformat:
+                        l_x=operation.to_R(x,only_border=True,chans=operation.chans)
+                    else:
+                        l_x=x
+                    ndata=x.shape[0]
+                else:
+                    if operation.get_use_R() and loss_function.Rformat:
+                        l_x[i]=operation.to_R(x[i],only_border=True,chans=operation.chans)
+                    else:
+                        l_x[i]=x[i]
+
+                    ndata=x.shape[0]*x.shape[1]
+                    
                 
             l=loss_function.eval(l_x)
-            g=self.check_dense(tf.gradients(l,x)[0],x.shape[0])
-            
+            g=self.check_dense(tf.gradients(l,x)[0],ndata)
             self.curr_gpu=self.curr_gpu+1
+            
             
         return l,g
     #---------------------------------------------------------------
@@ -166,7 +184,7 @@ class Synthesis:
         
     # ---------------------------------------------−---------
     def run(self,
-            x,
+            in_x,
             NUM_EPOCHS = 1000,
             DECAY_RATE=0.95,
             EVAL_FREQUENCY = 100,
@@ -174,7 +192,9 @@ class Synthesis:
             LEARNING_RATE = 0.03,
             EPSILON = 1E-7,
             grd_mask=None,
-            SHOWGPU=False):
+            SHOWGPU=False,
+            MESSAGE='',
+            axis=0):
         
         self.eta=LEARNING_RATE
         self.epsilon=EPSILON
@@ -182,7 +202,16 @@ class Synthesis:
         self.nlog=0
 
         if self.operation.get_use_R():
-            x=self.operation.to_R_center(x,chans=self.operation.chans)
+            if axis==0:
+                x=self.operation.to_R_center(self.operation.bk_cast(in_x),chans=self.operation.chans)
+            else:
+                tmp_x=self.operation.to_R_center(self.operation.bk_cast(in_x[0]),chans=self.operation.chans)
+                print(in_x.shape,tmp_x.shape)
+                x=np.zeros([in_x.shape[0],tmp_x.shape[0]],dtype=self.operation.all_type)
+                x[0]=tmp_x
+                del tmp_x
+                for i in range(1,in_x.shape[0]):
+                    x[i]=self.operation.to_R_center(self.operation.bk_cast(in_x[i]),chans=self.operation.chans)
             
         self.curr_gpu=self.curr_gpu+self.mpi_rank
         
@@ -247,8 +276,12 @@ class Synthesis:
             if self.mpi_size==1:
                 grad=g_tot
             else:
-                grad=np.zeros([g_tot.shape[0]],dtype=self.operation.get_type())
-                comm.Allreduce((g_tot.numpy().astype(self.operation.get_type()),self.operation.get_mpi_type()),
+                if axis==0:
+                    grad=np.zeros([g_tot.shape[0]],dtype=self.operation.get_type())
+                else:
+                    grad=np.zeros([g_tot.shape[0],g_tot.shape[1]],dtype=self.operation.get_type())
+                    
+                comm.Allreduce((g_tot.astype(self.operation.get_type()),self.operation.get_mpi_type()),
                                (grad,self.operation.get_mpi_type()))
             
             if self.nlog==self.history.shape[0]:
@@ -274,7 +307,7 @@ class Synthesis:
                     for k in range(info_gpu.shape[0]):
                         mess=mess+'[GPU%d %.0f/%.0f MB %.0f%%]'%(k,info_gpu[k,0],info_gpu[k,1],info_gpu[k,2])
                 
-                print('Itt %d L=%s %.3fs %s'%(itt,cur_loss,(end-start),mess))
+                print('%sItt %d L=%s %.3fs %s'%(MESSAGE,itt,cur_loss,(end-start),mess))
                 sys.stdout.flush()
                 start = time.time()
 
@@ -283,9 +316,20 @@ class Synthesis:
         
         operation=self.operation
         if operation.get_use_R():
-            l_x=operation.to_R(x,only_border=True,chans=self.operation.chans)
-            x=operation.from_R(l_x)
-            
+            if axis==0:
+                l_x=operation.to_R(x,only_border=True,chans=self.operation.chans)
+                x=operation.from_R(l_x)
+            else:
+                l_x=operation.to_R(x[0],only_border=True,chans=self.operation.chans)
+                tmp_x=operation.from_R(l_x)
+                out_x=np.zeros([x.shape[0],tmp_x.shape[0]])
+                out_x[0]=tmp_x
+                del tmp_x
+                for i in range(1,in_x.shape[0]):
+                    l_x=operation.to_R(x[i],only_border=True,chans=self.operation.chans)
+                    out_x[i]=operation.from_R(l_x)
+                x=out_x
+                    
         return(x)
 
     def get_history(self):

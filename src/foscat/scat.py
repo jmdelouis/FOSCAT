@@ -26,7 +26,7 @@ class scat:
         self.P00=0*self.P00
 
     def __add__(self,other):
-        assert isinstance(other, float) or isinstance(other, int) or \
+        assert isinstance(other, float) or isinstance(other, np.float32) or isinstance(other, int) or \
             isinstance(other, bool) or isinstance(other, scat)
         
         if isinstance(other, scat):
@@ -39,7 +39,7 @@ class scat:
                         (self.S2+ other))
 
     def __truediv__(self,other):
-        assert isinstance(other, float) or isinstance(other, int) or \
+        assert isinstance(other, float)  or isinstance(other, np.float32) or isinstance(other, int) or \
             isinstance(other, bool) or isinstance(other, scat)
         
         if isinstance(other, scat):
@@ -53,7 +53,7 @@ class scat:
         
 
     def __rtruediv__(self,other):
-        assert isinstance(other, float) or isinstance(other, int) or \
+        assert isinstance(other, float)  or isinstance(other, np.float32) or isinstance(other, int) or \
             isinstance(other, bool) or isinstance(other, scat)
         
         if isinstance(other, scat):
@@ -66,7 +66,7 @@ class scat:
                         (other / self.S2))
         
     def __sub__(self,other):
-        assert isinstance(other, float) or isinstance(other, int) or \
+        assert isinstance(other, float)  or isinstance(other, np.float32) or isinstance(other, int) or \
             isinstance(other, bool) or isinstance(other, scat)
         
         if isinstance(other, scat):
@@ -79,7 +79,7 @@ class scat:
                         (self.S2- other))
         
     def __mul__(self,other):
-        assert isinstance(other, float) or isinstance(other, int) or \
+        assert isinstance(other, float)  or isinstance(other, np.float32) or isinstance(other, int) or \
             isinstance(other, bool) or isinstance(other, scat)
         
         if isinstance(other, scat):
@@ -156,7 +156,7 @@ class funct(FOC.FoCUS):
         cross = False
         if image2 is not None:
             cross = True
-            all_cross=Auto
+            all_cross=not Auto
         else:
             all_cross=False
             
