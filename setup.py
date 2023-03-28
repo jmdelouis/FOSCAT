@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='foscat',
-    version='1.9.3',
+    version='1.9.4',
     description='Synthesise 2D or Healpix data using Cross Scattering Transform' ,
     long_description='Synthesise data (2D or Healpix) using Cross Scattering Transform (https://arxiv.org/abs/2207.12527) usable for component separation (e.g. denoising). \n Demo package here : https://github.com/jmdelouis/FOSCAT_DEMO ' ,
     license='MIT',
@@ -20,7 +20,7 @@ setup(
           'imagecodecs',
           'matplotlib',
           'numpy',
-          'tensorflow-gpu',
+          'tensorflow',
           'healpy',
       ],
 
