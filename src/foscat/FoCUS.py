@@ -181,10 +181,12 @@ class FoCUS:
             
         if all_type=='float32':
             self.all_bk_type=self.backend.float32
+            self.all_cbk_type=self.backend.complex64
         else:
             if all_type=='float64':
                 self.all_type='float64'
                 self.all_bk_type=self.backend.float64
+                self.all_cbk_type=self.backend.complex128
             else:
                 print('ERROR INIT FOCUS ',all_type,' should be float32 or float64')
                 exit(0)
@@ -439,11 +441,17 @@ class FoCUS:
 
     def bk_L1(self,x):
         if isinstance(x,Rformat):
-            return Rformat(self.backend.sign(x.get())* \
-                           self.backend.sqrt(self.backend.sign(x.get())*x.get()),
-                           x.off,x.axis,chans=self.chans)
+            return Rformat(self.bk_L1(x.get()),x.off,x.axis,chans=self.chans)
         else:
-            return self.backend.sign(x)*self.backend.sqrt(self.backend.sign(x)*x)
+            if x.dtype==self.all_cbk_type:
+                xr=self.bk_real(x)
+                xi=self.bk_imag(x)
+                
+                r=self.backend.sign(xr)*self.backend.sqrt(self.backend.sign(xr)*xr)
+                i=self.backend.sign(xi)*self.backend.sqrt(self.backend.sign(xi)*xi)
+                return self.bk_complex(r,i)
+            else:
+                return self.backend.sign(x)*self.backend.sqrt(self.backend.sign(x)*x)
         
     def bk_reduce_sum(self,data,axis=None):
         
@@ -585,13 +593,52 @@ class FoCUS:
             return(self.backend.concat(data))
         else:
             return(self.backend.concat(data,axis=axis))
+
+    
+    def bk_conjugate(self,data):
+        if isinstance(data,Rformat):
+            return Rformat(self.bk_conjugate(data.get()),data.off,data.axis,chans=self.chans)
+                
+        if self.BACKEND==self.TENSORFLOW:
+            return self.backend.math.conj(data)
+        if self.BACKEND==self.TORCH:
+            return self.backend.conjugate(data)
+        if self.BACKEND==self.NUMPY:
+            return data.conjugate()
+        
+    def bk_real(self,data):
+        if isinstance(data,Rformat):
+            return Rformat(self.bk_real(data.get()),data.off,data.axis,chans=self.chans)
+                
+        if self.BACKEND==self.TENSORFLOW:
+            return self.backend.math.real(data)
+        if self.BACKEND==self.TORCH:
+            return self.backend.real(data)
+        if self.BACKEND==self.NUMPY:
+            return self.backend.real(data)
+
+    def bk_imag(self,data):
+        if isinstance(data,Rformat):
+            return Rformat(self.bk_imag(data.get()),data.off,data.axis,chans=self.chans)
+                
+        if self.BACKEND==self.TENSORFLOW:
+            return self.backend.math.imag(data)
+        if self.BACKEND==self.TORCH:
+            return self.backend.imag(data)
+        if self.BACKEND==self.NUMPY:
+            return self.backend.imag(data)
         
     def bk_relu(self,x):
         if isinstance(x,Rformat):
             return Rformat(self.bk_relu(x.get()),x.off,x.axis,chans=self.chans)
         
         if self.BACKEND==self.TENSORFLOW:
-            return self.backend.nn.relu(x)
+            if x.dtype==self.all_cbk_type:
+                xr=self.backend.nn.relu(self.bk_real(x))
+                xi=self.backend.nn.relu(self.bk_imag(x))
+                return self.backend.complex(xr,xi)
+            else:
+                return self.backend.nn.relu(x)
         if self.BACKEND==self.TORCH:
             return self.backend.relu(x)
         if self.BACKEND==self.NUMPY:
@@ -600,13 +647,18 @@ class FoCUS:
     def bk_cast(self,x):
         if isinstance(x,Rformat):
             return Rformat(self.bk_cast(x.get()),x.off,x.axis,chans=self.chans)
-        
+
+        if x.dtype=='complex128' or x.dtype=='complex64':
+            out_type=self.all_cbk_type
+        else:
+            out_type=self.all_bk_type
+            
         if self.BACKEND==self.TENSORFLOW:
-            return self.backend.cast(x,self.all_bk_type)
+            return self.backend.cast(x,out_type)
         if self.BACKEND==self.TORCH:
-            return self.backend.cast(x,self.all_bk_type)
+            return self.backend.cast(x,out_type)
         if self.BACKEND==self.NUMPY:
-            return x.astype(self.all_type)
+            return x.astype(out_type)
     
     # ---------------------------------------------−---------
     # --       COMPUTE 3X3 INDEX FOR HEALPIX WORK          --
@@ -1414,11 +1466,16 @@ class FoCUS:
             for i in range(axis+3,len(x.shape)):
                 l_mask=self.bk_expand_dims(l_mask,-1)
             
+            if l_x.get().dtype==self.all_cbk_type:
+                l_mask=self.bk_complex(l_mask,0.0)
+                
             return self.bk_reduce_sum(self.bk_reduce_sum(self.bk_reduce_sum(l_mask*l_x.get(),axis=axis+1),axis=axis+1),axis=axis+1)/(12*nside*nside)
         else:
             for i in range(axis+1,len(x.shape)):
                 l_mask=self.bk_expand_dims(l_mask,-1)
 
+            if l_x.dtype==self.all_cbk_type:
+                l_mask=self.bk_complex(l_mask,0.0)
             return self.bk_reduce_mean(l_mask*l_x,axis=axis+1)
         
     # ---------------------------------------------−---------
@@ -1458,8 +1515,8 @@ class FoCUS:
             for k in range(1,axis+1):
                 o_shape=o_shape*shape[k]
         else:
-            o_shape=1
-                
+            o_shape=image.shape[0]
+            
         if len(shape)>axis+3:
             ishape=shape[axis+3]
             for k in range(axis+4,len(shape)):
@@ -1474,23 +1531,48 @@ class FoCUS:
             for k in range(ishape):
                 l_ww[:,:,k,k*norient:(k+1)*norient]=ww.reshape(self.KERNELSZ,self.KERNELSZ,norient)
             
-            res=self.backend.nn.conv2d(l_image,l_ww,strides=[1, 1, 1, 1],padding='SAME')
+            if l_image.dtype=='complex128' or l_image.dtype=='complex64':
+                r=self.backend.nn.conv2d(self.bk_real(l_image),
+                                         l_ww,
+                                         strides=[1, 1, 1, 1],
+                                         padding='SAME')
+                i=self.backend.nn.conv2d(self.bk_imag(l_image),
+                                         l_ww,
+                                         strides=[1, 1, 1, 1],
+                                         padding='SAME')
+                res=self.backend.complex(r,i)
+            else:
+                res=self.backend.nn.conv2d(l_image,l_ww,strides=[1, 1, 1, 1],padding='SAME')
 
             res=self.bk_reshape(res,[o_shape,shape[axis+1],shape[axis+2],ishape,norient])
         else:
             oshape=[o_shape,shape[axis+1],shape[axis+2],1]
             l_ww=self.bk_reshape(ww,[self.KERNELSZ,self.KERNELSZ,1,norient])
 
-            res=self.backend.nn.conv2d(self.bk_reshape(image,oshape),
-                                       l_ww,
-                                       strides=[1, 1, 1, 1],
-                                       padding='SAME')
+            tmp=self.bk_reshape(image,oshape)
+            if tmp.dtype=='complex128' or tmp.dtype=='complex64':
+                r=self.backend.nn.conv2d(self.bk_real(tmp),
+                                         l_ww,
+                                         strides=[1, 1, 1, 1],
+                                         padding='SAME')
+                i=self.backend.nn.conv2d(self.bk_imag(tmp),
+                                         l_ww,
+                                         strides=[1, 1, 1, 1],
+                                         padding='SAME')
+                res=self.backend.complex(r,i)
+            else:
+                res=self.backend.nn.conv2d(tmp,
+                                           l_ww,
+                                           strides=[1, 1, 1, 1],
+                                           padding='SAME')
 
-        return Rformat(self.bk_reshape(res,shape+[norient]),self.R_off,axis,chans=self.chans)
+        return self.bk_reshape(res,shape+[norient])
     
     # ---------------------------------------------−---------
-    def convol(self,image,axis=0):
+    def convol(self,in_image,axis=0):
 
+        image=self.bk_cast(in_image)
+        
         if self.use_R_format:
             
             if isinstance(image, Rformat):
@@ -1502,10 +1584,16 @@ class FoCUS:
             
             rr=self.conv2d(l_image.get(),self.ww_RealT[nside],axis=axis)
             ii=self.conv2d(l_image.get(),self.ww_ImagT[nside],axis=axis)
+
+            if rr.dtype==self.all_cbk_type:
+                res=self.bk_complex(1.0,0.0)*rr+self.bk_complex(0.0,1.0)*ii
+            else:
+                res=self.bk_complex(rr,ii) 
                 
+            res=Rformat(res,self.R_off,axis,chans=self.chans)
+            
             if not isinstance(image, Rformat):
-                rr=self.from_R(rr,axis=axis)
-                ii=self.from_R(ii,axis=axis)
+                res=self.from_R(res,axis=axis)
                 
         else:
             nside=int(np.sqrt(image.shape[axis]//12))
@@ -1536,12 +1624,16 @@ class FoCUS:
             rr=self.bk_reduce_sum(l_ww_real*imX9,axis+1)
             ii=self.bk_reduce_sum(l_ww_imag*imX9,axis+1)
 
-        return(rr,ii)
+            res=self.backend.complex(1,0)*rr+self.backend.complex(0,1)*ii
+            
+        return(res)
         
             
     # ---------------------------------------------−---------
-    def smooth(self,image,axis=0):
-    
+    def smooth(self,in_image,axis=0):
+
+        image=self.bk_cast(in_image)
+        
         if self.use_R_format:
             if isinstance(image, Rformat):
                 l_image=image.get()
@@ -1553,6 +1645,8 @@ class FoCUS:
             res=self.conv2d(l_image,self.ww_SmoothT,axis=axis)
 
             res=self.bk_reshape(res,l_image.shape)
+            
+            res=Rformat(res,self.R_off,axis,chans=self.chans)
             
             if not isinstance(image, Rformat):
                 res=self.from_R(res,axis=axis)

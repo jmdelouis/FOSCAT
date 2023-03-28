@@ -94,7 +94,8 @@ class Synthesis:
             nx=x.shape[0]
             
         with tf.device(operation.gpulist[(operation.gpupos+self.curr_gpu)%operation.ngpu]):
-            print('%s Run on GPU %s'%(loss_function.name,operation.gpulist[(operation.gpupos+self.curr_gpu)%operation.ngpu]))
+            print('%s Run on GPU %s'%(loss_function.name,
+                                      operation.gpulist[(operation.gpupos+self.curr_gpu)%operation.ngpu]))
 
             if nx>1:
                 l_x={}
@@ -216,6 +217,7 @@ class Synthesis:
         self.curr_gpu=self.curr_gpu+self.mpi_rank
         
         if self.mpi_size>1:
+            print('Work with MPI')
             from mpi4py import MPI
 
             comm = MPI.COMM_WORLD
@@ -266,6 +268,7 @@ class Synthesis:
                 l_tot=l_tot+l.numpy()
             
                 l_log[self.mpi_rank*self.MAXNUMLOSS+k]=l.numpy()
+
             
             if self.mpi_size==1:
                 ltot=l_log

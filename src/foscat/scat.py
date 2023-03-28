@@ -173,7 +173,7 @@ class scat:
     
 class funct(FOC.FoCUS):
     
-    def eval(self, image1, image2=None,mask=None,Auto=True):
+    def eval(self, image1, image2=None,mask=None,Auto=True,s0_off=1E-6):
 
         ### AUTO OR CROSS
         cross = False
@@ -252,12 +252,13 @@ class funct(FOC.FoCUS):
                 l_image2=I2
 
         s0=None
-        s0 = self.bk_masked_mean(l_image1,vmask,axis=axis)
+        s0 = self.bk_masked_mean(l_image1,vmask,axis=axis)+s0_off
+        
         if cross:
             if len(image1.shape)==1 or (len(image1.shape)==3 and isinstance(image1,FOC.Rformat)):
-                s0 = self.bk_concat([s0,self.bk_masked_mean(l_image2,vmask,axis=axis)],1)
+                s0 = self.bk_concat([s0,self.bk_masked_mean(l_image2,vmask,axis=axis)],1)+s0_off
             else:
-                s0 = self.bk_concat([s0,self.bk_masked_mean(l_image2,vmask,axis=axis)],0)
+                s0 = self.bk_concat([s0,self.bk_masked_mean(l_image2,vmask,axis=axis)],0)+s0_off
 
         s1=None
         s2=None
@@ -269,99 +270,60 @@ class funct(FOC.FoCUS):
             # Convol image along the axis defined by 'axis' using the wavelet defined at
             # the foscat initialisation
             #c_image_real is [....,Npix_j1,....,Norient]
-            c_image1_real,c_image1_imag=self.convol(l_image1,axis=axis)
+            c_image1=self.convol(l_image1,axis=axis)
             if cross:
-                c_image2_real,c_image2_imag=self.convol(l_image2,axis=axis)
+                c_image2=self.convol(l_image2,axis=axis)
             else:
-                c_image2_real=c_image1_real
-                c_image2_imag=c_image1_imag
+                c_image2=c_image1
 
             # Compute (a+ib)*(a+ib)* the last c_image column is the real and imaginary part
-            conj_real=c_image1_real*c_image2_real+c_image1_imag*c_image2_imag
-            if all_cross:
-                conj_imag=c_image1_real*c_image2_imag-c_image1_imag*c_image2_real
+            conj=c_image1*self.bk_conjugate(c_image2)
+            if Auto:
+                conj=self.bk_real(conj)
 
             # Compute l_p00 [....,....,Nmask,1,Norient]  
-            l_p00_real = self.bk_expand_dims(self.bk_masked_mean(conj_real,vmask,axis=axis),-2)
-            if all_cross:
-                l_p00_imag = self.bk_expand_dims(self.bk_masked_mean(conj_imag,vmask,axis=axis),-2)
+            l_p00 = self.bk_expand_dims(self.bk_masked_mean(conj,vmask,axis=axis),-2)
 
-            conj_real=self.bk_L1(conj_real)
-            if all_cross:
-                conj_imag=self.bk_L1(conj_imag)
+            conj=self.bk_L1(conj)
 
             # Compute l_s1 [....,....,Nmask,1,Norient] 
-            l_s1_real = self.bk_expand_dims(self.bk_masked_mean(conj_real,vmask,axis=axis),-2)
-            if all_cross:
-                l_s1_imag = self.bk_expand_dims(self.bk_masked_mean(conj_imag,vmask,axis=axis),-2)
+            l_s1 = self.bk_expand_dims(self.bk_masked_mean(conj,vmask,axis=axis),-2)
 
             # Concat S1,P00 [....,....,Nmask,j1,Norient] 
             if s1 is None:
-                if all_cross:
-                    s1  = self.bk_complex(l_s1_real,l_s1_imag)
-                    p00 = self.bk_complex(l_p00_real,l_p00_imag)
-                else:
-                    s1=l_s1_real
-                    p00=l_p00_real
+                s1=l_s1
+                p00=l_p00
             else:
-                if all_cross:
-                    s1 =self.bk_concat([s1,self.bk_complex(l_s1_real,l_s1_imag)],axis=-2)
-                    p00=self.bk_concat([p00,self.bk_complex(l_p00_real,l_p00_imag)],axis=-2)
-                else:
-                    s1=self.bk_concat([s1,l_s1_real],axis=-2)
-                    p00=self.bk_concat([p00,l_p00_real],axis=-2)
+                s1=self.bk_concat([s1,l_s1],axis=-2)
+                p00=self.bk_concat([p00,l_p00],axis=-2)
 
             # Concat l2_image [....,Npix_j1,....,j1,Norient]
             if l2_image is None:
-                l2_image=self.bk_expand_dims(self.update_R_border(conj_real,axis=axis),axis=-2)
+                l2_image=self.bk_expand_dims(self.update_R_border(conj,axis=axis),axis=-2)
             else:
-                l2_image=self.bk_concat([self.bk_expand_dims(self.update_R_border(conj_real,axis=axis),axis=-2),l2_image],axis=-2)
-            
-            if all_cross:
-                if l2_image_imag is None:
-                    l2_image_imag=self.bk_expand_dims(self.update_R_border(conj_imag,axis=axis),axis=-2)
-                else:
-                    l2_image_imag=self.bk_concat([self.bk_expand_dims(self.update_R_border(conj_imag,axis=axis)
-                                                                      ,axis=-2),l2_image_imag],axis=-2)
+                l2_image=self.bk_concat([self.bk_expand_dims(self.update_R_border(conj,axis=axis),axis=-2),l2_image],axis=-2)
 
             # Convol l2_image [....,Npix_j1,....,j1,Norient,Norient]
-            c2_image_real,c2_image_imag=self.convol(self.bk_relu(l2_image),axis=axis)
-            if all_cross:
-                c2_image_imag_real,c2_image_imag_imag=self.convol(self.bk_relu(l2_image_imag),axis=axis)
+            c2_image=self.convol(self.bk_relu(l2_image),axis=axis)
 
-            conj2=self.bk_L1(c2_image_real*c2_image_real+c2_image_imag*c2_image_imag)
-            if all_cross:
-                conj2_imag=self.bk_L1(c2_image_imag_real*c2_image_imag_real+ \
-                                      c2_image_imag_imag*c2_image_imag_imag)
+            conj2p=self.bk_L1(c2_image*self.bk_conjugate(c2_image))
+            if Auto:
+                conj2p=self.bk_real(conj2p)
 
-            c2_image_real,c2_image_imag=self.convol(self.bk_relu(-l2_image),axis=axis)
-            if cross:
-                if all_cross:
-                    c2_image_imag_real,c2_image_imag_imag=self.convol(self.bk_relu(-l2_image_imag),axis=axis)
+            c2_image=self.convol(self.bk_relu(-l2_image),axis=axis)
 
-                conj2=conj2-self.bk_L1(c2_image_real*c2_image_real+ \
-                                       c2_image_imag*c2_image_imag)
-                if all_cross:
-                    conj2_imag=conj2_imag - self.bk_L1(c2_image_imag_real*c2_image_imag_real+ \
-                                                       c2_image_imag_imag*c2_image_imag_imag)
+            conj2m=self.bk_L1(c2_image*self.bk_conjugate(c2_image))
+            if Auto:
+                conj2m=self.bk_real(conj2m)
 
             # Convol l_s2 [....,....,Nmask,j1,Norient,Norient]
-            l_s2 = self.bk_masked_mean(conj2,vmask,axis=axis)
-
-            if all_cross:
-                l_imag_s2 = self.bk_masked_mean(conj2_imag,vmask,axis=axis)
+            l_s2 = self.bk_masked_mean(conj2p-conj2m,vmask,axis=axis)
 
             # Concat l_s2 [....,....,Nmask,j1*(j1+1)/2,Norient,Norient]
             if s2 is None:
-                if all_cross:
-                    s2=self.bk_complex(l_s2,l_imag_s2)
-                else:
-                    s2=l_s2
+                s2=l_s2
             else:
-                if all_cross:
-                    s2=self.bk_concat([s2,self.bk_complex(l_s2,l_imag_s2)],axis=-3)
-                else:
-                    s2=self.bk_concat([s2,l_s2],axis=-3)
+                s2=self.bk_concat([s2,l_s2],axis=-3)
 
             if j1!=jmax-1:
                 # Rescale vmask [Nmask,Npix_j1//4]   
@@ -378,9 +340,6 @@ class funct(FOC.FoCUS):
                 if cross:
                     l_image2 = self.smooth(l_image2,axis=axis)
                     l_image2 = self.ud_grade_2(l_image2,axis=axis)
-                    if all_cross:
-                        l2_image_imag = self.smooth(l2_image_imag,axis=axis)
-                        l2_image_imag = self.ud_grade_2(l2_image_imag,axis=axis)
 
         if len(image1.shape)==1 or (len(image1.shape)==3 and isinstance(image1,FOC.Rformat)):
             return(scat(p00[0],s0[0],s1[0],s2[0],cross))
@@ -389,10 +348,10 @@ class funct(FOC.FoCUS):
 
     def square(self,x):
         # the abs make the complex value usable for reduce_sum or mean
-        return scat(self.bk_abs(self.bk_square(x.P00)),
-                    self.bk_abs(self.bk_square(x.S0)),
-                    self.bk_abs(self.bk_square(x.S1)),
-                    self.bk_abs(self.bk_square(x.S2)))
+        return scat(self.bk_square(self.bk_abs(x.P00)),
+                    self.bk_square(self.bk_abs(x.S0)),
+                    self.bk_square(self.bk_abs(x.S1)),
+                    self.bk_square(self.bk_abs(x.S2)))
 
     def reduce_mean(self,x,axis=None):
         if axis is None:
