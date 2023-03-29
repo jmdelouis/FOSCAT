@@ -645,6 +645,17 @@ class FoCUS:
             return (x>0)*x
         
     def bk_cast(self,x):
+        if isinstance(x,np.float64):
+            if self.all_bk_type=='float32':
+                return(np.float32(x))
+            else:
+                return(x)
+        if isinstance(x,np.float32):
+            if self.all_bk_type=='float64':
+                return(np.float64(x))
+            else:
+                return(x)
+        
         if isinstance(x,Rformat):
             return Rformat(self.bk_cast(x.get()),x.off,x.axis,chans=self.chans)
 
@@ -1465,9 +1476,9 @@ class FoCUS:
         if self.use_R_format:
             for i in range(axis+3,len(x.shape)):
                 l_mask=self.bk_expand_dims(l_mask,-1)
-            
+
             if l_x.get().dtype==self.all_cbk_type:
-                l_mask=self.bk_complex(l_mask,0.0)
+                l_mask=self.bk_complex(l_mask,0*l_mask)
                 
             return self.bk_reduce_sum(self.bk_reduce_sum(self.bk_reduce_sum(l_mask*l_x.get(),axis=axis+1),axis=axis+1),axis=axis+1)/(12*nside*nside)
         else:
@@ -1586,7 +1597,10 @@ class FoCUS:
             ii=self.conv2d(l_image.get(),self.ww_ImagT[nside],axis=axis)
 
             if rr.dtype==self.all_cbk_type:
-                res=self.bk_complex(1.0,0.0)*rr+self.bk_complex(0.0,1.0)*ii
+                if self.all_cbk_type=='complex128':
+                    res=rr+self.bk_complex(np.float64(0.0),np.float64(1.0))*ii
+                else:
+                    res=rr+self.bk_complex(np.float32(0.0),np.float32(1.0))*ii
             else:
                 res=self.bk_complex(rr,ii) 
                 

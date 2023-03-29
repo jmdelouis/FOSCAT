@@ -207,7 +207,6 @@ class Synthesis:
                 x=self.operation.to_R_center(self.operation.bk_cast(in_x),chans=self.operation.chans)
             else:
                 tmp_x=self.operation.to_R_center(self.operation.bk_cast(in_x[0]),chans=self.operation.chans)
-                print(in_x.shape,tmp_x.shape)
                 x=np.zeros([in_x.shape[0],tmp_x.shape[0]],dtype=self.operation.all_type)
                 x[0]=tmp_x
                 del tmp_x

@@ -2,5 +2,5 @@ imageio
 imagecodecs
 matplotlib
 numpy
-tensorflow-gpu
+tensorflow
 healpy
