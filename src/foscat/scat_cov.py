@@ -15,6 +15,21 @@ class scat_cov:
         self.S1 = s1
         self.C10 = c10
 
+    def numpy(self):
+        if self.S1 is None:
+            s1 = None
+        else:
+            s1=self.S1.numpy()
+        if self.C10 is None:
+            c10 = None
+        else:
+            c10=self.C10.numpy()
+        
+        return scat_cov((self.P00.numpy()),
+                        (self.C01.numpy()),
+                        (self.C11.numpy()),
+                        s1=s1, c10=c10)
+        
     def get_S1(self):
         return self.S1
 
@@ -72,7 +87,10 @@ class scat_cov:
             s1 = None
         else:
             if isinstance(other, scat_cov):
-                s1 = self.S1 / other.S1
+                if other.S1 is None:
+                    s1 = None
+                else:
+                    s1 = self.S1 / other.S1
             else:
                 s1 = self.S1 / other
 
@@ -80,7 +98,10 @@ class scat_cov:
             c10 = None
         else:
             if isinstance(other, scat_cov):
-                c10 = self.C10 / other.C10
+                if other.C10 is None:
+                    c10 = None
+                else:
+                    c10 = self.C10 / other.C10
             else:
                 c10 = self.C10 / other
 
@@ -877,6 +898,20 @@ class funct(FOC.FoCUS):
                                 s1=self.bk_square(self.bk_abs(x.S1)))
         else:
             return self.bk_abs(self.bk_square(x))
+
+    def sqrt(self, x):
+        if isinstance(x, scat_cov):
+            if x.S1 is None:
+                return scat_cov(self.bk_sqrt(self.bk_abs(x.P00)),
+                                self.bk_sqrt(self.bk_abs(x.C01)),
+                                self.bk_sqrt(self.bk_abs(x.C11)))
+            else:
+                return scat_cov(self.bk_sqrt(self.bk_abs(x.P00)),
+                                self.bk_sqrt(self.bk_abs(x.C01)),
+                                self.bk_sqrt(self.bk_abs(x.C11)),
+                                s1=self.bk_sqrt(self.bk_abs(x.S1)))
+        else:
+            return self.bk_abs(self.bk_sqrt(x))
 
     def reduce_mean(self, x):
         if isinstance(x, scat_cov):
