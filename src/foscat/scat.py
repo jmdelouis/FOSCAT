@@ -28,7 +28,7 @@ class scat:
 
     def reset_P00(self):
         self.P00=0*self.P00
-
+        
     def __add__(self,other):
         assert isinstance(other, float) or isinstance(other, np.float32) or isinstance(other, int) or \
             isinstance(other, bool) or isinstance(other, scat)
@@ -386,6 +386,13 @@ class funct(FOC.FoCUS):
                     self.backend.bk_square(self.backend.bk_abs(x.S0)),
                     self.backend.bk_square(self.backend.bk_abs(x.S1)),
                     self.backend.bk_square(self.backend.bk_abs(x.S2)))
+    
+    def sqrt(self,x):
+        # the abs make the complex value usable for reduce_sum or mean
+        return scat(self.backend.bk_sqrt(self.backend.bk_abs(x.P00)),
+                    self.backend.bk_sqrt(self.backend.bk_abs(x.S0)),
+                    self.backend.bk_sqrt(self.backend.bk_abs(x.S1)),
+                    self.backend.bk_sqrt(self.backend.bk_abs(x.S2)))
 
     def reduce_mean(self,x,axis=None):
         if axis is None:

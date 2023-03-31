@@ -264,7 +264,7 @@ class Synthesis:
         for itt in range(NUM_EPOCHS):
             g_tot=None
             l_tot=0.0
-            tabidx=(np.arange(batchsz)+imin)%totalsz
+            tabidx=((np.random.randn(batchsz)*(totalsz)+0.49999).astype('int'))%totalsz
             for k in range(self.number_of_loss):
                 if self.loss_class[k].batch is None:
                     l_batch=None
