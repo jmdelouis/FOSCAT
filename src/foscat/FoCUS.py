@@ -78,7 +78,8 @@ class FoCUS:
         
         self.backend=bk.foscat_backend(BACKEND,
                                        all_type=all_type,
-                                       mpi_rank=mpi_rank)
+                                       mpi_rank=mpi_rank,
+                                       gpupos=gpupos)
 
         self.all_bk_type=self.backend.all_bk_type
         self.all_cbk_type=self.backend.all_cbk_type

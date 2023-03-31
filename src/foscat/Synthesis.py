@@ -10,16 +10,21 @@ from threading import Event
 
 class Loss:
     
-    def __init__(self,function,scat_operator,*param,Rformat=True,name=''):
+    def __init__(self,function,scat_operator,*param,Rformat=True,name='',batch=None,batch_data=None):
 
         self.loss_function=function
         self.scat_operator=scat_operator
         self.args=param
         self.Rformat=Rformat
         self.name=name
+        self.batch=batch
+        self.batch_data=batch_data
 
-    def eval(self,x):
-        return self.loss_function(x,self.scat_operator,self.args)
+    def eval(self,x,batch):
+        if self.batch is None:
+            return self.loss_function(x,self.scat_operator,self.args)
+        else:
+            return self.loss_function(x,batch,self.scat_operator,self.args)
     
 class Synthesis:
     def __init__(self,
@@ -85,7 +90,7 @@ class Synthesis:
         return data
 
     @tf.function
-    def loss(self,x,loss_function):
+    def loss(self,x,batch,loss_function):
 
         operation=loss_function.scat_operator
 
@@ -114,8 +119,8 @@ class Synthesis:
 
                     ndata=x.shape[0]*x.shape[1]
                     
+            l=loss_function.eval(l_x,batch)
                 
-            l=loss_function.eval(l_x)
             g=self.check_dense(tf.gradients(l,x)[0],ndata)
             self.curr_gpu=self.curr_gpu+1
             
@@ -131,7 +136,7 @@ class Synthesis:
         g_tot=None
         l_tot=0.0
         for k in range(self.number_of_loss):
-            l,g=self.loss(x,self.loss_class[k])
+            l,g=self.loss(x,y,self.loss_class[k])
             if g_tot is None:
                 g_tot=g
             else:
@@ -195,24 +200,30 @@ class Synthesis:
             grd_mask=None,
             SHOWGPU=False,
             MESSAGE='',
+            batchsz=1,
+            totalsz=1,
             axis=0):
         
         self.eta=LEARNING_RATE
         self.epsilon=EPSILON
         self.decay_rate = DECAY_RATE
         self.nlog=0
+        
 
         if self.operation.get_use_R():
             if axis==0:
-                x=self.operation.to_R_center(self.operation.bk_cast(in_x),chans=self.operation.chans)
+                x=self.operation.to_R_center(self.operation.backend.bk_cast(in_x),chans=self.operation.chans)
             else:
-                tmp_x=self.operation.to_R_center(self.operation.bk_cast(in_x[0]),chans=self.operation.chans)
+                tmp_x=self.operation.to_R_center(self.operation.backend.bk_cast(in_x[0]),chans=self.operation.chans)
                 x=np.zeros([in_x.shape[0],tmp_x.shape[0]],dtype=self.operation.all_type)
                 x[0]=tmp_x
                 del tmp_x
                 for i in range(1,in_x.shape[0]):
-                    x[i]=self.operation.to_R_center(self.operation.bk_cast(in_x[i]),chans=self.operation.chans)
-            
+                    x[i]=self.operation.to_R_center(self.operation.backend.bk_cast(in_x[i]),chans=self.operation.chans)
+        else:
+            x=in_x
+                
+                    
         self.curr_gpu=self.curr_gpu+self.mpi_rank
         
         if self.mpi_size>1:
@@ -247,12 +258,21 @@ class Synthesis:
         l_log=np.zeros([self.mpi_size*self.MAXNUMLOSS],dtype='float32')
         l_log[self.mpi_rank*self.MAXNUMLOSS:(self.mpi_rank+1)*self.MAXNUMLOSS]=-1.0
         ltot=1.0*l_log
+
+        imin=0
         
         for itt in range(NUM_EPOCHS):
             g_tot=None
             l_tot=0.0
+            tabidx=(np.arange(batchsz)+imin)%totalsz
             for k in range(self.number_of_loss):
-                l,g=self.loss(x,self.loss_class[k])
+                if self.loss_class[k].batch is None:
+                    l_batch=None
+                else:
+                    l_batch=self.loss_class[k].batch(self.loss_class[k].batch_data,tabidx)
+                    
+                l,g=self.loss(x,l_batch,self.loss_class[k])
+                
                 if grd_mask is not None:
                     g=grd_mask*g.numpy()
                 else:
@@ -268,6 +288,7 @@ class Synthesis:
             
                 l_log[self.mpi_rank*self.MAXNUMLOSS+k]=l.numpy()
 
+            imin=imin+batchsz
             
             if self.mpi_size==1:
                 ltot=l_log

@@ -4,7 +4,7 @@ import foscat.Rformat as Rformat
 
 class foscat_backend:
     
-    def __init__(self,name,mpi_rank=0,all_type='float64'):
+    def __init__(self,name,mpi_rank=0,all_type='float64',gpupos=0):
         
         self.TENSORFLOW=1
         self.TORCH=2

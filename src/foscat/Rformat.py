@@ -30,8 +30,6 @@ class Rformat:
         exit(0)
 
     def __add__(self,other):
-        assert isinstance(other, float) or isinstance(other, np.float32) or isinstance(other, int) or \
-            isinstance(other, bool) or isinstance(other, Rformat)
         
         if isinstance(other, Rformat):
             return Rformat(self.get()+other.get(),self.off,self.axis,chans=self.chans)
@@ -39,8 +37,6 @@ class Rformat:
             return Rformat(self.get()+other,self.off,self.axis,chans=self.chans)
 
     def __sub__(self,other):
-        assert isinstance(other, float) or isinstance(other, np.float32) or isinstance(other, int) or \
-            isinstance(other, bool) or isinstance(other, Rformat)
         
         if isinstance(other, Rformat):
             return Rformat(self.get()-other.get(),self.off,self.axis,chans=self.chans)
@@ -52,8 +48,6 @@ class Rformat:
         return Rformat(-self.get(),self.off,self.axis,chans=self.chans)
 
     def __mul__(self,other):
-        assert isinstance(other, float) or isinstance(other, np.float32) or isinstance(other, int) or \
-            isinstance(other, bool) or isinstance(other, Rformat)
         
         if isinstance(other, Rformat):
             return Rformat(self.get()*other.get(),self.off,self.axis,chans=self.chans)
