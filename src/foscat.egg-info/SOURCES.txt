@@ -3,11 +3,16 @@ setup.cfg
 setup.py
 src/foscat/FoCUS.py
 src/foscat/GetGPUinfo.py
+src/foscat/Rformat.py
 src/foscat/Synthesis.py
 src/foscat/__init__.py
+src/foscat/backend.py
 src/foscat/build_demo.py
+src/foscat/demo2d.py
 src/foscat/scat.py
+src/foscat/scat_cov.old.py
 src/foscat/scat_cov.py
+src/foscat/scat_cov_new.py
 src/foscat.egg-info/PKG-INFO
 src/foscat.egg-info/SOURCES.txt
 src/foscat.egg-info/dependency_links.txt
