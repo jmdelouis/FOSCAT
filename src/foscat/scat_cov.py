@@ -1,5 +1,7 @@
 import foscat.FoCUS as FOC
 import numpy as np
+import foscat.backend as bk
+import foscat.Rformat as Rformat
 
 
 def read(filename):
@@ -8,12 +10,13 @@ def read(filename):
 
 
 class scat_cov:
-    def __init__(self, p00, c01, c11, s1=None, c10=None):
-        self.P00 = p00
-        self.C01 = c01
-        self.C11 = c11
-        self.S1 = s1
-        self.C10 = c10
+    def __init__(self, p00, c01, c11, s1=None, c10=None,backend=None):
+        self.P00     = p00
+        self.C01     = c01
+        self.C11     = c11
+        self.S1      = s1
+        self.C10     = c10
+        self.backend = backend
 
     def numpy(self):
         if self.S1 is None:
@@ -28,7 +31,7 @@ class scat_cov:
         return scat_cov((self.P00.numpy()),
                         (self.C01.numpy()),
                         (self.C11.numpy()),
-                        s1=s1, c10=c10)
+                        s1=s1, c10=c10,backend=self.backend)
         
     def get_S1(self):
         return self.S1
@@ -56,7 +59,10 @@ class scat_cov:
             s1 = None
         else:
             if isinstance(other, scat_cov):
-                s1 = self.S1 + other.S1
+                if other.S1 is None:
+                    s1=None
+                else:
+                    s1 = self.S1 + other.S1
             else:
                 s1 = self.S1 + other
 
@@ -64,21 +70,27 @@ class scat_cov:
             c10 = None
         else:
             if isinstance(other, scat_cov):
-                c10 = self.C10 + other.C10
+                if other.C10 is None:
+                    c10=None
+                else:
+                    c10 = self.C10 + other.C10
             else:
                 c10 = self.C10 + other
 
         if isinstance(other, scat_cov):
-            return scat_cov((self.P00 + other.P00),
+            return scat_cov(self.doadd(self.P00,other.P00),
                             (self.C01 + other.C01),
                             (self.C11 + other.C11),
-                            s1=s1, c10=c10)
+                            s1=s1, c10=c10,backend=self.backend)
         else:
             return scat_cov((self.P00 + other),
                             (self.C01 + other),
                             (self.C11 + other),
-                            s1=s1, c10=c10)
+                            s1=s1, c10=c10,backend=self.backend)
 
+    def __radd__(self, other):
+        return self.__add__(other)
+    
     def __truediv__(self, other):
         assert isinstance(other, float)  or isinstance(other, np.float32) or isinstance(other, int) or \
                isinstance(other, bool) or isinstance(other, scat_cov)
@@ -106,15 +118,15 @@ class scat_cov:
                 c10 = self.C10 / other
 
         if isinstance(other, scat_cov):
-            return scat_cov((self.P00 / other.P00),
+            return scat_cov(self.dodiv(self.P00,other.P00),
                             (self.C01 / other.C01),
                             (self.C11 / other.C11),
-                            s1=s1, c10=c10)
+                            s1=s1, c10=c10,backend=self.backend)
         else:
             return scat_cov((self.P00 / other),
                             (self.C01 / other),
                             (self.C11 / other),
-                            s1=s1, c10=c10)
+                            s1=s1, c10=c10,backend=self.backend)
 
     def __rtruediv__(self, other):
         assert isinstance(other, float)  or isinstance(other, np.float32) or isinstance(other, int) or \
@@ -124,29 +136,68 @@ class scat_cov:
             s1 = None
         else:
             if isinstance(other, scat_cov):
-                s1 = self.S1 / other.S1
+                s1 = other.S1 / self.S1
             else:
-                s1 = self.S1 / other
+                s1 = other.S1 / other
 
         if self.C10 is None:
             c10 = None
         else:
             if isinstance(other, scat_cov):
-                c10 = self.C10 / other.C10
+                c10 = other.C10 / self.C10
             else:
-                c10 = self.C10 / other
+                c10 = other/self.C10
 
         if isinstance(other, scat_cov):
-            return scat_cov((self.P00 / other.P00),
-                            (self.C01 / other.C01),
-                            (self.C11 / other.C11),
-                            s1=s1, c10=c10)
+            return scat_cov(self.dodiv(other.P00,self.P00),
+                            (other.C01 / self.C01),
+                            (other.C11 / self.C11),
+                            s1=s1, c10=c10,backend=self.backend)
         else:
-            return scat_cov((self.P00 / other),
-                            (self.C01 / other),
-                            (self.C11 / other),
-                            s1=s1, c10=c10)
+            return scat_cov((other/self.P00 ),
+                            (other/self.C01 ),
+                            (other/self.C11 ),
+                            s1=s1, c10=c10,backend=self.backend)
 
+    def __rsub__(self, other):
+        assert isinstance(other, float)  or isinstance(other, np.float32) or isinstance(other, int) or \
+               isinstance(other, bool) or isinstance(other, scat_cov)
+
+        if self.S1 is None:
+            s1 = None
+        else:
+            if isinstance(other, scat_cov):
+                if other.S1 is None:
+                    s1 = None
+                else:
+                    s1 = other.S1 - self.S1
+            else:
+                s1 = other - self.S1
+
+        if self.C10 is None:
+            c10 = None
+        else:
+            if isinstance(other, scat_cov):
+                if other.C10 is None:
+                    c10 = None
+                else:
+                    c10 = other.C10 - self.C10 
+            else:
+                c10 = other - self.C10
+
+        if isinstance(other, scat_cov):
+            return scat_cov(self.domin(other.P00,self.P00),
+                            (other.C01 - self.C01),
+                            (other.C11 - self.C11),
+                            s1=s1, c10=c10,
+                            backend=self.backend)
+        else:
+            return scat_cov((other-self.P00),
+                            (other-self.C01),
+                            (other-self.C11),
+                            s1=s1, c10=c10,
+                            backend=self.backend)
+        
     def __sub__(self, other):
         assert isinstance(other, float)  or isinstance(other, np.float32) or isinstance(other, int) or \
                isinstance(other, bool) or isinstance(other, scat_cov)
@@ -174,16 +225,53 @@ class scat_cov:
                 c10 = self.C10 - other
 
         if isinstance(other, scat_cov):
-            return scat_cov((self.P00 - other.P00),
+            return scat_cov(self.domin(self.P00,other.P00),
                             (self.C01 - other.C01),
                             (self.C11 - other.C11),
-                            s1=s1, c10=c10)
+                            s1=s1, c10=c10,backend=self.backend)
         else:
             return scat_cov((self.P00 - other),
                             (self.C01 - other),
                             (self.C11 - other),
-                            s1=s1, c10=c10)
+                            s1=s1, c10=c10,backend=self.backend)
 
+    def domult(self,x,y):
+        if x.dtype==y.dtype:
+            return x*y
+        if x.dtype=='complex64' or x.dtype=='complex128':
+            
+            return self.backend.bk_complex(self.backend.bk_real(x)*y,self.backend.bk_imag(x)*y)
+        else:
+            return self.backend.bk_complex(self.backend.bk_real(y)*x,self.backend.bk_imag(y)*x)
+        
+    def dodiv(self,x,y):
+        if x.dtype==y.dtype:
+            return x/y
+        if x.dtype=='complex64' or x.dtype=='complex128':
+            
+            return self.backend.bk_complex(self.backend.bk_real(x)/y,self.backend.bk_imag(x)/y)
+        else:
+            return self.backend.bk_complex(x/self.backend.bk_real(y),x/self.backend.bk_imag(y))
+        
+    def domin(self,x,y):
+        if x.dtype==y.dtype:
+            return x-y
+        if x.dtype=='complex64' or x.dtype=='complex128':
+            
+            return self.backend.bk_complex(self.backend.bk_real(x)-y,self.backend.bk_imag(x)-y)
+        else:
+            return self.backend.bk_complex(x-self.backend.bk_real(y),x-self.backend.bk_imag(y))
+        
+    def doadd(self,x,y):
+        if x.dtype==y.dtype:
+            return x+y
+        if x.dtype=='complex64' or x.dtype=='complex128':
+            
+            return self.backend.bk_complex(self.backend.bk_real(x)+y,self.backend.bk_imag(x)+y)
+        else:
+            return self.backend.bk_complex(x+self.backend.bk_real(y),x+self.backend.bk_imag(y))
+                
+            
     def __mul__(self, other):
         assert isinstance(other, float)  or isinstance(other, np.float32) or isinstance(other, int) or \
                isinstance(other, bool) or isinstance(other, scat_cov)
@@ -192,7 +280,10 @@ class scat_cov:
             s1 = None
         else:
             if isinstance(other, scat_cov):
-                s1 = self.S1 * other.S1
+                if other.S1 is None:
+                    s1 = None
+                else:
+                    s1 = self.S1 * other.S1
             else:
                 s1 = self.S1 * other
 
@@ -200,20 +291,27 @@ class scat_cov:
             c10 = None
         else:
             if isinstance(other, scat_cov):
-                c10 = self.C10 * other.C10
+                if other.C10 is None:
+                    c10 = None
+                else:
+                    c10 = self.C10 * other.C10
             else:
                 c10 = self.C10 * other
 
         if isinstance(other, scat_cov):
-            return scat_cov((self.P00 * other.P00),
+            return scat_cov(self.domult(self.P00,other.P00),
                             (self.C01 * other.C01),
                             (self.C11 * other.C11),
-                            s1=s1, c10=c10)
+                            s1=s1, c10=c10,backend=self.backend)
         else:
             return scat_cov((self.P00 * other),
                             (self.C01 * other),
                             (self.C11 * other),
-                            s1=s1, c10=c10)
+                            s1=s1, c10=c10,backend=self.backend)
+
+    
+    def __rmul__(self, other):
+        return self.__mul__(other)
 
     def plot(self, name=None, hold=True, color='blue', lw=1, legend=True):
 
@@ -292,7 +390,7 @@ class scat_cov:
         c11 = np.load('%s_c11.npy' % filename)
         p0 = np.load('%s_p0.npy' % filename)
 
-        return scat_cov(p0, c01, c11, s1=s1, c10=c10)
+        return scat_cov(p0, c01, c11, s1=s1, c10=c10,backend=self.backend)
 
     def std(self):
         if self.S1 is not None:  # Auto
@@ -351,7 +449,7 @@ class scat_cov:
                             (self.C01),
                             (self.C11),
                             s1=self.S1,
-                            c10=self.C10)
+                            c10=self.C10,backend=self.backend)
         
         inscale=self.P00.shape[2]
         p00=np.zeros([self.P00.shape[0],self.P00.shape[1],nscale,self.P00.shape[3]],dtype='complex')
@@ -488,7 +586,7 @@ class scat_cov:
         return scat_cov( (p00),
                          (c01),
                          (c11),
-                        s1=(s1))
+                        s1=(s1),backend=self.backend)
         
         
 
@@ -538,7 +636,7 @@ class funct(FOC.FoCUS):
         axis = 1
         # determine jmax and nside corresponding to the input map
         im_shape = image1.shape
-        if self.use_R_format and isinstance(image1, FOC.Rformat):
+        if self.use_R_format and isinstance(image1, Rformat.Rformat):
             if len(image1.shape) == 4:
                 nside = im_shape[2] - 2 * self.R_off
             else:
@@ -558,24 +656,24 @@ class funct(FOC.FoCUS):
         ### LOCAL VARIABLES (IMAGES and MASK)
         # Check if image1 is [Npix] or [Nbatch, Npix] or Rformat
         if len(image1.shape) == 1 or (len(image1.shape)==2 and self.chans==1) or (len(image1.shape) == 3 and isinstance(image1, FOC.Rformat)):
-            I1 = self.bk_cast(self.bk_expand_dims(image1, 0))  # Local image1 [Nbatch, Npix]
+            I1 = self.backend.bk_cast(self.backend.bk_expand_dims(image1, 0))  # Local image1 [Nbatch, Npix]
             if cross:
-                I2 = self.bk_cast(self.bk_expand_dims(image2, 0))  # Local image2 [Nbatch, Npix]
+                I2 = self.backend.bk_cast(self.backend.bk_expand_dims(image2, 0))  # Local image2 [Nbatch, Npix]
         else:
-            I1 = self.bk_cast(image1)  # Local image1 [Nbatch, Npix]
+            I1 = self.backend.bk_cast(image1)  # Local image1 [Nbatch, Npix]
             if cross:
-                I2 = self.bk_cast(image2)  # Local image2 [Nbatch, Npix]
+                I2 = self.backend.bk_cast(image2)  # Local image2 [Nbatch, Npix]
                 
         if mask is None:
             if self.chans==1:
-                vmask = self.bk_ones([1, nside, nside],dtype=self.all_type)
+                vmask = self.backend.bk_ones([1, nside, nside],dtype=self.all_type)
             else:
-                vmask = self.bk_ones([1, npix], dtype=self.all_type)
+                vmask = self.backend.bk_ones([1, npix], dtype=self.all_type)
                 
             if self.use_R_format:
                 vmask = self.to_R(vmask, axis=1,chans=self.chans)
         else:
-            vmask = self.bk_cast(mask)  # [Nmask, Npix]
+            vmask = self.backend.bk_cast(mask)  # [Nmask, Npix]
             if self.use_R_format:
                 vmask = self.to_R(vmask, axis=1,chans=self.chans)
 
@@ -592,7 +690,7 @@ class funct(FOC.FoCUS):
                 I2 = self.up_grade(I2, nside * 2, axis=axis)
                 
         # Normalize the masks because they have different pixel numbers
-        # vmask /= self.bk_reduce_sum(vmask, axis=1)[:, None]  # [Nmask, Npix]
+        # vmask /= self.backend.bk_reduce_sum(vmask, axis=1)[:, None]  # [Nmask, Npix]
 
         ### INITIALIZATION
         # Coefficients
@@ -624,17 +722,17 @@ class funct(FOC.FoCUS):
             ### Make the convolution I1 * Psi_j3
             conv1 = self.convol(I1, axis=1)  # [Nbatch, Npix_j3, Norient3]
             ### Take the module M1 = |I1 * Psi_j3|
-            M1_square = conv1*self.bk_conjugate(conv1) # [Nbatch, Npix_j3, Norient3]
-            M1 = self.bk_L1(M1_square)  # [Nbatch, Npix_j3, Norient3]
+            M1_square = conv1*self.backend.bk_conjugate(conv1) # [Nbatch, Npix_j3, Norient3]
+            M1 = self.backend.bk_L1(M1_square)  # [Nbatch, Npix_j3, Norient3]
             # Store M1_j3 in a dictionary
             M1_dic[j3] = self.update_R_border(M1, axis=axis)
 
             if not cross:  # Auto
-                M1_square=self.bk_real(M1_square)
+                M1_square=self.backend.bk_real(M1_square)
                 
                 ### P00_auto = < M1^2 >_pix
                 # Apply the mask [Nmask, Npix_j3] and average over pixels
-                p00 = self.bk_masked_mean(M1_square, vmask, axis=1)
+                p00 = self.masked_mean(M1_square, vmask, axis=1)
                 if cond_init_P1_dic:
                     # We fill P1_dic with P00 for normalisation of C01 and C11
                     P1_dic[j3] = p00  # [Nbatch, Nmask, Norient3]
@@ -645,12 +743,12 @@ class funct(FOC.FoCUS):
                 if P00 is None:
                     P00 = p00[:, :, None, :]  # Add a dimension for NP00
                 else:
-                    P00 = self.bk_concat([P00, p00[:, :, None, :]], axis=2)
+                    P00 = self.backend.bk_concat([P00, p00[:, :, None, :]], axis=2)
 
                 #### S1_auto computation
                 ### Image 1 : S1 = < M1 >_pix
                 # Apply the mask [Nmask, Npix_j3] and average over pixels
-                s1 = self.bk_masked_mean(M1, vmask, axis=1)  # [Nbatch, Nmask, Norient3]
+                s1 = self.masked_mean(M1, vmask, axis=1)  # [Nbatch, Nmask, Norient3]
                 ### Normalize S1
                 if norm is not None:
                     s1 /= (P1_dic[j3]) ** 0.5
@@ -658,14 +756,14 @@ class funct(FOC.FoCUS):
                 if S1 is None:
                     S1 = s1[:, :, None, :]  # Add a dimension for NS1
                 else:
-                    S1 = self.bk_concat([S1, s1[:, :, None, :]], axis=2)
+                    S1 = self.backend.bk_concat([S1, s1[:, :, None, :]], axis=2)
 
             else:  # Cross
                 ### Make the convolution I2 * Psi_j3
                 conv2 = self.convol(I2, axis=1)  # [Nbatch, Npix_j3, Norient3]
                 ### Take the module M2 = |I2 * Psi_j3|
-                M2_square = conv2*self.bk_conjugate(conv2)  # [Nbatch, Npix_j3, Norient3]
-                M2 = self.bk_L1(M2_square)  # [Nbatch, Npix_j3, Norient3]
+                M2_square = conv2*self.backend.bk_conjugate(conv2)  # [Nbatch, Npix_j3, Norient3]
+                M2 = self.backend.bk_L1(M2_square)  # [Nbatch, Npix_j3, Norient3]
                 # Store M2_j3 in a dictionary
                 M2_dic[j3] = self.update_R_border(M2, axis=axis)
 
@@ -673,17 +771,17 @@ class funct(FOC.FoCUS):
                 # Not returned, only for normalization
                 if cond_init_P1_dic:
                     # Apply the mask [Nmask, Npix_j3] and average over pixels
-                    p1 = self.bk_masked_mean(M1_square, vmask, axis=1)  # [Nbatch, Nmask, Norient3]
-                    p2 = self.bk_masked_mean(M2_square, vmask, axis=1)  # [Nbatch, Nmask, Norient3]
+                    p1 = self.masked_mean(M1_square, vmask, axis=1)  # [Nbatch, Nmask, Norient3]
+                    p2 = self.masked_mean(M2_square, vmask, axis=1)  # [Nbatch, Nmask, Norient3]
                     # We fill P1_dic with P00 for normalisation of C01 and C11
                     P1_dic[j3] = p1  # [Nbatch, Nmask, Norient3]
                     P2_dic[j3] = p2  # [Nbatch, Nmask, Norient3]
 
                 ### P00_cross = < (I1 * Psi_j3) (I2 * Psi_j3)^* >_pix
                 # z_1 x z_2^* = (a1a2 + b1b2) + i(b1a2 - a1b2)
-                p00 = conv1 * self.bk_conjugate(conv2)
+                p00 = conv1 * self.backend.bk_conjugate(conv2)
                 # Apply the mask [Nmask, Npix_j3] and average over pixels
-                p00 = self.bk_masked_mean(p00, vmask, axis=1)
+                p00 = self.masked_mean(p00, vmask, axis=1)
 
                 ### Normalize P00_cross
                 if norm == 'auto':
@@ -691,12 +789,12 @@ class funct(FOC.FoCUS):
 
                 ### Store P00_cross as complex [Nbatch, Nmask, NP00, Norient3]
                 if not all_cross:
-                    p00=self.bk_real(p00)
+                    p00=self.backend.bk_real(p00)
                     
                 if P00 is None:
                     P00 = p00[:,:,None,:]  # Add a dimension for NP00
                 else:
-                    P00 = self.bk_concat([P00, p00[:,:,None,:]], axis=2)
+                    P00 = self.backend.bk_concat([P00, p00[:,:,None,:]], axis=2)
                     
             # Initialize dictionaries for |I1*Psi_j| * Psi_j3
             M1convPsi_dic = {}
@@ -722,7 +820,7 @@ class funct(FOC.FoCUS):
                     if C01 is None:
                         C01 = c01[:,:,None,:,:]  # Add a dimension for NC01
                     else:
-                        C01 = self.bk_concat([C01, c01[:, :, None, :, :]],
+                        C01 = self.backend.bk_concat([C01, c01[:, :, None, :, :]],
                                                  axis=2)  # Add a dimension for NC01
 
                 ### C01_cross = < (I1 * Psi)_j3 x (|I2 * Psi_j2| * Psi_j3)^* >_pix
@@ -750,11 +848,11 @@ class funct(FOC.FoCUS):
                     if C01 is None:
                         C01 = c01[:, :, None, :, :] # Add a dimension for NC01
                     else:
-                        C01 = self.bk_concat([C01,c01[:, :, None, :, :]],axis=2)  # Add a dimension for NC01
+                        C01 = self.backend.bk_concat([C01,c01[:, :, None, :, :]],axis=2)  # Add a dimension for NC01
                     if C10 is None:
                         C10 = c10[:, :, None, :, :]  # Add a dimension for NC01
                     else:
-                        C10 = self.bk_concat([C10,c10[:, :, None, :, :]], axis=2)  # Add a dimension for NC01
+                        C10 = self.backend.bk_concat([C10,c10[:, :, None, :, :]], axis=2)  # Add a dimension for NC01
                         
 
 
@@ -774,7 +872,7 @@ class funct(FOC.FoCUS):
                         if C11 is None:
                             C11 = c11[:, :, None, :, :, :]  # Add a dimension for NC11
                         else:
-                            C11 = self.bk_concat([C11,c11[:, :, None, :, :, :]],
+                            C11 = self.backend.bk_concat([C11,c11[:, :, None, :, :, :]],
                                                  axis=2)  # Add a dimension for NC11
 
                         ### C11_cross = <(|I1 * psi1| * psi3)(|I2 * psi2| * psi3)^*>
@@ -790,7 +888,7 @@ class funct(FOC.FoCUS):
                         if C11 is None:
                             C11 = c11[:, :, None, :, :, :]  # Add a dimension for NC11
                         else:
-                            C11 = self.bk_concat([C11,c11[:, :, None, :, :, :]],
+                            C11 = self.backend.bk_concat([C11,c11[:, :, None, :, :, :]],
                                                  axis=2)  # Add a dimension for NC11
             
             ###### Reshape for next iteration on j3
@@ -828,9 +926,9 @@ class funct(FOC.FoCUS):
                 self.P2_dic = P2_dic
 
         if not cross:
-            return scat_cov(P00, C01, C11, s1=S1)
+            return scat_cov(P00, C01, C11, s1=S1,backend=self.backend)
         else:
-            return scat_cov(P00, C01, C11, c10=C10)
+            return scat_cov(P00, C01, C11, c10=C10,backend=self.backend)
 
     def clean_norm(self):
         self.P1_dic = None
@@ -859,10 +957,10 @@ class funct(FOC.FoCUS):
         ### Compute the product (I2 * Psi)_j3 x (M1_j2 * Psi_j3)^*
         # z_1 x z_2^* = (a1a2 + b1b2) + i(b1a2 - a1b2)
         # cconv, sconv are [Nbatch, Npix_j3, Norient3]
-        c01 = self.bk_expand_dims(conv, -1) * self.bk_conjugate(MconvPsi)   # [Nbatch, Npix_j3, Norient3, Norient2]
+        c01 = self.backend.bk_expand_dims(conv, -1) * self.backend.bk_conjugate(MconvPsi)   # [Nbatch, Npix_j3, Norient3, Norient2]
 
         ### Apply the mask [Nmask, Npix_j3] and sum over pixels
-        c01 = self.bk_masked_mean(c01, vmask, axis=1)  # [Nbatch, Nmask, Norient3, Norient2]
+        c01 = self.masked_mean(c01, vmask, axis=1)  # [Nbatch, Nmask, Norient3, Norient2]
         return c01
 
     def _compute_C11(self, j1, j2, vmask,
@@ -879,84 +977,84 @@ class funct(FOC.FoCUS):
 
         ### Compute the product (|I1 * Psi_j1| * Psi_j3)(|I2 * Psi_j2| * Psi_j3)
         # z_1 x z_2^* = (a1a2 + b1b2) + i(b1a2 - a1b2)
-        c11 = self.bk_expand_dims(M1, -2) * self.bk_conjugate(self.bk_expand_dims(M2, -1))  # [Nbatch, Npix_j3, Norient3, Norient2, Norient1]
+        c11 = self.backend.bk_expand_dims(M1, -2) * self.backend.bk_conjugate(self.backend.bk_expand_dims(M2, -1))  # [Nbatch, Npix_j3, Norient3, Norient2, Norient1]
 
         ### Apply the mask and sum over pixels
-        c11 = self.bk_masked_mean(c11, vmask, axis=1)  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
+        c11 = self.masked_mean(c11, vmask, axis=1)  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
         return c11
 
     def square(self, x):
         if isinstance(x, scat_cov):
             if x.S1 is None:
-                return scat_cov(self.bk_square(self.bk_abs(x.P00)),
-                                self.bk_square(self.bk_abs(x.C01)),
-                                self.bk_square(self.bk_abs(x.C11)))
+                return scat_cov(self.backend.bk_square(self.backend.bk_abs(x.P00)),
+                                self.backend.bk_square(self.backend.bk_abs(x.C01)),
+                                self.backend.bk_square(self.backend.bk_abs(x.C11)),backend=self.backend)
             else:
-                return scat_cov(self.bk_square(self.bk_abs(x.P00)),
-                                self.bk_square(self.bk_abs(x.C01)),
-                                self.bk_square(self.bk_abs(x.C11)),
-                                s1=self.bk_square(self.bk_abs(x.S1)))
+                return scat_cov(self.backend.bk_square(self.backend.bk_abs(x.P00)),
+                                self.backend.bk_square(self.backend.bk_abs(x.C01)),
+                                self.backend.bk_square(self.backend.bk_abs(x.C11)),
+                                s1=self.backend.bk_square(self.backend.bk_abs(x.S1)),backend=self.backend)
         else:
-            return self.bk_abs(self.bk_square(x))
+            return self.backend.bk_abs(self.backend.bk_square(x))
 
     def sqrt(self, x):
         if isinstance(x, scat_cov):
             if x.S1 is None:
-                return scat_cov(self.bk_sqrt(self.bk_abs(x.P00)),
-                                self.bk_sqrt(self.bk_abs(x.C01)),
-                                self.bk_sqrt(self.bk_abs(x.C11)))
+                return scat_cov(self.backend.bk_sqrt(self.backend.bk_abs(x.P00)),
+                                self.backend.bk_sqrt(self.backend.bk_abs(x.C01)),
+                                self.backend.bk_sqrt(self.backend.bk_abs(x.C11)),backend=self.backend)
             else:
-                return scat_cov(self.bk_sqrt(self.bk_abs(x.P00)),
-                                self.bk_sqrt(self.bk_abs(x.C01)),
-                                self.bk_sqrt(self.bk_abs(x.C11)),
-                                s1=self.bk_sqrt(self.bk_abs(x.S1)))
+                return scat_cov(self.backend.bk_sqrt(self.backend.bk_abs(x.P00)),
+                                self.backend.bk_sqrt(self.backend.bk_abs(x.C01)),
+                                self.backend.bk_sqrt(self.backend.bk_abs(x.C11)),
+                                s1=self.backend.bk_sqrt(self.backend.bk_abs(x.S1)),backend=self.backend)
         else:
-            return self.bk_abs(self.bk_sqrt(x))
+            return self.backend.bk_abs(self.backend.bk_sqrt(x))
 
     def reduce_mean(self, x):
         if isinstance(x, scat_cov):
             if x.S1 is None:
-                result = self.bk_reduce_mean(x.P00) + \
-                         self.bk_reduce_mean(x.C01) + \
-                         self.bk_reduce_mean(x.C11)
+                result = self.backend.bk_reduce_mean(x.P00) + \
+                         self.backend.bk_reduce_mean(x.C01) + \
+                         self.backend.bk_reduce_mean(x.C11)
             else:
-                result = self.bk_reduce_mean(x.P00) + \
-                         self.bk_reduce_mean(x.S1) + \
-                         self.bk_reduce_mean(x.C01) + \
-                         self.bk_reduce_mean(x.C11)
+                result = self.backend.bk_reduce_mean(x.P00) + \
+                         self.backend.bk_reduce_mean(x.S1) + \
+                         self.backend.bk_reduce_mean(x.C01) + \
+                         self.backend.bk_reduce_mean(x.C11)
         else:
-            return self.bk_reduce_mean(x)
+            return self.backend.bk_reduce_mean(x)
         return result
 
     def reduce_sum(self, x):
         
         if isinstance(x, scat_cov):
             if x.S1 is None:
-                result = self.bk_reduce_sum(x.P00) + \
-                         self.bk_reduce_sum(x.C01) + \
-                         self.bk_reduce_sum(x.C11)
+                result = self.backend.bk_reduce_sum(x.P00) + \
+                         self.backend.bk_reduce_sum(x.C01) + \
+                         self.backend.bk_reduce_sum(x.C11)
             else:
-                result = self.bk_reduce_sum(x.P00) + \
-                         self.bk_reduce_sum(x.S1) + \
-                         self.bk_reduce_sum(x.C01) + \
-                         self.bk_reduce_sum(x.C11)
+                result = self.backend.bk_reduce_sum(x.P00) + \
+                         self.backend.bk_reduce_sum(x.S1) + \
+                         self.backend.bk_reduce_sum(x.C01) + \
+                         self.backend.bk_reduce_sum(x.C11)
         else:
-            return self.bk_reduce_sum(x)
+            return self.backend.bk_reduce_sum(x)
         return result
 
     def log(self, x):
         if isinstance(x, scat_cov):
 
             if x.S1 is None:
-                result = self.bk_log(x.P00) + \
-                         self.bk_log(x.C01) + \
-                         self.bk_log(x.C11)
+                result = self.backend.bk_log(x.P00) + \
+                         self.backend.bk_log(x.C01) + \
+                         self.backend.bk_log(x.C11)
             else:
-                result = self.bk_log(x.P00) + \
-                         self.bk_log(x.S1) + \
-                         self.bk_log(x.C01) + \
-                         self.bk_log(x.C11)
+                result = self.backend.bk_log(x.P00) + \
+                         self.backend.bk_log(x.S1) + \
+                         self.backend.bk_log(x.C01) + \
+                         self.backend.bk_log(x.C11)
         else:
-            return self.bk_log(x)
+            return self.backend.bk_log(x)
         
         return result

@@ -1,66 +1,8 @@
 import numpy as np
 import healpy as hp
 import os, sys
-
-class Rformat:
-    def __init__(self,
-                 im,
-                 off,
-                 axis,
-                 chans=12):
-        self.data=im
-        self.shape=im.shape
-        self.axis=axis
-        self.off=off
-        self.chans=chans
-        self.nside=im.shape[axis+1]-2*off
-
-    def get(self):
-        return self.data
-    
-    def get_data(self):
-        if self.axis==0:
-            return self.data[:,self.off:-self.off,self.off:-self.off]
-        if self.axis==1:
-            return self.data[:,:,self.off:-self.off,self.off:-self.off]
-        if self.axis==2:
-            return self.data[:,:,:,self.off:-self.off,self.off:-self.off]
-        if self.axis==3:
-            return self.data[:,:,:,:,self.off:-self.off,self.off:-self.off]
-
-        print('get_data is implemented till axis==3 and axis=',self.axis)
-        exit(0)
-
-    def __add__(self,other):
-        assert isinstance(other, float) or isinstance(other, np.float32) or isinstance(other, int) or \
-            isinstance(other, bool) or isinstance(other, Rformat)
-        
-        if isinstance(other, Rformat):
-            return Rformat(self.get()+other.get(),self.off,self.axis,chans=self.chans)
-        else:
-            return Rformat(self.get()+other,self.off,self.axis,chans=self.chans)
-
-    def __sub__(self,other):
-        assert isinstance(other, float) or isinstance(other, np.float32) or isinstance(other, int) or \
-            isinstance(other, bool) or isinstance(other, Rformat)
-        
-        if isinstance(other, Rformat):
-            return Rformat(self.get()-other.get(),self.off,self.axis,chans=self.chans)
-        else:
-            return Rformat(self.get()-other,self.off,self.axis,chans=self.chans)
-            
-    def __neg__(self):
-        
-        return Rformat(-self.get(),self.off,self.axis,chans=self.chans)
-
-    def __mul__(self,other):
-        assert isinstance(other, float) or isinstance(other, np.float32) or isinstance(other, int) or \
-            isinstance(other, bool) or isinstance(other, Rformat)
-        
-        if isinstance(other, Rformat):
-            return Rformat(self.get()*other.get(),self.off,self.axis,chans=self.chans)
-        else:
-            return Rformat(self.get()*other,self.off,self.axis,chans=self.chans)
+import foscat.backend as bk
+import foscat.Rformat as Rformat
 
             
 class FoCUS:
@@ -87,36 +29,10 @@ class FoCUS:
         # P00 coeff for normalization for scat_cov
         self.P1_dic = None
         self.P2_dic = None
-
-        self.TENSORFLOW=1
-        self.TORCH=2
-        self.NUMPY=3
         self.isMPI=isMPI
 
         self.mpi_size=mpi_size
         self.mpi_rank=mpi_rank
-        
-        if BACKEND=='tensorflow':
-            import tensorflow as tf
-            
-            self.backend=tf
-            self.BACKEND=self.TENSORFLOW
-            #tf.config.threading.set_inter_op_parallelism_threads(1)
-            #tf.config.threading.set_intra_op_parallelism_threads(1)
-
-        if BACKEND=='torch':
-            import torch
-            self.BACKEND=self.TORCH
-            self.backend=torch
-            
-        if BACKEND=='numpy':
-            self.BACKEND=self.NUMPY
-            self.backend=np
-            
-        self.float64=self.backend.float64
-        self.float32=self.backend.float32
-        self.int64=self.backend.int64
-        self.int32=self.backend.int32
         
         print('================================================')
         print('          START FOSCAT CONFIGURATION')
@@ -148,24 +64,6 @@ class FoCUS:
         self.use_R_format=use_R_format
         self.chans=chans
         
-        """
-        if isMPI:
-            from mpi4py import MPI
-
-            self.comm = MPI.COMM_WORLD
-            self.size = self.comm.Get_size()
-            self.rank = self.comm.Get_rank()
-            
-            if all_type=='float32':
-                self.MPI_ALL_TYPE=MPI.FLOAT
-            else:
-                self.MPI_ALL_TYPE=MPI.DOUBLE
-        else:
-            self.size = 1
-            self.rank = 0
-        self.isMPI=isMPI
-        """
-        
         if isMPI:
             from mpi4py import MPI
             
@@ -178,67 +76,18 @@ class FoCUS:
             
         self.all_type=all_type
         
-            
-        if all_type=='float32':
-            self.all_bk_type=self.backend.float32
-            self.all_cbk_type=self.backend.complex64
-        else:
-            if all_type=='float64':
-                self.all_type='float64'
-                self.all_bk_type=self.backend.float64
-                self.all_cbk_type=self.backend.complex128
-            else:
-                print('ERROR INIT FOCUS ',all_type,' should be float32 or float64')
-                exit(0)
-                
-        #===========================================================================
-        # INIT 
-        if mpi_rank==0:
-            if BACKEND=='tensorflow':
-                print("Num GPUs Available: ", len(self.backend.config.experimental.list_physical_devices('GPU')))
-            sys.stdout.flush()
-        
-        if BACKEND=='tensorflow':
-            self.backend.debugging.set_log_device_placement(False)
-            self.backend.config.set_soft_device_placement(True)
-        
-            gpus = self.backend.config.experimental.list_physical_devices('GPU')
-            
-        if BACKEND=='torch':
-            gpus=torch.cuda.is_available()
-            
-        gpuname='CPU:0'
-        self.gpulist={}
-        self.gpulist[0]=gpuname
-        self.ngpu=1
-        
-        if gpus:
-            try:
-                if BACKEND=='tensorflow':
-                # Currently, memory growth needs to be the same across GPUs
-                    for gpu in gpus:
-                        self.backend.config.experimental.set_memory_growth(gpu, True)
-                    logical_gpus = self.backend.config.experimental.list_logical_devices('GPU')
-                    print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
-                    sys.stdout.flush()
-                    self.ngpu=len(logical_gpus)
-                    gpuname=logical_gpus[gpupos%self.ngpu].name
-                    self.gpulist={}
-                    for i in range(self.ngpu):
-                        self.gpulist[i]=logical_gpus[i].name
-                if BACKEND=='torch':
-                    self.ngpu=torch.cuda.device_count()
-                    self.gpulist={}
-                    for k in range(self.ngpu):
-                        self.gpulist[k]=torch.cuda.get_device_name(0)
+        self.backend=bk.foscat_backend(BACKEND,
+                                       all_type=all_type,
+                                       mpi_rank=mpi_rank)
 
-            except RuntimeError as e:
-                # Memory growth must be set before GPUs have been initialized
-                print(e)
-
+        self.all_bk_type=self.backend.all_bk_type
+        self.all_cbk_type=self.backend.all_cbk_type
+        self.gpulist=self.backend.gpulist
+        self.ngpu=self.backend.ngpu
         self.rank=mpi_rank
         
-        self.gpupos=(gpupos+mpi_rank)%self.ngpu
+        self.gpupos=(gpupos+mpi_rank)%self.backend.ngpu
+
         print('============================================================')
         print('==                                                        ==')
         print('==                                                        ==')
@@ -426,250 +275,7 @@ class FoCUS:
         return self.use_R_format
     
     def is_R(self,data):
-        return isinstance(data,Rformat)
-    
-    # ---------------------------------------------−---------
-    # --             BACKEND DEFINITION                    --
-    # ---------------------------------------------−---------
-    def bk_device(self,device_name):
-        return self.backend.device(device_name)
-        
-    def bk_ones(self,shape,dtype=None):
-        if dtype is None:
-            dtype=self.all_type
-        return(self.backend.ones(shape,dtype=dtype))
-
-    def bk_L1(self,x):
-        if isinstance(x,Rformat):
-            return Rformat(self.bk_L1(x.get()),x.off,x.axis,chans=self.chans)
-        else:
-            if x.dtype==self.all_cbk_type:
-                xr=self.bk_real(x)
-                xi=self.bk_imag(x)
-                
-                r=self.backend.sign(xr)*self.backend.sqrt(self.backend.sign(xr)*xr)
-                i=self.backend.sign(xi)*self.backend.sqrt(self.backend.sign(xi)*xi)
-                return self.bk_complex(r,i)
-            else:
-                return self.backend.sign(x)*self.backend.sqrt(self.backend.sign(x)*x)
-        
-    def bk_reduce_sum(self,data,axis=None):
-        
-        if isinstance(data,Rformat):
-            return self.bk_reduce_sum(data.get())
-        
-        if axis is None:
-            if self.BACKEND==self.TENSORFLOW:
-                return(self.backend.reduce_sum(data))
-            if self.BACKEND==self.TORCH:
-                return(self.backend.sum(data))
-            if self.BACKEND==self.NUMPY:
-                return(np.sum(data))
-        else:
-            if self.BACKEND==self.TENSORFLOW:
-                return(self.backend.reduce_sum(data,axis=axis))
-            if self.BACKEND==self.TORCH:
-                return(self.backend.sum(data,axis))
-            if self.BACKEND==self.NUMPY:
-                return(np.sum(data,axis))
-        
-    def bk_reduce_mean(self,data,axis=None):
-        
-        if isinstance(data,Rformat):
-            return self.bk_reduce_mean(data.get())
-        
-        if axis is None:
-            if self.BACKEND==self.TENSORFLOW:
-                return(self.backend.reduce_mean(data))
-            if self.BACKEND==self.TORCH:
-                return(self.backend.mean(data))
-            if self.BACKEND==self.NUMPY:
-                return(np.mean(data))
-        else:
-            if self.BACKEND==self.TENSORFLOW:
-                return(self.backend.reduce_mean(data,axis=axis))
-            if self.BACKEND==self.TORCH:
-                return(self.backend.mean(data,axis))
-            if self.BACKEND==self.NUMPY:
-                return(np.mean(data,axis))
-        
-    def bk_sqrt(self,data):
-        
-        if isinstance(data,Rformat):
-            return Rformat(self.bk_sqrt(data.get()),data.off,0,chans=self.chans)
-        
-        return(self.backend.sqrt(self.backend.abs(data)))
-    
-    def bk_abs(self,data):
-        
-        if isinstance(data,Rformat):
-            return Rformat(self.bk_abs(data.get()),data.off,0,chans=self.chans)
-        return(self.backend.abs(data))
-        
-    def bk_square(self,data):
-        
-        if isinstance(data,Rformat):
-            return Rformat(self.bk_square(data.get()),data.off,0,chans=self.chans)
-        
-        if self.BACKEND==self.TENSORFLOW:
-            return(self.backend.square(data))
-        if self.BACKEND==self.TORCH:
-            return(self.backend.square(data))
-        if self.BACKEND==self.NUMPY:
-            return(data*data)
-        
-    def bk_log(self,data):
-        if self.BACKEND==self.TENSORFLOW:
-            return(self.backend.math.log(data))
-        if self.BACKEND==self.TORCH:
-            return(self.backend.log(data))
-        if self.BACKEND==self.NUMPY:
-            return(np.log(data))
-        
-    def bk_complex(self,real,imag):
-        if self.BACKEND==self.TENSORFLOW:
-            return(self.backend.dtypes.complex(real,imag))
-        if self.BACKEND==self.TORCH:
-            return(self.backend.complex(real,imag))
-        if self.BACKEND==self.NUMPY:
-            return(np.complex(real,imag))
-
-    def bk_gather(self,data,shape,axis=None):
-        if self.BACKEND==self.TENSORFLOW:
-            if axis is None:
-                return(self.backend.gather(data,shape))
-            else:
-                return(self.backend.gather(data,shape,axis=axis))
-        if self.BACKEND==self.TORCH:
-            my_tensor = self.backend.LongTensor(shape)
-            my_data = self.backend.Tensor(data)
-            
-            return(self.backend.gather(my_data,axis,my_tensor))
-        
-        if self.BACKEND==self.NUMPY:
-            if axis is None:
-                return(np.take(data,shape))
-            else:
-                return(np.take(data,shape,axis=axis))
-
-    def bk_reshape(self,data,shape):
-        if isinstance(data,Rformat):
-            return Rformat(self.bk_reshape(data.get(),shape),data.off,0,chans=self.chans)
-        
-        return(self.backend.reshape(data,shape))
-    
-    def bk_repeat(self,data,nn,axis=0):
-        return(self.backend.repeat(data,nn,axis=axis))
-
-    def bk_expand_dims(self,data,axis=0):
-        if isinstance(data,Rformat):
-            if axis<data.axis:
-                l_axis=data.axis+1
-            else:
-                l_axis=data.axis
-            return Rformat(self.bk_expand_dims(data.get(),axis=axis),data.off,l_axis,chans=self.chans)
-            
-        if self.BACKEND==self.TENSORFLOW:
-            return(self.backend.expand_dims(data,axis=axis))
-        if self.BACKEND==self.TORCH:
-            return(self.backend.unsqueeze(data,axis))
-        if self.BACKEND==self.NUMPY:
-            return(np.expand_dims(data,axis))
-
-    def bk_transpose(self,data,thelist):
-        if self.BACKEND==self.TENSORFLOW:
-            return(self.backend.transpose(data,thelist))
-        if self.BACKEND==self.TORCH:
-            return(self.backend.transpose(data,thelist))
-        if self.BACKEND==self.NUMPY:
-            return(np.transpose(data,thelist))
-
-    def bk_concat(self,data,axis=None):
-        if isinstance(data[0],Rformat):
-            l_data=[idata.get() for idata in data]
-            return Rformat(self.bk_concat(l_data,axis=axis),data[0].off,data[0].axis,chans=self.chans)
-                
-        if axis is None:
-            return(self.backend.concat(data))
-        else:
-            return(self.backend.concat(data,axis=axis))
-
-    
-    def bk_conjugate(self,data):
-        if isinstance(data,Rformat):
-            return Rformat(self.bk_conjugate(data.get()),data.off,data.axis,chans=self.chans)
-                
-        if self.BACKEND==self.TENSORFLOW:
-            return self.backend.math.conj(data)
-        if self.BACKEND==self.TORCH:
-            return self.backend.conjugate(data)
-        if self.BACKEND==self.NUMPY:
-            return data.conjugate()
-        
-    def bk_real(self,data):
-        if isinstance(data,Rformat):
-            return Rformat(self.bk_real(data.get()),data.off,data.axis,chans=self.chans)
-                
-        if self.BACKEND==self.TENSORFLOW:
-            return self.backend.math.real(data)
-        if self.BACKEND==self.TORCH:
-            return self.backend.real(data)
-        if self.BACKEND==self.NUMPY:
-            return self.backend.real(data)
-
-    def bk_imag(self,data):
-        if isinstance(data,Rformat):
-            return Rformat(self.bk_imag(data.get()),data.off,data.axis,chans=self.chans)
-                
-        if self.BACKEND==self.TENSORFLOW:
-            return self.backend.math.imag(data)
-        if self.BACKEND==self.TORCH:
-            return self.backend.imag(data)
-        if self.BACKEND==self.NUMPY:
-            return self.backend.imag(data)
-        
-    def bk_relu(self,x):
-        if isinstance(x,Rformat):
-            return Rformat(self.bk_relu(x.get()),x.off,x.axis,chans=self.chans)
-        
-        if self.BACKEND==self.TENSORFLOW:
-            if x.dtype==self.all_cbk_type:
-                xr=self.backend.nn.relu(self.bk_real(x))
-                xi=self.backend.nn.relu(self.bk_imag(x))
-                return self.backend.complex(xr,xi)
-            else:
-                return self.backend.nn.relu(x)
-        if self.BACKEND==self.TORCH:
-            return self.backend.relu(x)
-        if self.BACKEND==self.NUMPY:
-            return (x>0)*x
-        
-    def bk_cast(self,x):
-        if isinstance(x,np.float64):
-            if self.all_bk_type=='float32':
-                return(np.float32(x))
-            else:
-                return(x)
-        if isinstance(x,np.float32):
-            if self.all_bk_type=='float64':
-                return(np.float64(x))
-            else:
-                return(x)
-        
-        if isinstance(x,Rformat):
-            return Rformat(self.bk_cast(x.get()),x.off,x.axis,chans=self.chans)
-
-        if x.dtype=='complex128' or x.dtype=='complex64':
-            out_type=self.all_cbk_type
-        else:
-            out_type=self.all_bk_type
-            
-        if self.BACKEND==self.TENSORFLOW:
-            return self.backend.cast(x,out_type)
-        if self.BACKEND==self.TORCH:
-            return self.backend.cast(x,out_type)
-        if self.BACKEND==self.NUMPY:
-            return x.astype(out_type)
+        return isinstance(data,Rformat.Rformat)
     
     # ---------------------------------------------−---------
     # --       COMPUTE 3X3 INDEX FOR HEALPIX WORK          --
@@ -848,7 +454,7 @@ class FoCUS:
             np.tile(self.R_off+yy,12)*(nside+2*self.R_off)+self.R_off+np.tile(nside-1-xx,12)
             
     def update_R_border(self,im,axis=0):
-        if not isinstance(im,Rformat):
+        if not isinstance(im,Rformat.Rformat):
             return im
             
         nside=im.shape[axis+1]-2*self.R_off
@@ -871,18 +477,18 @@ class FoCUS:
         if len(shape)>axis+3:
             oshape=oshape+shape[axis+3:]
 
-        l_im=self.bk_reshape(im_center,oshape)
-        v1=self.bk_gather(l_im,self.nest2R1[nside],axis=axis)
-        v2=self.bk_gather(l_im,self.nest2R2[nside],axis=axis)
-        v3=self.bk_gather(l_im,self.nest2R3[nside],axis=axis)
-        v4=self.bk_gather(l_im,self.nest2R4[nside],axis=axis)
+        l_im=self.backend.bk_reshape(im_center,oshape)
+        v1=self.backend.bk_gather(l_im,self.nest2R1[nside],axis=axis)
+        v2=self.backend.bk_gather(l_im,self.nest2R2[nside],axis=axis)
+        v3=self.backend.bk_gather(l_im,self.nest2R3[nside],axis=axis)
+        v4=self.backend.bk_gather(l_im,self.nest2R4[nside],axis=axis)
             
-        imout=self.bk_concat([v1,im_center,v2],axis=axis+1)
-        imout=self.bk_concat([v3,imout,v4],axis=axis+2)
-        return Rformat(imout,self.R_off,axis,chans=self.chans)
+        imout=self.backend.bk_concat([v1,im_center,v2],axis=axis+1)
+        imout=self.backend.bk_concat([v3,imout,v4],axis=axis+2)
+        return Rformat.Rformat(imout,self.R_off,axis,chans=self.chans)
         
     def to_R_center(self,im,axis=0,chans=12):
-        if isinstance(im,Rformat):
+        if isinstance(im,Rformat.Rformat):
             return im
         
         if chans==12:
@@ -898,12 +504,12 @@ class FoCUS:
         if self.nest2R[nside] is None:
             self.calc_R_index(nside,chans=chans)
         
-        im_center=self.bk_gather(lim,self.nest2R[nside],axis=axis)
+        im_center=self.backend.bk_gather(lim,self.nest2R[nside],axis=axis)
         
-        return self.bk_reshape(im_center,[chans*nside*nside])
+        return self.backend.bk_reshape(im_center,[chans*nside*nside])
         
     def to_R(self,im,axis=0,only_border=False,chans=12):
-        if isinstance(im,Rformat):
+        if isinstance(im,Rformat.Rformat):
             return im
 
         if chans==1 and len(im.shape)>1:
@@ -921,34 +527,34 @@ class FoCUS:
             else:
                 lim=im
                 
-            v1=self.bk_gather(lim,self.nest2R1[nside],axis=axis)
-            v2=self.bk_gather(lim,self.nest2R2[nside],axis=axis)
-            v3=self.bk_gather(lim,self.nest2R3[nside],axis=axis)
-            v4=self.bk_gather(lim,self.nest2R4[nside],axis=axis)
+            v1=self.backend.bk_gather(lim,self.nest2R1[nside],axis=axis)
+            v2=self.backend.bk_gather(lim,self.nest2R2[nside],axis=axis)
+            v3=self.backend.bk_gather(lim,self.nest2R3[nside],axis=axis)
+            v4=self.backend.bk_gather(lim,self.nest2R4[nside],axis=axis)
             
             if axis==0:
-                im_center=self.bk_reshape(im,[chans,nside,nside])
+                im_center=self.backend.bk_reshape(im,[chans,nside,nside])
             if axis==1:
-                im_center=self.bk_reshape(im,[im.shape[0],chans,nside,nside])
+                im_center=self.backend.bk_reshape(im,[im.shape[0],chans,nside,nside])
             if axis==2:
-                im_center=self.bk_reshape(im,[im.shape[0],im.shape[1],chans,nside,nside])
+                im_center=self.backend.bk_reshape(im,[im.shape[0],im.shape[1],chans,nside,nside])
             if axis==3:
-                im_center=self.bk_reshape(im,[im.shape[0],im.shape[1],im.shape[2],chans,nside,nside])
+                im_center=self.backend.bk_reshape(im,[im.shape[0],im.shape[1],im.shape[2],chans,nside,nside])
                 
-            imout=self.bk_concat([v1,im_center,v2],axis=axis+1)
-            imout=self.bk_concat([v3,imout,v4],axis=axis+2)
+            imout=self.backend.bk_concat([v1,im_center,v2],axis=axis+1)
+            imout=self.backend.bk_concat([v3,imout,v4],axis=axis+2)
 
-            return Rformat(imout,self.R_off,axis,chans=chans)
+            return Rformat.Rformat(imout,self.R_off,axis,chans=chans)
         
         else:
             if chans==1:
                 im_center=self.reduce_dim(im,axis=axis)
             else:
-                im_center=self.bk_gather(im,self.nest2R[nside],axis=axis)
-            v1=self.bk_gather(im_center,self.nest2R1[nside],axis=axis)
-            v2=self.bk_gather(im_center,self.nest2R2[nside],axis=axis)
-            v3=self.bk_gather(im_center,self.nest2R3[nside],axis=axis)
-            v4=self.bk_gather(im_center,self.nest2R4[nside],axis=axis)
+                im_center=self.backend.bk_gather(im,self.nest2R[nside],axis=axis)
+            v1=self.backend.bk_gather(im_center,self.nest2R1[nside],axis=axis)
+            v2=self.backend.bk_gather(im_center,self.nest2R2[nside],axis=axis)
+            v3=self.backend.bk_gather(im_center,self.nest2R3[nside],axis=axis)
+            v4=self.backend.bk_gather(im_center,self.nest2R4[nside],axis=axis)
 
             shape=list(im.shape)
             oshape=shape[0:axis]+[chans,nside,nside]
@@ -960,15 +566,15 @@ class FoCUS:
                 if axis+1<len(shape):
                     oshape=oshape+shape[axis+1:]
             
-            im_center=self.bk_reshape(im_center,oshape)
+            im_center=self.backend.bk_reshape(im_center,oshape)
 
-            imout=self.bk_concat([v1,im_center,v2],axis=axis+1)
-            imout=self.bk_concat([v3,imout,v4],axis=axis+2)
-            return Rformat(imout,self.R_off,axis,chans=chans)
+            imout=self.backend.bk_concat([v1,im_center,v2],axis=axis+1)
+            imout=self.backend.bk_concat([v3,imout,v4],axis=axis+2)
+            return Rformat.Rformat(imout,self.R_off,axis,chans=chans)
     
     def from_R(self,im,axis=0):
-        if not isinstance(im,Rformat):
-            print('fromR function only works with Rformat class')
+        if not isinstance(im,Rformat.Rformat):
+            print('fromR function only works with Rformat.Rformat class')
             
         image=im.get()
         if im.chans==1:
@@ -989,7 +595,7 @@ class FoCUS:
 
             res=self.reduce_dim(self.reduce_dim(image,axis=axis),axis=axis)
 
-            return self.bk_gather(res,self.inv_nest2R[nside],axis=axis)
+            return self.backend.bk_gather(res,self.inv_nest2R[nside],axis=axis)
         
     def corr_idx_wXX(self,x,y):
         idx=np.where(x==-1)[0]
@@ -1127,13 +733,13 @@ class FoCUS:
         if self.ring2nest[lout] is None:
             self.ring2nest[lout]=hp.ring2nest(lout,np.arange(12*lout**2))
             
-        return(self.bk_gather(image,self.ring2nest[lout],axis=axis))
+        return(self.backend.bk_gather(image,self.ring2nest[lout],axis=axis))
 
     #--------------------------------------------------------
     def ud_grade_2(self,im,axis=0):
         
         if self.use_R_format:
-            if isinstance(im, Rformat):
+            if isinstance(im, Rformat.Rformat):
                 l_image=im.get()
             else:
                 l_image=self.to_R(im,axis=axis,chans=self.chans).get()
@@ -1177,21 +783,21 @@ class FoCUS:
             if axis>3:
                 print('ud_grade_2 function not yet implemented for axis>3')
 
-            l_image=self.bk_reduce_sum(self.bk_reduce_sum(self.bk_reshape(l_image,oshape) \
+            l_image=self.backend.bk_reduce_sum(self.backend.bk_reduce_sum(self.backend.bk_reshape(l_image,oshape) \
                                                           ,axis=axis+2),axis=axis+3)/4
-            imout=self.bk_reshape(l_image,oshape2)
+            imout=self.backend.bk_reshape(l_image,oshape2)
             
-            v1=self.bk_gather(imout,self.nest2R1[lout//2],axis=axis)
-            v2=self.bk_gather(imout,self.nest2R2[lout//2],axis=axis)
-            v3=self.bk_gather(imout,self.nest2R3[lout//2],axis=axis)
-            v4=self.bk_gather(imout,self.nest2R4[lout//2],axis=axis)
+            v1=self.backend.bk_gather(imout,self.nest2R1[lout//2],axis=axis)
+            v2=self.backend.bk_gather(imout,self.nest2R2[lout//2],axis=axis)
+            v3=self.backend.bk_gather(imout,self.nest2R3[lout//2],axis=axis)
+            v4=self.backend.bk_gather(imout,self.nest2R4[lout//2],axis=axis)
             
-            imout=self.bk_concat([v1,l_image,v2],axis=axis+1)
-            imout=self.bk_concat([v3,imout,v4],axis=axis+2)
+            imout=self.backend.bk_concat([v1,l_image,v2],axis=axis+1)
+            imout=self.backend.bk_concat([v3,imout,v4],axis=axis+2)
 
-            imout=Rformat(imout,self.R_off,axis,chans=self.chans)
+            imout=Rformat.Rformat(imout,self.R_off,axis,chans=self.chans)
             
-            if not isinstance(im, Rformat):
+            if not isinstance(im, Rformat.Rformat):
                 imout=self.from_R(imout,axis=axis)
 
             return imout
@@ -1215,36 +821,36 @@ class FoCUS:
                 if len(shape)>axis:
                     oshape=oshape+shape[axis+1:]
 
-            return(self.bk_reduce_mean(self.bk_reshape(im,oshape),axis=axis+1))
+            return(self.backend.bk_reduce_mean(self.backend.bk_reshape(im,oshape),axis=axis+1))
     
     #--------------------------------------------------------
     def up_grade_2_R_format(self,l_image,axis=0):
         
         #l_image is [....,12,nside+2*R_off,nside+2*R_off,...]
-        res=self.backend.repeat(self.backend.repeat(l_image,2,axis=axis+1),2,axis=axis+2)
+        res=self.backend.bk_repeat(self.backend.bk_repeat(l_image,2,axis=axis+1),2,axis=axis+2)
 
         y00=res
-        y10=self.backend.roll(res,-1,axis=axis+1)
-        y01=self.backend.roll(res,-1,axis=axis+2)
-        y11=self.backend.roll(y10,-1,axis=axis+2)
+        y10=self.backend.bk_roll(res,-1,axis=axis+1)
+        y01=self.backend.bk_roll(res,-1,axis=axis+2)
+        y11=self.backend.bk_roll(y10,-1,axis=axis+2)
         #imout is [....,12,2*nside+4*R_off,2*nside+4*R_off,...]
         imout=(0.25*y00+0.25*y10+0.25*y01+0.25*y11)
         
-        y10=self.backend.roll(res,1,axis=axis+1)
-        y01=self.backend.roll(res,1,axis=axis+2)
-        y11=self.backend.roll(y10,1,axis=axis+2)
+        y10=self.backend.bk_roll(res,1,axis=axis+1)
+        y01=self.backend.bk_roll(res,1,axis=axis+2)
+        y11=self.backend.bk_roll(y10,1,axis=axis+2)
         #imout is [....,12,2*nside+4*R_off,2*nside+4*R_off,...]
         imout=imout+(0.25*y00+0.25*y10+0.25*y01+0.25*y11)
         
-        y10=self.backend.roll(res,1,axis=axis+1)
-        y01=self.backend.roll(res,-1,axis=axis+2)
-        y11=self.backend.roll(y10,-1,axis=axis+2)
+        y10=self.backend.bk_roll(res,1,axis=axis+1)
+        y01=self.backend.bk_roll(res,-1,axis=axis+2)
+        y11=self.backend.bk_roll(y10,-1,axis=axis+2)
         #imout is [....,12,2*nside+4*R_off,2*nside+4*R_off,...]
         imout=imout+(0.25*y00+0.25*y10+0.25*y01+0.25*y11)
         
-        y10=self.backend.roll(res,-1,axis=axis+1)
-        y01=self.backend.roll(res,1,axis=axis+2)
-        y11=self.backend.roll(y10,1,axis=axis+2)
+        y10=self.backend.bk_roll(res,-1,axis=axis+1)
+        y01=self.backend.bk_roll(res,1,axis=axis+2)
+        y11=self.backend.bk_roll(y10,1,axis=axis+2)
         #imout is [....,12,2*nside+4*R_off,2*nside+4*R_off,...]
         imout=imout+(0.25*y00+0.25*y10+0.25*y01+0.25*y11)
 
@@ -1267,7 +873,7 @@ class FoCUS:
     def up_grade(self,im,nout,axis=0):
         
         if self.use_R_format:
-            if isinstance(im, Rformat):
+            if isinstance(im, Rformat.Rformat):
                 l_image=im.get()
             else:
                 l_image=self.to_R(im,axis=axis,chans=self.chans).get()
@@ -1283,9 +889,9 @@ class FoCUS:
                 for i in range(1,nscale):
                     imout=self.up_grade_2_R_format(imout,axis=axis)
                         
-            imout=Rformat(imout,self.R_off,axis,chans=self.chans)
+            imout=Rformat.Rformat(imout,self.R_off,axis,chans=self.chans)
             
-            if not isinstance(im, Rformat):
+            if not isinstance(im, Rformat.Rformat):
                 imout=self.from_R(imout,axis=axis)
             
         else:
@@ -1297,7 +903,7 @@ class FoCUS:
                 p, w = hp.get_interp_weights(lout,th,ph,nest=True)
                 del th
                 del ph
-                if self.BACKEND==self.TORCH:
+                if self.backend.BACKEND==self.backend.TORCH:
                     self.pix_interp_val[lout][nout]=p.astype('int64')
                 else:
                     self.pix_interp_val[lout][nout]=p
@@ -1308,18 +914,21 @@ class FoCUS:
                 imout=im
             else:
                 if axis==0:
-                    imout=self.bk_reduce_sum(self.bk_gather(im,self.pix_interp_val[lout][nout],axis=axis)\
+                    imout=self.backend.bk_reduce_sum(self.backend.bk_gather(im,self.pix_interp_val[lout][nout],axis=axis)\
                                         *self.weight_interp_val[lout][nout],axis=0)
 
                 else:
-                    amap=self.bk_gather(im,self.pix_interp_val[lout][nout],axis=axis)
+                    amap=self.backend.bk_gather(im,self.pix_interp_val[lout][nout],axis=axis)
                     aw=self.weight_interp_val[lout][nout]
                     for k in range(axis):
-                        aw=self.bk_expand_dims(aw, axis=0)
+                        aw=self.backend.bk_expand_dims(aw, axis=0)
                     for k in range(axis+1,len(im.shape)):
-                        aw=self.bk_expand_dims(aw, axis=-1)
-
-                    imout=self.bk_reduce_sum(aw*amap,axis=axis)
+                        aw=self.backend.bk_expand_dims(aw, axis=-1)
+                    if amap.dtype==self.all_cbk_type:
+                        imout=self.backend.bk_complex(self.backend.bk_reduce_sum(aw*self.backend.bk_real(amap),axis=axis), \
+                                              self.backend.bk_reduce_sum(aw*self.backend.bk_imag(amap),axis=axis))
+                    else:
+                        imout=self.backend.bk_reduce_sum(aw*amap,axis=axis)
         return(imout)
 
     # ---------------------------------------------−---------
@@ -1388,7 +997,7 @@ class FoCUS:
 
                 
         if kernel==-1:
-            if self.BACKEND==self.TORCH:
+            if self.backend.BACKEND==self.backend.TORCH:
                 self.Idx_Neighbours[nside]=tmp.as_type('int64')
             else:
                 self.Idx_Neighbours[nside]=tmp
@@ -1445,17 +1054,17 @@ class FoCUS:
         thelist=[i for i in range(naxes)]
         thelist[laxis1]=laxis2
         thelist[laxis2]=laxis1
-        return self.bk_transpose(x,thelist)
+        return self.backend.bk_transpose(x,thelist)
     
     # ---------------------------------------------−---------
     # Mean using mask x [....,Npix,....], mask[Nmask,Npix]  to [....,Nmask,....]
     # if use_R_format
     # Mean using mask x [....,12,Nside+2*off,Nside+2*off,....], mask[Nmask,12,Nside+2*off,Nside+2*off]  to [....,Nmask,....]
-    def bk_masked_mean(self,x,mask,axis=0):
+    def masked_mean(self,x,mask,axis=0):
         
         shape=x.shape.as_list()
         
-        l_x=self.bk_expand_dims(x,axis)
+        l_x=self.backend.bk_expand_dims(x,axis)
             
         if self.use_R_format:
             nside=mask.nside
@@ -1471,23 +1080,23 @@ class FoCUS:
             l_mask=mask
             
         for i in range(axis):
-            l_mask=self.bk_expand_dims(l_mask,0)
+            l_mask=self.backend.bk_expand_dims(l_mask,0)
             
         if self.use_R_format:
             for i in range(axis+3,len(x.shape)):
-                l_mask=self.bk_expand_dims(l_mask,-1)
+                l_mask=self.backend.bk_expand_dims(l_mask,-1)
 
             if l_x.get().dtype==self.all_cbk_type:
-                l_mask=self.bk_complex(l_mask,0*l_mask)
+                l_mask=self.backend.bk_complex(l_mask,0*l_mask)
                 
-            return self.bk_reduce_sum(self.bk_reduce_sum(self.bk_reduce_sum(l_mask*l_x.get(),axis=axis+1),axis=axis+1),axis=axis+1)/(12*nside*nside)
+            return self.backend.bk_reduce_sum(self.backend.bk_reduce_sum(self.backend.bk_reduce_sum(l_mask*l_x.get(),axis=axis+1),axis=axis+1),axis=axis+1)/(12*nside*nside)
         else:
             for i in range(axis+1,len(x.shape)):
-                l_mask=self.bk_expand_dims(l_mask,-1)
+                l_mask=self.backend.bk_expand_dims(l_mask,-1)
 
             if l_x.dtype==self.all_cbk_type:
-                l_mask=self.bk_complex(l_mask,0.0)
-            return self.bk_reduce_mean(l_mask*l_x,axis=axis+1)
+                l_mask=self.backend.bk_complex(l_mask,0.0)
+            return self.backend.bk_reduce_mean(l_mask*l_x,axis=axis+1)
         
     # ---------------------------------------------−---------
     # convert tensor x [....,a,b,....] to [....,a*b,....]
@@ -1508,7 +1117,7 @@ class FoCUS:
         if laxis<len(shape)-1:
             oshape.extend(shape[laxis+2:])
             
-        return(self.bk_reshape(x,oshape))
+        return(self.backend.bk_reshape(x,oshape))
         
         
     # ---------------------------------------------−---------
@@ -1536,57 +1145,57 @@ class FoCUS:
             oshape=[o_shape,shape[axis+1],shape[axis+2],ishape]
 
             #l_image=self.swapaxes(self.bk_reshape(image,oshape),-1,-3)
-            l_image=self.bk_reshape(image,oshape)
+            l_image=self.backend.bk_reshape(image,oshape)
 
             l_ww=np.zeros([self.KERNELSZ,self.KERNELSZ,ishape,ishape*norient])
             for k in range(ishape):
                 l_ww[:,:,k,k*norient:(k+1)*norient]=ww.reshape(self.KERNELSZ,self.KERNELSZ,norient)
             
             if l_image.dtype=='complex128' or l_image.dtype=='complex64':
-                r=self.backend.nn.conv2d(self.bk_real(l_image),
-                                         l_ww,
-                                         strides=[1, 1, 1, 1],
-                                         padding='SAME')
-                i=self.backend.nn.conv2d(self.bk_imag(l_image),
-                                         l_ww,
-                                         strides=[1, 1, 1, 1],
-                                         padding='SAME')
-                res=self.backend.complex(r,i)
+                r=self.backend.conv2d(self.backend.bk_real(l_image),
+                                      l_ww,
+                                      strides=[1, 1, 1, 1],
+                                      padding='SAME')
+                i=self.backend.conv2d(self.backend.bk_imag(l_image),
+                                      l_ww,
+                                      strides=[1, 1, 1, 1],
+                                      padding='SAME')
+                res=self.backend.bk_complex(r,i)
             else:
-                res=self.backend.nn.conv2d(l_image,l_ww,strides=[1, 1, 1, 1],padding='SAME')
+                res=self.backend.conv2d(l_image,l_ww,strides=[1, 1, 1, 1],padding='SAME')
 
-            res=self.bk_reshape(res,[o_shape,shape[axis+1],shape[axis+2],ishape,norient])
+            res=self.backend.bk_reshape(res,[o_shape,shape[axis+1],shape[axis+2],ishape,norient])
         else:
             oshape=[o_shape,shape[axis+1],shape[axis+2],1]
-            l_ww=self.bk_reshape(ww,[self.KERNELSZ,self.KERNELSZ,1,norient])
+            l_ww=self.backend.bk_reshape(ww,[self.KERNELSZ,self.KERNELSZ,1,norient])
 
-            tmp=self.bk_reshape(image,oshape)
+            tmp=self.backend.bk_reshape(image,oshape)
             if tmp.dtype=='complex128' or tmp.dtype=='complex64':
-                r=self.backend.nn.conv2d(self.bk_real(tmp),
+                r=self.backend.conv2d(self.backend.bk_real(tmp),
+                                      l_ww,
+                                      strides=[1, 1, 1, 1],
+                                      padding='SAME')
+                i=self.backend.conv2d(self.backend.bk_imag(tmp),
                                          l_ww,
                                          strides=[1, 1, 1, 1],
                                          padding='SAME')
-                i=self.backend.nn.conv2d(self.bk_imag(tmp),
-                                         l_ww,
-                                         strides=[1, 1, 1, 1],
-                                         padding='SAME')
-                res=self.backend.complex(r,i)
+                res=self.backend.bk_complex(r,i)
             else:
-                res=self.backend.nn.conv2d(tmp,
-                                           l_ww,
-                                           strides=[1, 1, 1, 1],
-                                           padding='SAME')
+                res=self.backend.conv2d(tmp,
+                                        l_ww,
+                                        strides=[1, 1, 1, 1],
+                                        padding='SAME')
 
-        return self.bk_reshape(res,shape+[norient])
+        return self.backend.bk_reshape(res,shape+[norient])
     
     # ---------------------------------------------−---------
     def convol(self,in_image,axis=0):
 
-        image=self.bk_cast(in_image)
+        image=self.backend.bk_cast(in_image)
         
         if self.use_R_format:
             
-            if isinstance(image, Rformat):
+            if isinstance(image, Rformat.Rformat):
                 l_image=image
             else:
                 l_image=self.to_R(image,axis=axis,chans=self.chans)
@@ -1598,15 +1207,15 @@ class FoCUS:
 
             if rr.dtype==self.all_cbk_type:
                 if self.all_cbk_type=='complex128':
-                    res=rr+self.bk_complex(np.float64(0.0),np.float64(1.0))*ii
+                    res=rr+self.backend.bk_complex(np.float64(0.0),np.float64(1.0))*ii
                 else:
-                    res=rr+self.bk_complex(np.float32(0.0),np.float32(1.0))*ii
+                    res=rr+self.backend.bk_complex(np.float32(0.0),np.float32(1.0))*ii
             else:
-                res=self.bk_complex(rr,ii) 
+                res=self.backend.bk_complex(rr,ii) 
                 
-            res=Rformat(res,self.R_off,axis,chans=self.chans)
+            res=Rformat.Rformat(res,self.R_off,axis,chans=self.chans)
             
-            if not isinstance(image, Rformat):
+            if not isinstance(image, Rformat.Rformat):
                 res=self.from_R(res,axis=axis)
                 
         else:
@@ -1615,7 +1224,7 @@ class FoCUS:
             if self.Idx_convol[nside] is None:
                 self.init_index(nside)
 
-            imX9=self.bk_expand_dims(self.bk_gather(self.bk_cast(image),
+            imX9=self.backend.bk_expand_dims(self.backend.bk_gather(self.backend.bk_cast(image),
                                                     self.Idx_convol[nside],axis=axis),-1)
 
             l_ww_real=self.ww_Real[nside]
@@ -1623,22 +1232,29 @@ class FoCUS:
 
             if self.do_wigner:
                 for i in range(axis):
-                    l_ww_real=self.bk_expand_dims(l_ww_real,0)
-                    l_ww_imag=self.bk_expand_dims(l_ww_imag,0)
+                    l_ww_real=self.backend.bk_expand_dims(l_ww_real,0)
+                    l_ww_imag=self.backend.bk_expand_dims(l_ww_imag,0)
             else:
                 for i in range(axis+1):
-                    l_ww_real=self.bk_expand_dims(l_ww_real,0)
-                    l_ww_imag=self.bk_expand_dims(l_ww_imag,0)
+                    l_ww_real=self.backend.bk_expand_dims(l_ww_real,0)
+                    l_ww_imag=self.backend.bk_expand_dims(l_ww_imag,0)
                     
 
             for i in range(axis+2,len(imX9.shape)-1):
-                l_ww_real=self.bk_expand_dims(l_ww_real,axis+2)
-                l_ww_imag=self.bk_expand_dims(l_ww_imag,axis+2)
+                l_ww_real=self.backend.bk_expand_dims(l_ww_real,axis+2)
+                l_ww_imag=self.backend.bk_expand_dims(l_ww_imag,axis+2)
 
-            rr=self.bk_reduce_sum(l_ww_real*imX9,axis+1)
-            ii=self.bk_reduce_sum(l_ww_imag*imX9,axis+1)
+            if imX9.dtype==self.all_cbk_type:
+                rr=self.backend.bk_complex(self.backend.bk_reduce_sum(self.backend.bk_real(imX9)*l_ww_real,axis+1), \
+                                   self.backend.bk_reduce_sum(self.backend.bk_imag(imX9)*l_ww_real,axis+1))
+                ii=self.backend.bk_complex(self.backend.bk_reduce_sum(self.backend.bk_real(imX9)*l_ww_imag,axis+1), \
+                                   self.backend.bk_reduce_sum(self.backend.bk_imag(imX9)*l_ww_imag,axis+1))
+                res=rr+ii
+            else:
+                rr=self.backend.bk_reduce_sum(l_ww_real*imX9,axis+1)
+                ii=self.backend.bk_reduce_sum(l_ww_imag*imX9,axis+1)
 
-            res=self.backend.complex(1,0)*rr+self.backend.complex(0,1)*ii
+                res=self.backend.bk_complex(rr,ii)
             
         return(res)
         
@@ -1646,10 +1262,10 @@ class FoCUS:
     # ---------------------------------------------−---------
     def smooth(self,in_image,axis=0):
 
-        image=self.bk_cast(in_image)
+        image=self.backend.bk_cast(in_image)
         
         if self.use_R_format:
-            if isinstance(image, Rformat):
+            if isinstance(image, Rformat.Rformat):
                 l_image=image.get()
             else:
                 l_image=self.to_R(image,axis=axis,chans=self.chans).get()
@@ -1658,11 +1274,11 @@ class FoCUS:
             
             res=self.conv2d(l_image,self.ww_SmoothT,axis=axis)
 
-            res=self.bk_reshape(res,l_image.shape)
+            res=self.backend.bk_reshape(res,l_image.shape)
             
-            res=Rformat(res,self.R_off,axis,chans=self.chans)
+            res=Rformat.Rformat(res,self.R_off,axis,chans=self.chans)
             
-            if not isinstance(image, Rformat):
+            if not isinstance(image, Rformat.Rformat):
                 res=self.from_R(res,axis=axis)
                 
         else:
@@ -1671,16 +1287,21 @@ class FoCUS:
             if self.Idx_Neighbours[nside] is None:
                 self.init_index(nside)
             
-            imX9=self.bk_gather(image,self.Idx_Neighbours[nside],axis=axis)
+            imX9=self.backend.bk_gather(image,self.Idx_Neighbours[nside],axis=axis)
 
             l_w_smooth=self.w_smooth
             for i in range(axis+1):
-                l_w_smooth=self.bk_expand_dims(l_w_smooth,0)
+                l_w_smooth=self.backend.bk_expand_dims(l_w_smooth,0)
         
             for i in range(axis+2,len(imX9.shape)):
-                l_w_smooth=self.bk_expand_dims(l_w_smooth,axis+2)
+                l_w_smooth=self.backend.bk_expand_dims(l_w_smooth,axis+2)
 
-            res=self.bk_reduce_sum(l_w_smooth*imX9,axis+1)
+            if imX9.dtype==self.all_cbk_type:
+                res=self.backend.bk_complex(self.backend.bk_reduce_sum(self.backend.bk_real(imX9)*l_w_smooth,axis+1), \
+                                    self.backend.bk_reduce_sum(self.backend.bk_imag(imX9)*l_w_smooth,axis+1))
+            else:
+                res=self.backend.bk_reduce_sum(l_w_smooth*imX9,axis+1)
+                
         return(res)
     
     # ---------------------------------------------−---------

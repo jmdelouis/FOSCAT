@@ -1,6 +1,6 @@
 import foscat.FoCUS as FOC
 import numpy as np
-
+import foscat.Rformat as Rformat
 
 def read(filename):
     thescat=scat(1,1,1,1)
@@ -43,6 +43,10 @@ class scat:
                         (self.S0+ other), \
                         (self.S1+ other), \
                         (self.S2+ other))
+
+
+    def __radd__(self,other):
+        return self.__add__(other)
 
     def __truediv__(self,other):
         assert isinstance(other, float)  or isinstance(other, np.float32) or isinstance(other, int) or \
@@ -90,7 +94,37 @@ class scat:
                         (self.S1- other), \
                         (self.S2- other))
         
+    def __rsub__(self,other):
+        assert isinstance(other, float)  or isinstance(other, np.float32) or isinstance(other, int) or \
+            isinstance(other, bool) or isinstance(other, scat)
+        
+        if isinstance(other, scat):
+            return scat((other.P00-self.P00), \
+                        (other.S0- self.S0), \
+                        (other.S1- self.S1), \
+                        (other.S2- self.S2))
+        else:
+            return scat((other-self.P00), \
+                        (other-self.S0), \
+                        (other-self.S1), \
+                        (other-self.S2))
+        
     def __mul__(self,other):
+        assert isinstance(other, float)  or isinstance(other, np.float32) or isinstance(other, int) or \
+            isinstance(other, bool) or isinstance(other, scat)
+        
+        if isinstance(other, scat):
+            return scat((self.P00* other.P00), \
+                        (self.S0* other.S0), \
+                        (self.S1* other.S1), \
+                        (self.S2* other.S2))
+        else:
+            return scat((self.P00* other), \
+                        (self.S0* other), \
+                        (self.S1* other), \
+                        (self.S2* other))
+
+    def __rmul__(self,other):
         assert isinstance(other, float)  or isinstance(other, np.float32) or isinstance(other, int) or \
             isinstance(other, bool) or isinstance(other, scat)
         
@@ -187,7 +221,7 @@ class funct(FOC.FoCUS):
         
         # determine jmax and nside corresponding to the input map
         im_shape = image1.shape
-        if self.use_R_format and isinstance(image1,FOC.Rformat):
+        if self.use_R_format and isinstance(image1,Rformat.Rformat):
             if len(image1.shape)==4:
                 nside=im_shape[2]-2*self.R_off
                 npix = self.chans*nside*nside # Number of pixels
@@ -210,27 +244,27 @@ class funct(FOC.FoCUS):
 
         ### LOCAL VARIABLES (IMAGES and MASK)
         # Check if image1 is [Npix] or [Nbatch,Npix]
-        if len(image1.shape)==1 or (len(image1.shape)==2 and self.chans==1) or (len(image1.shape)==3 and isinstance(image1,FOC.Rformat)):
+        if len(image1.shape)==1 or (len(image1.shape)==2 and self.chans==1) or (len(image1.shape)==3 and isinstance(image1,Rformat.Rformat)):
             # image1 is [Nbatch, Npix]
-            I1 = self.bk_cast(self.bk_expand_dims(image1,0))  # Local image1 [Nbatch, Npix]
+            I1 = self.backend.bk_cast(self.backend.bk_expand_dims(image1,0))  # Local image1 [Nbatch, Npix]
             if cross:
-                I2 = self.bk_cast(self.bk_expand_dims(image2,0))  # Local image2 [Nbatch, Npix]
+                I2 = self.backend.bk_cast(self.backend.bk_expand_dims(image2,0))  # Local image2 [Nbatch, Npix]
         else:
-            I1=self.bk_cast(image1)
+            I1=self.backend.bk_cast(image1)
             if cross:
-                I2=self.bk_cast(image2)
+                I2=self.backend.bk_cast(image2)
                 
         # self.mask is [Nmask, Npix]
         if mask is None:
             if self.chans==1:
-                vmask = self.bk_ones([1,nside,nside],dtype=self.all_type)
+                vmask = self.backend.bk_ones([1,nside,nside],dtype=self.all_type)
             else:
-                vmask = self.bk_ones([1,npix],dtype=self.all_type)
+                vmask = self.backend.bk_ones([1,npix],dtype=self.all_type)
             
             if self.use_R_format:
                 vmask = self.to_R(vmask,axis=1,chans=self.chans)
         else:
-            vmask = self.bk_cast( mask) # [Nmask, Npix]
+            vmask = self.backend.bk_cast( mask) # [Nmask, Npix]
             
             if self.use_R_format:
                 vmask=self.to_R(vmask,axis=1,chans=self.chans)
@@ -252,13 +286,13 @@ class funct(FOC.FoCUS):
                 l_image2=I2
 
         s0=None
-        s0 = self.bk_masked_mean(l_image1,vmask,axis=axis)+s0_off
+        s0 = self.masked_mean(l_image1,vmask,axis=axis)+s0_off
         
         if cross:
-            if len(image1.shape)==1 or (len(image1.shape)==3 and isinstance(image1,FOC.Rformat)):
-                s0 = self.bk_concat([s0,self.bk_masked_mean(l_image2,vmask,axis=axis)],1)+s0_off
+            if len(image1.shape)==1 or (len(image1.shape)==3 and isinstance(image1,Rformat.Rformat)):
+                s0 = self.backend.bk_concat([s0,self.masked_mean(l_image2,vmask,axis=axis)],1)+s0_off
             else:
-                s0 = self.bk_concat([s0,self.bk_masked_mean(l_image2,vmask,axis=axis)],0)+s0_off
+                s0 = self.backend.bk_concat([s0,self.masked_mean(l_image2,vmask,axis=axis)],0)+s0_off
 
         s1=None
         s2=None
@@ -277,53 +311,53 @@ class funct(FOC.FoCUS):
                 c_image2=c_image1
 
             # Compute (a+ib)*(a+ib)* the last c_image column is the real and imaginary part
-            conj=c_image1*self.bk_conjugate(c_image2)
+            conj=c_image1*self.backend.bk_conjugate(c_image2)
             if Auto:
-                conj=self.bk_real(conj)
+                conj=self.backend.bk_real(conj)
 
             # Compute l_p00 [....,....,Nmask,1,Norient]  
-            l_p00 = self.bk_expand_dims(self.bk_masked_mean(conj,vmask,axis=axis),-2)
+            l_p00 = self.backend.bk_expand_dims(self.masked_mean(conj,vmask,axis=axis),-2)
 
-            conj=self.bk_L1(conj)
+            conj=self.backend.bk_L1(conj)
 
             # Compute l_s1 [....,....,Nmask,1,Norient] 
-            l_s1 = self.bk_expand_dims(self.bk_masked_mean(conj,vmask,axis=axis),-2)
+            l_s1 = self.backend.bk_expand_dims(self.masked_mean(conj,vmask,axis=axis),-2)
 
             # Concat S1,P00 [....,....,Nmask,j1,Norient] 
             if s1 is None:
                 s1=l_s1
                 p00=l_p00
             else:
-                s1=self.bk_concat([s1,l_s1],axis=-2)
-                p00=self.bk_concat([p00,l_p00],axis=-2)
+                s1=self.backend.bk_concat([s1,l_s1],axis=-2)
+                p00=self.backend.bk_concat([p00,l_p00],axis=-2)
 
             # Concat l2_image [....,Npix_j1,....,j1,Norient]
             if l2_image is None:
-                l2_image=self.bk_expand_dims(self.update_R_border(conj,axis=axis),axis=-2)
+                l2_image=self.backend.bk_expand_dims(self.update_R_border(conj,axis=axis),axis=-2)
             else:
-                l2_image=self.bk_concat([self.bk_expand_dims(self.update_R_border(conj,axis=axis),axis=-2),l2_image],axis=-2)
+                l2_image=self.backend.bk_concat([self.backend.bk_expand_dims(self.update_R_border(conj,axis=axis),axis=-2),l2_image],axis=-2)
 
             # Convol l2_image [....,Npix_j1,....,j1,Norient,Norient]
-            c2_image=self.convol(self.bk_relu(l2_image),axis=axis)
+            c2_image=self.convol(self.backend.bk_relu(l2_image),axis=axis)
 
-            conj2p=self.bk_L1(c2_image*self.bk_conjugate(c2_image))
+            conj2p=self.backend.bk_L1(c2_image*self.backend.bk_conjugate(c2_image))
             if Auto:
-                conj2p=self.bk_real(conj2p)
+                conj2p=self.backend.bk_real(conj2p)
 
-            c2_image=self.convol(self.bk_relu(-l2_image),axis=axis)
+            c2_image=self.convol(self.backend.bk_relu(-l2_image),axis=axis)
 
-            conj2m=self.bk_L1(c2_image*self.bk_conjugate(c2_image))
+            conj2m=self.backend.bk_L1(c2_image*self.backend.bk_conjugate(c2_image))
             if Auto:
-                conj2m=self.bk_real(conj2m)
+                conj2m=self.backend.bk_real(conj2m)
 
             # Convol l_s2 [....,....,Nmask,j1,Norient,Norient]
-            l_s2 = self.bk_masked_mean(conj2p-conj2m,vmask,axis=axis)
+            l_s2 = self.masked_mean(conj2p-conj2m,vmask,axis=axis)
 
             # Concat l_s2 [....,....,Nmask,j1*(j1+1)/2,Norient,Norient]
             if s2 is None:
                 s2=l_s2
             else:
-                s2=self.bk_concat([s2,l_s2],axis=-3)
+                s2=self.backend.bk_concat([s2,l_s2],axis=-3)
 
             if j1!=jmax-1:
                 # Rescale vmask [Nmask,Npix_j1//4]   
@@ -341,48 +375,48 @@ class funct(FOC.FoCUS):
                     l_image2 = self.smooth(l_image2,axis=axis)
                     l_image2 = self.ud_grade_2(l_image2,axis=axis)
 
-        if len(image1.shape)==1 or (len(image1.shape)==3 and isinstance(image1,FOC.Rformat)):
+        if len(image1.shape)==1 or (len(image1.shape)==3 and isinstance(image1,Rformat.Rformat)):
             return(scat(p00[0],s0[0],s1[0],s2[0],cross))
 
         return(scat(p00,s0,s1,s2,cross))
 
     def square(self,x):
         # the abs make the complex value usable for reduce_sum or mean
-        return scat(self.bk_square(self.bk_abs(x.P00)),
-                    self.bk_square(self.bk_abs(x.S0)),
-                    self.bk_square(self.bk_abs(x.S1)),
-                    self.bk_square(self.bk_abs(x.S2)))
+        return scat(self.backend.bk_square(self.backend.bk_abs(x.P00)),
+                    self.backend.bk_square(self.backend.bk_abs(x.S0)),
+                    self.backend.bk_square(self.backend.bk_abs(x.S1)),
+                    self.backend.bk_square(self.backend.bk_abs(x.S2)))
 
     def reduce_mean(self,x,axis=None):
         if axis is None:
-            return  scat(self.bk_reduce_mean(x.P00),
-                         self.bk_reduce_mean(x.S0),
-                         self.bk_reduce_mean(x.S1),
-                         self.bk_reduce_mean(x.S2))
+            return  scat(self.backend.bk_reduce_mean(x.P00),
+                         self.backend.bk_reduce_mean(x.S0),
+                         self.backend.bk_reduce_mean(x.S1),
+                         self.backend.bk_reduce_mean(x.S2))
         else:
-            return scat(self.bk_reduce_mean(x.P00,axis=axis),
-                        self.bk_reduce_mean(x.S0,axis=axis),
-                        self.bk_reduce_mean(x.S1,axis=axis),
-                        self.bk_reduce_mean(x.S2,axis=axis))
+            return scat(self.backend.bk_reduce_mean(x.P00,axis=axis),
+                        self.backend.bk_reduce_mean(x.S0,axis=axis),
+                        self.backend.bk_reduce_mean(x.S1,axis=axis),
+                        self.backend.bk_reduce_mean(x.S2,axis=axis))
 
     def reduce_sum(self,x,axis=None):
         if axis is None:
-            return  self.bk_reduce_sum(x.P00)+ \
-                self.bk_reduce_sum(x.S0)+ \
-                self.bk_reduce_sum(x.S1)+ \
-                self.bk_reduce_sum(x.S2)
+            return  self.backend.bk_reduce_sum(x.P00)+ \
+                self.backend.bk_reduce_sum(x.S0)+ \
+                self.backend.bk_reduce_sum(x.S1)+ \
+                self.backend.bk_reduce_sum(x.S2)
         else:
-            return scat(self.bk_reduce_sum(x.P00,axis=axis),
-                        self.bk_reduce_sum(x.S0,axis=axis),
-                        self.bk_reduce_sum(x.S1,axis=axis),
-                        self.bk_reduce_sum(x.S2,axis=axis))
+            return scat(self.backend.bk_reduce_sum(x.P00,axis=axis),
+                        self.backend.bk_reduce_sum(x.S0,axis=axis),
+                        self.backend.bk_reduce_sum(x.S1,axis=axis),
+                        self.backend.bk_reduce_sum(x.S2,axis=axis))
             
 
     def log(self,x):
-        return scat(self.bk_log(x.P00),
-                    self.bk_log(x.S0),
-                    self.bk_log(x.S1),
-                    self.bk_log(x.S2))
+        return scat(self.backend.bk_log(x.P00),
+                    self.backend.bk_log(x.S0),
+                    self.backend.bk_log(x.S1),
+                    self.backend.bk_log(x.S2))
     def inv(self,x):
         return scat(1/(x.P00),1/(x.S0),1/(x.S1),1/(x.S2))
 
