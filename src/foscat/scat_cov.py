@@ -1014,14 +1014,14 @@ class funct(FOC.FoCUS):
     def reduce_mean(self, x):
         if isinstance(x, scat_cov):
             if x.S1 is None:
-                result = self.backend.bk_reduce_mean(x.P00) + \
+                result = (self.backend.bk_reduce_mean(x.P00) + \
                          self.backend.bk_reduce_mean(x.C01) + \
-                         self.backend.bk_reduce_mean(x.C11)
+                         self.backend.bk_reduce_mean(x.C11))/3
             else:
-                result = self.backend.bk_reduce_mean(x.P00) + \
+                result = (self.backend.bk_reduce_mean(x.P00) + \
                          self.backend.bk_reduce_mean(x.S1) + \
                          self.backend.bk_reduce_mean(x.C01) + \
-                         self.backend.bk_reduce_mean(x.C11)
+                         self.backend.bk_reduce_mean(x.C11))/4
         else:
             return self.backend.bk_reduce_mean(x)
         return result

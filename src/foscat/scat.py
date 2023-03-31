@@ -389,15 +389,15 @@ class funct(FOC.FoCUS):
 
     def reduce_mean(self,x,axis=None):
         if axis is None:
-            return  scat(self.backend.bk_reduce_mean(x.P00),
-                         self.backend.bk_reduce_mean(x.S0),
-                         self.backend.bk_reduce_mean(x.S1),
-                         self.backend.bk_reduce_mean(x.S2))
+            return  (self.backend.bk_reduce_mean(x.P00)+
+                     self.backend.bk_reduce_mean(x.S0)+
+                     self.backend.bk_reduce_mean(x.S1)+
+                     self.backend.bk_reduce_mean(x.S2))/4
         else:
-            return scat(self.backend.bk_reduce_mean(x.P00,axis=axis),
-                        self.backend.bk_reduce_mean(x.S0,axis=axis),
-                        self.backend.bk_reduce_mean(x.S1,axis=axis),
-                        self.backend.bk_reduce_mean(x.S2,axis=axis))
+            return (self.backend.bk_reduce_mean(x.P00,axis=axis)+
+                    self.backend.bk_reduce_mean(x.S0,axis=axis)+
+                    self.backend.bk_reduce_mean(x.S1,axis=axis)+
+                    self.backend.bk_reduce_mean(x.S2,axis=axis))/4
 
     def reduce_sum(self,x,axis=None):
         if axis is None:
