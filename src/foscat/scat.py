@@ -7,12 +7,13 @@ def read(filename):
     return thescat.read(filename)
     
 class scat:
-    def __init__(self,p00,s0,s1,s2,cross=False):
+    def __init__(self,p00,s0,s1,s2,cross=False,backend=None):
         self.P00=p00
         self.S0=s0
         self.S1=s1
         self.S2=s2
         self.cross=cross
+        self.backend=backend
         
     def get_S0(self):
         return(self.S0)
@@ -28,21 +29,57 @@ class scat:
 
     def reset_P00(self):
         self.P00=0*self.P00
+
+    def domult(self,x,y):
+        if x.dtype==y.dtype:
+            return x*y
+        if x.dtype=='complex64' or x.dtype=='complex128':
+            
+            return self.backend.bk_complex(self.backend.bk_real(x)*y,self.backend.bk_imag(x)*y)
+        else:
+            return self.backend.bk_complex(self.backend.bk_real(y)*x,self.backend.bk_imag(y)*x)
+        
+    def dodiv(self,x,y):
+        if x.dtype==y.dtype:
+            return x/y
+        if x.dtype=='complex64' or x.dtype=='complex128':
+            
+            return self.backend.bk_complex(self.backend.bk_real(x)/y,self.backend.bk_imag(x)/y)
+        else:
+            return self.backend.bk_complex(x/self.backend.bk_real(y),x/self.backend.bk_imag(y))
+        
+    def domin(self,x,y):
+        if x.dtype==y.dtype:
+            return x-y
+        if x.dtype=='complex64' or x.dtype=='complex128':
+            
+            return self.backend.bk_complex(self.backend.bk_real(x)-y,self.backend.bk_imag(x)-y)
+        else:
+            return self.backend.bk_complex(x-self.backend.bk_real(y),x-self.backend.bk_imag(y))
+        
+    def doadd(self,x,y):
+        if x.dtype==y.dtype:
+            return x+y
+        if x.dtype=='complex64' or x.dtype=='complex128':
+            
+            return self.backend.bk_complex(self.backend.bk_real(x)+y,self.backend.bk_imag(x)+y)
+        else:
+            return self.backend.bk_complex(x+self.backend.bk_real(y),x+self.backend.bk_imag(y))
         
     def __add__(self,other):
         assert isinstance(other, float) or isinstance(other, np.float32) or isinstance(other, int) or \
             isinstance(other, bool) or isinstance(other, scat)
         
         if isinstance(other, scat):
-            return scat((self.P00+ other.P00), \
+            return scat(self.doadd(self.P00,other.P00), \
                         (self.S0+ other.S0), \
-                        (self.S1+ other.S1), \
-                        (self.S2+ other.S2))
+                        self.doadd(self.S1, other.S1), \
+                        self.doadd(self.S2, other.S2),backend=self.backend)
         else:
             return scat((self.P00+ other), \
                         (self.S0+ other), \
                         (self.S1+ other), \
-                        (self.S2+ other))
+                        (self.S2+ other),backend=self.backend)
 
 
     def __radd__(self,other):
@@ -53,15 +90,15 @@ class scat:
             isinstance(other, bool) or isinstance(other, scat)
         
         if isinstance(other, scat):
-            return scat((self.P00/ other.P00), \
+            return scat(self.dodiv(self.P00, other.P00), \
                         (self.S0/ other.S0), \
-                        (self.S1/ other.S1), \
-                        (self.S2/ other.S2))
+                        self.dodiv(self.S1, other.S1), \
+                        self.dodiv(self.S2, other.S2),backend=self.backend)
         else:
             return scat((self.P00/ other), \
                         (self.S0/ other), \
                         (self.S1/ other), \
-                        (self.S2/ other))
+                        (self.S2/ other),backend=self.backend)
         
 
     def __rtruediv__(self,other):
@@ -69,75 +106,75 @@ class scat:
             isinstance(other, bool) or isinstance(other, scat)
         
         if isinstance(other, scat):
-            return scat((other.P00/ self.P00), \
+            return scat(self.dodiv(other.P00, self.P00), \
                         (other.S0 / self.S0), \
-                        (other.S1 / self.S1), \
-                        (other.S2 / self.S2))
+                        self.dodiv(other.S1 , self.S1), \
+                        self.dodiv(other.S2 , self.S2),backend=self.backend)
         else:
             return scat((other/ self.P00), \
                         (other / self.S0), \
                         (other / self.S1), \
-                        (other / self.S2))
+                        (other / self.S2),backend=self.backend)
         
     def __sub__(self,other):
         assert isinstance(other, float)  or isinstance(other, np.float32) or isinstance(other, int) or \
             isinstance(other, bool) or isinstance(other, scat)
         
         if isinstance(other, scat):
-            return scat((self.P00- other.P00), \
+            return scat(self.domin(self.P00, other.P00), \
                         (self.S0- other.S0), \
-                        (self.S1- other.S1), \
-                        (self.S2- other.S2))
+                        self.domin(self.S1, other.S1), \
+                        self.domin(self.S2, other.S2),backend=self.backend)
         else:
             return scat((self.P00- other), \
                         (self.S0- other), \
                         (self.S1- other), \
-                        (self.S2- other))
+                        (self.S2- other),backend=self.backend)
         
     def __rsub__(self,other):
         assert isinstance(other, float)  or isinstance(other, np.float32) or isinstance(other, int) or \
             isinstance(other, bool) or isinstance(other, scat)
         
         if isinstance(other, scat):
-            return scat((other.P00-self.P00), \
+            return scat(self.domin(other.P00,self.P00), \
                         (other.S0- self.S0), \
-                        (other.S1- self.S1), \
-                        (other.S2- self.S2))
+                        self.domin(other.S1, self.S1), \
+                        self.domin(other.S2, self.S2),backend=self.backend)
         else:
             return scat((other-self.P00), \
                         (other-self.S0), \
                         (other-self.S1), \
-                        (other-self.S2))
+                        (other-self.S2),backend=self.backend)
         
     def __mul__(self,other):
         assert isinstance(other, float)  or isinstance(other, np.float32) or isinstance(other, int) or \
             isinstance(other, bool) or isinstance(other, scat)
         
         if isinstance(other, scat):
-            return scat((self.P00* other.P00), \
+            return scat(self.domult(self.P00, other.P00), \
                         (self.S0* other.S0), \
-                        (self.S1* other.S1), \
-                        (self.S2* other.S2))
+                        self.domult(self.S1, other.S1), \
+                        self.domult(self.S2, other.S2),backend=self.backend)
         else:
             return scat((self.P00* other), \
                         (self.S0* other), \
                         (self.S1* other), \
-                        (self.S2* other))
+                        (self.S2* other),backend=self.backend)
 
     def __rmul__(self,other):
         assert isinstance(other, float)  or isinstance(other, np.float32) or isinstance(other, int) or \
             isinstance(other, bool) or isinstance(other, scat)
         
         if isinstance(other, scat):
-            return scat((self.P00* other.P00), \
+            return scat(self.domult(self.P00, other.P00), \
                         (self.S0* other.S0), \
-                        (self.S1* other.S1), \
-                        (self.S2* other.S2))
+                        self.domult(self.S1, other.S1), \
+                        self.domult(self.S2, other.S2),backend=self.backend)
         else:
             return scat((self.P00* other), \
                         (self.S0* other), \
                         (self.S1* other), \
-                        (self.S2* other))
+                        (self.S2* other),backend=self.backend)
 
     def plot(self,name=None,hold=True,color='blue',lw=1,legend=True):
 
@@ -376,35 +413,35 @@ class funct(FOC.FoCUS):
                     l_image2 = self.ud_grade_2(l_image2,axis=axis)
 
         if len(image1.shape)==1 or (len(image1.shape)==3 and isinstance(image1,Rformat.Rformat)):
-            return(scat(p00[0],s0[0],s1[0],s2[0],cross))
+            return(scat(p00[0],s0[0],s1[0],s2[0],cross,backend=self.backend))
 
-        return(scat(p00,s0,s1,s2,cross))
+        return(scat(p00,s0,s1,s2,cross,backend=self.backend))
 
     def square(self,x):
         # the abs make the complex value usable for reduce_sum or mean
         return scat(self.backend.bk_square(self.backend.bk_abs(x.P00)),
                     self.backend.bk_square(self.backend.bk_abs(x.S0)),
                     self.backend.bk_square(self.backend.bk_abs(x.S1)),
-                    self.backend.bk_square(self.backend.bk_abs(x.S2)))
+                    self.backend.bk_square(self.backend.bk_abs(x.S2)),backend=self.backend)
     
     def sqrt(self,x):
         # the abs make the complex value usable for reduce_sum or mean
         return scat(self.backend.bk_sqrt(self.backend.bk_abs(x.P00)),
                     self.backend.bk_sqrt(self.backend.bk_abs(x.S0)),
                     self.backend.bk_sqrt(self.backend.bk_abs(x.S1)),
-                    self.backend.bk_sqrt(self.backend.bk_abs(x.S2)))
+                    self.backend.bk_sqrt(self.backend.bk_abs(x.S2)),backend=self.backend)
 
     def reduce_mean(self,x,axis=None):
         if axis is None:
-            return  (self.backend.bk_reduce_mean(x.P00)+
-                     self.backend.bk_reduce_mean(x.S0)+
-                     self.backend.bk_reduce_mean(x.S1)+
-                     self.backend.bk_reduce_mean(x.S2))/4
+            return  (self.backend.bk_abs(self.backend.bk_reduce_mean(x.P00))+
+                     self.backend.bk_abs(self.backend.bk_reduce_mean(x.S0))+
+                     self.backend.bk_abs(self.backend.bk_reduce_mean(x.S1))+
+                     self.backend.bk_abs(self.backend.bk_reduce_mean(x.S2)))/4.0
         else:
             return (self.backend.bk_reduce_mean(x.P00,axis=axis)+
                     self.backend.bk_reduce_mean(x.S0,axis=axis)+
                     self.backend.bk_reduce_mean(x.S1,axis=axis)+
-                    self.backend.bk_reduce_mean(x.S2,axis=axis))/4
+                    self.backend.bk_reduce_mean(x.S2,axis=axis))/4.0
 
     def reduce_sum(self,x,axis=None):
         if axis is None:
@@ -416,17 +453,17 @@ class funct(FOC.FoCUS):
             return scat(self.backend.bk_reduce_sum(x.P00,axis=axis),
                         self.backend.bk_reduce_sum(x.S0,axis=axis),
                         self.backend.bk_reduce_sum(x.S1,axis=axis),
-                        self.backend.bk_reduce_sum(x.S2,axis=axis))
+                        self.backend.bk_reduce_sum(x.S2,axis=axis),backend=self.backend)
             
 
     def log(self,x):
         return scat(self.backend.bk_log(x.P00),
                     self.backend.bk_log(x.S0),
                     self.backend.bk_log(x.S1),
-                    self.backend.bk_log(x.S2))
+                    self.backend.bk_log(x.S2),backend=self.backend)
     def inv(self,x):
-        return scat(1/(x.P00),1/(x.S0),1/(x.S1),1/(x.S2))
+        return scat(1/(x.P00),1/(x.S0),1/(x.S1),1/(x.S2),backend=self.backend)
 
     def one(self):
-        return scat(1.0,1.0,1.0,1.0)
+        return scat(1.0,1.0,1.0,1.0,backend=self.backend)
         

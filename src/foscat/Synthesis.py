@@ -209,7 +209,8 @@ class Synthesis:
         self.decay_rate = DECAY_RATE
         self.nlog=0
         
-
+        np.random.seed(self.mpi_rank*7+1234)
+            
         if self.operation.get_use_R():
             if axis==0:
                 x=self.operation.to_R_center(self.operation.backend.bk_cast(in_x),chans=self.operation.chans)
@@ -265,6 +266,7 @@ class Synthesis:
             g_tot=None
             l_tot=0.0
             tabidx=((np.random.randn(batchsz)*(totalsz)+0.49999).astype('int'))%totalsz
+            
             for k in range(self.number_of_loss):
                 if self.loss_class[k].batch is None:
                     l_batch=None
@@ -312,14 +314,14 @@ class Synthesis:
                 new_log[0:self.nlog]=self.history
                 self.history=new_log
                 
-            self.history[self.nlog]=ltot[ltot!=-1].sum()
+            self.history[self.nlog]=ltot[ltot!=-1].mean()
             self.nlog=self.nlog+1
                 
             x=x-self.update(grad)
             
             if itt%EVAL_FREQUENCY==0 and self.mpi_rank==0:
                 end = time.time()
-                cur_loss='%.3g ('%(ltot[ltot!=-1].sum())
+                cur_loss='%.3g ('%(ltot[ltot!=-1].mean())
                 for k in ltot[ltot!=-1]:
                     cur_loss=cur_loss+'%.3g '%(k)
                 cur_loss=cur_loss+')'
