@@ -66,7 +66,8 @@ class FoCUS:
         
         if isMPI:
             from mpi4py import MPI
-            
+
+            self.comm= MPI.COMM_WORLD
             if all_type=='float32':
                 self.MPI_ALL_TYPE=MPI.FLOAT
             else:
@@ -291,6 +292,13 @@ class FoCUS:
         # if chans=12 healpix sinon chans=1
 
         outname='BRD%d'%(self.R_off)
+                
+        #if self.Idx_Neighbours[nside] is None:
+        r_idx=self.init_index(nside,kernel=5)
+        r_idx2=self.init_index(nside,kernel=3)
+
+        self.barrier()
+        
         try:
             fidx =np.load('%s/%s_%d_%d_FIDX.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
             fidx1=np.load('%s/%s_%d_%d_FIDX1.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
@@ -298,137 +306,145 @@ class FoCUS:
             fidx3=np.load('%s/%s_%d_%d_FIDX3.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
             fidx4=np.load('%s/%s_%d_%d_FIDX4.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
         except:
-            nstep=int(np.log(nside)/np.log(2))
-            yy=(np.arange(chans*nside*nside)//nside)%nside
-            xx=nside-1-np.arange(chans*nside*nside)%nside
-            idx=(nside*nside)*(np.arange(chans*nside*nside)//(nside*nside))
-
-            if chans==12:
-                for i in range(nstep):
-                    idx=idx+(((xx)//(2**i))%2)*(4**i)+2*((yy//(2**i))%2)*(4**i)
-            else:
-                idx=yy*nside+nside-1-xx
-                
-            off=self.R_off
-
-            fidx=idx
-
-            if chans==12:
-                tab=np.array([[1,3,4,5],[2,0,5,6],[3,1,6,7],[0,2,7,4],
-                              [0,3,11,8],[1,0,8,9],[2,1,9,10],[3,2,10,11],
-                              [5,4,11,9],[6,5,8,10],[7,6,9,11],[4,7,10,8]])
-
-                #if self.Idx_Neighbours[nside] is None:
-                r_idx=self.init_index(nside,kernel=5)
-                r_idx2=self.init_index(nside,kernel=3)
-
-                fidx1=np.zeros([12,off,nside],dtype='int')
-                fidx2=np.zeros([12,off,nside],dtype='int')
-                fidx3=np.zeros([12,nside+2*off,off],dtype='int')
-                fidx4=np.zeros([12,nside+2*off,off],dtype='int')
-
-                lidx=np.arange(nside,dtype='int')
-                lidx2=np.arange(off*nside,dtype='int')
-
-                for i in range(0,4):
-                    fidx1[i,:,:]=(tab[i,3]*(nside*nside)+(nside-off+lidx2//nside)*nside+lidx2%nside).reshape(off,nside)
-                    fidx2[i,:,:]=(tab[i,1]*(nside*nside)+(nside-1-lidx2%nside)*nside+lidx2//nside).reshape(off,nside)
-                    fidx3[i,off:-off,:]=(tab[i,0]*(nside*nside)+(nside-off+lidx2%off)*nside+nside-1-lidx2//off).reshape(nside,off)
-                    fidx4[i,off:-off,:]=(tab[i,2]*(nside*nside)+(lidx2//off)*nside+lidx2%off).reshape(nside,off)
-
-                for i in range(4,8):
-                    fidx1[i,:,:]=(tab[i,3]*(nside*nside)+(nside-off+lidx2//nside)*nside+lidx2%nside).reshape(off,nside)
-                    fidx2[i,:,:]=(tab[i,1]*(nside*nside)+(lidx2//nside)*nside+lidx2%nside).reshape(off,nside)
-                    fidx3[i,off:-off,:]=(tab[i,0]*(nside*nside)+(lidx2//2)*nside+nside-off+lidx2%2).reshape(nside,off)
-                    fidx4[i,off:-off,:]=(tab[i,2]*(nside*nside)+(lidx2//2)*nside+lidx2%2).reshape(nside,off)
-
-                for i in range(8,12):
-                    fidx1[i,:,:]=(tab[i,3]*(nside*nside)+(nside-1-lidx2%nside)*nside+nside-off+lidx2//nside).reshape(off,nside)
-                    fidx2[i,:,:]=(tab[i,1]*(nside*nside)+(lidx2//nside)*nside+lidx2%nside).reshape(off,nside)
-                    fidx3[i,off:-off,:]=(tab[i,0]*(nside*nside)+(lidx2//2)*nside+nside-off+lidx2%2).reshape(nside,off)
-                    fidx4[i,off:-off,:]=(tab[i,2]*(nside*nside)+(lidx2%2)*nside+nside-1-lidx2//2).reshape(nside,off)
-
-                for k in range(12):
-                    lidx=fidx.reshape(12,nside,nside)[k,0,0]
-                    fidx3[k,0,0]=np.where(fidx==r_idx[lidx,24])[0]
-                    fidx3[k,0,1]=np.where(fidx==r_idx[lidx,23])[0]
-                    fidx3[k,1,0]=np.where(fidx==r_idx[lidx,19])[0]
-                    fidx3[k,1,1]=np.where(fidx==r_idx2[lidx,8])[0]
-                    #print('+++',k)
-                    #print(fidx.reshape(12,nside,nside)[k,0:3,0:3],':',fidx[fidx1[k,:,0:3]],':',fidx[fidx3[k,0:5,:]])
-                    #print(r_idx[lidx,:].reshape(5,5))
-                    #print(r_idx2[lidx,:].reshape(3,3))
-                    lidx=fidx.reshape(12,nside,nside)[k,-1,0]
-                    fidx3[k,-1,0]=np.where(fidx==r_idx[lidx,4])[0]
-                    fidx3[k,-1,1]=np.where(fidx==r_idx[lidx,3])[0]
-                    fidx3[k,-2,0]=np.where(fidx==r_idx[lidx,9])[0]
-                    fidx3[k,-2,1]=np.where(fidx==r_idx2[lidx,2])[0]
-                    #print('====',k)
-                    #print(fidx.reshape(12,nside,nside)[k,-3:,0:3],':',fidx[fidx2[k,:,0:3]],':',fidx[fidx3[k,-5:,:]])
-                    #print(r_idx[lidx,:].reshape(5,5))
-                    #print(r_idx2[lidx,:].reshape(3,3))
-                    #fidx4[k,off-1,0]=np.where(fidx==r_idx[lidx,6])[0]
-                    lidx=fidx.reshape(12,nside,nside)[k,0,-1]
-                    fidx4[k,0,0]=np.where(fidx==r_idx[lidx,21])[0]
-                    fidx4[k,0,1]=np.where(fidx==r_idx[lidx,20])[0]
-                    fidx4[k,1,1]=np.where(fidx==r_idx[lidx,15])[0]
-                    fidx4[k,1,0]=np.where(fidx==r_idx2[lidx,6])[0]
-                    #print('====',k)
-                    #print(fidx.reshape(12,nside,nside)[k,0:3,-3:],':',fidx[fidx1[k,:,-2:]],':',fidx[fidx4[k,0:5,:]])
-                    #print(r_idx[lidx,:].reshape(5,5))
-                    #print(r_idx2[lidx,:].reshape(3,3))
-                    #fidx4[k,off-1,0]=np.where(fidx==r_idx[lidx,6])[0]
-                    lidx=fidx.reshape(12,nside,nside)[k,-1,-1]
-                    fidx4[k,-1,1]=np.where(fidx==r_idx[lidx,0])[0]
-                    fidx4[k,-1,0]=np.where(fidx==r_idx[lidx,1])[0]
-                    fidx4[k,-2,1]=np.where(fidx==r_idx[lidx,5])[0]
-                    fidx4[k,-2,0]=np.where(fidx==r_idx2[lidx,0])[0]
-                    #print('+++',k)
-                    #print(fidx.reshape(12,nside,nside)[k,-3:,-3:],':',fidx[fidx2[k,:,-3:]],':',fidx[fidx4[k,-5:,:]])
-                    #print(r_idx[lidx,:].reshape(5,5))
-                    #print(r_idx2[lidx,:].reshape(3,3))
-                    #fidx4[k,-off,0]=np.where(fidx==r_idx[lidx,0])[0]
-
-                fidx = (fidx+12*nside*nside)%(12*nside*nside)
-                fidx1 = (fidx1+12*nside*nside)%(12*nside*nside)
-                fidx2 = (fidx2+12*nside*nside)%(12*nside*nside)
-                fidx3 = (fidx3+12*nside*nside)%(12*nside*nside)
-                fidx4 = (fidx4+12*nside*nside)%(12*nside*nside)
-            else:
-                ll_idx=np.arange(nside,dtype='int')
-                fidx1=np.zeros([1,off,nside],dtype='int')
-                fidx2=np.zeros([1,off,nside],dtype='int')
-                fidx3=np.zeros([1,nside+2*off,off],dtype='int')
-                fidx4=np.zeros([1,nside+2*off,off],dtype='int')
-                for i in range(2):
-                    fidx1[0,i,:] = (nside-off+i)*nside+ll_idx
-                    fidx2[0,i,:] = i*nside+ll_idx
-                    fidx3[0,off:-off,i] = nside-2+i+nside*ll_idx
-                    fidx4[0,off:-off,i] = i+nside*ll_idx
-
-                    for j in range(2):
-                        fidx3[0,j,i]=nside-2+i+nside*(nside-2+j)
-                        fidx3[0,nside+off+j,i]=nside-2+i+nside*(j)
-                        fidx4[0,j,i]=i+nside*(nside-2+j)
-                        fidx4[0,nside+off+j,i]=i+nside*(j)
-                    
-                fidx = (fidx+nside*nside)%(nside*nside)
-                fidx1 = (fidx1+nside*nside)%(nside*nside)
-                fidx2 = (fidx2+nside*nside)%(nside*nside)
-                fidx3 = (fidx3+nside*nside)%(nside*nside)
-                fidx4 = (fidx4+nside*nside)%(nside*nside)
             
-            np.save('%s/%s_%d_%d_FIDX.npy'%(self.TEMPLATE_PATH,outname,nside,chans),fidx)
-            print('%s/%s_%d_%d_FIDX.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
-            np.save('%s/%s_%d_%d_FIDX1.npy'%(self.TEMPLATE_PATH,outname,nside,chans),fidx1)
-            print('%s/%s_%d_%d_FIDX1.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
-            np.save('%s/%s_%d_%d_FIDX2.npy'%(self.TEMPLATE_PATH,outname,nside,chans),fidx2)
-            print('%s/%s_%d_%d_FIDX2.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
-            np.save('%s/%s_%d_%d_FIDX3.npy'%(self.TEMPLATE_PATH,outname,nside,chans),fidx3)
-            print('%s/%s_%d_%d_FIDX3.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
-            np.save('%s/%s_%d_%d_FIDX4.npy'%(self.TEMPLATE_PATH,outname,nside,chans),fidx4)
-            print('%s/%s_%d_%d_FIDX4.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
-            sys.stdout.flush()
+            if self.rank==0:
+                print('compute BR2 ',nside)
+                nstep=int(np.log(nside)/np.log(2))
+                yy=(np.arange(chans*nside*nside)//nside)%nside
+                xx=nside-1-np.arange(chans*nside*nside)%nside
+                idx=(nside*nside)*(np.arange(chans*nside*nside)//(nside*nside))
+
+                if chans==12:
+                    for i in range(nstep):
+                        idx=idx+(((xx)//(2**i))%2)*(4**i)+2*((yy//(2**i))%2)*(4**i)
+                else:
+                    idx=yy*nside+nside-1-xx
+
+                off=self.R_off
+
+                fidx=idx
+
+                if chans==12:
+                    tab=np.array([[1,3,4,5],[2,0,5,6],[3,1,6,7],[0,2,7,4],
+                                  [0,3,11,8],[1,0,8,9],[2,1,9,10],[3,2,10,11],
+                                  [5,4,11,9],[6,5,8,10],[7,6,9,11],[4,7,10,8]])
+
+
+                    fidx1=np.zeros([12,off,nside],dtype='int')
+                    fidx2=np.zeros([12,off,nside],dtype='int')
+                    fidx3=np.zeros([12,nside+2*off,off],dtype='int')
+                    fidx4=np.zeros([12,nside+2*off,off],dtype='int')
+
+                    lidx=np.arange(nside,dtype='int')
+                    lidx2=np.arange(off*nside,dtype='int')
+
+                    for i in range(0,4):
+                        fidx1[i,:,:]=(tab[i,3]*(nside*nside)+(nside-off+lidx2//nside)*nside+lidx2%nside).reshape(off,nside)
+                        fidx2[i,:,:]=(tab[i,1]*(nside*nside)+(nside-1-lidx2%nside)*nside+lidx2//nside).reshape(off,nside)
+                        fidx3[i,off:-off,:]=(tab[i,0]*(nside*nside)+(nside-off+lidx2%off)*nside+nside-1-lidx2//off).reshape(nside,off)
+                        fidx4[i,off:-off,:]=(tab[i,2]*(nside*nside)+(lidx2//off)*nside+lidx2%off).reshape(nside,off)
+
+                    for i in range(4,8):
+                        fidx1[i,:,:]=(tab[i,3]*(nside*nside)+(nside-off+lidx2//nside)*nside+lidx2%nside).reshape(off,nside)
+                        fidx2[i,:,:]=(tab[i,1]*(nside*nside)+(lidx2//nside)*nside+lidx2%nside).reshape(off,nside)
+                        fidx3[i,off:-off,:]=(tab[i,0]*(nside*nside)+(lidx2//2)*nside+nside-off+lidx2%2).reshape(nside,off)
+                        fidx4[i,off:-off,:]=(tab[i,2]*(nside*nside)+(lidx2//2)*nside+lidx2%2).reshape(nside,off)
+
+                    for i in range(8,12):
+                        fidx1[i,:,:]=(tab[i,3]*(nside*nside)+(nside-1-lidx2%nside)*nside+nside-off+lidx2//nside).reshape(off,nside)
+                        fidx2[i,:,:]=(tab[i,1]*(nside*nside)+(lidx2//nside)*nside+lidx2%nside).reshape(off,nside)
+                        fidx3[i,off:-off,:]=(tab[i,0]*(nside*nside)+(lidx2//2)*nside+nside-off+lidx2%2).reshape(nside,off)
+                        fidx4[i,off:-off,:]=(tab[i,2]*(nside*nside)+(lidx2%2)*nside+nside-1-lidx2//2).reshape(nside,off)
+
+                    for k in range(12):
+                        lidx=fidx.reshape(12,nside,nside)[k,0,0]
+                        fidx3[k,0,0]=np.where(fidx==r_idx[lidx,24])[0]
+                        fidx3[k,0,1]=np.where(fidx==r_idx[lidx,23])[0]
+                        fidx3[k,1,0]=np.where(fidx==r_idx[lidx,19])[0]
+                        fidx3[k,1,1]=np.where(fidx==r_idx2[lidx,8])[0]
+                        #print('+++',k)
+                        #print(fidx.reshape(12,nside,nside)[k,0:3,0:3],':',fidx[fidx1[k,:,0:3]],':',fidx[fidx3[k,0:5,:]])
+                        #print(r_idx[lidx,:].reshape(5,5))
+                        #print(r_idx2[lidx,:].reshape(3,3))
+                        lidx=fidx.reshape(12,nside,nside)[k,-1,0]
+                        fidx3[k,-1,0]=np.where(fidx==r_idx[lidx,4])[0]
+                        fidx3[k,-1,1]=np.where(fidx==r_idx[lidx,3])[0]
+                        fidx3[k,-2,0]=np.where(fidx==r_idx[lidx,9])[0]
+                        fidx3[k,-2,1]=np.where(fidx==r_idx2[lidx,2])[0]
+                        #print('====',k)
+                        #print(fidx.reshape(12,nside,nside)[k,-3:,0:3],':',fidx[fidx2[k,:,0:3]],':',fidx[fidx3[k,-5:,:]])
+                        #print(r_idx[lidx,:].reshape(5,5))
+                        #print(r_idx2[lidx,:].reshape(3,3))
+                        #fidx4[k,off-1,0]=np.where(fidx==r_idx[lidx,6])[0]
+                        lidx=fidx.reshape(12,nside,nside)[k,0,-1]
+                        fidx4[k,0,0]=np.where(fidx==r_idx[lidx,21])[0]
+                        fidx4[k,0,1]=np.where(fidx==r_idx[lidx,20])[0]
+                        fidx4[k,1,1]=np.where(fidx==r_idx[lidx,15])[0]
+                        fidx4[k,1,0]=np.where(fidx==r_idx2[lidx,6])[0]
+                        #print('====',k)
+                        #print(fidx.reshape(12,nside,nside)[k,0:3,-3:],':',fidx[fidx1[k,:,-2:]],':',fidx[fidx4[k,0:5,:]])
+                        #print(r_idx[lidx,:].reshape(5,5))
+                        #print(r_idx2[lidx,:].reshape(3,3))
+                        #fidx4[k,off-1,0]=np.where(fidx==r_idx[lidx,6])[0]
+                        lidx=fidx.reshape(12,nside,nside)[k,-1,-1]
+                        fidx4[k,-1,1]=np.where(fidx==r_idx[lidx,0])[0]
+                        fidx4[k,-1,0]=np.where(fidx==r_idx[lidx,1])[0]
+                        fidx4[k,-2,1]=np.where(fidx==r_idx[lidx,5])[0]
+                        fidx4[k,-2,0]=np.where(fidx==r_idx2[lidx,0])[0]
+                        #print('+++',k)
+                        #print(fidx.reshape(12,nside,nside)[k,-3:,-3:],':',fidx[fidx2[k,:,-3:]],':',fidx[fidx4[k,-5:,:]])
+                        #print(r_idx[lidx,:].reshape(5,5))
+                        #print(r_idx2[lidx,:].reshape(3,3))
+                        #fidx4[k,-off,0]=np.where(fidx==r_idx[lidx,0])[0]
+
+                    fidx = (fidx+12*nside*nside)%(12*nside*nside)
+                    fidx1 = (fidx1+12*nside*nside)%(12*nside*nside)
+                    fidx2 = (fidx2+12*nside*nside)%(12*nside*nside)
+                    fidx3 = (fidx3+12*nside*nside)%(12*nside*nside)
+                    fidx4 = (fidx4+12*nside*nside)%(12*nside*nside)
+                else:
+                    ll_idx=np.arange(nside,dtype='int')
+                    fidx1=np.zeros([1,off,nside],dtype='int')
+                    fidx2=np.zeros([1,off,nside],dtype='int')
+                    fidx3=np.zeros([1,nside+2*off,off],dtype='int')
+                    fidx4=np.zeros([1,nside+2*off,off],dtype='int')
+                    for i in range(2):
+                        fidx1[0,i,:] = (nside-off+i)*nside+ll_idx
+                        fidx2[0,i,:] = i*nside+ll_idx
+                        fidx3[0,off:-off,i] = nside-2+i+nside*ll_idx
+                        fidx4[0,off:-off,i] = i+nside*ll_idx
+
+                        for j in range(2):
+                            fidx3[0,j,i]=nside-2+i+nside*(nside-2+j)
+                            fidx3[0,nside+off+j,i]=nside-2+i+nside*(j)
+                            fidx4[0,j,i]=i+nside*(nside-2+j)
+                            fidx4[0,nside+off+j,i]=i+nside*(j)
+
+                    fidx = (fidx+nside*nside)%(nside*nside)
+                    fidx1 = (fidx1+nside*nside)%(nside*nside)
+                    fidx2 = (fidx2+nside*nside)%(nside*nside)
+                    fidx3 = (fidx3+nside*nside)%(nside*nside)
+                    fidx4 = (fidx4+nside*nside)%(nside*nside)
+
+                np.save('%s/%s_%d_%d_FIDX.npy'%(self.TEMPLATE_PATH,outname,nside,chans),fidx)
+                print('%s/%s_%d_%d_FIDX.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
+                np.save('%s/%s_%d_%d_FIDX1.npy'%(self.TEMPLATE_PATH,outname,nside,chans),fidx1)
+                print('%s/%s_%d_%d_FIDX1.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
+                np.save('%s/%s_%d_%d_FIDX2.npy'%(self.TEMPLATE_PATH,outname,nside,chans),fidx2)
+                print('%s/%s_%d_%d_FIDX2.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
+                np.save('%s/%s_%d_%d_FIDX3.npy'%(self.TEMPLATE_PATH,outname,nside,chans),fidx3)
+                print('%s/%s_%d_%d_FIDX3.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
+                np.save('%s/%s_%d_%d_FIDX4.npy'%(self.TEMPLATE_PATH,outname,nside,chans),fidx4)
+                print('%s/%s_%d_%d_FIDX4.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
+                sys.stdout.flush()
+
+        self.barrier()
+            
+        fidx =np.load('%s/%s_%d_%d_FIDX.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
+        fidx1=np.load('%s/%s_%d_%d_FIDX1.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
+        fidx2=np.load('%s/%s_%d_%d_FIDX2.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
+        fidx3=np.load('%s/%s_%d_%d_FIDX3.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
+        fidx4=np.load('%s/%s_%d_%d_FIDX4.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
             
         self.nest2R[nside]=fidx
         self.nest2R1[nside]=fidx1
@@ -980,6 +996,7 @@ class FoCUS:
         else:
             l_kernel=kernel
             
+        
         try:
             tmp=np.load('%s/W%d_%d_IDX.npy'%(self.TEMPLATE_PATH,l_kernel**2,nside))
         except:
@@ -993,9 +1010,9 @@ class FoCUS:
                 if self.rank==0:
                     print('Only 3x3 and 5x5 kernel have been developped for Healpix and you ask for %dx%d'%(KERNELSZ,KERNELSZ))
                     exit(0)
-            self.barrier()
-            tmp=np.load('%s/W%d_%d_IDX.npy'%(self.TEMPLATE_PATH,l_kernel**2,nside))
 
+        self.barrier()            
+        tmp=np.load('%s/W%d_%d_IDX.npy'%(self.TEMPLATE_PATH,l_kernel**2,nside))
                 
         if kernel==-1:
             if self.backend.BACKEND==self.backend.TORCH:

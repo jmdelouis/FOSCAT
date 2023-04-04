@@ -445,10 +445,10 @@ class funct(FOC.FoCUS):
 
     def reduce_sum(self,x,axis=None):
         if axis is None:
-            return  self.backend.bk_reduce_sum(x.P00)+ \
-                self.backend.bk_reduce_sum(x.S0)+ \
-                self.backend.bk_reduce_sum(x.S1)+ \
-                self.backend.bk_reduce_sum(x.S2)
+            return  self.backend.bk_reduce_sum(self.backend.bk_abs(x.P00))+ \
+                self.backend.bk_reduce_sum(self.backend.bk_abs(x.S0))+ \
+                self.backend.bk_reduce_sum(self.backend.bk_abs(x.S1))+ \
+                self.backend.bk_reduce_sum(self.backend.bk_abs(x.S2))
         else:
             return scat(self.backend.bk_reduce_sum(x.P00,axis=axis),
                         self.backend.bk_reduce_sum(x.S0,axis=axis),
