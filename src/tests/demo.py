@@ -187,7 +187,7 @@ def main():
         refX=scat_op.eval(im,image2=im,Imaginary=True,mask=mask)
     else:
         refX=scat_op.eval(im,mask=mask)
-    
+
     loss1=synthe.Loss(lossX,scat_op,refX,im,mask)
         
     sy = synthe.Synthesis([loss1])

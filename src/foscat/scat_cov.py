@@ -73,7 +73,7 @@ class scat_cov:
                 if other.C10 is None:
                     c10=None
                 else:
-                    c10 = self.C10 + other.C10
+                    c10 = self.doadd(self.C10 , other.C10)
             else:
                 c10 = self.C10 + other
 
@@ -113,7 +113,7 @@ class scat_cov:
                 if other.C10 is None:
                     c10 = None
                 else:
-                    c10 = self.C10 / other.C10
+                    c10 = self.dodiv(self.C10 , other.C10)
             else:
                 c10 = self.C10 / other
 
@@ -144,7 +144,7 @@ class scat_cov:
             c10 = None
         else:
             if isinstance(other, scat_cov):
-                c10 = other.C10 / self.C10
+                c10 = self.dodiv(other.C10 , self.C10)
             else:
                 c10 = other/self.C10
 
@@ -181,7 +181,7 @@ class scat_cov:
                 if other.C10 is None:
                     c10 = None
                 else:
-                    c10 = other.C10 - self.C10 
+                    c10 = self.domin(other.C10 , self.C10 )
             else:
                 c10 = other - self.C10
 
@@ -220,7 +220,7 @@ class scat_cov:
                 if other.C10 is None:
                     c10 = None
                 else:
-                    c10 = self.C10 - other.C10
+                    c10 = self.domin(self.C10 , other.C10)
             else:
                 c10 = self.C10 - other
 
@@ -294,14 +294,14 @@ class scat_cov:
                 if other.C10 is None:
                     c10 = None
                 else:
-                    c10 = self.C10 * other.C10
+                    c10 = self.domult(self.C10 , other.C10)
             else:
                 c10 = self.C10 * other
 
         if isinstance(other, scat_cov):
             return scat_cov(self.domult(self.P00,other.P00),
-                            (self.C01 * other.C01),
-                            (self.C11 * other.C11),
+                            self.domult(self.C01,other.C01),
+                            self.domult(self.C11,other.C11),
                             s1=s1, c10=c10,backend=self.backend)
         else:
             return scat_cov((self.P00 * other),
@@ -1014,14 +1014,14 @@ class funct(FOC.FoCUS):
     def reduce_mean(self, x):
         if isinstance(x, scat_cov):
             if x.S1 is None:
-                result = (self.backend.bk_reduce_mean(x.P00) + \
-                         self.backend.bk_reduce_mean(x.C01) + \
-                         self.backend.bk_reduce_mean(x.C11))/3
+                result = (self.backend.bk_reduce_mean(self.backend.bk_abs(x.P00)) + \
+                         self.backend.bk_reduce_mean(self.backend.bk_abs(x.C01)) + \
+                          self.backend.bk_reduce_mean(self.backend.bk_abs(x.C11)))/3
             else:
-                result = (self.backend.bk_reduce_mean(x.P00) + \
-                         self.backend.bk_reduce_mean(x.S1) + \
-                         self.backend.bk_reduce_mean(x.C01) + \
-                         self.backend.bk_reduce_mean(x.C11))/4
+                result = (self.backend.bk_reduce_mean(self.backend.bk_abs(x.P00)) + \
+                         self.backend.bk_reduce_mean(self.backend.bk_abs(x.S1)) + \
+                         self.backend.bk_reduce_mean(self.backend.bk_abs(x.C01)) + \
+                         self.backend.bk_reduce_mean(self.backend.bk_abs(x.C11)))/4
         else:
             return self.backend.bk_reduce_mean(x)
         return result
