@@ -461,6 +461,11 @@ class funct(FOC.FoCUS):
                     self.backend.bk_log(x.S0),
                     self.backend.bk_log(x.S1),
                     self.backend.bk_log(x.S2),backend=self.backend)
+    def abs(self,x):
+        return scat(self.backend.bk_abs(x.P00),
+                    self.backend.bk_abs(x.S0),
+                    self.backend.bk_abs(x.S1),
+                    self.backend.bk_abs(x.S2),backend=self.backend)
     def inv(self,x):
         return scat(1/(x.P00),1/(x.S0),1/(x.S1),1/(x.S2),backend=self.backend)
 
