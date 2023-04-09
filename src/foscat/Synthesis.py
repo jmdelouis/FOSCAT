@@ -122,8 +122,7 @@ class Synthesis:
             l=loss_function.eval(l_x,batch)
                 
             g=self.check_dense(tf.gradients(l,x)[0],ndata)
-            self.curr_gpu=self.curr_gpu+1
-            
+            self.curr_gpu=self.curr_gpu+1   
             
         return l,g
     #---------------------------------------------------------------
@@ -146,7 +145,7 @@ class Synthesis:
             grad=g_tot
         else:
             grad=np.zeros([g_tot.shape[0]],dtype='float32')
-            comm.Allreduce((g_tot.numpy(),MPI.FLOAT),(grad,MPI.FLOAT))
+            comm.Allreduce((g_tot.numpy(),self.MPI.FLOAT),(grad,self.MPI.FLOAT))
             
         operation=self.operation
         if operation.get_use_R():
@@ -189,6 +188,107 @@ class Synthesis:
             return(np.zeros([1,3]))
         
     # ---------------------------------------------−---------
+    def info_back(self,x):
+            
+        if self.itt%self.EVAL_FREQUENCY==0 and self.mpi_rank==0:
+            end = time.time()
+            cur_loss='%.3g ('%(self.ltot[self.ltot!=-1].mean())
+            for k in self.ltot[self.ltot!=-1]:
+                cur_loss=cur_loss+'%.3g '%(k)
+            cur_loss=cur_loss+')'
+                
+            mess=''
+            if self.itt2!=0:
+                mess=' LBFGS %d '%(self.itt2)
+                
+            if self.SHOWGPU:
+                info_gpu=self.getgpumem()
+                for k in range(info_gpu.shape[0]):
+                    mess=mess+'[GPU%d %.0f/%.0f MB %.0f%%]'%(k,info_gpu[k,0],info_gpu[k,1],info_gpu[k,2])
+                
+            print('%sItt %d L=%s %.3fs %s'%(self.MESSAGE,self.itt,cur_loss,(end-self.start),mess))
+            sys.stdout.flush()
+            self.start = time.time()
+        self.itt=self.itt+1
+        
+    # ---------------------------------------------−---------
+    def calc_grad(self,in_x):
+        
+        g_tot=None
+        l_tot=0.0
+
+        if self.noise_idx is None:
+            tabidx=((np.arange(self.batchsz)+self.itt+self.mpi_rank*self.batchsz).astype('int'))%self.totalsz
+        else:
+            tabidx=self.noise_idx
+        
+        x=self.operation.backend.bk_cast(self.operation.backend.bk_reshape(in_x,self.oshape))
+        
+        for k in range(self.number_of_loss):
+            if self.loss_class[k].batch is None:
+                l_batch=None
+            else:
+                l_batch=self.loss_class[k].batch(self.loss_class[k].batch_data,tabidx)
+
+            l,g=self.loss(x,l_batch,self.loss_class[k])
+
+            grd_mask=self.grd_mask
+            
+            if grd_mask is not None:
+                g=grd_mask*g.numpy()
+            else:
+                g=g.numpy()
+            
+            g[np.isnan(g)]=0.0
+            if g_tot is None:
+                g_tot=g
+            else:
+                g_tot=g_tot+g
+
+            l_tot=l_tot+l.numpy()
+
+            self.l_log[self.mpi_rank*self.MAXNUMLOSS+k]=l.numpy()
+
+        self.imin=self.imin+self.batchsz
+
+        if self.mpi_size==1:
+            self.ltot=self.l_log
+        else:
+            self.comm.Allreduce((self.l_log,self.MPI.FLOAT),(self.ltot,self.MPI.FLOAT))
+            
+
+        if self.mpi_size==1:
+            grad=g_tot
+        else:
+            
+            if g_tot.dtype=='complex64' or g_tot.dtype=='complex128':
+                grad=np.zeros(self.oshape,dtype=gtot.dtype)
+
+                self.comm.Allreduce((g_tot),(grad))
+            else:
+                grad=np.zeros(self.oshape,dtype='float64')
+
+                self.comm.Allreduce((g_tot.astype('float64'),self.MPI.DOUBLE),
+                                    (grad,self.MPI.DOUBLE))
+            
+        if self.nlog==self.history.shape[0]:
+            new_log=np.zeros([self.history.shape[0]*2])
+            new_log[0:self.nlog]=self.history
+            self.history=new_log
+
+        l_tot=self.ltot[self.ltot!=-1].mean()
+        self.history[self.nlog]=l_tot
+        self.nlog=self.nlog+1
+
+        g_tot=grad.flatten()
+
+        if g_tot.dtype=='complex64' or g_tot.dtype=='complex128':
+            return l_tot.astype('float64'),g_tot
+        
+        return l_tot.astype('float64'),g_tot.astype('float64')
+
+        
+    # ---------------------------------------------−---------
     def run(self,
             in_x,
             NUM_EPOCHS = 1000,
@@ -202,13 +302,25 @@ class Synthesis:
             MESSAGE='',
             batchsz=1,
             totalsz=1,
+            do_lbfgs=False,
             axis=0):
         
         self.eta=LEARNING_RATE
         self.epsilon=EPSILON
         self.decay_rate = DECAY_RATE
         self.nlog=0
-        
+        self.batchsz=batchsz
+        self.totalsz=totalsz
+        self.grd_mask=grd_mask
+        self.EVAL_FREQUENCY=EVAL_FREQUENCY
+        self.MESSAGE=MESSAGE
+        self.SHOWGPU=SHOWGPU
+        self.axis=axis
+
+        if do_lbfgs and (in_x.dtype=='complex64' or in_x.dtype=='complex128'):
+            print('L_BFGS minimisation not yet implemented for acomplex array, use default FOSCAT minimizer or convert your problem to float32 or float64')
+            exit(0)
+            
         np.random.seed(self.mpi_rank*7+1234)
             
         if self.operation.get_use_R():
@@ -230,8 +342,10 @@ class Synthesis:
         if self.mpi_size>1:
             print('Work with MPI')
             from mpi4py import MPI
-
+            
             comm = MPI.COMM_WORLD
+            self.comm=comm
+            self.MPI=MPI
             
         if self.mpi_rank==0 and SHOWGPU:
             # start thread that catch GPU information
@@ -258,84 +372,52 @@ class Synthesis:
         
         l_log=np.zeros([self.mpi_size*self.MAXNUMLOSS],dtype='float32')
         l_log[self.mpi_rank*self.MAXNUMLOSS:(self.mpi_rank+1)*self.MAXNUMLOSS]=-1.0
-        ltot=1.0*l_log
-
-        imin=0
+        self.ltot=l_log.copy()
+        self.l_log=l_log
         
-        for itt in range(NUM_EPOCHS):
-            g_tot=None
-            l_tot=0.0
-            tabidx=((np.random.randn(batchsz)*(totalsz)+0.49999).astype('int'))%totalsz
+        self.imin=0
+        self.start=time.time()
+        self.itt=0
+        
+        self.oshape=list(x.shape)
+        
+        if not isinstance(x,np.ndarray):
+            x=x.numpy()
             
-            for k in range(self.number_of_loss):
-                if self.loss_class[k].batch is None:
-                    l_batch=None
-                else:
-                    l_batch=self.loss_class[k].batch(self.loss_class[k].batch_data,tabidx)
+        x=x.flatten()
+
+        self.itt2=0
+        
+        if do_lbfgs:
+            import scipy.optimize as opt
+
+            self.noise_idx=((np.random.randn(self.batchsz)*(self.totalsz)+0.49999).astype('int'))%self.totalsz
+            
+            l_tot,g_tot=self.calc_grad(x)
+                
+            self.info_back(x)
+
+            while self.itt<NUM_EPOCHS:
+                self.noise_idx=None
+                x,l,i=opt.fmin_l_bfgs_b(self.calc_grad,x.astype('float64'),
+                                        callback=self.info_back,
+                                        pgtol=1E-32,
+                                        factr=0.0,
+                                        maxiter=NUM_EPOCHS)
+                
+                self.itt2=self.itt2+1
+        else:
+            for itt in range(NUM_EPOCHS):
+                
+                self.noise_idx=((np.random.randn(self.batchsz)*(self.totalsz)+0.49999).astype('int'))%self.totalsz
+                l_tot,g_tot=self.calc_grad(x)
+                
+                x=x-self.update(g_tot)
+                
+                self.info_back(x)
                     
-                l,g=self.loss(x,l_batch,self.loss_class[k])
-                
-                if grd_mask is not None:
-                    g=grd_mask*g.numpy()
-                else:
-                    g=g.numpy()
-                g[np.isnan(g)]=0.0
-                if g_tot is None:
-                    g_tot=g
-                else:
-                    g_tot=g_tot+g
-
-                    
-                l_tot=l_tot+l.numpy()
-            
-                l_log[self.mpi_rank*self.MAXNUMLOSS+k]=l.numpy()
-
-            imin=imin+batchsz
-            
-            if self.mpi_size==1:
-                ltot=l_log
-            else:
-                comm.Allreduce((l_log,MPI.FLOAT),(ltot,MPI.FLOAT))
-            
-
-            if self.mpi_size==1:
-                grad=g_tot
-            else:
-                if axis==0:
-                    grad=np.zeros([g_tot.shape[0]],dtype=self.operation.get_type())
-                else:
-                    grad=np.zeros([g_tot.shape[0],g_tot.shape[1]],dtype=self.operation.get_type())
-                    
-                comm.Allreduce((g_tot.astype(self.operation.get_type()),self.operation.get_mpi_type()),
-                               (grad,self.operation.get_mpi_type()))
-            
-            if self.nlog==self.history.shape[0]:
-                new_log=np.zeros([self.history.shape[0]*2])
-                new_log[0:self.nlog]=self.history
-                self.history=new_log
-                
-            self.history[self.nlog]=ltot[ltot!=-1].mean()
-            self.nlog=self.nlog+1
-                
-            x=x-self.update(grad)
-            
-            if itt%EVAL_FREQUENCY==0 and self.mpi_rank==0:
-                end = time.time()
-                cur_loss='%.3g ('%(ltot[ltot!=-1].mean())
-                for k in ltot[ltot!=-1]:
-                    cur_loss=cur_loss+'%.3g '%(k)
-                cur_loss=cur_loss+')'
-                
-                mess=''
-                if SHOWGPU:
-                    info_gpu=self.getgpumem()
-                    for k in range(info_gpu.shape[0]):
-                        mess=mess+'[GPU%d %.0f/%.0f MB %.0f%%]'%(k,info_gpu[k,0],info_gpu[k,1],info_gpu[k,2])
-                
-                print('%sItt %d L=%s %.3fs %s'%(MESSAGE,itt,cur_loss,(end-start),mess))
-                sys.stdout.flush()
-                start = time.time()
-
+        x=self.operation.backend.bk_reshape(x,self.oshape)
+        
         if self.mpi_rank==0 and SHOWGPU:
             self.stop_synthesis()
         

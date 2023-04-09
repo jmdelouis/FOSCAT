@@ -454,6 +454,12 @@ class funct(FOC.FoCUS):
                         self.backend.bk_reduce_sum(x.S0,axis=axis),
                         self.backend.bk_reduce_sum(x.S1,axis=axis),
                         self.backend.bk_reduce_sum(x.S2,axis=axis),backend=self.backend)
+        
+    def ldiff(self,sig,x):
+        return scat(self.backend.bk_abs(x.domult(sig.P00,x.P00)),
+                    x.domult(sig.S0,x.S0)*x.domult(sig.S0,x.S0),
+                    x.domult(sig.S1,x.S1)*x.domult(sig.S1,x.S1),
+                    x.domult(sig.S2,x.S2)*x.domult(sig.S2,x.S2),backend=self.backend)
             
 
     def log(self,x):
