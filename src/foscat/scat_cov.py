@@ -9,6 +9,8 @@ def read(filename):
     return thescat.read(filename)
 
 
+testwarn=0
+
 class scat_cov:
     def __init__(self, p00, c01, c11, s1=None, c10=None,backend=None):
         self.P00     = p00
@@ -76,17 +78,26 @@ class scat_cov:
                     c10 = self.doadd(self.C10 , other.C10)
             else:
                 c10 = self.C10 + other
+                
+        if self.C11 is None:
+            c11 = None
+        else:
+            if isinstance(other, scat_cov):
+                if other.C11 is None:
+                    c11 = None
+                else:
+                    c11 = self.doadd(self.C11, other.C11 )
+            else:
+                c11 = self.C11+other 
 
         if isinstance(other, scat_cov):
             return scat_cov(self.doadd(self.P00,other.P00),
                             (self.C01 + other.C01),
-                            (self.C11 + other.C11),
-                            s1=s1, c10=c10,backend=self.backend)
+                            c11,s1=s1, c10=c10,backend=self.backend)
         else:
             return scat_cov((self.P00 + other),
                             (self.C01 + other),
-                            (self.C11 + other),
-                            s1=s1, c10=c10,backend=self.backend)
+                            c11,s1=s1, c10=c10,backend=self.backend)
 
     def __radd__(self, other):
         return self.__add__(other)
@@ -116,17 +127,26 @@ class scat_cov:
                     c10 = self.dodiv(self.C10 , other.C10)
             else:
                 c10 = self.C10 / other
+                
+        if self.C11 is None:
+            c11 = None
+        else:
+            if isinstance(other, scat_cov):
+                if other.C11 is None:
+                    c11 = None
+                else:
+                    c11 = self.dodiv(self.C11, other.C11 )
+            else:
+                c11 = self.C11/other 
 
         if isinstance(other, scat_cov):
             return scat_cov(self.dodiv(self.P00,other.P00),
                             (self.C01 / other.C01),
-                            (self.C11 / other.C11),
-                            s1=s1, c10=c10,backend=self.backend)
+                            c11,s1=s1, c10=c10,backend=self.backend)
         else:
             return scat_cov((self.P00 / other),
                             (self.C01 / other),
-                            (self.C11 / other),
-                            s1=s1, c10=c10,backend=self.backend)
+                            c11,s1=s1, c10=c10,backend=self.backend)
 
     def __rtruediv__(self, other):
         assert isinstance(other, float)  or isinstance(other, np.float32) or isinstance(other, int) or \
@@ -147,12 +167,22 @@ class scat_cov:
                 c10 = self.dodiv(other.C10 , self.C10)
             else:
                 c10 = other/self.C10
+                
+        if self.C11 is None:
+            c11 = None
+        else:
+            if isinstance(other, scat_cov):
+                if other.C11 is None:
+                    c11 = None
+                else:
+                    c11 = self.dodiv( other.C11,self.C11 )
+            else:
+                c11 = other/self.C11
 
         if isinstance(other, scat_cov):
             return scat_cov(self.dodiv(other.P00,self.P00),
                             (other.C01 / self.C01),
-                            (other.C11 / self.C11),
-                            s1=s1, c10=c10,backend=self.backend)
+                            c11,s1=s1, c10=c10,backend=self.backend)
         else:
             return scat_cov((other/self.P00 ),
                             (other/self.C01 ),
@@ -160,6 +190,7 @@ class scat_cov:
                             s1=s1, c10=c10,backend=self.backend)
 
     def __rsub__(self, other):
+
         assert isinstance(other, float)  or isinstance(other, np.float32) or isinstance(other, int) or \
                isinstance(other, bool) or isinstance(other, scat_cov)
 
@@ -184,18 +215,27 @@ class scat_cov:
                     c10 = self.domin(other.C10 , self.C10 )
             else:
                 c10 = other - self.C10
+                
+        if self.C11 is None:
+            c11 = None
+        else:
+            if isinstance(other, scat_cov):
+                if other.C11 is None:
+                    c11 = None
+                else:
+                    c11 = self.domin( other.C11,self.C11 )
+            else:
+                c11 = other - self.C11
 
         if isinstance(other, scat_cov):
             return scat_cov(self.domin(other.P00,self.P00),
                             (other.C01 - self.C01),
-                            (other.C11 - self.C11),
-                            s1=s1, c10=c10,
+                            c11,s1=s1, c10=c10,
                             backend=self.backend)
         else:
             return scat_cov((other-self.P00),
                             (other-self.C01),
-                            (other-self.C11),
-                            s1=s1, c10=c10,
+                            c11,s1=s1, c10=c10,
                             backend=self.backend)
         
     def __sub__(self, other):
@@ -223,18 +263,29 @@ class scat_cov:
                     c10 = self.domin(self.C10 , other.C10)
             else:
                 c10 = self.C10 - other
+                
+        if self.C11 is None:
+            c11 = None
+        else:
+            if isinstance(other, scat_cov):
+                if other.C11 is None:
+                    c11 = None
+                else:
+                    c11 = self.domin(self.C11 , other.C11)
+            else:
+                c11 = self.C11 - other
 
         if isinstance(other, scat_cov):
             return scat_cov(self.domin(self.P00,other.P00),
                             (self.C01 - other.C01),
-                            (self.C11 - other.C11),
+                            c11,
                             s1=s1, c10=c10,backend=self.backend)
         else:
             return scat_cov((self.P00 - other),
                             (self.C01 - other),
-                            (self.C11 - other),
+                            c11,
                             s1=s1, c10=c10,backend=self.backend)
-
+        
     def domult(self,x,y):
         if x.dtype==y.dtype:
             return x*y
@@ -298,15 +349,26 @@ class scat_cov:
             else:
                 c10 = self.C10 * other
 
+        if self.C11 is None:
+            c11 = None
+        else:
+            if isinstance(other, scat_cov):
+                if other.C11 is None:
+                    c11 = None
+                else:
+                    c11 = self.domult(self.C11 , other.C11)
+            else:
+                c11 = self.C11 * other
+
         if isinstance(other, scat_cov):
             return scat_cov(self.domult(self.P00,other.P00),
                             self.domult(self.C01,other.C01),
-                            self.domult(self.C11,other.C11),
+                            c11,
                             s1=s1, c10=c10,backend=self.backend)
         else:
             return scat_cov((self.P00 * other),
                             (self.C01 * other),
-                            (self.C11 * other),
+                            c11,
                             s1=s1, c10=c10,backend=self.backend)
 
     
@@ -361,10 +423,11 @@ class scat_cov:
         plt.legend()
 
     def get_np(self, x):
-        if isinstance(x, np.ndarray):
-            return x
-        else:
-            return x.numpy()
+        if x is not None:
+            if isinstance(x, np.ndarray):
+                return x
+            else:
+                return x.numpy()
         
     def save(self, filename):
         if self.S1 is not None:  # Auto
@@ -924,7 +987,7 @@ class funct(FOC.FoCUS):
             self.P1_dic = P1_dic
             if cross:
                 self.P2_dic = P2_dic
-
+            
         if not cross:
             return scat_cov(P00, C01, C11, s1=S1,backend=self.backend)
         else:
@@ -1042,6 +1105,22 @@ class funct(FOC.FoCUS):
             return self.backend.bk_reduce_sum(x)
         return result
 
+        
+    def ldiff(self,sig,x):
+
+                
+        if x.S1 is None:
+            return scat_cov(self.backend.bk_abs(x.domult(sig.P00,x.P00)),
+                            x.domult(sig.C01,x.C01)*x.domult(sig.C01,x.C01),
+                            x.domult(sig.C11,x.C11)*x.domult(sig.C11,x.C11),
+                            backend=self.backend)
+        else:
+            return scat_cov(self.backend.bk_abs(x.domult(sig.P00,x.P00)),
+                            x.domult(sig.S1,x.S1)*x.domult(sig.S1,x.S1),
+                            x.domult(sig.C01,x.C01)*x.domult(sig.C01,x.C01),
+                            x.domult(sig.C11,x.C11)*x.domult(sig.C11,x.C11),
+                            backend=self.backend)
+    
     def log(self, x):
         if isinstance(x, scat_cov):
 
