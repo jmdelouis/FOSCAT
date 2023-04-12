@@ -217,37 +217,52 @@ class Synthesis:
         g_tot=None
         l_tot=0.0
 
-        if self.noise_idx is None:
-            tabidx=((np.arange(self.batchsz)+self.itt+self.mpi_rank*self.batchsz).astype('int'))%self.totalsz
+        if self.do_all_noise and self.totalsz>self.batchsz:
+            nstep=self.totalsz//self.batchsz
         else:
-            tabidx=self.noise_idx
-        
+            nstep=1
+
         x=self.operation.backend.bk_cast(self.operation.backend.bk_reshape(in_x,self.oshape))
+
+        self.l_log[self.mpi_rank*self.MAXNUMLOSS:(self.mpi_rank+1)*self.MAXNUMLOSS]=-1.0
         
-        for k in range(self.number_of_loss):
-            if self.loss_class[k].batch is None:
-                l_batch=None
+        for istep in range(nstep):
+            if self.noise_idx is None:
+                tabidx=((np.arange(self.batchsz)+istep*self.batchsz).astype('int'))%self.totalsz
             else:
-                l_batch=self.loss_class[k].batch(self.loss_class[k].batch_data,tabidx)
-
-            l,g=self.loss(x,l_batch,self.loss_class[k])
-
-            grd_mask=self.grd_mask
+                tabidx=self.noise_idx
             
-            if grd_mask is not None:
-                g=grd_mask*g.numpy()
-            else:
-                g=g.numpy()
+        
+            for k in range(self.number_of_loss):
+                if self.loss_class[k].batch is None:
+                    l_batch=None
+                else:
+                    l_batch=self.loss_class[k].batch(self.loss_class[k].batch_data,tabidx)
+
+                l,g=self.loss(x,l_batch,self.loss_class[k])
+
+                if g_tot is None:
+                    g_tot=g
+                else:
+                    g_tot=g_tot+g
+
+                l_tot=l_tot+l.numpy()
+
+                if self.l_log[self.mpi_rank*self.MAXNUMLOSS+k]==-1:
+                    self.l_log[self.mpi_rank*self.MAXNUMLOSS+k]=l.numpy()/nstep
+                else:
+                    self.l_log[self.mpi_rank*self.MAXNUMLOSS+k]=self.l_log[self.mpi_rank*self.MAXNUMLOSS+k]+l.numpy()/nstep
+
+        
+        grd_mask=self.grd_mask
             
-            g[np.isnan(g)]=0.0
-            if g_tot is None:
-                g_tot=g
-            else:
-                g_tot=g_tot+g
-
-            l_tot=l_tot+l.numpy()
-
-            self.l_log[self.mpi_rank*self.MAXNUMLOSS+k]=l.numpy()
+        if grd_mask is not None:
+            g_tot=grd_mask*g_tot.numpy()
+        else:
+            g_tot=g_tot.numpy()
+            
+        g_tot[np.isnan(g_tot)]=0.0
+        
 
         self.imin=self.imin+self.batchsz
 
@@ -388,23 +403,29 @@ class Synthesis:
 
         self.itt2=0
         
+        self.do_all_noise=False
+            
         if do_lbfgs:
             import scipy.optimize as opt
+            
+            self.do_all_noise=True
 
-            self.noise_idx=((np.random.randn(self.batchsz)*(self.totalsz)+0.49999).astype('int'))%self.totalsz
+            self.noise_idx=None
             
             l_tot,g_tot=self.calc_grad(x)
                 
             self.info_back(x)
 
+            maxitt=NUM_EPOCHS
+            
+            
             while self.itt<NUM_EPOCHS:
-                self.noise_idx=None
+
                 x,l,i=opt.fmin_l_bfgs_b(self.calc_grad,x.astype('float64'),
                                         callback=self.info_back,
                                         pgtol=1E-32,
                                         factr=0.0,
-                                        maxiter=NUM_EPOCHS)
-                
+                                        maxiter=maxitt)
                 self.itt2=self.itt2+1
         else:
             for itt in range(NUM_EPOCHS):
