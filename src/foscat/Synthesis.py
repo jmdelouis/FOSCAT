@@ -190,11 +190,14 @@ class Synthesis:
     # ---------------------------------------------−---------
     def info_back(self,x):
             
+        self.nlog=self.nlog+1
+        
         if self.itt%self.EVAL_FREQUENCY==0 and self.mpi_rank==0:
             end = time.time()
             cur_loss='%.3g ('%(self.ltot[self.ltot!=-1].mean())
             for k in self.ltot[self.ltot!=-1]:
                 cur_loss=cur_loss+'%.3g '%(k)
+                
             cur_loss=cur_loss+')'
                 
             mess=''
@@ -209,6 +212,7 @@ class Synthesis:
             print('%sItt %d L=%s %.3fs %s'%(self.MESSAGE,self.itt,cur_loss,(end-self.start),mess))
             sys.stdout.flush()
             self.start = time.time()
+            
         self.itt=self.itt+1
         
     # ---------------------------------------------−---------
@@ -216,7 +220,7 @@ class Synthesis:
         
         g_tot=None
         l_tot=0.0
-
+        
         if self.do_all_noise and self.totalsz>self.batchsz:
             nstep=self.totalsz//self.batchsz
         else:
@@ -252,8 +256,7 @@ class Synthesis:
                     self.l_log[self.mpi_rank*self.MAXNUMLOSS+k]=l.numpy()/nstep
                 else:
                     self.l_log[self.mpi_rank*self.MAXNUMLOSS+k]=self.l_log[self.mpi_rank*self.MAXNUMLOSS+k]+l.numpy()/nstep
-
-        
+                
         grd_mask=self.grd_mask
             
         if grd_mask is not None:
@@ -293,7 +296,6 @@ class Synthesis:
 
         l_tot=self.ltot[self.ltot!=-1].mean()
         self.history[self.nlog]=l_tot
-        self.nlog=self.nlog+1
 
         g_tot=grad.flatten()
 

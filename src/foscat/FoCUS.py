@@ -1106,8 +1106,13 @@ class FoCUS:
 
             if l_x.get().dtype==self.all_cbk_type:
                 l_mask=self.backend.bk_complex(l_mask,0*l_mask)
-                
-            return self.backend.bk_reduce_sum(self.backend.bk_reduce_sum(self.backend.bk_reduce_sum(l_mask*l_x.get(),axis=axis+1),axis=axis+1),axis=axis+1)/(12*nside*nside)
+
+            shape1=list(l_mask.shape)
+            shape2=list(l_x.get().shape)
+            oshape1=shape1[0:axis+1]+[shape1[axis+3]*shape1[axis+1]*shape1[axis+2]]+shape1[axis+4:]
+            oshape2=shape2[0:axis+1]+[shape2[axis+3]*shape2[axis+1]*shape2[axis+2]]+shape2[axis+4:]
+            
+            return self.backend.bk_reduce_sum(self.backend.bk_reshape(l_mask,oshape1)*self.backend.bk_reshape(l_x.get(),oshape2),axis=axis+1)/(12*nside*nside)
         else:
             for i in range(axis+1,len(x.shape)):
                 l_mask=self.backend.bk_expand_dims(l_mask,-1)

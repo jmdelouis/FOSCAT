@@ -1110,12 +1110,12 @@ class funct(FOC.FoCUS):
 
                 
         if x.S1 is None:
-            return scat_cov(self.backend.bk_abs(x.domult(sig.P00,x.P00)),
+            return scat_cov(x.domult(sig.P00,x.P00)*x.domult(sig.P00,x.P00),
                             x.domult(sig.C01,x.C01)*x.domult(sig.C01,x.C01),
                             x.domult(sig.C11,x.C11)*x.domult(sig.C11,x.C11),
                             backend=self.backend)
         else:
-            return scat_cov(self.backend.bk_abs(x.domult(sig.P00,x.P00)),
+            return scat_cov(x.domult(sig.P00,x.P00)*x.domult(sig.P00,x.P00),
                             x.domult(sig.S1,x.S1)*x.domult(sig.S1,x.S1),
                             x.domult(sig.C01,x.C01)*x.domult(sig.C01,x.C01),
                             x.domult(sig.C11,x.C11)*x.domult(sig.C11,x.C11),
