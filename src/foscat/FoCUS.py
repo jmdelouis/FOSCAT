@@ -1087,7 +1087,7 @@ class FoCUS:
         if self.use_R_format:
             nside=mask.nside
             if self.remove_border[nside] is None:
-                self.remove_border[nside]=np.ones([1,12,nside+2*self.R_off,nside+2*self.R_off])
+                self.remove_border[nside]=np.ones([1,shape[axis-1],nside+2*self.R_off,nside+2*self.R_off])
                 self.remove_border[nside][0,:,0:self.R_off,:]=0.0
                 self.remove_border[nside][0,:,-self.R_off:,:]=0.0
                 self.remove_border[nside][0,:,:,0:self.R_off]=0.0
@@ -1109,6 +1109,7 @@ class FoCUS:
 
             shape1=list(l_mask.shape)
             shape2=list(l_x.get().shape)
+
             oshape1=shape1[0:axis+1]+[shape1[axis+3]*shape1[axis+1]*shape1[axis+2]]+shape1[axis+4:]
             oshape2=shape2[0:axis+1]+[shape2[axis+3]*shape2[axis+1]*shape2[axis+2]]+shape2[axis+4:]
             
