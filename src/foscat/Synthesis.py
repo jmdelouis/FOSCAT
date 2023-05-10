@@ -191,6 +191,7 @@ class Synthesis:
     def info_back(self,x):
             
         self.nlog=self.nlog+1
+        self.itt2=0
         
         if self.itt%self.EVAL_FREQUENCY==0 and self.mpi_rank==0:
             end = time.time()
@@ -326,6 +327,7 @@ class Synthesis:
         self.epsilon=EPSILON
         self.decay_rate = DECAY_RATE
         self.nlog=0
+        self.itt2=0
         self.batchsz=batchsz
         self.totalsz=totalsz
         self.grd_mask=grd_mask
@@ -419,16 +421,12 @@ class Synthesis:
             self.info_back(x)
 
             maxitt=NUM_EPOCHS
-            
-            
-            while self.itt<NUM_EPOCHS:
 
-                x,l,i=opt.fmin_l_bfgs_b(self.calc_grad,x.astype('float64'),
-                                        callback=self.info_back,
-                                        pgtol=1E-32,
-                                        factr=0.0,
-                                        maxiter=maxitt)
-                self.itt2=self.itt2+1
+            x,l,i=opt.fmin_l_bfgs_b(self.calc_grad,x.astype('float64'),
+                                    callback=self.info_back,
+                                    pgtol=1E-32,
+                                    factr=10.0,
+                                    maxiter=maxitt)
         else:
             for itt in range(NUM_EPOCHS):
                 
