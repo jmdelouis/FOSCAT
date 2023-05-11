@@ -158,7 +158,7 @@ class scat_cov:
             if isinstance(other, scat_cov):
                 s1 = other.S1 / self.S1
             else:
-                s1 = other.S1 / other
+                s1 = other/self.S1
 
         if self.C10 is None:
             c10 = None
