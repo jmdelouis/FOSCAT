@@ -256,6 +256,60 @@ class scat:
 
     def mean(self):
         return abs(self.get_np(self.S0).mean()+self.get_np(self.S1).mean()+self.get_np(self.S2).mean()+self.get_np(self.P00).mean())/3
+
+    def findn(self,n):
+        d=np.sqrt(1+8*n)
+        return int((d-1)/2)
+
+    def findidx(self):
+        s2=self.S2.numpy()
+        i1=np.zeros([s2.shape[1]],dtype='int')
+        i2=np.zeros([s2.shape[1]],dtype='int')
+        n=0
+        for k in range(self.findn(s2.shape[1])):
+            i1[n:n+k+1]=np.arange(k+1)
+            i2[n:n+k+1]=k
+            n=n+k+1
+        return i1,i2
+
+    def extrapols2(self,add):
+        s2=self.S2.numpy()
+        i1,i2=self.findidx(s2)
+
+        so2=np.zeros([s2.shape[0],(findn(s2.shape[1])+add)*(findn(s2.shape[1])+add+1)//2,s2.shape[2],s2.shape[3]])
+        oi1,oi2=self.findidx(so2)
+        for l in range(s2.shape[0]):
+            for k in range(self.findn(s2.shape[1])):
+                for i in range(s2.shape[2]):
+                    for j in range(s2.shape[3]):
+                        tmp=model(s2[l,i2==k,i,j],dx=4,dell=1,add=add,weigth=np.array([1,2,2,2]))
+                        so2[l,oi2==k+add,i,j]=tmp
+
+
+        for l in range(s2.shape[0]):
+            for k in range(add+1,-1,-1):
+                lidx=np.where(oi2-oi1==k)[0]
+                lidx2=np.where(oi2-oi1==k+1)[0]
+                for i in range(s2.shape[2]):
+                    for j in range(s2.shape[3]):
+                        so2[l,lidx[0:add+2-k],i,j]=so2[l,lidx2[0:add+2-k],i,j]
+
+        return(so2)
+
+    def extrapol_s1(self,i_s1,add):
+        s1=i_s1.numpy()
+        so1=np.zeros([s1.shape[0],s1.shape[1]+add,s1.shape[2]])
+        for i in range(s1.shape[2]):
+            so1[0,:,i]=model(s1[0,:,i],dx=4,dell=1,add=3)
+        return so1
+
+    def extrapol(self,add):
+        return scat(self.extrapol_s1(add,self.P00), \
+                    self.S0, \
+                    self.extrapol_s1(add,self.S1), \
+                    self.extrapol_s2(add),backend=self.backend)
+        
+        
         
         
     
@@ -344,9 +398,15 @@ class funct(FOC.FoCUS):
         
         if cross and Auto==False:
             if len(image1.shape)==1 or (len(image1.shape)==3 and isinstance(image1,Rformat.Rformat)):
-                s0 = self.backend.bk_complex(s0,self.masked_mean(l_image2,vmask,axis=axis)+s0_off)
+                if s0.dtype!='complex64' and s0.dtype!='complex128':
+                    s0 = self.backend.bk_complex(s0,self.masked_mean(l_image2,vmask,axis=axis)+s0_off)
+                else:
+                    s0 = self.backend.bk_concat([s0,self.masked_mean(l_image2,vmask,axis=axis)],axis=0)
             else:
-                s0 = self.backend.bk_complex(s0,self.masked_mean(l_image2,vmask,axis=axis)+s0_off)
+                if s0.dtype!='complex64' and s0.dtype!='complex128':
+                    s0 = self.backend.bk_complex(s0,self.masked_mean(l_image2,vmask,axis=axis)+s0_off)
+                else:
+                    s0 = self.backend.bk_concat([s0,self.masked_mean(l_image2,vmask,axis=axis)],axis=0)
 
         s1=None
         s2=None

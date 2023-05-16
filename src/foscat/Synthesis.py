@@ -191,6 +191,7 @@ class Synthesis:
     def info_back(self,x):
             
         self.nlog=self.nlog+1
+        self.itt2=0
         
         if self.itt%self.EVAL_FREQUENCY==0 and self.mpi_rank==0:
             end = time.time()
@@ -324,6 +325,7 @@ class Synthesis:
         self.epsilon=EPSILON
         self.decay_rate = DECAY_RATE
         self.nlog=0
+        self.itt2=0
         self.batchsz=batchsz
         self.totalsz=totalsz
         self.grd_mask=grd_mask
@@ -420,7 +422,7 @@ class Synthesis:
                                     x.astype('float64'),
                                     callback=self.info_back,
                                     pgtol=1E-32,
-                                    factr=1000.0,
+                                    factr=10.0,
                                     maxiter=maxitt)
         else:
             for itt in range(NUM_EPOCHS):
