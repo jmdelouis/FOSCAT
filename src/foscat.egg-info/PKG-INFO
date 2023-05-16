@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: foscat
-Version: 2.0.2
+Version: 2.0.3
 Summary: Generate synthetic Healpix or 2D data using Cross Scattering Transform
 Home-page: https://github.com/jmdelouis/FOSCAT
 Author: Jean-Marc DELOUIS
@@ -13,4 +13,4 @@ Keywords: Scattering transform,Component separation,denoising
 Utilize the Cross Scattering Transform (described in https://arxiv.org/abs/2207.12527) to synthesize Healpix or 2D data that is suitable for component separation purposes, such as denoising. 
  A demo package for this process can be found at https://github.com/jmdelouis/FOSCAT_DEMO. 
 
- List of developers : J.-M. Delouis, T. Foulqieur, L. Mousset, E. Allys 
+ List of developers : J.-M. Delouis, T. Foulquier, L. Mousset, E. Allys 

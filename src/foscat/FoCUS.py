@@ -1353,6 +1353,51 @@ class FoCUS:
             plt.imshow(s[:,i].reshape(npt,npt),cmap='jet',vmin=-c.max(),vmax=c.max())
             sys.stdout.flush()
         plt.show()
+
+    # ---------------------------------------------−---------
+    def model(i__y,add=0,dx=3,dell=2,weigth=None,inverse=False):
+
+        if i__y.shape[0]<dx+1:
+            l__dx=i__y.shape[0]-1
+        else:
+            l__dx=dx
+
+        if i__y.shape[0]<dell:
+            l__dell=0
+        else:
+            l__dell=dell
+
+        if l__dx<2:
+            res=np.zeros([i__y.shape[0]+add])
+            if inverse:
+                res[:-add]=i__y
+            else:
+                res[add:]=i__y[0:]
+            return res
+
+        if weigth is None:
+            w=2**(np.arange(l__dx))
+        else:
+            if not inverse:
+                w=weigth[0:l__dx]
+            else:
+                w=weigth[-l__dx:]
+
+        x=np.arange(l__dx)+1
+        if not inverse:
+            y=np.log(i__y[1:l__dx+1])
+        else:
+            y=np.log(i__y[-(l__dx+1):-1])
+
+        r=np.polyfit(x,y,1,w=w)
+
+        if inverse:
+            res=np.exp(r[0]*(np.arange(i__y.shape[0]+add)-1)+r[1])
+            res[:-(l__dell+add)]=i__y[:-l__dell]
+        else:
+            res=np.exp(r[0]*(np.arange(i__y.shape[0]+add)-add)+r[1])
+            res[l__dell+add:]=i__y[l__dell:]
+        return res
         
     
     
