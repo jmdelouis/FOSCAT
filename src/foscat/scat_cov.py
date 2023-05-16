@@ -1108,18 +1108,30 @@ class funct(FOC.FoCUS):
         
     def ldiff(self,sig,x):
 
-                
         if x.S1 is None:
-            return scat_cov(x.domult(sig.P00,x.P00)*x.domult(sig.P00,x.P00),
-                            x.domult(sig.C01,x.C01)*x.domult(sig.C01,x.C01),
-                            x.domult(sig.C11,x.C11)*x.domult(sig.C11,x.C11),
-                            backend=self.backend)
+            if x.C11 is not None:
+                return scat_cov(x.domult(sig.P00,x.P00)*x.domult(sig.P00,x.P00),
+                                x.domult(sig.C01,x.C01)*x.domult(sig.C01,x.C01),
+                                x.domult(sig.C11,x.C11)*x.domult(sig.C11,x.C11),
+                                backend=self.backend)
+            else:
+                return scat_cov(x.domult(sig.P00,x.P00)*x.domult(sig.P00,x.P00),
+                                x.domult(sig.C01,x.C01)*x.domult(sig.C01,x.C01),
+                                0*sig.C01,
+                                backend=self.backend)
         else:
-            return scat_cov(x.domult(sig.P00,x.P00)*x.domult(sig.P00,x.P00),
-                            x.domult(sig.S1,x.S1)*x.domult(sig.S1,x.S1),
-                            x.domult(sig.C01,x.C01)*x.domult(sig.C01,x.C01),
-                            x.domult(sig.C11,x.C11)*x.domult(sig.C11,x.C11),
-                            backend=self.backend)
+            if x.C11 is None:
+                return scat_cov(x.domult(sig.P00,x.P00)*x.domult(sig.P00,x.P00),
+                                x.domult(sig.S1,x.S1)*x.domult(sig.S1,x.S1),
+                                x.domult(sig.C01,x.C01)*x.domult(sig.C01,x.C01),
+                                0*sig.S1,
+                                backend=self.backend)
+            else:
+                return scat_cov(x.domult(sig.P00,x.P00)*x.domult(sig.P00,x.P00),
+                                x.domult(sig.S1,x.S1)*x.domult(sig.S1,x.S1),
+                                x.domult(sig.C01,x.C01)*x.domult(sig.C01,x.C01),
+                                x.domult(sig.C11,x.C11)*x.domult(sig.C11,x.C11),
+                                backend=self.backend)
     
     def log(self, x):
         if isinstance(x, scat_cov):

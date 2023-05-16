@@ -201,8 +201,6 @@ class Synthesis:
             cur_loss=cur_loss+')'
                 
             mess=''
-            if self.itt2!=0:
-                mess=' LBFGS %d '%(self.itt2)
                 
             if self.SHOWGPU:
                 info_gpu=self.getgpumem()
@@ -403,8 +401,6 @@ class Synthesis:
             
         x=x.flatten()
 
-        self.itt2=0
-        
         self.do_all_noise=False
             
         if do_lbfgs:
@@ -420,15 +416,12 @@ class Synthesis:
 
             maxitt=NUM_EPOCHS
             
-            
-            while self.itt<NUM_EPOCHS:
-
-                x,l,i=opt.fmin_l_bfgs_b(self.calc_grad,x.astype('float64'),
-                                        callback=self.info_back,
-                                        pgtol=1E-32,
-                                        factr=0.0,
-                                        maxiter=maxitt)
-                self.itt2=self.itt2+1
+            x,l,i=opt.fmin_l_bfgs_b(self.calc_grad,
+                                    x.astype('float64'),
+                                    callback=self.info_back,
+                                    pgtol=1E-32,
+                                    factr=1000.0,
+                                    maxiter=maxitt)
         else:
             for itt in range(NUM_EPOCHS):
                 
