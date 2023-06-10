@@ -99,6 +99,31 @@ class scat_cov:
                             (self.C01 + other),
                             c11,s1=s1, c10=c10,backend=self.backend)
 
+    
+    def relu(self):
+
+        if self.S1 is None:
+            s1 = None
+        else:
+            s1 = self.backend.bk_relu(self.S1)
+
+        if self.C10 is None:
+            c10 = None
+        else:
+            c10 = self.backend.bk_relu(self.c10)
+                
+        if self.C11 is None:
+            c11 = None
+        else:
+            c11 = self.backend.bk_relu(self.c11)
+
+        return scat_cov(self.backend.bk_relu(self.P00),
+                        self.backend.bk_relu(self.C01),
+                        c11,
+                        s1=s1, 
+                        c10=c10,
+                        backend=self.backend)
+
     def __radd__(self, other):
         return self.__add__(other)
     
@@ -1132,6 +1157,7 @@ class funct(FOC.FoCUS):
                                 x.domult(sig.C01,x.C01)*x.domult(sig.C01,x.C01),
                                 x.domult(sig.C11,x.C11)*x.domult(sig.C11,x.C11),
                                 backend=self.backend)
+
     
     def log(self, x):
         if isinstance(x, scat_cov):

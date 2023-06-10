@@ -10,7 +10,12 @@ from threading import Event
 
 class Loss:
     
-    def __init__(self,function,scat_operator,*param,Rformat=True,name='',batch=None,batch_data=None):
+    def __init__(self,function,scat_operator,*param,
+                 Rformat=True,
+                 name='',
+                 batch=None,
+                 batch_data=None,
+                 batch_update=None):
 
         self.loss_function=function
         self.scat_operator=scat_operator
@@ -19,6 +24,7 @@ class Loss:
         self.name=name
         self.batch=batch
         self.batch_data=batch_data
+        self.batch_update=batch_update
 
     def eval(self,x,batch):
         if self.batch is None:
@@ -230,17 +236,12 @@ class Synthesis:
         self.l_log[self.mpi_rank*self.MAXNUMLOSS:(self.mpi_rank+1)*self.MAXNUMLOSS]=-1.0
         
         for istep in range(nstep):
-            if self.noise_idx is None:
-                tabidx=((np.arange(self.batchsz)+istep*self.batchsz).astype('int'))%self.totalsz
-            else:
-                tabidx=self.noise_idx
             
-        
             for k in range(self.number_of_loss):
                 if self.loss_class[k].batch is None:
                     l_batch=None
                 else:
-                    l_batch=self.loss_class[k].batch(self.loss_class[k].batch_data,tabidx)
+                    l_batch=self.loss_class[k].batch(self.loss_class[k].batch_data,istep)
 
                 l,g=self.loss(x,l_batch,self.loss_class[k])
 
@@ -303,7 +304,28 @@ class Synthesis:
         
         return l_tot.astype('float64'),g_tot.astype('float64')
 
+    # ---------------------------------------------−---------
+    def xtractmap(self,x,axis):
+        x=self.operation.backend.bk_reshape(x,self.oshape)
         
+        operation=self.operation
+        if operation.get_use_R():
+            if axis==0:
+                l_x=operation.to_R(x,only_border=True,chans=self.operation.chans)
+                x=operation.from_R(l_x)
+            else:
+                l_x=operation.to_R(x[0],only_border=True,chans=self.operation.chans)
+                tmp_x=operation.from_R(l_x)
+                out_x=np.zeros([x.shape[0],tmp_x.shape[0]])
+                out_x[0]=tmp_x
+                del tmp_x
+                for i in range(1,self.in_x_nshape):
+                    l_x=operation.to_R(x[i],only_border=True,chans=self.operation.chans)
+                    out_x[i]=operation.from_R(l_x)
+                x=out_x
+        
+        return x
+
     # ---------------------------------------------−---------
     def run(self,
             in_x,
@@ -311,6 +333,7 @@ class Synthesis:
             DECAY_RATE=0.95,
             EVAL_FREQUENCY = 100,
             DEVAL_STAT_FREQUENCY = 1000,
+            NUM_STEP_BIAS = 1,
             LEARNING_RATE = 0.03,
             EPSILON = 1E-7,
             grd_mask=None,
@@ -333,6 +356,7 @@ class Synthesis:
         self.MESSAGE=MESSAGE
         self.SHOWGPU=SHOWGPU
         self.axis=axis
+        self.in_x_nshape=in_x.shape[0]
 
         if do_lbfgs and (in_x.dtype=='complex64' or in_x.dtype=='complex128'):
             print('L_BFGS minimisation not yet implemented for acomplex array, use default FOSCAT minimizer or convert your problem to float32 or float64')
@@ -411,19 +435,39 @@ class Synthesis:
             self.do_all_noise=True
 
             self.noise_idx=None
+
+            for k in range(self.number_of_loss):
+                if self.loss_class[k].batch is not None:
+                    l_batch=self.loss_class[k].batch(self.loss_class[k].batch_data,0,init=True)
             
             l_tot,g_tot=self.calc_grad(x)
                 
             self.info_back(x)
 
-            maxitt=NUM_EPOCHS
+            maxitt=NUM_EPOCHS//NUM_STEP_BIAS
+
+            start_x=x.copy()
             
-            x,l,i=opt.fmin_l_bfgs_b(self.calc_grad,
-                                    x.astype('float64'),
-                                    callback=self.info_back,
-                                    pgtol=1E-32,
-                                    factr=10.0,
-                                    maxiter=maxitt)
+            for iteration in range(NUM_STEP_BIAS):
+
+                x,l,i=opt.fmin_l_bfgs_b(self.calc_grad,
+                                        x.astype('float64'),
+                                        callback=self.info_back,
+                                        pgtol=1E-32,
+                                        factr=10.0,
+                                        maxiter=maxitt)
+
+                # update bias input data
+                if iteration<NUM_STEP_BIAS-1:
+
+                    omap=self.xtractmap(x,axis)
+
+                    for k in range(self.number_of_loss):
+                        if self.loss_class[k].batch_update is not None:
+                            self.loss_class[k].batch_update(self.loss_class[k].batch_data,omap)
+                            l_batch=self.loss_class[k].batch(self.loss_class[k].batch_data,0,init=True)
+                    #x=start_x.copy()
+                    
         else:
             for itt in range(NUM_EPOCHS):
                 
@@ -434,27 +478,11 @@ class Synthesis:
                 
                 self.info_back(x)
                     
-        x=self.operation.backend.bk_reshape(x,self.oshape)
         
         if self.mpi_rank==0 and SHOWGPU:
             self.stop_synthesis()
-        
-        operation=self.operation
-        if operation.get_use_R():
-            if axis==0:
-                l_x=operation.to_R(x,only_border=True,chans=self.operation.chans)
-                x=operation.from_R(l_x)
-            else:
-                l_x=operation.to_R(x[0],only_border=True,chans=self.operation.chans)
-                tmp_x=operation.from_R(l_x)
-                out_x=np.zeros([x.shape[0],tmp_x.shape[0]])
-                out_x[0]=tmp_x
-                del tmp_x
-                for i in range(1,in_x.shape[0]):
-                    l_x=operation.to_R(x[i],only_border=True,chans=self.operation.chans)
-                    out_x[i]=operation.from_R(l_x)
-                x=out_x
-                    
+
+        x=self.xtractmap(x,axis)
         return(x)
 
     def get_history(self):

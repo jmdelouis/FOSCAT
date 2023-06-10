@@ -205,6 +205,14 @@ class foscat_backend:
             return(self.backend.log(data))
         if self.BACKEND==self.NUMPY:
             return(np.log(data))
+
+    def bk_tensor(self,data):
+        if self.BACKEND==self.TENSORFLOW:
+            return(self.backend.constant(data))
+        if self.BACKEND==self.TORCH:
+            return(self.backend.constant(data))
+        if self.BACKEND==self.NUMPY:
+            return(data)
         
     def bk_complex(self,real,imag):
         if self.BACKEND==self.TENSORFLOW:
