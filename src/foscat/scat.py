@@ -17,6 +17,20 @@ class scat:
         self.cross=cross
         self.backend=backend
         
+    def get_j_idx(self):
+        shape=list(self.S1.shape)
+        nscale=shape[1]
+        n=nscale*(nscale+1)//2
+        j1=np.zeros([n],dtype='int')
+        j2=np.zeros([n],dtype='int')
+        n=0
+        for i in range(nscale):
+            for j in range(i+1):
+                j1[n]=j
+                j2[n]=i
+                n=n+1
+        return(j1,j2)
+    
     def get_S0(self):
         return(self.S0)
 

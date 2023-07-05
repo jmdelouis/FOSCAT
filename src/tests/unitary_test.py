@@ -14,6 +14,7 @@ except:
 
 os.system('mkdir UNITARY')
 
+
 scratch_path='UNITARY'
 
 #=================================================================================
@@ -37,6 +38,7 @@ nside=16
 data='Venus_256.npy'
 ims=dodown(np.load(data),nside)
 mask=(np.random.rand(3,ims.shape[0])>0.5).astype('float')
+
 
 def lossX(x,scat_operator,args):
         

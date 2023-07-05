@@ -53,6 +53,20 @@ class scat_cov:
     def get_C11(self):
         return self.C11
 
+    def get_j_idx(self):
+        shape=list(self.P00.shape)
+        nscale=shape[2]
+        n=nscale*(nscale-1)//2
+        j1=np.zeros([n],dtype='int')
+        j2=np.zeros([n],dtype='int')
+        n=0
+        for i in range(nscale):
+            for j in range(i):
+                j1[n]=j
+                j2[n]=i
+                n=n+1
+        return(j1,j2)
+    
     def __add__(self, other):
         assert isinstance(other, float)  or isinstance(other, np.float32) or isinstance(other, int) or \
                isinstance(other, bool) or isinstance(other, scat_cov)
