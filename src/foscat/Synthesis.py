@@ -341,7 +341,7 @@ class Synthesis:
             MESSAGE='',
             batchsz=1,
             totalsz=1,
-            do_lbfgs=False,
+            do_lbfgs=True,
             axis=0):
         
         self.eta=LEARNING_RATE
