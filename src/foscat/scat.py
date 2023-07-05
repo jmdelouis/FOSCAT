@@ -412,7 +412,17 @@ class scat:
 class funct(FOC.FoCUS):
     
     def eval(self, image1, image2=None,mask=None,Auto=True,s0_off=1E-6):
-
+        # Check input consistency
+        if not isinstance(image1,Rformat.Rformat):
+            if image2 is not None:
+                if list(image1.shape)!=list(image2.shape):
+                    print('The two input image should have the same size to eval Scattering')
+                    exit(0)
+            if mask is not None:
+                if list(image1.shape)!=list(mask.shape)[1:]:
+                    print('The mask should have the same size than the input image to eval Scattering')
+                    exit(0)
+            
         ### AUTO OR CROSS
         cross = False
         if image2 is not None:
