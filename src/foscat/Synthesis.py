@@ -295,6 +295,7 @@ class Synthesis:
             self.history=new_log
 
         l_tot=self.ltot[self.ltot!=-1].mean()
+        
         self.history[self.nlog]=l_tot
 
         g_tot=grad.flatten()
@@ -316,7 +317,10 @@ class Synthesis:
             else:
                 l_x=operation.to_R(x[0],only_border=True,chans=self.operation.chans)
                 tmp_x=operation.from_R(l_x)
-                out_x=np.zeros([x.shape[0],tmp_x.shape[0]])
+                if self.operation.chans!=1:
+                    out_x=np.zeros([self.in_x_nshape,tmp_x.shape[0]])
+                else:
+                    out_x=np.zeros([self.in_x_nshape,tmp_x.shape[0],tmp_x.shape[1]])
                 out_x[0]=tmp_x
                 del tmp_x
                 for i in range(1,self.in_x_nshape):
@@ -365,6 +369,7 @@ class Synthesis:
         np.random.seed(self.mpi_rank*7+1234)
             
         if self.operation.get_use_R():
+            # TO DO : detect acis error, is it possible ?
             if axis==0:
                 x=self.operation.to_R_center(self.operation.backend.bk_cast(in_x),chans=self.operation.chans)
             else:

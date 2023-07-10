@@ -2,7 +2,7 @@ import foscat.FoCUS as FOC
 import numpy as np
 import foscat.backend as bk
 import foscat.Rformat as Rformat
-
+import traceback
 
 def read(filename):
     thescat = scat_cov(1, 1, 1)
@@ -731,10 +731,12 @@ class funct(FOC.FoCUS):
             if image2 is not None:
                 if list(image1.shape)!=list(image2.shape):
                     print('The two input image should have the same size to eval Scattering')
+                    traceback.print_exc()
                     exit(0)
             if mask is not None:
                 if list(image1.shape)!=list(mask.shape)[1:]:
                     print('The mask should have the same size than the input image to eval Scattering')
+                    traceback.print_exc()
                     exit(0)
 
         ### AUTO OR CROSS
