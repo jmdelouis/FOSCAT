@@ -2,7 +2,6 @@ import foscat.FoCUS as FOC
 import numpy as np
 import foscat.Rformat as Rformat
 import tensorflow as tf
-import traceback
   
 def read(filename):
     thescat=scat(1,1,1,1,1)
@@ -20,7 +19,7 @@ class scat:
         
     def get_j_idx(self):
         shape=list(self.S1.shape)
-        nscale=shape[1]
+        nscale=shape[2]
         n=nscale*(nscale+1)//2
         j1=np.zeros([n],dtype='int')
         j2=np.zeros([n],dtype='int')
@@ -237,50 +236,164 @@ class scat:
     def plot(self,name=None,hold=True,color='blue',lw=1,legend=True):
 
         import matplotlib.pyplot as plt
+
+        j1,j2=self.get_j_idx()
         
         if name is None:
             name=''
 
         if hold:
-            plt.figure(figsize=(8,8))
+            plt.figure(figsize=(16,8))
         
-        plt.subplot(2,2,1)
-        if legend:
-            plt.plot(abs(self.l1_abs(self.S1).flatten()),':',color=color,lw=lw)
-            plt.plot(self.l1_abs(self.S1).flatten(),color=color,label=r'%s $S_1$'%(name),lw=lw)
-        else:
-            plt.plot(abs(self.l1_abs(self.S1).flatten()),':',color=color,lw=lw)
-            plt.plot(self.l1_abs(self.S1).flatten(),color=color,lw=lw)
+        test=None
+        plt.subplot(2, 2, 1)
+        tmp=abs(self.get_np(self.S1))
+        for k in range(tmp.shape[3]):
+            for i1 in range(tmp.shape[0]):
+                for i2 in range(tmp.shape[0]):
+                    if test is None:
+                        test=1
+                        plt.plot(tmp[i1,i2,:,k],color=color, label=r'%s $S_{1}$' % (name), lw=lw)
+                    else:
+                        plt.plot(tmp[i1,i2,:,k],color=color, lw=lw)
         plt.yscale('log')
+        plt.ylabel('S1')
+        plt.xlabel(r'$j_{1}$')
         plt.legend()
-        plt.subplot(2,2,2)
-        if legend:
-            plt.plot(abs(self.l1_abs(self.P00).flatten()),':',color=color,lw=lw)
-            plt.plot(self.l1_abs(self.P00).flatten(),color=color,label=r'%s $P_{00}$'%(name),lw=lw)
-        else:
-            plt.plot(abs(self.l1_abs(self.P00).flatten()),':',color=color,lw=lw)
-            plt.plot(self.l1_abs(self.P00).flatten(),color=color,lw=lw)
+
+        test=None
+        plt.subplot(2, 2, 2)
+        tmp=abs(self.get_np(self.P00))
+        for k in range(tmp.shape[3]):
+            for i1 in range(tmp.shape[0]):
+                for i2 in range(tmp.shape[0]):
+                    if test is None:
+                        test=1
+                        plt.plot(tmp[i1,i2,:,k],color=color, label=r'%s $P_{00}$' % (name), lw=lw)
+                    else:
+                        plt.plot(tmp[i1,i2,:,k],color=color, lw=lw)
         plt.yscale('log')
-        plt.legend()
-        plt.subplot(2,2,3)
-        if legend:
-            plt.plot(abs(self.l1_abs(self.S2).flatten()),':',color=color,lw=lw)
-            plt.plot(self.l1_abs(self.S2).flatten(),color=color,label=r'%s $S_2$ L1 norm'%(name),lw=lw)
-        else:
-            plt.plot(abs(self.l1_abs(self.S2).flatten()),':',color=color,lw=lw)
-            plt.plot(self.l1_abs(self.S2).flatten(),color=color,lw=lw)
-        plt.yscale('log')
+        plt.ylabel('P00')
+        plt.xlabel(r'$j_{1}$')
         plt.legend()
         
-        plt.subplot(2,2,4)
-        if legend:
-            plt.plot(abs(self.l1_abs(self.S2L).flatten()),':',color=color,lw=lw)
-            plt.plot(self.l1_abs(self.S2L).flatten(),color=color,label=r'%s $S_2$ L2 norm'%(name),lw=lw)
-        else:
-            plt.plot(abs(self.l1_abs(self.S2L).flatten()),':',color=color,lw=lw)
-            plt.plot(self.l1_abs(self.S2L).flatten(),color=color,lw=lw)
+        ax1=plt.subplot(2, 2, 3)
+        ax2 = ax1.twiny()
+        n=0
+        tmp=abs(self.get_np(self.S2))
+        lname=r'%s $S_{2}$' % (name)
+        ax1.set_ylabel(r'$S_{2}$ [L1 norm]')
+        test=None
+        tabx=[]
+        tabnx=[]
+        tab2x=[]
+        tab2nx=[]
+        for i0 in range(tmp.shape[0]):
+            for i1 in range(tmp.shape[1]):
+                for i2 in range(j1.max()+1):
+                    for i3 in range(tmp.shape[3]):
+                        for i4 in range(tmp.shape[4]):
+                            if j2[j1==i2].shape[0]==1:
+                                ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3,i4],'.', \
+                                             color=color, lw=lw)
+                            else:
+                                if legend and test is None:
+                                    ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3,i4], \
+                                             color=color, label=lname, lw=lw)
+                                    test=1
+                                ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3,i4], \
+                                         color=color, lw=lw)
+                    tabnx=tabnx+[r'%d'%(k) for k in j2[j1==i2]]
+                    tabx=tabx+[k+n for k in j2[j1==i2]]
+                    tab2x=tab2x+[(j2[j1==i2]+n).mean()]
+                    tab2nx=tab2nx+['%d'%(i2)]
+                    ax1.axvline((j2[j1==i2]+n).max()+0.5,ls=':',color='gray') 
+                    n=n+j2[j1==i2].shape[0]-1
         plt.yscale('log')
-        plt.legend()
+        ax1.set_xlim(0,n+2)
+        ax1.set_xticks(tabx)
+        ax1.set_xticklabels(tabnx,fontsize=6)
+        ax1.set_xlabel(r"$j_{2}$ ",fontsize=6)
+        
+        # Move twinned axis ticks and label from top to bottom
+        ax2.xaxis.set_ticks_position("bottom")
+        ax2.xaxis.set_label_position("bottom")
+
+        # Offset the twin axis below the host
+        ax2.spines["bottom"].set_position(("axes", -0.15))
+
+        # Turn on the frame for the twin axis, but then hide all 
+        # but the bottom spine
+        ax2.set_frame_on(True)
+        ax2.patch.set_visible(False)
+
+        for sp in ax2.spines.values():
+            sp.set_visible(False)
+        ax2.spines["bottom"].set_visible(True)
+        ax2.set_xlim(0,n+2)
+        ax2.set_xticks(tab2x)
+        ax2.set_xticklabels(tab2nx,fontsize=6)
+        ax2.set_xlabel(r"$j_{1}$",fontsize=6)
+        ax1.legend(frameon=0)
+        
+        ax1=plt.subplot(2, 2, 4)
+        ax2 = ax1.twiny()
+        n=0
+        tmp=abs(self.get_np(self.S2L))
+        lname=r'%s $S2_{2}$' % (name)
+        ax1.set_ylabel(r'$S_{2}$ [L2 norm]')
+        test=None
+        tabx=[]
+        tabnx=[]
+        tab2x=[]
+        tab2nx=[]
+        for i0 in range(tmp.shape[0]):
+            for i1 in range(tmp.shape[1]):
+                for i2 in range(j1.max()+1):
+                    for i3 in range(tmp.shape[3]):
+                        for i4 in range(tmp.shape[4]):
+                            if j2[j1==i2].shape[0]==1:
+                                ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3,i4],'.', \
+                                             color=color, lw=lw)
+                            else:
+                                if legend and test is None:
+                                    ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3,i4], \
+                                             color=color, label=lname, lw=lw)
+                                    test=1
+                                ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3,i4], \
+                                         color=color, lw=lw)
+                    tabnx=tabnx+[r'%d'%(k) for k in j2[j1==i2]]
+                    tabx=tabx+[k+n for k in j2[j1==i2]]
+                    tab2x=tab2x+[(j2[j1==i2]+n).mean()]
+                    tab2nx=tab2nx+['%d'%(i2)]
+                    ax1.axvline((j2[j1==i2]+n).max()+0.5,ls=':',color='gray') 
+                    n=n+j2[j1==i2].shape[0]-1
+        plt.yscale('log')
+        ax1.set_xlim(-1,n+3)
+        ax1.set_xticks(tabx)
+        ax1.set_xticklabels(tabnx,fontsize=6)
+        ax1.set_xlabel(r"$j_{2}$",fontsize=6)
+        
+        # Move twinned axis ticks and label from top to bottom
+        ax2.xaxis.set_ticks_position("bottom")
+        ax2.xaxis.set_label_position("bottom")
+
+        # Offset the twin axis below the host
+        ax2.spines["bottom"].set_position(("axes", -0.15))
+
+        # Turn on the frame for the twin axis, but then hide all 
+        # but the bottom spine
+        ax2.set_frame_on(True)
+        ax2.patch.set_visible(False)
+
+        for sp in ax2.spines.values():
+            sp.set_visible(False)
+        ax2.spines["bottom"].set_visible(True)
+        ax2.set_xlim(0,n+3)
+        ax2.set_xticks(tab2x)
+        ax2.set_xticklabels(tab2nx,fontsize=6)
+        ax2.set_xlabel(r"$j_{1}$",fontsize=6)
+        ax1.legend(frameon=0)
         
     def save(self,filename):
         np.save('%s_s0.npy'%(filename), self.get_S0().numpy())
@@ -429,16 +542,14 @@ class funct(FOC.FoCUS):
     def eval(self, image1, image2=None,mask=None,Auto=True,s0_off=1E-6):
         # Check input consistency
         if not isinstance(image1,Rformat.Rformat):
-            if image2 is not None:
+            if image2 is not None and not isinstance(image2,Rformat.Rformat):
                 if list(image1.shape)!=list(image2.shape):
                     print('The two input image should have the same size to eval Scattering')
-                    traceback.print_exc()
                     
                     exit(0)
             if mask is not None:
                 if list(image1.shape)!=list(mask.shape)[1:]:
                     print('The mask should have the same size than the input image to eval Scattering')
-                    traceback.print_exc()
                     exit(0)
             
         ### AUTO OR CROSS

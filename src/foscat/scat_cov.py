@@ -2,12 +2,10 @@ import foscat.FoCUS as FOC
 import numpy as np
 import foscat.backend as bk
 import foscat.Rformat as Rformat
-import traceback
 
 def read(filename):
     thescat = scat_cov(1, 1, 1)
     return thescat.read(filename)
-
 
 testwarn=0
 
@@ -66,6 +64,23 @@ class scat_cov:
                 j2[n]=i
                 n=n+1
         return(j1,j2)
+    
+    def get_jc11_idx(self):
+        shape=list(self.P00.shape)
+        nscale=shape[2]
+        n=nscale*(nscale-1)*(nscale-2)
+        j1=np.zeros([n*2],dtype='int')
+        j2=np.zeros([n*2],dtype='int')
+        j3=np.zeros([n*2],dtype='int')
+        n=0
+        for i in range(nscale):
+            for j in range(i):
+                for k in range(j):
+                    j1[n]=k
+                    j2[n]=j
+                    j3[n]=i
+                    n=n+1
+        return(j1[0:n],j2[0:n],j3[0:n])
     
     def __add__(self, other):
         assert isinstance(other, float)  or isinstance(other, np.float32) or isinstance(other, int) or \
@@ -421,45 +436,170 @@ class scat_cov:
         if name is None:
             name = ''
 
+        j1,j2=self.get_j_idx()
+        
         if hold:
-            plt.figure(figsize=(8, 8))
+            plt.figure(figsize=(16, 8))
 
         if self.S1 is not None:
             plt.subplot(2, 2, 1)
-            if legend:
-                plt.plot(abs(self.get_np(self.S1)).flatten(), color=color, label=r'%s $S_1$' % (name), lw=lw)
-            else:
-                plt.plot(abs(self.get_np(self.S1)).flatten(), color=color, lw=lw)
+            tmp=abs(self.get_np(self.S1))
+            test=None
+            for k in range(tmp.shape[3]):
+                for i1 in range(tmp.shape[0]):
+                    for i2 in range(tmp.shape[0]):
+                        if test is None:
+                            test=1
+                            plt.plot(tmp[i1,i2,:,k],color=color, label=r'%s $S_1$' % (name), lw=lw)
+                        else:
+                            plt.plot(tmp[i1,i2,:,k],color=color, lw=lw)
             plt.yscale('log')
             plt.legend()
+            plt.ylabel('S1')
+            plt.xlabel(r'$j_{1},\Theta_{1}$')
 
+        test=None
         plt.subplot(2, 2, 2)
-        if legend:
-            plt.plot(abs(self.get_np(self.P00)).flatten(), color=color, label=r'%s $P_{00}$' % (name), lw=lw)
-        else:
-            plt.plot(abs(self.get_np(self.P00)).flatten(), color=color, lw=lw)
+        tmp=abs(self.get_np(self.P00))
+        for k in range(tmp.shape[3]):
+            for i1 in range(tmp.shape[0]):
+                for i2 in range(tmp.shape[0]):
+                    if test is None:
+                        test=1
+                        plt.plot(tmp[i1,i2,:,k],color=color, label=r'%s $P_{00}$' % (name), lw=lw)
+                    else:
+                        plt.plot(tmp[i1,i2,:,k],color=color, lw=lw)
         plt.yscale('log')
+        plt.ylabel('P00')
+        plt.xlabel(r'$j_{1}$')
         plt.legend()
 
-        plt.subplot(2, 2, 3)
-        if legend:
-            plt.plot(abs(self.get_np(self.C01)).flatten(), color=color, label=r'%s $C_{01}$' % (name), lw=lw)
-            if self.C10 is not None:
-                plt.plot(abs(self.get_np(self.C10)).flatten(), color=color, label=r'%s $C_{10}$' % (name), lw=lw)
-        else:
-            plt.plot(abs(self.get_np(self.C01)).flatten(), color=color, lw=lw)
-            if self.C10 is not None:
-                plt.plot(abs(self.get_np(self.C10)).flatten(), color=color, lw=lw)
+        ax1=plt.subplot(2, 2, 3)
+        ax2 = ax1.twiny()
+        n=0
+        tmp=abs(self.get_np(self.C01))
+        lname=r'%s $C_{01}$' % (name)
+        ax1.set_ylabel(r'$C_{01}$')
+        if self.C10 is not None:
+            tmp=abs(self.get_np(self.C01))
+            lname=r'%s $C_{10}$' % (name)
+            ax1.set_ylabel(r'$C_{10}$')
+        test=None
+        tabx=[]
+        tabnx=[]
+        tab2x=[]
+        tab2nx=[]
+        for i0 in range(tmp.shape[0]):
+            for i1 in range(tmp.shape[1]):
+                for i2 in range(j1.max()+1):
+                    for i3 in range(tmp.shape[3]):
+                        for i4 in range(tmp.shape[4]):
+                            if j2[j1==i2].shape[0]==1:
+                                ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3,i4],'.', \
+                                             color=color, lw=lw)
+                            else:
+                                if legend and test is None:
+                                    ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3,i4], \
+                                             color=color, label=lname, lw=lw)
+                                    test=1
+                                ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3,i4], \
+                                         color=color, lw=lw)
+                    tabnx=tabnx+[r'%d'%(k) for k in j2[j1==i2]]
+                    tabx=tabx+[k+n for k in j2[j1==i2]]
+                    tab2x=tab2x+[(j2[j1==i2]+n).mean()]
+                    tab2nx=tab2nx+['%d'%(i2)]
+                    ax1.axvline((j2[j1==i2]+n).max()+0.5,ls=':',color='gray') 
+                    n=n+j2[j1==i2].shape[0]-1
         plt.yscale('log')
-        plt.legend()
+        ax1.set_xlim(0,n+2)
+        ax1.set_xticks(tabx)
+        ax1.set_xticklabels(tabnx,fontsize=6)
+        ax1.set_xlabel(r"$j_{2}$",fontsize=6)
+        
+        # Move twinned axis ticks and label from top to bottom
+        ax2.xaxis.set_ticks_position("bottom")
+        ax2.xaxis.set_label_position("bottom")
 
-        plt.subplot(2, 2, 4)
-        if legend:
-            plt.plot(abs(self.get_np(self.C11)).flatten(), color=color, label=r'%s $C_{11}$' % (name), lw=lw)
-        else:
-            plt.plot(abs(self.get_np(self.C11)).flatten(), color=color, lw=lw)
+        # Offset the twin axis below the host
+        ax2.spines["bottom"].set_position(("axes", -0.15))
+
+        # Turn on the frame for the twin axis, but then hide all 
+        # but the bottom spine
+        ax2.set_frame_on(True)
+        ax2.patch.set_visible(False)
+
+        for sp in ax2.spines.values():
+            sp.set_visible(False)
+        ax2.spines["bottom"].set_visible(True)
+        ax2.set_xlim(0,n+2)
+        ax2.set_xticks(tab2x)
+        ax2.set_xticklabels(tab2nx,fontsize=6)
+        ax2.set_xlabel(r"$j_{1}$",fontsize=6)
+        ax1.legend(frameon=0)
+
+        ax1=plt.subplot(2, 2, 4)
+        j1,j2,j3=self.get_jc11_idx()
+        ax2 = ax1.twiny()
+        n=1
+        tmp=abs(self.get_np(self.C11))
+        lname=r'%s $C_{11}$' % (name)
+        test=None
+        tabx=[]
+        tabnx=[]
+        tab2x=[]
+        tab2nx=[]
+        for i0 in range(tmp.shape[0]):
+            for i1 in range(tmp.shape[1]):
+                for i2 in range(j1.max()+1):
+                    nprev=n
+                    for i2b in range(j2[j1==i2].max()+1):
+                        idx=np.where((j1==i2)*(j2==i2b))[0]
+                        for i3 in range(tmp.shape[3]):
+                            for i4 in range(tmp.shape[4]):
+                                for i5 in range(tmp.shape[5]):
+                                    if len(idx)==1:
+                                        ax1.plot(np.arange(len(idx))+n,tmp[i0,i1,idx,i3,i4,i5],'.', \
+                                                 color=color, lw=lw)
+                                    else:
+                                        if legend and test is None:
+                                            ax1.plot(np.arange(len(idx))+n,tmp[i0,i1,idx,i3,i4,i5], \
+                                                     color=color, label=lname, lw=lw)
+                                            test=1
+                                        ax1.plot(np.arange(len(idx))+n,tmp[i0,i1,idx,i3,i4,i5], \
+                                                 color=color, lw=lw)
+                        tabnx=tabnx+[r'%d,%d'%(j2[k],j3[k]) for k in idx]
+                        tabx=tabx+[k+n for k in range(len(idx))]
+                        n=n+idx.shape[0]
+                    tab2x=tab2x+[(n+nprev-1)/2]
+                    tab2nx=tab2nx+['%d'%(i2)]
+                    ax1.axvline(n-0.5,ls=':',color='gray') 
         plt.yscale('log')
-        plt.legend()
+        ax1.set_ylabel(r'$C_{11}$')
+        ax1.set_xticks(tabx)
+        ax1.set_xticklabels(tabnx,fontsize=6)
+        ax1.set_xlabel(r"$j_{2},j_{3}$",fontsize=6)
+        ax1.set_xlim(0,n)
+        
+        # Move twinned axis ticks and label from top to bottom
+        ax2.xaxis.set_ticks_position("bottom")
+        ax2.xaxis.set_label_position("bottom")
+
+        # Offset the twin axis below the host
+        ax2.spines["bottom"].set_position(("axes", -0.15))
+
+        # Turn on the frame for the twin axis, but then hide all 
+        # but the bottom spine
+        ax2.set_frame_on(True)
+        ax2.patch.set_visible(False)
+
+        for sp in ax2.spines.values():
+            sp.set_visible(False)
+        ax2.spines["bottom"].set_visible(True)
+        ax2.set_xlim(0,n)
+        ax2.set_xticks(tab2x)
+        ax2.set_xticklabels(tab2nx,fontsize=6)
+        ax2.set_xlabel(r"$j_{1}$",fontsize=6)
+        ax1.legend(frameon=0)
 
     def get_np(self, x):
         if x is not None:
@@ -728,15 +868,13 @@ class funct(FOC.FoCUS):
         """
         # Check input consistency
         if not isinstance(image1,Rformat.Rformat):
-            if image2 is not None:
+            if image2 is not None and not isinstance(image2,Rformat.Rformat):
                 if list(image1.shape)!=list(image2.shape):
-                    print('The two input image should have the same size to eval Scattering')
-                    traceback.print_exc()
+                    print('The two input image should have the same size to eval Scattering Covariance')
                     exit(0)
             if mask is not None:
                 if list(image1.shape)!=list(mask.shape)[1:]:
-                    print('The mask should have the same size than the input image to eval Scattering')
-                    traceback.print_exc()
+                    print('The mask should have the same size than the input image to eval Scattering Covariance')
                     exit(0)
 
         ### AUTO OR CROSS
