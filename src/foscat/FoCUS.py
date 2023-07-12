@@ -4,7 +4,6 @@ import os, sys
 import foscat.backend as bk
 import foscat.Rformat as Rformat
 
-            
 class FoCUS:
     def __init__(self,
                  NORIENT=4,
@@ -15,13 +14,14 @@ class FoCUS:
                  nstep_max=16,
                  padding='SAME',
                  gpupos=0,
-                 healpix=True,
                  OSTEP=0,
                  isMPI=False,
                  TEMPLATE_PATH='data',
                  BACKEND='tensorflow',
                  use_R_format=True,
                  chans=12,
+                 Healpix=True,
+                 JmaxDelta=0,
                  DODIV=False,
                  mpi_size=1,
                  mpi_rank=0):
@@ -55,13 +55,29 @@ class FoCUS:
         self.nlog=0
         
         self.padding=padding
-        self.healpix=healpix
-        if OSTEP<-1:
-            print('Warning : OSTEP can not be smaller than -1')
+            
+        if OSTEP!=0:
+            print('OPTION option is deprecated after version 2.0.6. Please use Jmax option')
+            JmaxDelta=OSTEP
+        else:
+            OSTEP=JmaxDelta
+            
+        if JmaxDelta<-1:
+            print('Warning : Jmax can not be smaller than -1')
             exit(0)
             
-        self.OSTEP=OSTEP
+        self.OSTEP=JmaxDelta
         self.use_R_format=use_R_format
+        
+        if chans!=12:
+            print('chans option is deprecated after version 2.0.6. Please use Healpix option')
+            if chans==1:
+                Healpix=False
+        if Healpix==False:
+            chans=1
+        else:
+            chans=12
+            
         self.chans=chans
         
         if isMPI:
