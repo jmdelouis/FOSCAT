@@ -172,6 +172,26 @@ class foscat_backend:
                 return(self.backend.mean(data,axis))
             if self.BACKEND==self.NUMPY:
                 return(np.mean(data,axis))
+
+    def bk_reduce_std(self,data,axis=None):
+        
+        if isinstance(data,Rformat.Rformat):
+            return self.bk_reduce_std(data.get())
+        
+        if axis is None:
+            if self.BACKEND==self.TENSORFLOW:
+                return(self.backend.math.reduce_std(data))
+            if self.BACKEND==self.TORCH:
+                return(self.backend.std(data))
+            if self.BACKEND==self.NUMPY:
+                return(np.std(data))
+        else:
+            if self.BACKEND==self.TENSORFLOW:
+                return(self.backend.math.reduce_std(data,axis=axis))
+            if self.BACKEND==self.TORCH:
+                return(self.backend.std(data,axis))
+            if self.BACKEND==self.NUMPY:
+                return(np.std(data,axis))
         
     def bk_sqrt(self,data):
         
