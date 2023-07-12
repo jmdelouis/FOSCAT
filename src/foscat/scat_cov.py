@@ -456,7 +456,7 @@ class scat_cov:
             plt.yscale('log')
             plt.legend()
             plt.ylabel('S1')
-            plt.xlabel(r'$j_{1},\Theta_{1}$')
+            plt.xlabel(r'$j_{1}$')
 
         test=None
         plt.subplot(2, 2, 2)
