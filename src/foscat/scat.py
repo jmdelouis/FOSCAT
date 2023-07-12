@@ -19,7 +19,11 @@ class scat:
         
     def get_j_idx(self):
         shape=list(self.S1.shape)
-        nscale=shape[2]
+        if len(shape)==3:
+            nscale=shape[1]
+        else:
+            nscale=shape[2]
+
         n=nscale*(nscale+1)//2
         j1=np.zeros([n],dtype='int')
         j2=np.zeros([n],dtype='int')
@@ -248,14 +252,23 @@ class scat:
         test=None
         plt.subplot(2, 2, 1)
         tmp=abs(self.get_np(self.S1))
-        for k in range(tmp.shape[3]):
-            for i1 in range(tmp.shape[0]):
-                for i2 in range(tmp.shape[0]):
+        if len(tmp.shape)==4:
+            for k in range(tmp.shape[3]):
+                for i1 in range(tmp.shape[0]):
+                    for i2 in range(tmp.shape[0]):
+                        if test is None:
+                            test=1
+                            plt.plot(tmp[i1,i2,:,k],color=color, label=r'%s $S_{1}$' % (name), lw=lw)
+                        else:
+                            plt.plot(tmp[i1,i2,:,k],color=color, lw=lw)
+        else:
+            for k in range(tmp.shape[2]):
+                for i1 in range(tmp.shape[0]):
                     if test is None:
                         test=1
-                        plt.plot(tmp[i1,i2,:,k],color=color, label=r'%s $S_{1}$' % (name), lw=lw)
+                        plt.plot(tmp[i1,:,k],color=color, label=r'%s $S_{1}$' % (name), lw=lw)
                     else:
-                        plt.plot(tmp[i1,i2,:,k],color=color, lw=lw)
+                        plt.plot(tmp[i1,:,k],color=color, lw=lw)
         plt.yscale('log')
         plt.ylabel('S1')
         plt.xlabel(r'$j_{1}$')
@@ -264,14 +277,23 @@ class scat:
         test=None
         plt.subplot(2, 2, 2)
         tmp=abs(self.get_np(self.P00))
-        for k in range(tmp.shape[3]):
-            for i1 in range(tmp.shape[0]):
-                for i2 in range(tmp.shape[0]):
+        if len(tmp.shape)==4:
+            for k in range(tmp.shape[3]):
+                for i1 in range(tmp.shape[0]):
+                    for i2 in range(tmp.shape[0]):
+                        if test is None:
+                            test=1
+                            plt.plot(tmp[i1,i2,:,k],color=color, label=r'%s $P_{00}$' % (name), lw=lw)
+                        else:
+                            plt.plot(tmp[i1,i2,:,k],color=color, lw=lw)
+        else:
+            for k in range(tmp.shape[2]):
+                for i1 in range(tmp.shape[0]):
                     if test is None:
                         test=1
-                        plt.plot(tmp[i1,i2,:,k],color=color, label=r'%s $P_{00}$' % (name), lw=lw)
+                        plt.plot(tmp[i1,:,k],color=color, label=r'%s $P_{00}$' % (name), lw=lw)
                     else:
-                        plt.plot(tmp[i1,i2,:,k],color=color, lw=lw)
+                        plt.plot(tmp[i1,:,k],color=color, lw=lw)
         plt.yscale('log')
         plt.ylabel('P00')
         plt.xlabel(r'$j_{1}$')
@@ -288,20 +310,43 @@ class scat:
         tabnx=[]
         tab2x=[]
         tab2nx=[]
-        for i0 in range(tmp.shape[0]):
-            for i1 in range(tmp.shape[1]):
-                for i2 in range(j1.max()+1):
-                    for i3 in range(tmp.shape[3]):
-                        for i4 in range(tmp.shape[4]):
-                            if j2[j1==i2].shape[0]==1:
-                                ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3,i4],'.', \
+        if len(tmp.shape)==5:
+            for i0 in range(tmp.shape[0]):
+                for i1 in range(tmp.shape[1]):
+                    for i2 in range(j1.max()+1):
+                        for i3 in range(tmp.shape[3]):
+                            for i4 in range(tmp.shape[4]):
+                                if j2[j1==i2].shape[0]==1:
+                                    ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3,i4],'.', \
+                                                 color=color, lw=lw)
+                                else:
+                                    if legend and test is None:
+                                        ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3,i4], \
+                                                 color=color, label=lname, lw=lw)
+                                        test=1
+                                    ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3,i4], \
                                              color=color, lw=lw)
+                        tabnx=tabnx+[r'%d'%(k) for k in j2[j1==i2]]
+                        tabx=tabx+[k+n for k in j2[j1==i2]]
+                        tab2x=tab2x+[(j2[j1==i2]+n).mean()]
+                        tab2nx=tab2nx+['%d'%(i2)]
+                        ax1.axvline((j2[j1==i2]+n).max()+0.5,ls=':',color='gray') 
+                        n=n+j2[j1==i2].shape[0]-1
+        else:
+            print(tmp.shape)
+            for i0 in range(tmp.shape[0]):
+                for i2 in range(j1.max()+1):
+                    for i3 in range(tmp.shape[2]):
+                        for i4 in range(tmp.shape[3]):
+                            if j2[j1==i2].shape[0]==1:
+                                ax1.plot(j2[j1==i2]+n,tmp[i0,j1==i2,i3,i4],'.', \
+                                         color=color, lw=lw)
                             else:
                                 if legend and test is None:
-                                    ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3,i4], \
+                                    ax1.plot(j2[j1==i2]+n,tmp[i0,j1==i2,i3,i4], \
                                              color=color, label=lname, lw=lw)
                                     test=1
-                                ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3,i4], \
+                                ax1.plot(j2[j1==i2]+n,tmp[i0,j1==i2,i3,i4], \
                                          color=color, lw=lw)
                     tabnx=tabnx+[r'%d'%(k) for k in j2[j1==i2]]
                     tabx=tabx+[k+n for k in j2[j1==i2]]
@@ -347,20 +392,42 @@ class scat:
         tabnx=[]
         tab2x=[]
         tab2nx=[]
-        for i0 in range(tmp.shape[0]):
-            for i1 in range(tmp.shape[1]):
+        if len(tmp.shape)==5:
+            for i0 in range(tmp.shape[0]):
+                for i1 in range(tmp.shape[1]):
+                    for i2 in range(j1.max()+1):
+                        for i3 in range(tmp.shape[3]):
+                            for i4 in range(tmp.shape[4]):
+                                if j2[j1==i2].shape[0]==1:
+                                    ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3,i4],'.', \
+                                                 color=color, lw=lw)
+                                else:
+                                    if legend and test is None:
+                                        ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3,i4], \
+                                                 color=color, label=lname, lw=lw)
+                                        test=1
+                                    ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3,i4], \
+                                             color=color, lw=lw)
+                        tabnx=tabnx+[r'%d'%(k) for k in j2[j1==i2]]
+                        tabx=tabx+[k+n for k in j2[j1==i2]]
+                        tab2x=tab2x+[(j2[j1==i2]+n).mean()]
+                        tab2nx=tab2nx+['%d'%(i2)]
+                        ax1.axvline((j2[j1==i2]+n).max()+0.5,ls=':',color='gray') 
+                        n=n+j2[j1==i2].shape[0]-1
+        else:
+            for i0 in range(tmp.shape[0]):
                 for i2 in range(j1.max()+1):
-                    for i3 in range(tmp.shape[3]):
-                        for i4 in range(tmp.shape[4]):
+                    for i3 in range(tmp.shape[2]):
+                        for i4 in range(tmp.shape[3]):
                             if j2[j1==i2].shape[0]==1:
-                                ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3,i4],'.', \
+                                ax1.plot(j2[j1==i2]+n,tmp[i0,j1==i2,i3,i4],'.', \
                                              color=color, lw=lw)
                             else:
                                 if legend and test is None:
-                                    ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3,i4], \
+                                    ax1.plot(j2[j1==i2]+n,tmp[i0,j1==i2,i3,i4], \
                                              color=color, label=lname, lw=lw)
                                     test=1
-                                ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3,i4], \
+                                ax1.plot(j2[j1==i2]+n,tmp[i0,j1==i2,i3,i4], \
                                          color=color, lw=lw)
                     tabnx=tabnx+[r'%d'%(k) for k in j2[j1==i2]]
                     tabx=tabx+[k+n for k in j2[j1==i2]]
