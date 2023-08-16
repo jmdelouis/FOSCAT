@@ -781,12 +781,12 @@ class funct(FOC.FoCUS):
                 conj=self.backend.bk_real(conj)
 
             # Compute l_p00 [....,....,Nmask,1,Norient]  
-            l_p00 = self.backend.bk_expand_dims(self.masked_mean(conj,vmask,axis=axis),-2)
+            l_p00 = self.backend.bk_expand_dims(self.masked_mean(conj,vmask,axis=axis,rank=j1),-2)
 
             conj=self.backend.bk_L1(conj)
 
             # Compute l_s1 [....,....,Nmask,1,Norient] 
-            l_s1 = self.backend.bk_expand_dims(self.masked_mean(conj,vmask,axis=axis),-2)
+            l_s1 = self.backend.bk_expand_dims(self.masked_mean(conj,vmask,axis=axis,rank=j1),-2)
 
             # Concat S1,P00 [....,....,Nmask,j1,Norient] 
             if s1 is None:
@@ -820,10 +820,10 @@ class funct(FOC.FoCUS):
             if Auto:
                 conj2m=self.backend.bk_real(conj2m)
                 conj2ml1=self.backend.bk_real(conj2ml1)
-
+                
             # Convol l_s2 [....,....,Nmask,j1,Norient,Norient]
-            l_s2 = self.masked_mean(conj2p-conj2m,vmask,axis=axis)
-            l_s2l1 = self.masked_mean(conj2pl1-conj2ml1,vmask,axis=axis)
+            l_s2 = self.masked_mean(conj2p-conj2m,vmask,axis=axis,rank=j1)
+            l_s2l1 = self.masked_mean(conj2pl1-conj2ml1,vmask,axis=axis,rank=j1)
 
             # Concat l_s2 [....,....,Nmask,j1*(j1+1)/2,Norient,Norient]
             if s2 is None:

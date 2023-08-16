@@ -55,6 +55,9 @@ class FoCUS:
         self.nlog=0
         
         self.padding=padding
+        if Healpix==True and padding!='SAME':
+            print('convolution padding should be equal to SAME while working with HEALPIX data')
+            self.padding='SAME'
             
         if OSTEP!=0:
             print('OPTION option is deprecated after version 2.0.6. Please use Jmax option')
@@ -243,9 +246,10 @@ class FoCUS:
         
         if not self.do_wigner:
             for i in range(nstep_max):
-                for i in range(l_NORIENT):
-                    self.ww_RealT[lout][:,i]=trans_kernel(self.ww_Real[lout][:,i])
-                    self.ww_ImagT[lout][:,i]=trans_kernel(self.ww_Imag[lout][:,i])
+                lout=(2**i)
+                for j in range(l_NORIENT):
+                    self.ww_RealT[lout][:,j]=trans_kernel(self.ww_Real[lout][:,j])
+                    self.ww_ImagT[lout][:,j]=trans_kernel(self.ww_Imag[lout][:,j])
           
         self.Idx_Neighbours={}
         self.Idx_convol={}
@@ -489,11 +493,8 @@ class FoCUS:
     def update_R_border(self,im,axis=0):
         if not isinstance(im,Rformat.Rformat):
             return im
-            
+
         nside=im.shape[axis+1]-2*self.R_off
-        
-        if self.nest2R[nside] is None:
-            self.calc_R_index(nside,chans=self.chans)
             
         if axis==0:
             im_center=im.get()[:,self.R_off:-self.R_off,self.R_off:-self.R_off]
@@ -511,6 +512,10 @@ class FoCUS:
             oshape=oshape+shape[axis+3:]
 
         l_im=self.backend.bk_reshape(im_center,oshape)
+        
+        if self.nest2R[nside] is None:
+            self.calc_R_index(nside,chans=self.chans)
+                
         v1=self.backend.bk_gather(l_im,self.nest2R1[nside],axis=axis)
         v2=self.backend.bk_gather(l_im,self.nest2R2[nside],axis=axis)
         v3=self.backend.bk_gather(l_im,self.nest2R3[nside],axis=axis)
@@ -518,6 +523,7 @@ class FoCUS:
             
         imout=self.backend.bk_concat([v1,im_center,v2],axis=axis+1)
         imout=self.backend.bk_concat([v3,imout,v4],axis=axis+2)
+            
         return Rformat.Rformat(imout,self.R_off,axis,chans=self.chans)
         
     def to_R_center(self,im,axis=0,chans=12):
@@ -544,16 +550,26 @@ class FoCUS:
     def to_R(self,im,axis=0,only_border=False,chans=12):
         if isinstance(im,Rformat.Rformat):
             return im
-
+                    
+        padding=self.padding
         if chans==1 and len(im.shape)>1:
             nside=im.shape[axis]
         else:
             nside=int(np.sqrt(im.shape[axis]//chans))
-        
+                
         if self.nest2R[nside] is None:
             self.calc_R_index(nside,chans=chans)
-                
+            
         if only_border:
+            
+            if axis==0:
+                im_center=self.backend.bk_reshape(im,[chans,nside,nside])
+            if axis==1:
+                im_center=self.backend.bk_reshape(im,[im.shape[0],chans,nside,nside])
+            if axis==2:
+                im_center=self.backend.bk_reshape(im,[im.shape[0],im.shape[1],chans,nside,nside])
+            if axis==3:
+                im_center=self.backend.bk_reshape(im,[im.shape[0],im.shape[1],im.shape[2],chans,nside,nside])
             
             if chans==1 and len(im.shape)>1:
                 lim=self.reduce_dim(im,axis=axis)
@@ -564,45 +580,39 @@ class FoCUS:
             v2=self.backend.bk_gather(lim,self.nest2R2[nside],axis=axis)
             v3=self.backend.bk_gather(lim,self.nest2R3[nside],axis=axis)
             v4=self.backend.bk_gather(lim,self.nest2R4[nside],axis=axis)
-            
-            if axis==0:
-                im_center=self.backend.bk_reshape(im,[chans,nside,nside])
-            if axis==1:
-                im_center=self.backend.bk_reshape(im,[im.shape[0],chans,nside,nside])
-            if axis==2:
-                im_center=self.backend.bk_reshape(im,[im.shape[0],im.shape[1],chans,nside,nside])
-            if axis==3:
-                im_center=self.backend.bk_reshape(im,[im.shape[0],im.shape[1],im.shape[2],chans,nside,nside])
                 
             imout=self.backend.bk_concat([v1,im_center,v2],axis=axis+1)
             imout=self.backend.bk_concat([v3,imout,v4],axis=axis+2)
-
+                
             return Rformat.Rformat(imout,self.R_off,axis,chans=chans)
         
         else:
+                    
             if chans==1:
                 im_center=self.reduce_dim(im,axis=axis)
             else:
                 im_center=self.backend.bk_gather(im,self.nest2R[nside],axis=axis)
-            v1=self.backend.bk_gather(im_center,self.nest2R1[nside],axis=axis)
-            v2=self.backend.bk_gather(im_center,self.nest2R2[nside],axis=axis)
-            v3=self.backend.bk_gather(im_center,self.nest2R3[nside],axis=axis)
-            v4=self.backend.bk_gather(im_center,self.nest2R4[nside],axis=axis)
-
+                
             shape=list(im.shape)
             oshape=shape[0:axis]+[chans,nside,nside]
-
+            
             if chans==1:
                 if axis+2<len(shape):
                     oshape=oshape+shape[axis+2:]
             else:
                 if axis+1<len(shape):
                     oshape=oshape+shape[axis+1:]
-            
-            im_center=self.backend.bk_reshape(im_center,oshape)
+                    
+            v1=self.backend.bk_gather(im_center,self.nest2R1[nside],axis=axis)
+            v2=self.backend.bk_gather(im_center,self.nest2R2[nside],axis=axis)
+            v3=self.backend.bk_gather(im_center,self.nest2R3[nside],axis=axis)
+            v4=self.backend.bk_gather(im_center,self.nest2R4[nside],axis=axis)
 
+            im_center=self.backend.bk_reshape(im_center,oshape)
+            
             imout=self.backend.bk_concat([v1,im_center,v2],axis=axis+1)
             imout=self.backend.bk_concat([v3,imout,v4],axis=axis+2)
+                
             return Rformat.Rformat(imout,self.R_off,axis,chans=chans)
     
     def from_R(self,im,axis=0):
@@ -778,9 +788,6 @@ class FoCUS:
                 l_image=self.to_R(im,axis=axis,chans=self.chans).get()
 
             lout=int(l_image.shape[axis+1]-2*self.R_off)
-            
-            if self.nest2R[lout//2] is None:
-                self.calc_R_index(lout//2,chans=self.chans)
                 
             shape=list(im.shape)
             
@@ -815,11 +822,14 @@ class FoCUS:
                     
             if axis>3:
                 print('ud_grade_2 function not yet implemented for axis>3')
-
+                
             l_image=self.backend.bk_reduce_sum(self.backend.bk_reduce_sum(self.backend.bk_reshape(l_image,oshape) \
                                                           ,axis=axis+2),axis=axis+3)/4
             imout=self.backend.bk_reshape(l_image,oshape2)
-            
+
+            if self.nest2R[lout//2] is None:
+                self.calc_R_index(lout//2,chans=self.chans)
+                
             v1=self.backend.bk_gather(imout,self.nest2R1[lout//2],axis=axis)
             v2=self.backend.bk_gather(imout,self.nest2R2[lout//2],axis=axis)
             v3=self.backend.bk_gather(imout,self.nest2R3[lout//2],axis=axis)
@@ -827,7 +837,7 @@ class FoCUS:
             
             imout=self.backend.bk_concat([v1,l_image,v2],axis=axis+1)
             imout=self.backend.bk_concat([v3,imout,v4],axis=axis+2)
-
+                
             imout=Rformat.Rformat(imout,self.R_off,axis,chans=self.chans)
             
             if not isinstance(im, Rformat.Rformat):
@@ -1094,7 +1104,7 @@ class FoCUS:
     # Mean using mask x [....,Npix,....], mask[Nmask,Npix]  to [....,Nmask,....]
     # if use_R_format
     # Mean using mask x [....,12,Nside+2*off,Nside+2*off,....], mask[Nmask,12,Nside+2*off,Nside+2*off]  to [....,Nmask,....]
-    def masked_mean(self,x,mask,axis=0):
+    def masked_mean(self,x,mask,axis=0,rank=0):
         
         shape=x.shape.as_list()
         
@@ -1102,6 +1112,13 @@ class FoCUS:
             
         if self.use_R_format:
             nside=mask.nside
+            if self.padding!='SAME':
+                self.remove_border[nside]=np.ones([1,shape[axis-1],nside+2*self.R_off,nside+2*self.R_off])
+                self.remove_border[nside][0,:,0:self.R_off+rank+self.KERNELSZ//2,:]=0.0
+                self.remove_border[nside][0,:,-(self.R_off+rank+self.KERNELSZ//2):,:]=0.0
+                self.remove_border[nside][0,:,:,0:self.R_off+rank+self.KERNELSZ//2]=0.0
+                self.remove_border[nside][0,:,:,-(self.R_off+rank+self.KERNELSZ//2):]=0.0
+                    
             if self.remove_border[nside] is None:
                 self.remove_border[nside]=np.ones([1,shape[axis-1],nside+2*self.R_off,nside+2*self.R_off])
                 self.remove_border[nside][0,:,0:self.R_off,:]=0.0
@@ -1239,9 +1256,9 @@ class FoCUS:
                 l_image=image
             else:
                 l_image=self.to_R(image,axis=axis,chans=self.chans)
-            
+
             nside=l_image.shape[axis+1]-2*self.R_off
-            
+                
             rr=self.conv2d(l_image.get(),self.ww_RealT[nside],axis=axis)
             ii=self.conv2d(l_image.get(),self.ww_ImagT[nside],axis=axis)
 

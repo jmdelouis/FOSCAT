@@ -22,6 +22,7 @@ class Loss:
         self.args=param
         self.Rformat=Rformat
         self.name=name
+        print('batch ',batch)
         self.batch=batch
         self.batch_data=batch_data
         self.batch_update=batch_update
