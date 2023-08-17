@@ -953,6 +953,7 @@ class funct(FOC.FoCUS):
         image2: tensor
             Second image. If not None, we compute cross-scattering covariance coefficients.
         mask:
+
         norm: None or str
             If None no normalization is applied, if 'auto' normalize by the reference P00,
             if 'self' normalize by the current P00.
@@ -1264,7 +1265,10 @@ class funct(FOC.FoCUS):
                         M2_smooth = self.smooth(M2_dic[j2], axis=1)  # [Nbatch, Npix_j3, Norient3]
                         M2_dic[j2] = self.ud_grade_2(M2_smooth, axis=1)  # [Nbatch, Npix_j3, Norient3]
                 ### Mask
+                vmask_smooth = self.ud_grade_2(vmask, axis=1)
                 vmask = self.ud_grade_2(vmask, axis=1)
+                if self.mask_thres is not None:
+                    vmask = self.backend.threshold(vmask,self.mask_thres)
 
                 ### NSIDE_j3
                 nside_j3 = nside_j3 // 2

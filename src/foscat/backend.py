@@ -110,6 +110,14 @@ class foscat_backend:
             return x
         if self.BACKEND==self.NUMPY:
             return x
+
+    def bk_threshold(self,x,threshold,greater=True):
+        if self.BACKEND==self.TENSORFLOW:
+            return(self.backend.cast(x>threshold,x.dtype)*x)
+        if self.BACKEND==self.TORCH:
+            return(self.backend.cast(x>threshold,x.dtype)*x)
+        if self.BACKEND==self.NUMPY:
+            return (x>threshold)*x
         
     def bk_device(self,device_name):
         return self.backend.device(device_name)

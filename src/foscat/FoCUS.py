@@ -14,6 +14,8 @@ class FoCUS:
                  nstep_max=16,
                  padding='SAME',
                  gpupos=0,
+                 mask_thres=None,
+                 mask_norm=False,
                  OSTEP=0,
                  isMPI=False,
                  TEMPLATE_PATH='data',
@@ -30,6 +32,8 @@ class FoCUS:
         self.P1_dic = None
         self.P2_dic = None
         self.isMPI=isMPI
+        self.mask_thres = mask_thres
+        self.mask_norm = mask_norm
 
         self.mpi_size=mpi_size
         self.mpi_rank=mpi_rank
@@ -1130,6 +1134,10 @@ class FoCUS:
         else:
             l_mask=mask
             
+        if self.mask_norm:
+            print(l_mask.shape)
+            l_mask=12*nside*nside*l_mask/self.backend.reshape(self.backend.bk_reduce_sum(l_mask,0),[1]+l_mask.shape[1:])
+            
         for i in range(axis):
             l_mask=self.backend.bk_expand_dims(l_mask,0)
             
@@ -1145,7 +1153,7 @@ class FoCUS:
 
             oshape1=shape1[0:axis+1]+[shape1[axis+3]*shape1[axis+1]*shape1[axis+2]]+shape1[axis+4:]
             oshape2=shape2[0:axis+1]+[shape2[axis+3]*shape2[axis+1]*shape2[axis+2]]+shape2[axis+4:]
-            
+                
             return self.backend.bk_reduce_sum(self.backend.bk_reshape(l_mask,oshape1)*self.backend.bk_reshape(l_x.get(),oshape2),axis=axis+1)/(12*nside*nside)
         else:
             for i in range(axis+1,len(x.shape)):

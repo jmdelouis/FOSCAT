@@ -736,6 +736,7 @@ class funct(FOC.FoCUS):
             # if the kernel size is bigger than 3 increase the binning before smoothing
             l_image1=self.up_grade(I1,nside*2,axis=axis)
             vmask=self.up_grade(vmask,nside*2,axis=1)
+                
             if cross:
                 l_image2=self.up_grade(I2,nside*2,axis=axis)
         else:
@@ -837,6 +838,8 @@ class funct(FOC.FoCUS):
                 # Rescale vmask [Nmask,Npix_j1//4]   
                 vmask = self.smooth(vmask,axis=1)
                 vmask = self.ud_grade_2(vmask,axis=1)
+                if self.mask_thres is not None:
+                    vmask = self.backend.threshold(vmask,self.mask_thres)
 
                 # Rescale l2_image [....,Npix_j1//4,....,j1,Norient]   
                 l2_image = self.smooth(l2_image,axis=axis)
