@@ -237,6 +237,14 @@ class foscat_backend:
         if self.BACKEND==self.NUMPY:
             return(np.log(data))
 
+    def bk_matmul(self,a,b):
+        if self.BACKEND==self.TENSORFLOW:
+            return(self.backend.matmul(a,b))
+        if self.BACKEND==self.TORCH:
+            return(self.backend.matmul(a,b))
+        if self.BACKEND==self.NUMPY:
+            return(np.dot(a,b))
+
     def bk_tensor(self,data):
         if self.BACKEND==self.TENSORFLOW:
             return(self.backend.constant(data))
