@@ -1136,6 +1136,7 @@ class FoCUS:
             
         if self.mask_norm:
             print(l_mask.shape)
+            print(self.backend.bk_reduce_sum(l_mask,0).numpy())
             l_mask=12*nside*nside*l_mask/self.backend.reshape(self.backend.bk_reduce_sum(l_mask,0),[1]+l_mask.shape[1:])
             
         for i in range(axis):
