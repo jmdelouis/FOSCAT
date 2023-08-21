@@ -691,9 +691,8 @@ class scat_cov:
                                         [shape[0],shape[1],shape[2],norient,norient])
             C10=self.backend.bk_reduce_mean(C10,4)
 
-        print(self.C11)
         shape=list(self.C11.shape)
-        print(self.C11.shape,shape)
+
         C11=self.backend.bk_reshape(self.backend.bk_gather(
             self.backend.bk_reshape(self.C11,[shape[0],shape[1],shape[2],norient*norient*norient]),idx2,3),
                                        [shape[0],shape[1],shape[2],norient,norient,norient])
