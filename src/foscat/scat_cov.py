@@ -678,12 +678,13 @@ class scat_cov:
         P00 = self.backend.bk_reduce_mean(self.P00,3)
 
         C01=self.C01
-        shape=list(self.C01.shape)
-        if self.C01 is not None:
-            C01=self.backend.bk_reshape(self.backend.bk_gather(
-                self.backend.bk_reshape(self.C01,[shape[0],shape[1],shape[2],norient*norient]),idx1,3),
-                                        [shape[0],shape[1],shape[2],norient,norient])
-            C01=self.backend.bk_reduce_mean(C01,4)
+        if C01 is not None:
+            shape=list(self.C01.shape)
+            if self.C01 is not None:
+                C01=self.backend.bk_reshape(self.backend.bk_gather(
+                    self.backend.bk_reshape(self.C01,[shape[0],shape[1],shape[2],norient*norient]),idx1,3),
+                                            [shape[0],shape[1],shape[2],norient,norient])
+                C01=self.backend.bk_reduce_mean(C01,4)
         C10=self.C10
         if self.C10 is not None:
             C10=self.backend.bk_reshape(self.backend.bk_gather(
@@ -691,13 +692,15 @@ class scat_cov:
                                         [shape[0],shape[1],shape[2],norient,norient])
             C10=self.backend.bk_reduce_mean(C10,4)
 
-        shape=list(self.C11.shape)
+        C11=self.C11
+        if self.C11 is not None:
+            shape=list(self.C11.shape)
 
-        C11=self.backend.bk_reshape(self.backend.bk_gather(
-            self.backend.bk_reshape(self.C11,[shape[0],shape[1],shape[2],norient*norient*norient]),idx2,3),
-                                       [shape[0],shape[1],shape[2],norient,norient,norient])
-
-        C11=self.backend.bk_reduce_mean(C11,5)
+            C11=self.backend.bk_reshape(self.backend.bk_gather(
+                self.backend.bk_reshape(self.C11,[shape[0],shape[1],shape[2],norient*norient*norient]),idx2,3),
+                                        [shape[0],shape[1],shape[2],norient,norient,norient])
+            
+            C11=self.backend.bk_reduce_mean(C11,5)
 
         return scat_cov(P00, C01, C11, s1=S1, c10=C10,backend=self.backend)
 
@@ -726,14 +729,15 @@ class scat_cov:
             P00=self.backend.bk_reshape(self.backend.bk_repeat(P00,norient),self.P00.shape)
 
         C01=self.C01
-        shape=list(self.C01.shape)
-        if self.C01 is not None:
-            C01=self.backend.bk_reshape(self.backend.bk_gather(
-                self.backend.bk_reshape(self.C01,[shape[0],shape[1],shape[2],norient*norient]),idx1,3),
-                                        [shape[0],shape[1],shape[2],norient,norient])
-            C01=self.backend.bk_reduce_mean(C01,4)
-            if repeat:
-                C01=self.backend.bk_reshape(self.backend.bk_repeat(C01,norient),self.C01.shape)
+        if C01 is not None:
+            shape=list(self.C01.shape)
+            if self.C01 is not None:
+                C01=self.backend.bk_reshape(self.backend.bk_gather(
+                    self.backend.bk_reshape(self.C01,[shape[0],shape[1],shape[2],norient*norient]),idx1,3),
+                                            [shape[0],shape[1],shape[2],norient,norient])
+                C01=self.backend.bk_reduce_mean(C01,4)
+                if repeat:
+                    C01=self.backend.bk_reshape(self.backend.bk_repeat(C01,norient),self.C01.shape)
         C10=self.C10
         if self.C10 is not None:
             C10=self.backend.bk_reshape(self.backend.bk_gather(
@@ -743,14 +747,16 @@ class scat_cov:
             if repeat:
                 C10=self.backend.bk_reshape(self.backend.bk_repeat(C10,norient),self.C10.shape)
 
-        shape=list(self.C11.shape)
-        C11=self.backend.bk_reshape(self.backend.bk_gather(
-            self.backend.bk_reshape(self.C11,[shape[0],shape[1],shape[2],norient*norient*norient]),idx2,3),
-                                       [shape[0],shape[1],shape[2],norient,norient,norient])
+        C11=self.C11
+        if self.C11 is not None:
+            shape=list(self.C11.shape)
+            C11=self.backend.bk_reshape(self.backend.bk_gather(
+                self.backend.bk_reshape(self.C11,[shape[0],shape[1],shape[2],norient*norient*norient]),idx2,3),
+                                           [shape[0],shape[1],shape[2],norient,norient,norient])
 
-        C11=self.backend.bk_reduce_mean(C11,5)
-        if repeat:
-            C11=self.backend.bk_reshape(self.backend.bk_repeat(C11,norient),self.C11.shape)
+            C11=self.backend.bk_reduce_mean(C11,5)
+            if repeat:
+                C11=self.backend.bk_reshape(self.backend.bk_repeat(C11,norient),self.C11.shape)
 
         return scat_cov(P00, C01, C11, s1=S1, c10=C10,backend=self.backend)
 

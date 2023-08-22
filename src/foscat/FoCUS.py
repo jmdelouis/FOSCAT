@@ -1135,7 +1135,8 @@ class FoCUS:
             l_mask=mask
             
         if self.mask_norm:
-            l_mask=12*nside*nside*l_mask/self.backend.reshape(self.backend.bk_reduce_sum(l_mask,0),[1]+l_mask.shape[1:])
+            sum_mask=self.backend.bk_reduce_sum(self.backend.bk_reshape(l_mask,[l_mask.shape[0],np.prod(np.array(l_mask.shape[1:]))]),1)
+            l_mask=12*nside*nside*l_mask/self.backend.bk_reshape(sum_mask,[l_mask.shape[0]]+[1 for i in l_mask.shape[1:]])
             
         for i in range(axis):
             l_mask=self.backend.bk_expand_dims(l_mask,0)
