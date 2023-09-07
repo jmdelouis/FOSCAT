@@ -111,10 +111,7 @@ class foscat_backend:
         if self.BACKEND==self.NUMPY:
             return x
 
-    def threshold(self,x,threshold,greater=True):
-        if isinstance(x,Rformat.Rformat):
-            return Rformat.Rformat(self.threshold(x.get(),threshold,greater=greater),x.off,x.axis,chans=x.chans)
-
+    def bk_threshold(self,x,threshold,greater=True):
         if self.BACKEND==self.TENSORFLOW:
             return(self.backend.cast(x>threshold,x.dtype)*x)
         if self.BACKEND==self.TORCH:
@@ -279,6 +276,42 @@ class foscat_backend:
             else:
                 return(np.take(data,shape,axis=axis))
 
+    def bk_exp(self,data):
+        if isinstance(data,Rformat.Rformat):
+            return Rformat.Rformat(self.bk_exp(data.get()),data.off,0,chans=data.chans)
+        
+        return(self.backend.exp(data))
+    
+    def bk_min(self,data):
+        if isinstance(data,Rformat.Rformat):
+            return Rformat.Rformat(self.bk_min(data.get()),data.off,0,chans=data.chans)
+        
+        return(self.backend.reduce_min(data))
+    
+    def bk_argmin(self,data):
+        if isinstance(data,Rformat.Rformat):
+            return Rformat.Rformat(self.bk_argmin(data.get()),data.off,0,chans=data.chans)
+        
+        return(self.backend.argmin(data))
+    
+    def bk_tanh(self,data):
+        if isinstance(data,Rformat.Rformat):
+            return Rformat.Rformat(self.bk_tanh(data.get()),data.off,0,chans=data.chans)
+        
+        return(self.backend.math.tanh(data))
+    
+    def bk_max(self,data):
+        if isinstance(data,Rformat.Rformat):
+            return Rformat.Rformat(self.bk_max(data.get()),data.off,0,chans=data.chans)
+        
+        return(self.backend.reduce_max(data))
+    
+    def bk_argmax(self,data):
+        if isinstance(data,Rformat.Rformat):
+            return Rformat.Rformat(self.bk_argmax(data.get()),data.off,0,chans=data.chans)
+        
+        return(self.backend.argmax(data))
+    
     def bk_reshape(self,data,shape):
         if isinstance(data,Rformat.Rformat):
             return Rformat.Rformat(self.bk_reshape(data.get(),shape),data.off,0,chans=data.chans)

@@ -32,7 +32,7 @@ class Loss:
             return self.loss_function(x,self.scat_operator,self.args)
         else:
             return self.loss_function(x,batch,self.scat_operator,self.args)
-    
+        
 class Synthesis:
     def __init__(self,
                  loss_list,
@@ -202,9 +202,9 @@ class Synthesis:
         
         if self.itt%self.EVAL_FREQUENCY==0 and self.mpi_rank==0:
             end = time.time()
-            cur_loss='%.3g ('%(self.ltot[self.ltot!=-1].mean())
+            cur_loss='%10.3g ('%(self.ltot[self.ltot!=-1].mean())
             for k in self.ltot[self.ltot!=-1]:
-                cur_loss=cur_loss+'%.3g '%(k)
+                cur_loss=cur_loss+'%10.3g '%(k)
                 
             cur_loss=cur_loss+')'
                 
@@ -215,7 +215,7 @@ class Synthesis:
                 for k in range(info_gpu.shape[0]):
                     mess=mess+'[GPU%d %.0f/%.0f MB %.0f%%]'%(k,info_gpu[k,0],info_gpu[k,1],info_gpu[k,2])
                 
-            print('%sItt %d L=%s %.3fs %s'%(self.MESSAGE,self.itt,cur_loss,(end-self.start),mess))
+            print('%sItt %6d L=%s %.3fs %s'%(self.MESSAGE,self.itt,cur_loss,(end-self.start),mess))
             sys.stdout.flush()
             self.start = time.time()
             
