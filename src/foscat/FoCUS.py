@@ -25,6 +25,7 @@ class FoCUS:
                  Healpix=True,
                  JmaxDelta=0,
                  DODIV=False,
+                 strong_convol=False,
                  mpi_size=1,
                  mpi_rank=0):
 
@@ -34,6 +35,7 @@ class FoCUS:
         self.isMPI=isMPI
         self.mask_thres = mask_thres
         self.mask_norm = mask_norm
+        self.strong_convol=strong_convol
 
         self.mpi_size=mpi_size
         self.mpi_rank=mpi_rank
@@ -143,8 +145,8 @@ class FoCUS:
             for i in range(nstep_max):
                 lout=(2**i)
                 all_nmax=128
-                self.ww_Real[lout]=np.load('ALLWAVE_%d_%d_Wr.npy'%(lout,all_nmax)).astype(self.all_type)
-                self.ww_Imag[lout]=np.load('ALLWAVE_%d_%d_Wi.npy'%(lout,all_nmax)).astype(self.all_type)
+                self.ww_Real[lout]=np.load('ALLWAVE_V2_2_%d_%d_Wr.npy'%(lout,all_nmax)).astype(self.all_type)
+                self.ww_Imag[lout]=np.load('ALLWAVE_V2_2_%d_%d_Wi.npy'%(lout,all_nmax)).astype(self.all_type)
                 
             KERNELSZ=5
             x=np.repeat(np.arange(KERNELSZ)-KERNELSZ//2,KERNELSZ).reshape(KERNELSZ,KERNELSZ)
@@ -265,6 +267,10 @@ class FoCUS:
         self.nest2R2={}
         self.nest2R3={}
         self.nest2R4={}
+        self.nest2idx45={}
+        self.nest2invidx45={}
+        self.wsin45={}
+        self.wcos45={}
         self.inv_nest2R={}
         self.remove_border={}
             
@@ -286,6 +292,10 @@ class FoCUS:
             self.nest2R2[lout]=None
             self.nest2R3[lout]=None
             self.nest2R4[lout]=None
+            self.nest2idx45[lout]=None
+            self.nest2invidx45[lout]=None
+            self.wsin45[lout]=None
+            self.wcos45[lout]=None
             self.inv_nest2R[lout]=None
             self.remove_border[lout]=None
 
@@ -311,6 +321,9 @@ class FoCUS:
         if self.use_R_format and isinstance(x,np.ndarray):
             return(self.to_R(x,axis,chans=self.chans))
         return x
+
+    def diffang(self,a,b):
+        return np.arctan2(np.sin(a)-np.sin(b),np.cos(a)-np.cos(b))
         
     def calc_R_index(self,nside,chans=12):
         # if chans=12 healpix sinon chans=1
@@ -324,11 +337,11 @@ class FoCUS:
         self.barrier()
         
         try:
-            fidx =np.load('%s/%s_%d_%d_FIDX.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
-            fidx1=np.load('%s/%s_%d_%d_FIDX1.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
-            fidx2=np.load('%s/%s_%d_%d_FIDX2.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
-            fidx3=np.load('%s/%s_%d_%d_FIDX3.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
-            fidx4=np.load('%s/%s_%d_%d_FIDX4.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
+            fidx =np.load('%s/%s_V2_2_%d_%d_FIDX.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
+            fidx1=np.load('%s/%s_V2_2_%d_%d_FIDX1.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
+            fidx2=np.load('%s/%s_V2_2_%d_%d_FIDX2.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
+            fidx3=np.load('%s/%s_V2_2_%d_%d_FIDX3.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
+            fidx4=np.load('%s/%s_V2_2_%d_%d_FIDX4.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
         except:
             
             if self.rank==0:
@@ -426,6 +439,171 @@ class FoCUS:
                     fidx2 = (fidx2+12*nside*nside)%(12*nside*nside)
                     fidx3 = (fidx3+12*nside*nside)%(12*nside*nside)
                     fidx4 = (fidx4+12*nside*nside)%(12*nside*nside)
+                    
+                    fidx_inv=0*fidx
+                    fidx_inv[fidx]=np.arange(12*nside*nside)
+                    
+                    """
+                    # use ang2pix to keep the proper orientation at big pixel edge
+                    ith,iph=hp.pix2ang(nside,np.arange(12*nside*nside),nest=True)
+                
+                    ith=ith[fidx]
+                    iph=iph[fidx]
+                    th2=ith[fidx2]
+                    ph2=iph[fidx2]
+                    th3=ith[fidx3]
+                    ph3=iph[fidx3]
+                    th1=ith[fidx1]
+                    ph1=iph[fidx1]
+                    th4=ith[fidx4]
+                    ph4=iph[fidx4]
+                    
+                    ith=ith.reshape(12,nside,nside)
+                    iph=iph.reshape(12,nside,nside)
+                    
+                    th2[0:4,1,2:]=ith[0:4,-1,:-2]
+                    th2[0:4,0,1:]=ith[0:4,-1,:-1]
+
+                    print(iph.shape)
+                    ph2[0:4,1,3:]=self.diffang(3*iph[0:4,-1,1:-2],2*iph[0:4,-2,:-3])
+                    ph2[0:4,0,2:]=self.diffang(2*iph[0:4,-1,1:-1],  iph[0:4,-2,:-2])
+                    
+                    # fill the pole
+                    th2[0:4,1,0]=ith[0:4,-1,2]
+                    th2[0:4,1,1]=ith[0:4,-1,1]
+                    th2[0:4,1,2]=ith[0:4,-1,0]
+                    th2[0:4,0,0]=ith[0:4,-1,1]
+                    th2[0:4,0,1]=ith[0:4,-1,0]
+
+                    ph2[0:4,1,0]=iph[0:4,-1,2]+np.pi-np.pi/3
+                    ph2[0:4,1,1]=iph[0:4,-1,1]+np.pi/4
+                    ph2[0:4,1,2]=iph[0:4,-1,0]+np.pi
+                    ph2[0:4,0,0]=iph[0:4,-1,1]+np.pi/2
+                    ph2[0:4,0,1]=iph[0:4,-1,0]+np.pi/2
+                    
+                    fidx2 = fidx_inv[hp.ang2pix(nside,th2,ph2,nest=True)]
+                    
+                    th3[0:4,1:-3,1]=ith[0:4,:,0]
+                    th3[0:4,:-4,0]=ith[0:4,:,0]
+                    
+                    ph3[0:4,0:-5,0]=3*iph[0:4,:-1,0]-2*iph[0:4,1:,1]
+                    ph3[0:4,1:-4,1]=2*iph[0:4,:-1,0]-  iph[0:4,1:,1]
+                    
+                    # fill the pole
+                    th3[0:4,-1,0]=ith[0:4,-3,2]
+                    th3[0:4,-2,0]=ith[0:4,-3,1]
+                    th3[0:4,-3,0]=ith[0:4,-2,1]
+                    th3[0:4,-4,0]=ith[0:4,-2,0]
+                    th3[0:4,-5,0]=ith[0:4,-1,0]
+                    
+                    th3[0:4,-1,1]=ith[0:4,-3,1]
+                    th3[0:4,-2,1]=ith[0:4,-2,1]
+                    th3[0:4,-3,1]=ith[0:4,-2,0]
+                    th3[0:4,-4,1]=ith[0:4,-1,0]
+                    
+                    ph3[0:4,-1,0]=iph[0:4,-3,2]-np.pi
+                    ph3[0:4,-2,0]=iph[0:4,-3,1]-np.pi+np.pi/8
+                    ph3[0:4,-3,0]=iph[0:4,-2,1]-np.pi+np.pi/6
+                    ph3[0:4,-4,0]=iph[0:4,-2,0]-np.pi+np.pi/2
+                    ph3[0:4,-5,0]=iph[0:4,-1,0]-np.pi
+                    
+                    ph3[0:4,-1,1]=iph[0:4,-3,1]-np.pi+np.pi/16
+                    ph3[0:4,-2,1]=iph[0:4,-2,1]-np.pi
+                    ph3[0:4,-3,1]=iph[0:4,-2,0]-np.pi+np.pi/4
+                    ph3[0:4,-4,1]=iph[0:4,-1,0]-np.pi/2
+                    
+                    fidx3 = fidx_inv[hp.ang2pix(nside,th3,ph3,nest=True)]
+                    
+                    th1[8:,0,:-2] = ith[8:,0,2:]
+                    th1[8:,1,:-1] = ith[8:,0,1:]
+                    
+                    ph1[8:,0,0:-3]=self.diffang(3*iph[8:,0,2:-1],2*iph[8:,1,3:])
+                    ph1[8:,1,0:-2]=self.diffang(2*iph[8:,0,1:-1],iph[8:,1,2:])
+                    
+                    # fill the pole
+                    th1[8:,0,-1]=ith[8:,2,-1]
+                    th1[8:,0,-2]=ith[8:,1,-1]
+                    th1[8:,0,-3]=ith[8:,0,-1]
+                    th1[8:,1,-1]=ith[8:,1,-1]
+                    th1[8:,1,-2]=ith[8:,0,-1]
+
+                    ph1[8:,0,-1]=iph[8:,2,-1]-2*np.pi/3
+                    ph1[8:,0,-2]=iph[8:,1,-1]-np.pi/4
+                    ph1[8:,0,-3]=iph[8:,0,-1]-np.pi
+                    ph1[8:,1,-1]=iph[8:,1,-1]-np.pi/2
+                    ph1[8:,1,-2]=iph[8:,0,-1]-np.pi/2
+                    
+                    fidx1 = fidx_inv[hp.ang2pix(nside,th1,ph1,nest=True)]
+                    
+                    th4[8:,4:,  1]= ith[8:,:,-1]
+                    th4[8:,3:-1,0]  = ith[8:,:,-1]
+                    
+                    ph4[8:,4:-1,1] = self.diffang(2*iph[8:,:-1,-1],iph[8:,1:,-2])
+                    ph4[8:,5:  ,0] = self.diffang(3*iph[8:,:-1,-1],2*iph[8:,1:,-2])
+
+                    th4[8:,0,1]=ith[8:,2,-3]
+                    th4[8:,1,1]=ith[8:,1,-1]
+                    th4[8:,2,1]=ith[8:,1,-2]
+                    th4[8:,3,1]=ith[8:,0,-2]
+                    th4[8:,4,1]=ith[8:,0,-1]
+                    
+                    th4[8:,0,0]=ith[8:,1,-1]
+                    th4[8:,1,0]=ith[8:,1,-2]
+                    th4[8:,2,0]=ith[8:,0,-2]
+                    th4[8:,3,0]=ith[8:,0,-1]
+
+                    
+                    ph4[8:,0,1]=iph[8:,2,-3]+np.pi
+                    ph4[8:,1,1]=iph[8:,1,-1]+3*np.pi/4
+                    ph4[8:,2,1]=iph[8:,1,-2]+2*np.pi/3
+                    ph4[8:,3,1]=iph[8:,0,-2]+np.pi/4
+                    ph4[8:,4,1]=iph[8:,0,-1]+np.pi
+                    
+                    ph4[8:,0,0]=iph[8:,1,-1]+3*np.pi/4
+                    ph4[8:,1,0]=iph[8:,1,-2]+np.pi
+                    ph4[8:,2,0]=iph[8:,0,-2]+np.pi/2
+                    ph4[8:,3,0]=iph[8:,0,-1]+np.pi/2
+                    
+                    fidx4 = fidx_inv[hp.ang2pix(nside,th4,ph4,nest=True)]
+                    """
+                    th,ph=hp.pix2ang(nside,np.arange(12*nside**2),nest=True)
+                    thc=th[fidx].reshape(chans,nside,nside)
+                    th1=th[fidx1]
+                    th2=th[fidx2]
+                    th3=th[fidx3]
+                    th4=th[fidx4]
+                    th=np.concatenate([th3,np.concatenate([th1,thc,th2],1),th4],2)
+                    phc=ph[fidx].reshape(chans,nside,nside)
+                    ph1=ph[fidx1]
+                    ph2=ph[fidx2]
+                    ph3=ph[fidx3]
+                    ph4=ph[fidx4]
+                    ph=np.concatenate([ph3,np.concatenate([ph1,phc,ph2],1),ph4],2)
+                    wsin45=np.expand_dims(1.0-((th<np.pi/4)+(th>3*np.pi/4))*np.cos(2*ph)**2,-1)
+                    wcos45=1.0-wsin45
+                    
+                    
+                    
+                    ro = hp.Rotator(rot=[45,0])
+                    thr,phr=ro(th.flatten(),ph.flatten())
+                    idx45=fidx_inv[hp.ang2pix(nside,thr,phr,nest=True)]
+                    idx45=(idx45%nside)+2+(4+nside)*((idx45%(nside*nside)//nside)+2)+(4+nside)*(4+nside)*(idx45//(nside*nside))
+                    idx45=idx45.flatten()
+                    
+                    ro = hp.Rotator(rot=[-45,0])
+                    thr,phr=ro(th.flatten(),ph.flatten())
+                    inv_idx45=fidx_inv[hp.ang2pix(nside,thr,phr,nest=True)]
+                    inv_idx45=(inv_idx45%nside)+2+(4+nside)*((inv_idx45%(nside*nside)//nside)+2)+(4+nside)*(4+nside)*(inv_idx45//(nside*nside))
+                    inv_idx45=inv_idx45.flatten()
+                    
+                    np.save('%s/%s_V2_2_%d_%d_IDX45.npy'%(self.TEMPLATE_PATH,outname,nside,chans),idx45)
+                    print('%s/%s_V2_2_%d_%d_IDX45.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
+                    np.save('%s/%s_V2_2_%d_%d_INV_IDX45.npy'%(self.TEMPLATE_PATH,outname,nside,chans),inv_idx45)
+                    print('%s/%s_V2_2_%d_%d_INV_IDX45.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
+                    np.save('%s/%s_V2_2_%d_%d_WSIN45.npy'%(self.TEMPLATE_PATH,outname,nside,chans),wsin45)
+                    print('%s/%s_V2_2_%d_%d_WSIN45.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
+                    np.save('%s/%s_V2_2_%d_%d_WCOS45.npy'%(self.TEMPLATE_PATH,outname,nside,chans),wcos45)
+                    print('%s/%s_V2_2_%d_%d_INV_WCOS45.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
                 else:
                     ll_idx=np.arange(nside,dtype='int')
                     fidx1=np.zeros([1,off,nside],dtype='int')
@@ -449,32 +627,44 @@ class FoCUS:
                     fidx2 = (fidx2+nside*nside)%(nside*nside)
                     fidx3 = (fidx3+nside*nside)%(nside*nside)
                     fidx4 = (fidx4+nside*nside)%(nside*nside)
-
-                np.save('%s/%s_%d_%d_FIDX.npy'%(self.TEMPLATE_PATH,outname,nside,chans),fidx)
-                print('%s/%s_%d_%d_FIDX.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
-                np.save('%s/%s_%d_%d_FIDX1.npy'%(self.TEMPLATE_PATH,outname,nside,chans),fidx1)
-                print('%s/%s_%d_%d_FIDX1.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
-                np.save('%s/%s_%d_%d_FIDX2.npy'%(self.TEMPLATE_PATH,outname,nside,chans),fidx2)
-                print('%s/%s_%d_%d_FIDX2.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
-                np.save('%s/%s_%d_%d_FIDX3.npy'%(self.TEMPLATE_PATH,outname,nside,chans),fidx3)
-                print('%s/%s_%d_%d_FIDX3.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
-                np.save('%s/%s_%d_%d_FIDX4.npy'%(self.TEMPLATE_PATH,outname,nside,chans),fidx4)
-                print('%s/%s_%d_%d_FIDX4.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
+                
+                
+                np.save('%s/%s_V2_2_%d_%d_FIDX.npy'%(self.TEMPLATE_PATH,outname,nside,chans),fidx)
+                print('%s/%s_V2_2_%d_%d_FIDX.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
+                np.save('%s/%s_V2_2_%d_%d_FIDX1.npy'%(self.TEMPLATE_PATH,outname,nside,chans),fidx1)
+                print('%s/%s_V2_2_%d_%d_FIDX1.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
+                np.save('%s/%s_V2_2_%d_%d_FIDX2.npy'%(self.TEMPLATE_PATH,outname,nside,chans),fidx2)
+                print('%s/%s_V2_2_%d_%d_FIDX2.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
+                np.save('%s/%s_V2_2_%d_%d_FIDX3.npy'%(self.TEMPLATE_PATH,outname,nside,chans),fidx3)
+                print('%s/%s_V2_2_%d_%d_FIDX3.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
+                np.save('%s/%s_V2_2_%d_%d_FIDX4.npy'%(self.TEMPLATE_PATH,outname,nside,chans),fidx4)
+                print('%s/%s_V2_2_%d_%d_FIDX4.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
                 sys.stdout.flush()
 
         self.barrier()
             
-        fidx =np.load('%s/%s_%d_%d_FIDX.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
-        fidx1=np.load('%s/%s_%d_%d_FIDX1.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
-        fidx2=np.load('%s/%s_%d_%d_FIDX2.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
-        fidx3=np.load('%s/%s_%d_%d_FIDX3.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
-        fidx4=np.load('%s/%s_%d_%d_FIDX4.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
-            
+        fidx =np.load('%s/%s_V2_2_%d_%d_FIDX.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
+        fidx1=np.load('%s/%s_V2_2_%d_%d_FIDX1.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
+        fidx2=np.load('%s/%s_V2_2_%d_%d_FIDX2.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
+        fidx3=np.load('%s/%s_V2_2_%d_%d_FIDX3.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
+        fidx4=np.load('%s/%s_V2_2_%d_%d_FIDX4.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
+        idx45=np.load('%s/%s_V2_2_%d_%d_IDX45.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
+        inv_idx45=np.load('%s/%s_V2_2_%d_%d_INV_IDX45.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
+        wsin45=np.load('%s/%s_V2_2_%d_%d_WSIN45.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
+        wcos45=np.load('%s/%s_V2_2_%d_%d_WCOS45.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
+
         self.nest2R[nside]=fidx
         self.nest2R1[nside]=fidx1
         self.nest2R2[nside]=fidx2
         self.nest2R3[nside]=fidx3
         self.nest2R4[nside]=fidx4
+        
+        if chans==12:
+            self.nest2idx45[nside]=idx45
+            self.nest2invidx45[nside]=inv_idx45
+            self.wsin45[nside]=wsin45
+            self.wcos45[nside]=wcos45
+            
     
     def calc_R_inv_index(self,nside,chans=12):
         nstep=int(np.log(nside)/np.log(2))
@@ -555,6 +745,7 @@ class FoCUS:
         if isinstance(im,Rformat.Rformat):
             return im
                     
+            
         padding=self.padding
         if chans==1 and len(im.shape)>1:
             nside=im.shape[axis]
@@ -579,7 +770,7 @@ class FoCUS:
                 lim=self.reduce_dim(im,axis=axis)
             else:
                 lim=im
-                
+
             v1=self.backend.bk_gather(lim,self.nest2R1[nside],axis=axis)
             v2=self.backend.bk_gather(lim,self.nest2R2[nside],axis=axis)
             v3=self.backend.bk_gather(lim,self.nest2R3[nside],axis=axis)
@@ -606,7 +797,7 @@ class FoCUS:
             else:
                 if axis+1<len(shape):
                     oshape=oshape+shape[axis+1:]
-                    
+
             v1=self.backend.bk_gather(im_center,self.nest2R1[nside],axis=axis)
             v2=self.backend.bk_gather(im_center,self.nest2R2[nside],axis=axis)
             v3=self.backend.bk_gather(im_center,self.nest2R3[nside],axis=axis)
@@ -690,8 +881,8 @@ class FoCUS:
         for iii in range(12*nout*nout):
             idx[iii,:]=allidx[:,iii]
 
-        np.save('%s/%s_%d_IDX.npy'%(self.TEMPLATE_PATH,outname,nout),idx)
-        print('%s/%s_%d_IDX.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nout))
+        np.save('%s/%s_V2_2_%d_IDX.npy'%(self.TEMPLATE_PATH,outname,nout),idx)
+        print('%s/%s_V2_2_%d_IDX.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nout))
         sys.stdout.flush()
             
     # ---------------------------------------------−---------
@@ -757,8 +948,8 @@ class FoCUS:
         for iii in range(12*nout*nout):
             idx[iii,:]=allidx[:,iii]
 
-        np.save('%s/%s_%d_IDX.npy'%(self.TEMPLATE_PATH,outname,nout),idx)
-        print('%s/%s_%d_IDX.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nout))
+        np.save('%s/%s_V2_2_%d_IDX.npy'%(self.TEMPLATE_PATH,outname,nout),idx)
+        print('%s/%s_V2_2_%d_IDX.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nout))
         sys.stdout.flush()
         
     # ---------------------------------------------−---------
@@ -1013,10 +1204,10 @@ class FoCUS:
             wi[l,:,:]=wwi[idx[0:nmax],:]
             iii[l,:]=idx[0:nmax]
 
-        print('Write ALLWAVE_%d_%d_W.npy'%(nside,k),wr.shape[1]/(12*nside**2))
-        np.save('ALLWAVE_%d_%d_Wr.npy'%(nside,all_nmax),wr)
-        np.save('ALLWAVE_%d_%d_Wi.npy'%(nside,all_nmax),wi)
-        np.save('ALLWAVE_%d_%d_I.npy'%(nside,all_nmax),iii)
+        print('Write ALLWAVE_V2_2_%d_%d_W.npy'%(nside,k),wr.shape[1]/(12*nside**2))
+        np.save('ALLWAVE_V2_2_%d_%d_Wr.npy'%(nside,all_nmax),wr)
+        np.save('ALLWAVE_V2_2_%d_%d_Wi.npy'%(nside,all_nmax),wi)
+        np.save('ALLWAVE_V2_2_%d_%d_I.npy'%(nside,all_nmax),iii)
         
     # ---------------------------------------------−---------
     def init_index(self,nside,kernel=-1):
@@ -1028,7 +1219,7 @@ class FoCUS:
             
         
         try:
-            tmp=np.load('%s/W%d_%d_IDX.npy'%(self.TEMPLATE_PATH,l_kernel**2,nside))
+            tmp=np.load('%s/W%d_V2_2_%d_IDX.npy'%(self.TEMPLATE_PATH,l_kernel**2,nside))
         except:
             if l_kernel**2==9:
                 if self.rank==0:
@@ -1042,7 +1233,7 @@ class FoCUS:
                     exit(0)
 
         self.barrier()            
-        tmp=np.load('%s/W%d_%d_IDX.npy'%(self.TEMPLATE_PATH,l_kernel**2,nside))
+        tmp=np.load('%s/W%d_V2_2_%d_IDX.npy'%(self.TEMPLATE_PATH,l_kernel**2,nside))
                 
         if kernel==-1:
             if self.backend.BACKEND==self.backend.TORCH:
@@ -1053,7 +1244,7 @@ class FoCUS:
         
         if self.do_wigner:
             try:
-                self.Idx_convol[nside]=np.load('ALLWAVE_%d_%d_I.npy'%(nside,128))
+                self.Idx_convol[nside]=np.load('ALLWAVE_V2_2_%d_%d_I.npy'%(nside,128))
             except:
                 self.computeWigner(nside)
         else:
@@ -1133,11 +1324,11 @@ class FoCUS:
             l_mask=mask.get()*self.remove_border[nside]
         else:
             l_mask=mask
-            
+
         if self.mask_norm:
             sum_mask=self.backend.bk_reduce_sum(self.backend.bk_reshape(l_mask,[l_mask.shape[0],np.prod(np.array(l_mask.shape[1:]))]),1)
             l_mask=12*nside*nside*l_mask/self.backend.bk_reshape(sum_mask,[l_mask.shape[0]]+[1 for i in l_mask.shape[1:]])
-            
+                        
         for i in range(axis):
             l_mask=self.backend.bk_expand_dims(l_mask,0)
             
@@ -1153,7 +1344,7 @@ class FoCUS:
 
             oshape1=shape1[0:axis+1]+[shape1[axis+3]*shape1[axis+1]*shape1[axis+2]]+shape1[axis+4:]
             oshape2=shape2[0:axis+1]+[shape2[axis+3]*shape2[axis+1]*shape2[axis+2]]+shape2[axis+4:]
-                
+            
             return self.backend.bk_reduce_sum(self.backend.bk_reshape(l_mask,oshape1)*self.backend.bk_reshape(l_x.get(),oshape2),axis=axis+1)/(12*nside*nside)
         else:
             for i in range(axis+1,len(x.shape)):
@@ -1254,6 +1445,42 @@ class FoCUS:
         return self.backend.bk_reshape(res,shape+[norient])
     
     # ---------------------------------------------−---------
+    def rot45_R(self,image,axis=0,chans=12,inv=False):
+        
+        if isinstance(image, Rformat.Rformat) or inv:
+            l_image=image
+        else:
+            l_image=self.to_R(image,axis=axis,chans=self.chans)
+
+        tsize=l_image.shape[axis]*l_image.shape[axis+1]*l_image.shape[axis+2]
+        
+        if inv:
+            nside=l_image.shape[axis+1]-2*self.R_off
+            if axis==0:
+                res=self.backend.bk_reshape(l_image,[tsize]+l_image.shape[axis+3:])
+            if axis==1:
+                res=self.backend.bk_reshape(l_image,[l_image.shape[0],tsize]+l_image.shape[axis+3:])
+            res=self.backend.bk_gather(res,self.nest2invidx45[nside],axis=axis)
+            res=self.backend.bk_reshape(res,l_image.shape)
+        else:
+            nside=l_image.shape[axis+1]-2*self.R_off
+            if self.nest2idx45[nside] is None:
+                self.calc_R_index(nside,chans=12)
+            if axis==0:
+                res=self.backend.bk_reshape(l_image.get(),[tsize]+l_image.shape[axis+3:])
+            if axis==1:
+                res=self.backend.bk_reshape(l_image.get(),[l_image.shape[0],tsize]+l_image.shape[axis+3:])
+
+            res=self.backend.bk_gather(res,self.nest2idx45[nside],axis=axis)
+            res=self.backend.bk_reshape(res,l_image.get().shape)
+            
+            res=Rformat.Rformat(res,self.R_off,axis,chans=self.chans)
+            
+            if not isinstance(image, Rformat.Rformat):
+                res=self.from_R(res,axis=axis)
+        return res
+    
+    # ---------------------------------------------−---------
     def convol(self,in_image,axis=0):
 
         image=self.backend.bk_cast(in_image)
@@ -1270,6 +1497,25 @@ class FoCUS:
             rr=self.conv2d(l_image.get(),self.ww_RealT[nside],axis=axis)
             ii=self.conv2d(l_image.get(),self.ww_ImagT[nside],axis=axis)
 
+            if self.chans==12 and self.strong_convol:
+                l_image=self.rot45_R(l_image,axis=axis,chans=self.chans)
+                rr45=self.rot45_R(self.conv2d(l_image.get(),self.ww_RealT[nside],axis=axis),axis=axis,inv=True)
+                ii45=self.rot45_R(self.conv2d(l_image.get(),self.ww_ImagT[nside],axis=axis),axis=axis,inv=True)
+
+                factor=self.backend.bk_cast(self.wsin45[nside])
+                oshape=[]
+                for k in range(axis):
+                    oshape=oshape+[1]
+                    
+                oshape=oshape+list(factor.shape)
+                for k in range(len(l_image.shape)-axis-3):
+                    oshape=oshape+[1]
+                factor=self.backend.bk_reshape(factor,oshape)
+                if rr.dtype=='complex64' or rr.dtype=='complex128' :
+                    factor=self.backend.bk_complex(factor,0*factor)
+                rr=rr*factor+rr45*(1-factor)
+                ii=ii*factor+ii45*(1-factor)
+                
             if rr.dtype==self.all_cbk_type:
                 if self.all_cbk_type=='complex128':
                     res=rr+self.backend.bk_complex(np.float64(0.0),np.float64(1.0))*ii
