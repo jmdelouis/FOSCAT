@@ -235,13 +235,13 @@ class FoCUS:
         
         if not self.use_R_format:
             self.w_smooth = {}
-            for i in range(1,8):
+            for i in range(1,9):
                 lout=(2**i)
                 self.init_index(lout)
                 
-                self.ww_Real[lout]=np.load('%s/FOSCAT_V2_2_W%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,KERNELSZ**2,lout)).real.astype(self.all_type)
-                self.ww_Imag[lout]=np.load('%s/FOSCAT_V2_2_W%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,KERNELSZ**2,lout)).imag.astype(self.all_type)
-                self.w_smooth[lout]=slope*np.load('%s/FOSCAT_V2_2_W%d_%d_SMOO.npy'%(self.TEMPLATE_PATH,KERNELSZ**2,lout)).astype(self.all_type)
+                self.ww_Real[lout]=np.load('%s/FOSCAT_V2_2_W%d_%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,KERNELSZ**2,self.NORIENT,lout)).real.astype(self.all_type)
+                self.ww_Imag[lout]=np.load('%s/FOSCAT_V2_2_W%d_%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,KERNELSZ**2,self.NORIENT,lout)).imag.astype(self.all_type)
+                self.w_smooth[lout]=slope*np.load('%s/FOSCAT_V2_2_W%d_%d_%d_SMOO.npy'%(self.TEMPLATE_PATH,KERNELSZ**2,self.NORIENT,lout)).astype(self.all_type)
         else:
             self.w_smooth=slope*(w_smooth/w_smooth.sum()).astype(self.all_type)
             for i in range(nstep_max):
@@ -1231,15 +1231,15 @@ class FoCUS:
             if self.use_R_format:
                 tmp=np.load('%s/W%d_V2_2_%d_IDX.npy'%(self.TEMPLATE_PATH,l_kernel**2,nside))
             else:
-                tmp=np.load('%s/FOSCAT_V2_2_W%d_%d_PIDX.npy'%(self.TEMPLATE_PATH,l_kernel**2,nside))
+                tmp=np.load('%s/FOSCAT_V2_2_W%d_%d_%d_PIDX.npy'%(self.TEMPLATE_PATH,l_kernel**2,self.NORIENT,nside))
         except:
             if self.use_R_format==False:
+                aa=np.cos(np.arange(self.NORIENT)/self.NORIENT*np.pi).reshape(1,self.NORIENT)
+                bb=np.sin(np.arange(self.NORIENT)/self.NORIENT*np.pi).reshape(1,self.NORIENT)
                 x,y,z=hp.pix2vec(nside,np.arange(12*nside*nside),nest=True)
-                ax=np.arccos(x)
-                ay=np.arccos(y)
-                az=np.arccos(z)
+                to,po=hp.pix2ang(nside,np.arange(12*nside*nside),nest=True)
 
-                wav=np.zeros([12*nside*nside,l_kernel**2,3],dtype='complex')
+                wav=np.zeros([12*nside*nside,l_kernel**2,self.NORIENT],dtype='complex')
                 wwav=np.zeros([12*nside*nside,l_kernel**2])
                 iwav=np.zeros([12*nside*nside,l_kernel**2],dtype='int')
 
@@ -1248,6 +1248,11 @@ class FoCUS:
                     th,ph=hp.pix2ang(nside//scale,np.arange(12*(nside//scale)**2),nest=True)
                 else:
                     lidx=np.arange(12*nside*nside)
+
+                if self.KERNELSZ==5:
+                    pw=1/2.0
+                else:
+                    pw=1/np.sqrt(2.0)
                     
                 for k in range(12*nside*nside):
                     if k%(nside*nside)==0:
@@ -1266,25 +1271,24 @@ class FoCUS:
                     w=np.exp(-0.5*delta[pidx]*(nside**2))
                     iwav[k]=lidx[pidx]
                     wwav[k]=w
-    
-                    pw=1/np.sqrt(2)
-                    wav[k,:,0]=(np.cos(pw*nside*np.pi*(ax[iwav[k]]-ax[k]))+ \
-                                complex(0.0,1.0)*np.sin(pw*nside*np.pi*(ax[iwav[k]]-ax[k])))*w
-    
-                    wav[k,:,1]=(np.cos(pw*nside*np.pi*(ay[iwav[k]]-ay[k]))+ \
-                                complex(0.0,1.0)*np.sin(pw*nside*np.pi*(ay[iwav[k]]-ay[k])))*w
-    
-                    wav[k,:,2]=(np.cos(pw*nside*np.pi*(az[iwav[k]]-az[k]))+ \
-                                complex(0.0,1.0)*np.sin(pw*nside*np.pi*(az[iwav[k]]-az[k])))*w
+                    rot=[po[k]/np.pi*180.0,90+(-to[k])/np.pi*180.0]
+                    r=hp.Rotator(rot=rot)
+                    ty,tx=r(to[iwav[k]],po[iwav[k]])
+                    ty=ty-np.pi/2
+                        
+                    xx=np.expand_dims(pw*nside*np.pi*tx/np.cos(ty),-1)
+                    yy=np.expand_dims(pw*nside*np.pi*ty,-1)
+                    
+                    wav[k,:,:]=(np.cos(xx*aa+yy*bb)+complex(0.0,1.0)*np.sin(xx*aa+yy*bb))*np.expand_dims(w,-1)
     
                 wav=wav-np.expand_dims(np.mean(wav,1),1)
                 wav=wav/np.expand_dims(np.std(wav,1),1)
                 wwav=wwav/np.expand_dims(np.sum(wwav,1),1)
 
-                print('Write FOSCAT_V2_2_W%d_%d_PIDX.npy'%(l_kernel**2,nside))
-                np.save('%s/FOSCAT_V2_2_W%d_%d_PIDX.npy'%(self.TEMPLATE_PATH,l_kernel**2,nside),iwav)
-                np.save('%s/FOSCAT_V2_2_W%d_%d_SMOO.npy'%(self.TEMPLATE_PATH,l_kernel**2,nside),wwav)
-                np.save('%s/FOSCAT_V2_2_W%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,l_kernel**2,nside),wav)
+                print('Write FOSCAT_V2_2_W%d_%d_%d_PIDX.npy'%(l_kernel**2,self.NORIENT,nside))
+                np.save('%s/FOSCAT_V2_2_W%d_%d_%d_PIDX.npy'%(self.TEMPLATE_PATH,l_kernel**2,self.NORIENT,nside),iwav)
+                np.save('%s/FOSCAT_V2_2_W%d_%d_%d_SMOO.npy'%(self.TEMPLATE_PATH,l_kernel**2,self.NORIENT,nside),wwav)
+                np.save('%s/FOSCAT_V2_2_W%d_%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,l_kernel**2,self.NORIENT,nside),wav)
             else:
                 if l_kernel**2==9:
                     if self.rank==0:
@@ -1301,7 +1305,7 @@ class FoCUS:
         if self.use_R_format:          
             tmp=np.load('%s/W%d_V2_2_%d_IDX.npy'%(self.TEMPLATE_PATH,l_kernel**2,nside))
         else:
-            tmp=np.load('%s/FOSCAT_V2_2_W%d_%d_PIDX.npy'%(self.TEMPLATE_PATH,l_kernel**2,nside))
+            tmp=np.load('%s/FOSCAT_V2_2_W%d_%d_%d_PIDX.npy'%(self.TEMPLATE_PATH,l_kernel**2,self.NORIENT,nside))
                 
         if kernel==-1:
             if self.backend.BACKEND==self.backend.TORCH:
