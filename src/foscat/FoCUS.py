@@ -227,38 +227,50 @@ class FoCUS:
                         
 
                     w_smooth=w_smooth.flatten()
-        
-        self.KERNELSZ=KERNELSZ
-        self.w_smooth=slope*(w_smooth/w_smooth.sum()).astype(self.all_type)
-        for i in range(nstep_max):
-            lout=(2**i)
-            if not self.do_wigner:
-                self.ww_Real[lout]=wwc.astype(self.all_type)
-                self.ww_Imag[lout]=wws.astype(self.all_type)
-                self.ww_RealT[lout]=wwc.astype(self.all_type)
-                self.ww_ImagT[lout]=wws.astype(self.all_type)
-            else:
-                self.ww_RealT[lout]=np.zeros([KERNELSZ**2,l_NORIENT]).astype(all_type)
-                self.ww_ImagT[lout]=np.zeros([KERNELSZ**2,l_NORIENT]).astype(all_type)
-        
-        def trans_kernel(a):
-            b=1*a.reshape(KERNELSZ,KERNELSZ)
-            for i in range(KERNELSZ):
-                for j in range(KERNELSZ):
-                    b[i,j]=a.reshape(KERNELSZ,KERNELSZ)[KERNELSZ-1-i,KERNELSZ-1-j]
-            return b.reshape(KERNELSZ*KERNELSZ)
 
-        self.ww_SmoothT = self.w_smooth.reshape(KERNELSZ,KERNELSZ,1)
-        
-        if not self.do_wigner:
-            for i in range(nstep_max):
-                lout=(2**i)
-                for j in range(l_NORIENT):
-                    self.ww_RealT[lout][:,j]=trans_kernel(self.ww_Real[lout][:,j])
-                    self.ww_ImagT[lout][:,j]=trans_kernel(self.ww_Imag[lout][:,j])
-          
+        self.KERNELSZ=KERNELSZ
+
         self.Idx_Neighbours={}
         self.Idx_convol={}
+        
+        if not self.use_R_format:
+            self.w_smooth = {}
+            for i in range(1,9):
+                lout=(2**i)
+                self.init_index(lout)
+                
+                self.ww_Real[lout]=np.load('%s/FOSCAT_V2_2_W%d_%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,KERNELSZ**2,self.NORIENT,lout)).real.astype(self.all_type)
+                self.ww_Imag[lout]=np.load('%s/FOSCAT_V2_2_W%d_%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,KERNELSZ**2,self.NORIENT,lout)).imag.astype(self.all_type)
+                self.w_smooth[lout]=slope*np.load('%s/FOSCAT_V2_2_W%d_%d_%d_SMOO.npy'%(self.TEMPLATE_PATH,KERNELSZ**2,self.NORIENT,lout)).astype(self.all_type)
+        else:
+            self.w_smooth=slope*(w_smooth/w_smooth.sum()).astype(self.all_type)
+            for i in range(nstep_max):
+                lout=(2**i)
+                if not self.do_wigner:
+                    self.ww_Real[lout]=wwc.astype(self.all_type)
+                    self.ww_Imag[lout]=wws.astype(self.all_type)
+                    self.ww_RealT[lout]=wwc.astype(self.all_type)
+                    self.ww_ImagT[lout]=wws.astype(self.all_type)
+                else:
+                    self.ww_RealT[lout]=np.zeros([KERNELSZ**2,l_NORIENT]).astype(all_type)
+                    self.ww_ImagT[lout]=np.zeros([KERNELSZ**2,l_NORIENT]).astype(all_type)
+
+            def trans_kernel(a):
+                b=1*a.reshape(KERNELSZ,KERNELSZ)
+                for i in range(KERNELSZ):
+                    for j in range(KERNELSZ):
+                        b[i,j]=a.reshape(KERNELSZ,KERNELSZ)[KERNELSZ-1-i,KERNELSZ-1-j]
+                return b.reshape(KERNELSZ*KERNELSZ)
+
+            self.ww_SmoothT = self.w_smooth.reshape(KERNELSZ,KERNELSZ,1)
+        
+            if not self.do_wigner:
+                for i in range(nstep_max):
+                    lout=(2**i)
+                    for j in range(l_NORIENT):
+                        self.ww_RealT[lout][:,j]=trans_kernel(self.ww_Real[lout][:,j])
+                        self.ww_ImagT[lout][:,j]=trans_kernel(self.ww_Imag[lout][:,j])
+          
         self.pix_interp_val={}
         self.weight_interp_val={}
         self.ring2nest={}
@@ -440,7 +452,6 @@ class FoCUS:
                     
                     fidx_inv=0*fidx
                     fidx_inv[fidx]=np.arange(12*nside*nside)
-                    
                     """
                     # use ang2pix to keep the proper orientation at big pixel edge
                     ith,iph=hp.pix2ang(nside,np.arange(12*nside*nside),nest=True)
@@ -580,8 +591,13 @@ class FoCUS:
                     ph3=ph[fidx3]
                     ph4=ph[fidx4]
                     ph=np.concatenate([ph3,np.concatenate([ph1,phc,ph2],1),ph4],2)
+<<<<<<< HEAD
 
                     
+=======
+                    wsin45=np.expand_dims(1.0-((th<np.pi/4)+(th>3*np.pi/4))*np.cos(2*ph)**2,-1)
+                    wcos45=1.0-wsin45
+>>>>>>> ecc0dc351d93c05428c807e012156e99da196d40
                     
                     ro = hp.Rotator(rot=[45,0])
                     thr,phr=ro(th.flatten(),ph.flatten())
@@ -879,7 +895,7 @@ class FoCUS:
         np.save('%s/%s_V2_2_%d_IDX.npy'%(self.TEMPLATE_PATH,outname,nout),idx)
         print('%s/%s_V2_2_%d_IDX.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nout))
         sys.stdout.flush()
-            
+
     # ---------------------------------------------−---------
     # --       COMPUTE 5X5 INDEX FOR HEALPIX WORK          --
     # ---------------------------------------------−---------
@@ -1214,21 +1230,84 @@ class FoCUS:
             
         
         try:
-            tmp=np.load('%s/W%d_V2_2_%d_IDX.npy'%(self.TEMPLATE_PATH,l_kernel**2,nside))
-        except:
-            if l_kernel**2==9:
-                if self.rank==0:
-                    self.comp_idx_w9(nside)
-            elif l_kernel**2==25:
-                if self.rank==0:
-                    self.comp_idx_w25(nside)
+            if self.use_R_format:
+                tmp=np.load('%s/W%d_V2_2_%d_IDX.npy'%(self.TEMPLATE_PATH,l_kernel**2,nside))
             else:
-                if self.rank==0:
-                    print('Only 3x3 and 5x5 kernel have been developped for Healpix and you ask for %dx%d'%(KERNELSZ,KERNELSZ))
-                    exit(0)
+                tmp=np.load('%s/FOSCAT_V2_2_W%d_%d_%d_PIDX.npy'%(self.TEMPLATE_PATH,l_kernel**2,self.NORIENT,nside))
+        except:
+            if self.use_R_format==False:
+                aa=np.cos(np.arange(self.NORIENT)/self.NORIENT*np.pi).reshape(1,self.NORIENT)
+                bb=np.sin(np.arange(self.NORIENT)/self.NORIENT*np.pi).reshape(1,self.NORIENT)
+                x,y,z=hp.pix2vec(nside,np.arange(12*nside*nside),nest=True)
+                to,po=hp.pix2ang(nside,np.arange(12*nside*nside),nest=True)
 
-        self.barrier()            
-        tmp=np.load('%s/W%d_V2_2_%d_IDX.npy'%(self.TEMPLATE_PATH,l_kernel**2,nside))
+                wav=np.zeros([12*nside*nside,l_kernel**2,self.NORIENT],dtype='complex')
+                wwav=np.zeros([12*nside*nside,l_kernel**2])
+                iwav=np.zeros([12*nside*nside,l_kernel**2],dtype='int')
+
+                scale=4
+                if nside>scale*2:
+                    th,ph=hp.pix2ang(nside//scale,np.arange(12*(nside//scale)**2),nest=True)
+                else:
+                    lidx=np.arange(12*nside*nside)
+
+                if self.KERNELSZ==5:
+                    pw=1/2.0
+                else:
+                    pw=1/np.sqrt(2.0)
+                    
+                for k in range(12*nside*nside):
+                    if k%(nside*nside)==0:
+                        print('compute nside=%6d %.2f%%'%(nside,100*k/(12*nside*nside)))
+                    if nside>scale*2:
+                        lidx=hp.get_all_neighbours(nside//scale,th[k//(scale*scale)],ph[k//(scale*scale)],nest=True)
+                        lidx=np.concatenate([lidx,np.array([(k//(scale*scale))])],0)
+                        lidx=np.repeat(lidx*(scale*scale),(scale*scale))+ \
+                              np.tile(np.arange((scale*scale)),lidx.shape[0])
+        
+                    delta=(x[lidx]-x[k])**2+(y[lidx]-y[k])**2+(z[lidx]-z[k])**2
+                    pidx=np.where(delta<10/(nside**2))[0]
+        
+                    w=np.exp(-0.5*delta[pidx]*(nside**2))
+                    pidx=pidx[np.argsort(-w)[0:l_kernel**2]]
+                    w=np.exp(-0.5*delta[pidx]*(nside**2))
+                    iwav[k]=lidx[pidx]
+                    wwav[k]=w
+                    rot=[po[k]/np.pi*180.0,90+(-to[k])/np.pi*180.0]
+                    r=hp.Rotator(rot=rot)
+                    ty,tx=r(to[iwav[k]],po[iwav[k]])
+                    ty=ty-np.pi/2
+                        
+                    xx=np.expand_dims(pw*nside*np.pi*tx/np.cos(ty),-1)
+                    yy=np.expand_dims(pw*nside*np.pi*ty,-1)
+                    
+                    wav[k,:,:]=(np.cos(xx*aa+yy*bb)+complex(0.0,1.0)*np.sin(xx*aa+yy*bb))*np.expand_dims(w,-1)
+    
+                wav=wav-np.expand_dims(np.mean(wav,1),1)
+                wav=wav/np.expand_dims(np.std(wav,1),1)
+                wwav=wwav/np.expand_dims(np.sum(wwav,1),1)
+
+                print('Write FOSCAT_V2_2_W%d_%d_%d_PIDX.npy'%(l_kernel**2,self.NORIENT,nside))
+                np.save('%s/FOSCAT_V2_2_W%d_%d_%d_PIDX.npy'%(self.TEMPLATE_PATH,l_kernel**2,self.NORIENT,nside),iwav)
+                np.save('%s/FOSCAT_V2_2_W%d_%d_%d_SMOO.npy'%(self.TEMPLATE_PATH,l_kernel**2,self.NORIENT,nside),wwav)
+                np.save('%s/FOSCAT_V2_2_W%d_%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,l_kernel**2,self.NORIENT,nside),wav)
+            else:
+                if l_kernel**2==9:
+                    if self.rank==0:
+                        self.comp_idx_w9(nside)
+                elif l_kernel**2==25:
+                    if self.rank==0:
+                        self.comp_idx_w25(nside)
+                else:
+                    if self.rank==0:
+                        print('Only 3x3 and 5x5 kernel have been developped for Healpix and you ask for %dx%d'%(KERNELSZ,KERNELSZ))
+                        exit(0)
+
+        self.barrier()  
+        if self.use_R_format:          
+            tmp=np.load('%s/W%d_V2_2_%d_IDX.npy'%(self.TEMPLATE_PATH,l_kernel**2,nside))
+        else:
+            tmp=np.load('%s/FOSCAT_V2_2_W%d_%d_%d_PIDX.npy'%(self.TEMPLATE_PATH,l_kernel**2,self.NORIENT,nside))
                 
         if kernel==-1:
             if self.backend.BACKEND==self.backend.TORCH:
@@ -1243,7 +1322,7 @@ class FoCUS:
             except:
                 self.computeWigner(nside)
         else:
-                self.Idx_convol[nside]=self.Idx_Neighbours[nside]
+            self.Idx_convol[nside]=self.Idx_Neighbours[nside]
                 
         if kernel!=-1:
             return tmp
@@ -1346,7 +1425,7 @@ class FoCUS:
                 l_mask=self.backend.bk_expand_dims(l_mask,-1)
 
             if l_x.dtype==self.all_cbk_type:
-                l_mask=self.backend.bk_complex(l_mask,0.0)
+                l_mask=self.backend.bk_complex(l_mask,0.0*l_mask)
             return self.backend.bk_reduce_mean(l_mask*l_x,axis=axis+1)
         
     # ---------------------------------------------−---------
@@ -1541,7 +1620,7 @@ class FoCUS:
                     l_ww_real=self.backend.bk_expand_dims(l_ww_real,0)
                     l_ww_imag=self.backend.bk_expand_dims(l_ww_imag,0)
             else:
-                for i in range(axis+1):
+                for i in range(axis):
                     l_ww_real=self.backend.bk_expand_dims(l_ww_real,0)
                     l_ww_imag=self.backend.bk_expand_dims(l_ww_imag,0)
                     
@@ -1564,7 +1643,31 @@ class FoCUS:
             
         return(res)
         
-            
+
+    # ---------------------------------------------−---------
+    def gauss_filter(self,in_image,sigma,ksz=1):
+        gauss_kernel=np.zeros([int(sigma)*2*ksz+1,int(sigma)*2*ksz+1,1,1])
+        vv=((np.arange(int(sigma)*2*ksz+1)-int(sigma)*ksz)/sigma)
+        vv=np.exp(-vv**2).reshape(int(sigma)*2*ksz+1,1)
+        gauss_kernel[:,:,0,0]=np.dot(vv,vv.T)
+        gauss_kernel/=gauss_kernel.sum()
+
+        R=self.backend.bk_reshape(self.backend.bk_tile(in_image[0],[int(sigma)*ksz]),[int(sigma)*ksz,in_image.shape[1]])
+        D=self.backend.bk_reshape(self.backend.bk_tile(in_image[-1],[int(sigma)*ksz]),[int(sigma)*ksz,in_image.shape[1]])
+        image=self.backend.bk_concat([R,in_image,D],0)
+        
+        U=self.backend.bk_reshape(self.backend.bk_repeat(self.backend.bk_reshape(image[:,0],[image.shape[0]]), \
+                                                       int(sigma)*ksz),[image.shape[0],int(sigma)*ksz])
+        D=self.backend.bk_reshape(self.backend.bk_repeat(self.backend.bk_reshape(image[:,-1],[image.shape[0]]), \
+                                                       int(sigma)*ksz),[image.shape[0],int(sigma)*ksz])
+        image=self.backend.bk_concat([U,image,D],1)
+        
+        image=self.backend.bk_reshape(image,[1,image.shape[0],image.shape[1],1])
+
+        res = self.backend.conv2d(image, gauss_kernel, strides=[1, 1, 1, 1], padding="VALID")
+
+        return(self.backend.bk_reshape(res,[in_image.shape[0],in_image.shape[1]]))
+
     # ---------------------------------------------−---------
     def smooth(self,in_image,axis=0):
 
@@ -1595,8 +1698,8 @@ class FoCUS:
             
             imX9=self.backend.bk_gather(image,self.Idx_Neighbours[nside],axis=axis)
 
-            l_w_smooth=self.w_smooth
-            for i in range(axis+1):
+            l_w_smooth=self.w_smooth[nside]
+            for i in range(axis):
                 l_w_smooth=self.backend.bk_expand_dims(l_w_smooth,0)
         
             for i in range(axis+2,len(imX9.shape)):

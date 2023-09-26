@@ -121,6 +121,14 @@ class foscat_backend:
             return(self.backend.cast(x>threshold,x.dtype)*x)
         if self.BACKEND==self.NUMPY:
             return (x>threshold)*x
+
+    def bk_maximum(self,x1,x2):
+        if self.BACKEND==self.TENSORFLOW:
+            return(self.backend.maximum(x1,x2))
+        if self.BACKEND==self.TORCH:
+            return(self.backend.maximum(x1,x2))
+        if self.BACKEND==self.NUMPY:
+            return x1*(x1>x2)+x2*(x2>x1)
         
     def bk_device(self,device_name):
         return self.backend.device(device_name)
@@ -323,6 +331,9 @@ class foscat_backend:
     
     def bk_repeat(self,data,nn,axis=0):
         return(self.backend.repeat(data,nn,axis=axis))
+    
+    def bk_tile(self,data,nn,axis=0):
+        return(self.backend.tile(data,nn))
     
     def bk_roll(self,data,nn,axis=0):
         return(self.backend.roll(data,nn,axis=axis))
