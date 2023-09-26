@@ -22,16 +22,15 @@ class Loss:
         self.args=param
         self.Rformat=Rformat
         self.name=name
-        print('batch ',batch)
         self.batch=batch
         self.batch_data=batch_data
         self.batch_update=batch_update
 
-    def eval(self,x,batch):
+    def eval(self,x,batch,return_all=False):
         if self.batch is None:
-            return self.loss_function(x,self.scat_operator,self.args)
+            return self.loss_function(x,self.scat_operator,self.args,return_all=return_all)
         else:
-            return self.loss_function(x,batch,self.scat_operator,self.args)
+            return self.loss_function(x,batch,self.scat_operator,self.args,return_all=return_all)
         
 class Synthesis:
     def __init__(self,
@@ -59,6 +58,7 @@ class Synthesis:
         self.operation=loss_list[0].scat_operator
         self.mpi_size=self.operation.mpi_size
         self.mpi_rank=self.operation.mpi_rank
+        self.KEEP_TRACK=None
         self.MAXNUMLOSS=MAXNUMLOSS
     
     # ---------------------------------------------−---------
@@ -106,9 +106,10 @@ class Synthesis:
             nx=x.shape[0]
             
         with tf.device(operation.gpulist[(operation.gpupos+self.curr_gpu)%operation.ngpu]):
-            print('%s Run on GPU %s'%(loss_function.name,
+            print('%s Run [PROC=%04d] on GPU %s'%(loss_function.name,self.mpi_rank,
                                       operation.gpulist[(operation.gpupos+self.curr_gpu)%operation.ngpu]))
-
+            sys.stdout.flush()
+            
             if nx>1:
                 l_x={}
             for i in range(nx):
@@ -125,13 +126,19 @@ class Synthesis:
                         l_x[i]=x[i]
 
                     ndata=x.shape[0]*x.shape[1]
-                    
-            l=loss_function.eval(l_x,batch)
+    
+            if self.KEEP_TRACK is not None:
+                l,linfo=loss_function.eval(l_x,batch,return_all=True)
+            else:
+                l=loss_function.eval(l_x,batch)
                 
             g=self.check_dense(tf.gradients(l,x)[0],ndata)
             self.curr_gpu=self.curr_gpu+1   
             
-        return l,g
+        if self.KEEP_TRACK is not None:
+            return l,g,linfo
+        else:
+            return l,g
     #---------------------------------------------------------------
     
     def gradient(self,x):
@@ -217,6 +224,10 @@ class Synthesis:
                 
             print('%sItt %6d L=%s %.3fs %s'%(self.MESSAGE,self.itt,cur_loss,(end-self.start),mess))
             sys.stdout.flush()
+            if self.KEEP_TRACK is not None:
+                print(self.last_info)
+                sys.stdout.flush()
+                
             self.start = time.time()
             
         self.itt=self.itt+1
@@ -226,7 +237,7 @@ class Synthesis:
         
         g_tot=None
         l_tot=0.0
-        
+
         if self.do_all_noise and self.totalsz>self.batchsz:
             nstep=self.totalsz//self.batchsz
         else:
@@ -244,7 +255,11 @@ class Synthesis:
                 else:
                     l_batch=self.loss_class[k].batch(self.loss_class[k].batch_data,istep)
 
-                l,g=self.loss(x,l_batch,self.loss_class[k])
+                if self.KEEP_TRACK is not None:
+                    l,g,linfo=self.loss(x,l_batch,self.loss_class[k])
+                    self.last_info=self.KEEP_TRACK(linfo,self.mpi_rank,add=True)
+                else:
+                    l,g=self.loss(x,l_batch,self.loss_class[k])
 
                 if g_tot is None:
                     g_tot=g
@@ -266,16 +281,16 @@ class Synthesis:
             g_tot=g_tot.numpy()
             
         g_tot[np.isnan(g_tot)]=0.0
-        
 
         self.imin=self.imin+self.batchsz
 
         if self.mpi_size==1:
             self.ltot=self.l_log
         else:
-            self.comm.Allreduce((self.l_log,self.MPI.FLOAT),(self.ltot,self.MPI.FLOAT))
+            local_log=(self.l_log).astype('float64')
+            self.ltot=np.zeros(self.l_log.shape,dtype='float64')
+            self.comm.Allreduce((local_log,self.MPI.DOUBLE),(self.ltot,self.MPI.DOUBLE))
             
-
         if self.mpi_size==1:
             grad=g_tot
         else:
@@ -289,7 +304,7 @@ class Synthesis:
 
                 self.comm.Allreduce((g_tot.astype('float64'),self.MPI.DOUBLE),
                                     (grad,self.MPI.DOUBLE))
-            
+        
         if self.nlog==self.history.shape[0]:
             new_log=np.zeros([self.history.shape[0]*2])
             new_log[0:self.nlog]=self.history
@@ -341,6 +356,7 @@ class Synthesis:
             NUM_STEP_BIAS = 1,
             LEARNING_RATE = 0.03,
             EPSILON = 1E-7,
+            KEEP_TRACK=None,
             grd_mask=None,
             SHOWGPU=False,
             MESSAGE='',
@@ -349,6 +365,9 @@ class Synthesis:
             do_lbfgs=True,
             axis=0):
         
+        self.KEEP_TRACK=KEEP_TRACK
+        self.track={}
+        self.ntrack=0
         self.eta=LEARNING_RATE
         self.epsilon=EPSILON
         self.decay_rate = DECAY_RATE
@@ -387,12 +406,15 @@ class Synthesis:
         self.curr_gpu=self.curr_gpu+self.mpi_rank
         
         if self.mpi_size>1:
-            print('Work with MPI')
             from mpi4py import MPI
             
+
             comm = MPI.COMM_WORLD
             self.comm=comm
             self.MPI=MPI
+            if self.mpi_rank==0:
+                print('Work with MPI')
+                sys.stdout.flush()
             
         if self.mpi_rank==0 and SHOWGPU:
             # start thread that catch GPU information
@@ -462,7 +484,7 @@ class Synthesis:
                                         pgtol=1E-32,
                                         factr=10.0,
                                         maxiter=maxitt)
-
+                
                 # update bias input data
                 if iteration<NUM_STEP_BIAS-1:
 
@@ -484,9 +506,12 @@ class Synthesis:
                 
                 self.info_back(x)
                     
-        
+
         if self.mpi_rank==0 and SHOWGPU:
             self.stop_synthesis()
+
+        if self.KEEP_TRACK is not None:
+            self.last_info=self.KEEP_TRACK(None,self.mpi_rank,add=False)
 
         x=self.xtractmap(x,axis)
         return(x)

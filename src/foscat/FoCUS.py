@@ -1323,7 +1323,31 @@ class FoCUS:
             
         return(res)
         
-            
+
+    # ---------------------------------------------−---------
+    def gauss_filter(self,in_image,sigma,ksz=1):
+        gauss_kernel=np.zeros([int(sigma)*2*ksz+1,int(sigma)*2*ksz+1,1,1])
+        vv=((np.arange(int(sigma)*2*ksz+1)-int(sigma)*ksz)/sigma)
+        vv=np.exp(-vv**2).reshape(int(sigma)*2*ksz+1,1)
+        gauss_kernel[:,:,0,0]=np.dot(vv,vv.T)
+        gauss_kernel/=gauss_kernel.sum()
+
+        R=self.backend.bk_reshape(self.backend.bk_tile(in_image[0],[int(sigma)*ksz]),[int(sigma)*ksz,in_image.shape[1]])
+        D=self.backend.bk_reshape(self.backend.bk_tile(in_image[-1],[int(sigma)*ksz]),[int(sigma)*ksz,in_image.shape[1]])
+        image=self.backend.bk_concat([R,in_image,D],0)
+        
+        U=self.backend.bk_reshape(self.backend.bk_repeat(self.backend.bk_reshape(image[:,0],[image.shape[0]]), \
+                                                       int(sigma)*ksz),[image.shape[0],int(sigma)*ksz])
+        D=self.backend.bk_reshape(self.backend.bk_repeat(self.backend.bk_reshape(image[:,-1],[image.shape[0]]), \
+                                                       int(sigma)*ksz),[image.shape[0],int(sigma)*ksz])
+        image=self.backend.bk_concat([U,image,D],1)
+        
+        image=self.backend.bk_reshape(image,[1,image.shape[0],image.shape[1],1])
+
+        res = self.backend.conv2d(image, gauss_kernel, strides=[1, 1, 1, 1], padding="VALID")
+
+        return(self.backend.bk_reshape(res,[in_image.shape[0],in_image.shape[1]]))
+
     # ---------------------------------------------−---------
     def smooth(self,in_image,axis=0):
 
