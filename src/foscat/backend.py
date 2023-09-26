@@ -112,6 +112,9 @@ class foscat_backend:
             return x
 
     def bk_threshold(self,x,threshold,greater=True):
+        if isinstance(x,Rformat.Rformat):
+            return Rformat.Rformat(self.bk_threshold(x.get(),threshold,greater=greater),x.off,x.axis,chans=x.chans)
+
         if self.BACKEND==self.TENSORFLOW:
             return(self.backend.cast(x>threshold,x.dtype)*x)
         if self.BACKEND==self.TORCH:

@@ -270,7 +270,6 @@ class FoCUS:
         self.nest2idx45={}
         self.nest2invidx45={}
         self.wsin45={}
-        self.wcos45={}
         self.inv_nest2R={}
         self.remove_border={}
             
@@ -295,7 +294,6 @@ class FoCUS:
             self.nest2idx45[lout]=None
             self.nest2invidx45[lout]=None
             self.wsin45[lout]=None
-            self.wcos45[lout]=None
             self.inv_nest2R[lout]=None
             self.remove_border[lout]=None
 
@@ -567,6 +565,9 @@ class FoCUS:
                     fidx4 = fidx_inv[hp.ang2pix(nside,th4,ph4,nest=True)]
                     """
                     th,ph=hp.pix2ang(nside,np.arange(12*nside**2),nest=True)
+
+                    wsin45=np.expand_dims((1-np.cos(4*ph))/2,0)
+
                     thc=th[fidx].reshape(chans,nside,nside)
                     th1=th[fidx1]
                     th2=th[fidx2]
@@ -579,9 +580,7 @@ class FoCUS:
                     ph3=ph[fidx3]
                     ph4=ph[fidx4]
                     ph=np.concatenate([ph3,np.concatenate([ph1,phc,ph2],1),ph4],2)
-                    wsin45=np.expand_dims(1.0-((th<np.pi/4)+(th>3*np.pi/4))*np.cos(2*ph)**2,-1)
-                    wcos45=1.0-wsin45
-                    
+
                     
                     
                     ro = hp.Rotator(rot=[45,0])
@@ -602,8 +601,6 @@ class FoCUS:
                     print('%s/%s_V2_2_%d_%d_INV_IDX45.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
                     np.save('%s/%s_V2_2_%d_%d_WSIN45.npy'%(self.TEMPLATE_PATH,outname,nside,chans),wsin45)
                     print('%s/%s_V2_2_%d_%d_WSIN45.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
-                    np.save('%s/%s_V2_2_%d_%d_WCOS45.npy'%(self.TEMPLATE_PATH,outname,nside,chans),wcos45)
-                    print('%s/%s_V2_2_%d_%d_INV_WCOS45.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
                 else:
                     ll_idx=np.arange(nside,dtype='int')
                     fidx1=np.zeros([1,off,nside],dtype='int')
@@ -651,7 +648,6 @@ class FoCUS:
         idx45=np.load('%s/%s_V2_2_%d_%d_IDX45.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
         inv_idx45=np.load('%s/%s_V2_2_%d_%d_INV_IDX45.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
         wsin45=np.load('%s/%s_V2_2_%d_%d_WSIN45.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
-        wcos45=np.load('%s/%s_V2_2_%d_%d_WCOS45.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
 
         self.nest2R[nside]=fidx
         self.nest2R1[nside]=fidx1
@@ -663,7 +659,6 @@ class FoCUS:
             self.nest2idx45[nside]=idx45
             self.nest2invidx45[nside]=inv_idx45
             self.wsin45[nside]=wsin45
-            self.wcos45[nside]=wcos45
             
     
     def calc_R_inv_index(self,nside,chans=12):
