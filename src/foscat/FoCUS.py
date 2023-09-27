@@ -1252,7 +1252,7 @@ class FoCUS:
                 if self.KERNELSZ==5:
                     pw=1/2.0
                 else:
-                    pw=1/np.sqrt(2.0)
+                    pw=1.0
                     
                 for k in range(12*nside*nside):
                     if k%(nside*nside)==0:
