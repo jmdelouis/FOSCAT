@@ -2,6 +2,7 @@ import foscat.FoCUS as FOC
 import numpy as np
 import foscat.backend as bk
 import foscat.Rformat as Rformat
+import tensorflow as tf
 
 def read(filename):
     thescat = scat_cov(1, 1, 1)
@@ -931,7 +932,7 @@ class scat_cov:
 
 class funct(FOC.FoCUS):
 
-    def eval(self, image1, image2=None, mask=None, norm=None, Auto=True):
+    def eval(self, image1, image2=None, mask=None, norm=None, Auto=True, Add_R45=False):
         """
         Calculates the scattering correlations for a batch of images. Mean are done over pixels.
         mean of modulus:
@@ -1014,23 +1015,39 @@ class funct(FOC.FoCUS):
             if cross:
                 I2 = self.backend.bk_cast(image2)  # Local image2 [Nbatch, Npix]
                 
-        if mask is None:
-            if self.chans==1:
-                vmask = self.backend.bk_ones([1, nside, nside],dtype=self.all_type)
+        if Add_R45:
+            if mask is None:
+                vmask = self.backend.bk_cast(self.wsin45[nside])
+
+                if self.use_R_format:
+                    vmask = self.to_R(vmask, axis=1,chans=self.chans)
             else:
-                vmask = self.backend.bk_ones([1, npix], dtype=self.all_type)
-                
-            if self.use_R_format:
-                vmask = self.to_R(vmask, axis=1,chans=self.chans)
+                vmask = self.backend.bk_cast(mask*self.wsin45[nside])  # [Nmask, Npix]
+                if self.use_R_format:
+                    vmask = self.to_R(vmask, axis=1,chans=self.chans)
         else:
-            vmask = self.backend.bk_cast(mask)  # [Nmask, Npix]
-            if self.use_R_format:
-                vmask = self.to_R(vmask, axis=1,chans=self.chans)
+            if mask is None:
+                if self.chans==1:
+                    vmask = self.backend.bk_ones([1, nside, nside],dtype=self.all_type)
+                else:
+                    vmask = self.backend.bk_ones([1, npix], dtype=self.all_type)
+
+                if self.use_R_format:
+                    vmask = self.to_R(vmask, axis=1,chans=self.chans)
+            else:
+                vmask = self.backend.bk_cast(mask)  # [Nmask, Npix]
+                if self.use_R_format:
+                    vmask = self.to_R(vmask, axis=1,chans=self.chans)
 
         if self.use_R_format:
             I1 = self.to_R(I1, axis=axis,chans=self.chans)
             if cross:
                 I2 = self.to_R(I2, axis=axis,chans=self.chans)
+
+        if Add_R45:
+            I1 = self.rot45_R(I1,axis=axis)
+            if cross:
+                I2 = self.rot45_R(I2,axis=axis)
 
         if self.KERNELSZ > 3:
             # if the kernel size is bigger than 3 increase the binning before smoothing
@@ -1265,6 +1282,11 @@ class funct(FOC.FoCUS):
                         M2_dic[j2] = self.ud_grade_2(M2_smooth, axis=1)  # [Nbatch, Npix_j3, Norient3]
                 ### Mask
                 vmask = self.ud_grade_2(vmask, axis=1)
+<<<<<<< HEAD
+                if self.mask_thres is not None:
+                    vmask = self.backend.bk_threshold(vmask,self.mask_thres)
+=======
+>>>>>>> ecc0dc351d93c05428c807e012156e99da196d40
 
                 ### NSIDE_j3
                 nside_j3 = nside_j3 // 2
@@ -1275,10 +1297,24 @@ class funct(FOC.FoCUS):
             if cross:
                 self.P2_dic = P2_dic
             
+        if Add_R45:
+            if mask is None:
+                vmask=self.wsin45[nside]
+            else:
+                vmask=mask*self.wsin45[nside]
+                
+            sc=self.eval(image1, image2=image2, mask=vmask, norm=norm, Auto=Auto, Add_R45=False)
+        
         if not cross:
-            return scat_cov(P00, C01, C11, s1=S1,backend=self.backend)
+            if Add_R45:
+                return sc+scat_cov(P00, C01, C11, s1=S1,backend=self.backend)
+            else:
+                return scat_cov(P00, C01, C11, s1=S1,backend=self.backend)
         else:
-            return scat_cov(P00, C01, C11, c10=C10,backend=self.backend)
+            if Add_R45:
+                return sc+scat_cov(P00, C01, C11, c10=C10,backend=self.backend)
+            else:
+                return scat_cov(P00, C01, C11, c10=C10,backend=self.backend)
 
     def clean_norm(self):
         self.P1_dic = None
@@ -1437,3 +1473,15 @@ class funct(FOC.FoCUS):
             return self.backend.bk_log(x)
         
         return result
+
+    @tf.function
+    def eval_comp_fast(self, image1, image2=None,mask=None,norm=None, Auto=True,Add_R45=False):
+
+        res=self.eval(image1, image2=image2,mask=mask,Auto=Auto,Add_R45=Add_R45)
+        return res.P00,res.S1,res.C01,res.C11,res.C10
+
+    def eval_fast(self, image1, image2=None,mask=None,norm=None, Auto=True,Add_R45=False):
+        p0,s1,c01,c11,c10=self.eval_comp_fast(image1, image2=image2,mask=mask,Auto=Auto,Add_R45=Add_R45)
+        return scat_cov(p0,  c01, c11, s1=s1,c10=c10,backend=self.backend)
+        
+        

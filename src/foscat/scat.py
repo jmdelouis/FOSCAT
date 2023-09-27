@@ -654,7 +654,7 @@ class scat:
     
 class funct(FOC.FoCUS):
     
-    def eval(self, image1, image2=None,mask=None,Auto=True,s0_off=1E-6):
+    def eval(self, image1, image2=None,mask=None,Auto=True,s0_off=1E-6,Add_R45=False):
         # Check input consistency
         if not isinstance(image1,Rformat.Rformat):
             if image2 is not None and not isinstance(image2,Rformat.Rformat):
@@ -713,24 +713,39 @@ class funct(FOC.FoCUS):
                 I2=self.backend.bk_cast(image2)
                 
         # self.mask is [Nmask, Npix]
-        if mask is None:
-            if self.chans==1:
-                vmask = self.backend.bk_ones([1,nside,nside],dtype=self.all_type)
+        if Add_R45:
+            if mask is None:
+                vmask = self.backend.bk_cast(self.wsin45[nside])
+
+                if self.use_R_format:
+                    vmask = self.to_R(vmask, axis=1,chans=self.chans)
             else:
-                vmask = self.backend.bk_ones([1,npix],dtype=self.all_type)
-            
-            if self.use_R_format:
-                vmask = self.to_R(vmask,axis=1,chans=self.chans)
+                vmask = self.backend.bk_cast(mask*self.wsin45[nside])  # [Nmask, Npix]
+                if self.use_R_format:
+                    vmask = self.to_R(vmask, axis=1,chans=self.chans)
         else:
-            vmask = self.backend.bk_cast( mask) # [Nmask, Npix]
-            
-            if self.use_R_format:
-                vmask=self.to_R(vmask,axis=1,chans=self.chans)
+            if mask is None:
+                if self.chans==1:
+                    vmask = self.backend.bk_ones([1, nside, nside],dtype=self.all_type)
+                else:
+                    vmask = self.backend.bk_ones([1, npix], dtype=self.all_type)
+
+                if self.use_R_format:
+                    vmask = self.to_R(vmask, axis=1,chans=self.chans)
+            else:
+                vmask = self.backend.bk_cast(mask)  # [Nmask, Npix]
+                if self.use_R_format:
+                    vmask = self.to_R(vmask, axis=1,chans=self.chans)
 
         if self.use_R_format:
             I1=self.to_R(I1,axis=axis,chans=self.chans)
             if cross:
                 I2=self.to_R(I2,axis=axis,chans=self.chans)
+
+        if Add_R45:
+            I1 = self.rot45_R(I1,axis=axis)
+            if cross:
+                I2 = self.rot45_R(I2,axis=axis)
 
         if self.KERNELSZ>3:
             # if the kernel size is bigger than 3 increase the binning before smoothing
@@ -839,7 +854,7 @@ class funct(FOC.FoCUS):
                 vmask = self.smooth(vmask,axis=1)
                 vmask = self.ud_grade_2(vmask,axis=1)
                 if self.mask_thres is not None:
-                    vmask = self.backend.threshold(vmask,self.mask_thres)
+                    vmask = self.backend.bk_threshold(vmask,self.mask_thres)
 
                 # Rescale l2_image [....,Npix_j1//4,....,j1,Norient]   
                 l2_image = self.smooth(l2_image,axis=axis)
@@ -852,10 +867,24 @@ class funct(FOC.FoCUS):
                     l_image2 = self.smooth(l_image2,axis=axis)
                     l_image2 = self.ud_grade_2(l_image2,axis=axis)
                     
-        if len(image1.shape)==1 or (len(image1.shape)==3 and isinstance(image1,Rformat.Rformat)):
-            return(scat(p00[0],s0[0],s1[0],s2[0],s2l[0],cross,backend=self.backend))
+        if Add_R45:
+            if mask is None:
+                vmask=self.wsin45[nside]
+            else:
+                vmask=mask*self.wsin45[nside]
+                
+            sc=self.eval(image1, image2=image2, mask=vmask, Auto=Auto, s0_off=s0_off,Add_R45=False)
 
-        return(scat(p00,s0,s1,s2,s2l,cross,backend=self.backend))
+        if len(image1.shape)==1 or (len(image1.shape)==3 and isinstance(image1,Rformat.Rformat)):
+            if Add_R45:
+                return(sc+scat(p00[0],s0[0],s1[0],s2[0],s2l[0],cross,backend=self.backend))
+            else:
+                return(scat(p00[0],s0[0],s1[0],s2[0],s2l[0],cross,backend=self.backend))
+
+        if Add_R45:
+            return(scat(p00,s0,s1,s2,s2l,cross,backend=self.backend))
+        else:
+            return(sc+scat(p00,s0,s1,s2,s2l,cross,backend=self.backend))
 
     def square(self,x):
         # the abs make the complex value usable for reduce_sum or mean
@@ -942,13 +971,13 @@ class funct(FOC.FoCUS):
         return scat(1.0,1.0,1.0,1.0,1.0,backend=self.backend)
 
     @tf.function
-    def eval_comp_fast(self, image1, image2=None,mask=None,Auto=True,s0_off=1E-6):
+    def eval_comp_fast(self, image1, image2=None,mask=None,Auto=True,s0_off=1E-6,Add_R45=False):
 
-        res=self.eval(image1, image2=image2,mask=mask,Auto=Auto,s0_off=s0_off)
+        res=self.eval(image1, image2=image2,mask=mask,Auto=Auto,s0_off=s0_off,Add_R45=Add_R45)
         return res.P00,res.S0,res.S1,res.S2,res.S2L
 
-    def eval_fast(self, image1, image2=None,mask=None,Auto=True,s0_off=1E-6):
-        p0,s0,s1,s2,s2l=self.eval_comp_fast(image1, image2=image2,mask=mask,Auto=Auto,s0_off=s0_off)
+    def eval_fast(self, image1, image2=None,mask=None,Auto=True,s0_off=1E-6,Add_R45=False):
+        p0,s0,s1,s2,s2l=self.eval_comp_fast(image1, image2=image2,mask=mask,Auto=Auto,s0_off=s0_off,Add_R45=Add_R45)
         return scat(p0,s0,s1,s2,s2l,backend=self.backend)
         
         
