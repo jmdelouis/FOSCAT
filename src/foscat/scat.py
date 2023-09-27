@@ -2,6 +2,7 @@ import foscat.FoCUS as FOC
 import numpy as np
 import foscat.Rformat as Rformat
 import tensorflow as tf
+import pickle
   
 def read(filename):
     thescat=scat(1,1,1,1,1)
@@ -463,19 +464,22 @@ class scat:
         ax1.legend(frameon=0)
         
     def save(self,filename):
-        np.save('%s_s0.npy'%(filename), self.get_S0().numpy())
-        np.save('%s_s1.npy'%(filename), self.get_S1().numpy())
-        np.save('%s_s2.npy'%(filename), self.get_S2().numpy())
-        np.save('%s_s2l.npy'%(filename), self.get_S2L().numpy())
-        np.save('%s_p0.npy'%(filename), self.get_P00().numpy())
+        outlist=[self.get_S0().numpy(), \
+                 self.get_S1().numpy(), \
+                 self.get_S2().numpy(), \
+                 self.get_S2L().numpy(), \
+                 self.get_P00().numpy()]
+
+        myout=open("%s.pkl"%(filename),"wb")
+        pickle.dump(outlist,myout)
+        myout.close()
+
         
     def read(self,filename):
-        s0=np.load('%s_s0.npy'%(filename))
-        s1=np.load('%s_s1.npy'%(filename))
-        s2=np.load('%s_s2.npy'%(filename))
-        s2l=np.load('%s_s2l.npy'%(filename))
-        p0= np.load('%s_p0.npy'%(filename))
-        return scat(p0,s0,s1,s2,s2l)
+        
+        outlist=pickle.load(open("%s.pkl"%(filename),"rb"))
+
+        return scat(outlist[4],outlist[0],outlist[1],outlist[2],outlist[3])
     
     def get_np(self,x):
         if isinstance(x, np.ndarray):

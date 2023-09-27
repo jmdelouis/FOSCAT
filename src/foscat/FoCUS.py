@@ -235,13 +235,17 @@ class FoCUS:
         
         if not self.use_R_format:
             self.w_smooth = {}
-            for i in range(1,9):
+            for i in range(nstep_max):
+                lout=(2**i)
+                self.ww_Real[lout]=None
+
+            for i in range(1,8):
                 lout=(2**i)
                 self.init_index(lout)
                 
-                self.ww_Real[lout]=np.load('%s/FOSCAT_V2_2_W%d_%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,KERNELSZ**2,self.NORIENT,lout)).real.astype(self.all_type)
-                self.ww_Imag[lout]=np.load('%s/FOSCAT_V2_2_W%d_%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,KERNELSZ**2,self.NORIENT,lout)).imag.astype(self.all_type)
-                self.w_smooth[lout]=slope*np.load('%s/FOSCAT_V2_2_W%d_%d_%d_SMOO.npy'%(self.TEMPLATE_PATH,KERNELSZ**2,self.NORIENT,lout)).astype(self.all_type)
+                self.ww_Real[lout]=np.load('%s/FOSCAT_V2_2_W%d_%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,self.KERNELSZ**2,self.NORIENT,lout)).real.astype(self.all_type)
+                self.ww_Imag[lout]=np.load('%s/FOSCAT_V2_2_W%d_%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,self.KERNELSZ**2,self.NORIENT,lout)).imag.astype(self.all_type)
+                self.w_smooth[lout]=slope*np.load('%s/FOSCAT_V2_2_W%d_%d_%d_SMOO.npy'%(self.TEMPLATE_PATH,self.KERNELSZ**2,self.NORIENT,lout)).astype(self.all_type)
         else:
             self.w_smooth=slope*(w_smooth/w_smooth.sum()).astype(self.all_type)
             for i in range(nstep_max):
@@ -452,129 +456,7 @@ class FoCUS:
                     
                     fidx_inv=0*fidx
                     fidx_inv[fidx]=np.arange(12*nside*nside)
-                    """
-                    # use ang2pix to keep the proper orientation at big pixel edge
-                    ith,iph=hp.pix2ang(nside,np.arange(12*nside*nside),nest=True)
-                
-                    ith=ith[fidx]
-                    iph=iph[fidx]
-                    th2=ith[fidx2]
-                    ph2=iph[fidx2]
-                    th3=ith[fidx3]
-                    ph3=iph[fidx3]
-                    th1=ith[fidx1]
-                    ph1=iph[fidx1]
-                    th4=ith[fidx4]
-                    ph4=iph[fidx4]
-                    
-                    ith=ith.reshape(12,nside,nside)
-                    iph=iph.reshape(12,nside,nside)
-                    
-                    th2[0:4,1,2:]=ith[0:4,-1,:-2]
-                    th2[0:4,0,1:]=ith[0:4,-1,:-1]
 
-                    print(iph.shape)
-                    ph2[0:4,1,3:]=self.diffang(3*iph[0:4,-1,1:-2],2*iph[0:4,-2,:-3])
-                    ph2[0:4,0,2:]=self.diffang(2*iph[0:4,-1,1:-1],  iph[0:4,-2,:-2])
-                    
-                    # fill the pole
-                    th2[0:4,1,0]=ith[0:4,-1,2]
-                    th2[0:4,1,1]=ith[0:4,-1,1]
-                    th2[0:4,1,2]=ith[0:4,-1,0]
-                    th2[0:4,0,0]=ith[0:4,-1,1]
-                    th2[0:4,0,1]=ith[0:4,-1,0]
-
-                    ph2[0:4,1,0]=iph[0:4,-1,2]+np.pi-np.pi/3
-                    ph2[0:4,1,1]=iph[0:4,-1,1]+np.pi/4
-                    ph2[0:4,1,2]=iph[0:4,-1,0]+np.pi
-                    ph2[0:4,0,0]=iph[0:4,-1,1]+np.pi/2
-                    ph2[0:4,0,1]=iph[0:4,-1,0]+np.pi/2
-                    
-                    fidx2 = fidx_inv[hp.ang2pix(nside,th2,ph2,nest=True)]
-                    
-                    th3[0:4,1:-3,1]=ith[0:4,:,0]
-                    th3[0:4,:-4,0]=ith[0:4,:,0]
-                    
-                    ph3[0:4,0:-5,0]=3*iph[0:4,:-1,0]-2*iph[0:4,1:,1]
-                    ph3[0:4,1:-4,1]=2*iph[0:4,:-1,0]-  iph[0:4,1:,1]
-                    
-                    # fill the pole
-                    th3[0:4,-1,0]=ith[0:4,-3,2]
-                    th3[0:4,-2,0]=ith[0:4,-3,1]
-                    th3[0:4,-3,0]=ith[0:4,-2,1]
-                    th3[0:4,-4,0]=ith[0:4,-2,0]
-                    th3[0:4,-5,0]=ith[0:4,-1,0]
-                    
-                    th3[0:4,-1,1]=ith[0:4,-3,1]
-                    th3[0:4,-2,1]=ith[0:4,-2,1]
-                    th3[0:4,-3,1]=ith[0:4,-2,0]
-                    th3[0:4,-4,1]=ith[0:4,-1,0]
-                    
-                    ph3[0:4,-1,0]=iph[0:4,-3,2]-np.pi
-                    ph3[0:4,-2,0]=iph[0:4,-3,1]-np.pi+np.pi/8
-                    ph3[0:4,-3,0]=iph[0:4,-2,1]-np.pi+np.pi/6
-                    ph3[0:4,-4,0]=iph[0:4,-2,0]-np.pi+np.pi/2
-                    ph3[0:4,-5,0]=iph[0:4,-1,0]-np.pi
-                    
-                    ph3[0:4,-1,1]=iph[0:4,-3,1]-np.pi+np.pi/16
-                    ph3[0:4,-2,1]=iph[0:4,-2,1]-np.pi
-                    ph3[0:4,-3,1]=iph[0:4,-2,0]-np.pi+np.pi/4
-                    ph3[0:4,-4,1]=iph[0:4,-1,0]-np.pi/2
-                    
-                    fidx3 = fidx_inv[hp.ang2pix(nside,th3,ph3,nest=True)]
-                    
-                    th1[8:,0,:-2] = ith[8:,0,2:]
-                    th1[8:,1,:-1] = ith[8:,0,1:]
-                    
-                    ph1[8:,0,0:-3]=self.diffang(3*iph[8:,0,2:-1],2*iph[8:,1,3:])
-                    ph1[8:,1,0:-2]=self.diffang(2*iph[8:,0,1:-1],iph[8:,1,2:])
-                    
-                    # fill the pole
-                    th1[8:,0,-1]=ith[8:,2,-1]
-                    th1[8:,0,-2]=ith[8:,1,-1]
-                    th1[8:,0,-3]=ith[8:,0,-1]
-                    th1[8:,1,-1]=ith[8:,1,-1]
-                    th1[8:,1,-2]=ith[8:,0,-1]
-
-                    ph1[8:,0,-1]=iph[8:,2,-1]-2*np.pi/3
-                    ph1[8:,0,-2]=iph[8:,1,-1]-np.pi/4
-                    ph1[8:,0,-3]=iph[8:,0,-1]-np.pi
-                    ph1[8:,1,-1]=iph[8:,1,-1]-np.pi/2
-                    ph1[8:,1,-2]=iph[8:,0,-1]-np.pi/2
-                    
-                    fidx1 = fidx_inv[hp.ang2pix(nside,th1,ph1,nest=True)]
-                    
-                    th4[8:,4:,  1]= ith[8:,:,-1]
-                    th4[8:,3:-1,0]  = ith[8:,:,-1]
-                    
-                    ph4[8:,4:-1,1] = self.diffang(2*iph[8:,:-1,-1],iph[8:,1:,-2])
-                    ph4[8:,5:  ,0] = self.diffang(3*iph[8:,:-1,-1],2*iph[8:,1:,-2])
-
-                    th4[8:,0,1]=ith[8:,2,-3]
-                    th4[8:,1,1]=ith[8:,1,-1]
-                    th4[8:,2,1]=ith[8:,1,-2]
-                    th4[8:,3,1]=ith[8:,0,-2]
-                    th4[8:,4,1]=ith[8:,0,-1]
-                    
-                    th4[8:,0,0]=ith[8:,1,-1]
-                    th4[8:,1,0]=ith[8:,1,-2]
-                    th4[8:,2,0]=ith[8:,0,-2]
-                    th4[8:,3,0]=ith[8:,0,-1]
-
-                    
-                    ph4[8:,0,1]=iph[8:,2,-3]+np.pi
-                    ph4[8:,1,1]=iph[8:,1,-1]+3*np.pi/4
-                    ph4[8:,2,1]=iph[8:,1,-2]+2*np.pi/3
-                    ph4[8:,3,1]=iph[8:,0,-2]+np.pi/4
-                    ph4[8:,4,1]=iph[8:,0,-1]+np.pi
-                    
-                    ph4[8:,0,0]=iph[8:,1,-1]+3*np.pi/4
-                    ph4[8:,1,0]=iph[8:,1,-2]+np.pi
-                    ph4[8:,2,0]=iph[8:,0,-2]+np.pi/2
-                    ph4[8:,3,0]=iph[8:,0,-1]+np.pi/2
-                    
-                    fidx4 = fidx_inv[hp.ang2pix(nside,th4,ph4,nest=True)]
-                    """
                     th,ph=hp.pix2ang(nside,np.arange(12*nside**2),nest=True)
 
                     wsin45=np.expand_dims((1-np.cos(4*ph))/2,0)
@@ -591,13 +473,9 @@ class FoCUS:
                     ph3=ph[fidx3]
                     ph4=ph[fidx4]
                     ph=np.concatenate([ph3,np.concatenate([ph1,phc,ph2],1),ph4],2)
-<<<<<<< HEAD
 
-                    
-=======
+         
                     wsin45=np.expand_dims(1.0-((th<np.pi/4)+(th>3*np.pi/4))*np.cos(2*ph)**2,-1)
-                    wcos45=1.0-wsin45
->>>>>>> ecc0dc351d93c05428c807e012156e99da196d40
                     
                     ro = hp.Rotator(rot=[45,0])
                     thr,phr=ro(th.flatten(),ph.flatten())
@@ -1253,8 +1131,10 @@ class FoCUS:
 
                 if self.KERNELSZ==5:
                     pw=1/2.0
+                    pw2=1/2.0
                 else:
-                    pw=1/np.sqrt(2.0)
+                    pw=1.0
+                    pw2=1.0
                     
                 for k in range(12*nside*nside):
                     if k%(nside*nside)==0:
@@ -1268,9 +1148,9 @@ class FoCUS:
                     delta=(x[lidx]-x[k])**2+(y[lidx]-y[k])**2+(z[lidx]-z[k])**2
                     pidx=np.where(delta<10/(nside**2))[0]
         
-                    w=np.exp(-0.5*delta[pidx]*(nside**2))
+                    w=np.exp(-pw2*delta[pidx]*(nside**2))
                     pidx=pidx[np.argsort(-w)[0:l_kernel**2]]
-                    w=np.exp(-0.5*delta[pidx]*(nside**2))
+                    w=np.exp(-pw2*delta[pidx]*(nside**2))
                     iwav[k]=lidx[pidx]
                     wwav[k]=w
                     rot=[po[k]/np.pi*180.0,90+(-to[k])/np.pi*180.0]
@@ -1397,6 +1277,7 @@ class FoCUS:
                 
             l_mask=mask.get()*self.remove_border[nside]
         else:
+            nside=int(np.sqrt(mask.shape[axis]//12))
             l_mask=mask
 
         if self.mask_norm:
@@ -1567,7 +1448,7 @@ class FoCUS:
                 l_image=self.to_R(image,axis=axis,chans=self.chans)
 
             nside=l_image.shape[axis+1]-2*self.R_off
-                
+    
             rr=self.conv2d(l_image.get(),self.ww_RealT[nside],axis=axis)
             ii=self.conv2d(l_image.get(),self.ww_ImagT[nside],axis=axis)
 
@@ -1612,6 +1493,12 @@ class FoCUS:
             imX9=self.backend.bk_expand_dims(self.backend.bk_gather(self.backend.bk_cast(image),
                                                     self.Idx_convol[nside],axis=axis),-1)
 
+            if self.ww_Real[nside] is None:
+                self.init_index(nside)
+                self.ww_Real[nside]=np.load('%s/FOSCAT_V2_2_W%d_%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,self.KERNELSZ**2,self.NORIENT,nside)).real.astype(self.all_type)
+                self.ww_Imag[nside]=np.load('%s/FOSCAT_V2_2_W%d_%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,self.KERNELSZ**2,self.NORIENT,nside)).imag.astype(self.all_type)
+                self.w_smooth[nside]=self.slope*np.load('%s/FOSCAT_V2_2_W%d_%d_%d_SMOO.npy'%(self.TEMPLATE_PATH,self.KERNELSZ**2,self.NORIENT,nside)).astype(self.all_type)
+                
             l_ww_real=self.ww_Real[nside]
             l_ww_imag=self.ww_Imag[nside]
 

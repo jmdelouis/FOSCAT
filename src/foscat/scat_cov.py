@@ -3,6 +3,7 @@ import numpy as np
 import foscat.backend as bk
 import foscat.Rformat as Rformat
 import tensorflow as tf
+import pickle
 
 def read(filename):
     thescat = scat_cov(1, 1, 1)
@@ -608,32 +609,27 @@ class scat_cov:
                 return x
             else:
                 return x.numpy()
+        else:
+            return None
         
     def save(self, filename):
-        if self.S1 is not None:  # Auto
-            np.save('%s_s1.npy' % filename, self.get_np(self.get_S1()))
-        if self.C10 is not None:  # Cross
-            np.save('%s_c10.npy' % filename, self.get_np(self.get_C10()))
-        np.save('%s_c01.npy' % filename, self.get_np(self.get_C01()))
-        np.save('%s_c11.npy' % filename, self.get_np(self.get_C11()))
-        np.save('%s_p0.npy' % filename, self.get_np(self.get_P00()))
+        
+        outlist=[self.get_np(self.S1), \
+                 self.get_np(self.C10), \
+                 self.get_np(self.C01), \
+                 self.get_np(self.C11), \
+                 self.get_np(self.P00)]
+
+        myout=open("%s.pkl"%(filename),"wb")
+        pickle.dump(outlist,myout)
+        myout.close()
 
     def read(self, filename):
-        try:
-            s1 = np.load('%s_s1.npy' % filename)
-        except:
-            s1 = None
 
-        try:
-            c10 = np.load('%s_c10.npy' % filename)
-        except:
-            c10 = None
+        outlist=pickle.load(open("%s.pkl"%(filename),"rb"))
 
-        c01 = np.load('%s_c01.npy' % filename)
-        c11 = np.load('%s_c11.npy' % filename)
-        p0 = np.load('%s_p0.npy' % filename)
-
-        return scat_cov(p0, c01, c11, s1=s1, c10=c10,backend=self.backend)
+        return scat_cov(outlist[4], outlist[2], outlist[3], \
+                        s1=outlist[0], c10=outlist[1],backend=self.backend)
 
     def std(self):
         if self.S1 is not None:  # Auto
@@ -692,14 +688,14 @@ class scat_cov:
                                         [shape[0],shape[1],shape[2],norient,norient])
             C10=self.backend.bk_reduce_mean(C10,4)
 
-        print(self.C11)
-        shape=list(self.C11.shape)
-        print(self.C11.shape,shape)
-        C11=self.backend.bk_reshape(self.backend.bk_gather(
-            self.backend.bk_reshape(self.C11,[shape[0],shape[1],shape[2],norient*norient*norient]),idx2,3),
-                                       [shape[0],shape[1],shape[2],norient,norient,norient])
+        C11=self.C11
+        if self.C11 is not None:
+            shape=list(self.C11.shape)
+            C11=self.backend.bk_reshape(self.backend.bk_gather(
+                self.backend.bk_reshape(self.C11,[shape[0],shape[1],shape[2],norient*norient*norient]),idx2,3),
+                                        [shape[0],shape[1],shape[2],norient,norient,norient])
 
-        C11=self.backend.bk_reduce_mean(C11,5)
+            C11=self.backend.bk_reduce_mean(C11,5)
 
         return scat_cov(P00, C01, C11, s1=S1, c10=C10,backend=self.backend)
 
@@ -745,14 +741,16 @@ class scat_cov:
             if repeat:
                 C10=self.backend.bk_reshape(self.backend.bk_repeat(C10,norient),self.C10.shape)
 
-        shape=list(self.C11.shape)
-        C11=self.backend.bk_reshape(self.backend.bk_gather(
-            self.backend.bk_reshape(self.C11,[shape[0],shape[1],shape[2],norient*norient*norient]),idx2,3),
-                                       [shape[0],shape[1],shape[2],norient,norient,norient])
+        C11=self.C11
+        if self.C11 is not None:
+            shape=list(self.C11.shape)
+            C11=self.backend.bk_reshape(self.backend.bk_gather(
+                self.backend.bk_reshape(self.C11,[shape[0],shape[1],shape[2],norient*norient*norient]),idx2,3),
+                                        [shape[0],shape[1],shape[2],norient,norient,norient])
 
-        C11=self.backend.bk_reduce_mean(C11,5)
-        if repeat:
-            C11=self.backend.bk_reshape(self.backend.bk_repeat(C11,norient),self.C11.shape)
+            C11=self.backend.bk_reduce_mean(C11,5)
+            if repeat:
+                C11=self.backend.bk_reshape(self.backend.bk_repeat(C11,norient),self.C11.shape)
 
         return scat_cov(P00, C01, C11, s1=S1, c10=C10,backend=self.backend)
 
@@ -1282,11 +1280,9 @@ class funct(FOC.FoCUS):
                         M2_dic[j2] = self.ud_grade_2(M2_smooth, axis=1)  # [Nbatch, Npix_j3, Norient3]
                 ### Mask
                 vmask = self.ud_grade_2(vmask, axis=1)
-<<<<<<< HEAD
+
                 if self.mask_thres is not None:
                     vmask = self.backend.bk_threshold(vmask,self.mask_thres)
-=======
->>>>>>> ecc0dc351d93c05428c807e012156e99da196d40
 
                 ### NSIDE_j3
                 nside_j3 = nside_j3 // 2

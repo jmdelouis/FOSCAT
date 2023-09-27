@@ -15,7 +15,8 @@ class Loss:
                  name='',
                  batch=None,
                  batch_data=None,
-                 batch_update=None):
+                 batch_update=None,
+                 info_callback=False):
 
         self.loss_function=function
         self.scat_operator=scat_operator
@@ -25,12 +26,19 @@ class Loss:
         self.batch=batch
         self.batch_data=batch_data
         self.batch_update=batch_update
+        self.info=info_callback
 
     def eval(self,x,batch,return_all=False):
         if self.batch is None:
-            return self.loss_function(x,self.scat_operator,self.args,return_all=return_all)
+            if self.info:
+                return self.loss_function(x,self.scat_operator,self.args,return_all=return_all)
+            else:
+                return self.loss_function(x,self.scat_operator,self.args)
         else:
-            return self.loss_function(x,batch,self.scat_operator,self.args,return_all=return_all)
+            if self.info:
+                return self.loss_function(x,batch,self.scat_operator,self.args,return_all=return_all)
+            else:
+                return self.loss_function(x,batch,self.scat_operator,self.args)
         
 class Synthesis:
     def __init__(self,
