@@ -54,6 +54,13 @@ class scat:
     def reset_P00(self):
         self.P00=0*self.P00
 
+    def constant(self):
+        return scat(self.backend.constant(self.P00 ), \
+                    self.backend.constant(self.S0  ), \
+                    self.backend.constant(self.S1  ), \
+                    self.backend.constant(self.S2  ), \
+                    self.backend.constant(self.S2L ),backend=self.backend)
+
     def domult(self,x,y):
         if x.dtype==y.dtype:
             return x*y
@@ -975,13 +982,13 @@ class funct(FOC.FoCUS):
         return scat(1.0,1.0,1.0,1.0,1.0,backend=self.backend)
 
     @tf.function
-    def eval_comp_fast(self, image1, image2=None,mask=None,Auto=True,s0_off=1E-6,Add_R45=False):
+    def eval_comp_fast(self, image1, image2=None,mask=None,Auto=True,s0_off=1E-6):
 
-        res=self.eval(image1, image2=image2,mask=mask,Auto=Auto,s0_off=s0_off,Add_R45=Add_R45)
+        res=self.eval(image1, image2=image2,mask=mask,Auto=Auto,s0_off=s0_off)
         return res.P00,res.S0,res.S1,res.S2,res.S2L
 
-    def eval_fast(self, image1, image2=None,mask=None,Auto=True,s0_off=1E-6,Add_R45=False):
-        p0,s0,s1,s2,s2l=self.eval_comp_fast(image1, image2=image2,mask=mask,Auto=Auto,s0_off=s0_off,Add_R45=Add_R45)
+    def eval_fast(self, image1, image2=None,mask=None,Auto=True,s0_off=1E-6):
+        p0,s0,s1,s2,s2l=self.eval_comp_fast(image1, image2=image2,mask=mask,Auto=Auto,s0_off=s0_off)
         return scat(p0,s0,s1,s2,s2l,backend=self.backend)
         
         

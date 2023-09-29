@@ -172,6 +172,12 @@ class foscat_backend:
             if self.BACKEND==self.NUMPY:
                 return(np.sum(data,axis))
         
+    def constant(self,data):
+        
+        if self.BACKEND==self.TENSORFLOW:
+            return(self.backend.constant(data))
+        return(data)
+
     def bk_reduce_mean(self,data,axis=None):
         
         if isinstance(data,Rformat.Rformat):
@@ -212,6 +218,7 @@ class foscat_backend:
             if self.BACKEND==self.NUMPY:
                 return(np.std(data,axis))
         
+    
     def bk_sqrt(self,data):
         
         if isinstance(data,Rformat.Rformat):

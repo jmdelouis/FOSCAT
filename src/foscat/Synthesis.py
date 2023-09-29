@@ -140,7 +140,8 @@ class Synthesis:
             else:
                 l=loss_function.eval(l_x,batch)
                 
-            g=self.check_dense(tf.gradients(l,x)[0],ndata)
+            g=tf.gradients(l,x)[0]
+            g=self.check_dense(g,ndata)
             self.curr_gpu=self.curr_gpu+1   
             
         if self.KEEP_TRACK is not None:
