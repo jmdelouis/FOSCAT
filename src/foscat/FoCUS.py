@@ -245,14 +245,14 @@ class FoCUS:
                 self.ww_Imag[lout]=self.backend.constant(np.load('%s/FOSCAT_V2_2_W%d_%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,self.KERNELSZ**2,self.NORIENT,lout)).imag.astype(self.all_type))
                 self.w_smooth[lout]=self.backend.constant(slope*np.load('%s/FOSCAT_V2_2_W%d_%d_%d_SMOO.npy'%(self.TEMPLATE_PATH,self.KERNELSZ**2,self.NORIENT,lout)).astype(self.all_type))
         else:
-            self.w_smooth=self.backend.constant(slope*(w_smooth/w_smooth.sum()).astype(self.all_type))
+            self.w_smooth=slope*(w_smooth/w_smooth.sum()).astype(self.all_type)
             for i in range(nstep_max):
                 lout=(2**i)
                 if not self.do_wigner:
-                    self.ww_Real[lout]=self.backend.constant(wwc.astype(self.all_type))
-                    self.ww_Imag[lout]=self.backend.constant(wws.astype(self.all_type))
-                    self.ww_RealT[lout]=self.backend.constant(wwc.astype(self.all_type))
-                    self.ww_ImagT[lout]=self.backend.constant(wws.astype(self.all_type))
+                    self.ww_Real[lout]=(wwc.astype(self.all_type))
+                    self.ww_Imag[lout]=(wws.astype(self.all_type))
+                    self.ww_RealT[lout]=(wwc.astype(self.all_type))
+                    self.ww_ImagT[lout]=(wws.astype(self.all_type))
                 else:
                     self.ww_RealT[lout]=self.backend.constant(np.zeros([KERNELSZ**2,l_NORIENT]).astype(all_type))
                     self.ww_ImagT[lout]=self.backend.constant(np.zeros([KERNELSZ**2,l_NORIENT]).astype(all_type))
@@ -264,7 +264,7 @@ class FoCUS:
                         b[i,j]=a.reshape(KERNELSZ,KERNELSZ)[KERNELSZ-1-i,KERNELSZ-1-j]
                 return b.reshape(KERNELSZ*KERNELSZ)
 
-            self.ww_SmoothT = self.backend.constant(self.w_smooth.reshape(KERNELSZ,KERNELSZ,1))
+            self.ww_SmoothT = self.w_smooth.reshape(KERNELSZ,KERNELSZ,1)
         
             if not self.do_wigner:
                 for i in range(nstep_max):
@@ -272,6 +272,10 @@ class FoCUS:
                     for j in range(l_NORIENT):
                         self.ww_RealT[lout][:,j]=self.backend.constant(trans_kernel(self.ww_Real[lout][:,j]))
                         self.ww_ImagT[lout][:,j]=self.backend.constant(trans_kernel(self.ww_Imag[lout][:,j]))
+                    #self.ww_Real[lout]=self.backend.constant(self.ww_Real[lout])
+                    #self.ww_Imag[lout]=self.backend.constant(self.ww_Imag[lout])
+                    #self.ww_RealT[lout]=self.backend.constant(self.ww_RealT[lout])
+                    #self.ww_ImagT[lout]=self.backend.constant(self.ww_ImagT[lout])
           
         self.pix_interp_val={}
         self.weight_interp_val={}

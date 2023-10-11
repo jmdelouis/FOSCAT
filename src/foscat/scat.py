@@ -34,7 +34,8 @@ class scat:
                 j1[n]=j
                 j2[n]=i
                 n=n+1
-        return(j1,j2)
+
+        return j1,j2
     
     def get_S0(self):
         return(self.S0)
@@ -263,7 +264,7 @@ class scat:
         if len(tmp.shape)==4:
             for k in range(tmp.shape[3]):
                 for i1 in range(tmp.shape[0]):
-                    for i2 in range(tmp.shape[0]):
+                    for i2 in range(tmp.shape[1]):
                         if test is None:
                             test=1
                             plt.plot(tmp[i1,i2,:,k],color=color, label=r'%s $S_{1}$' % (name), lw=lw)
@@ -508,14 +509,20 @@ class scat:
                    self.get_np(self.S2L).mean()+ \
                    self.get_np(self.P00).mean())/3
 
-    def iso_mean(self):
+    def iso_mean(self,repeat=False):
         shape=list(self.S2.shape)
         idx=np.zeros([shape[2]*shape[2]],dtype='int')
         for i in range(shape[2]):
             idx[i*shape[2]:(i+1)*shape[2]]=(np.arange(shape[2])+i)%shape[2]+np.arange(shape[2])*shape[2]
 
         S1  = self.backend.bk_reduce_mean(self.S1,2)
+        if repeat:
+            S1=self.backend.bk_reshape(self.backend.bk_repeat(S1,shape[2]),self.S1.shape)
+
         P00 = self.backend.bk_reduce_mean(self.P00,2)
+        if repeat:
+            P00=self.backend.bk_reshape(self.backend.bk_repeat(P00,shape[2]),self.S1.shape)
+
         S2=self.backend.bk_reshape(self.backend.bk_gather(
             self.backend.bk_reshape(self.S2,[shape[0],shape[1],shape[2]*shape[2]]),idx,2),
                                       [shape[0],shape[1],shape[2],shape[2]])
@@ -525,6 +532,9 @@ class scat:
 
         S2  =self.backend.bk_reduce_mean(S2,3)
         S2L=self.backend.bk_reduce_mean(S2L,3)
+        if repeat:
+            S2=self.backend.bk_reshape(self.backend.bk_repeat(S2,shape[2]),self.S2.shape)
+            S2L=self.backend.bk_reshape(self.backend.bk_repeat(S2L,shape[2]),self.S2.shape)
 
         return scat(P00,self.S0,S1,S2,S2L,backend=self.backend)
 
@@ -555,6 +565,64 @@ class scat:
             S2L=self.backend.bk_reshape(self.backend.bk_repeat(S2L,shape[2]),self.S2.shape)
 
         return scat(P00,self.backend.bk_abs(self.S0),S1,S2,S2L,backend=self.backend)
+
+    # ---------------------------------------------−---------
+    def interp(self,nscale,extend=True,constant=False):
+        
+        if nscale+2>self.S1.shape[1]:
+            print('Can not *interp* %d with a statistic described over %d'%(nscale,self.S1.shape[1]))
+            return scat(self.P00,self.S0,self.S1,self.S2,self.S2L,backend=self.backend)
+
+        s1=self.S1.numpy()
+        p0=self.P00.numpy()
+        for k in range(nscale):
+            if constant:
+                s1[:,nscale-1-k,:]=s1[:,nscale-k,:]
+                p0[:,nscale-1-k,:]=p0[:,nscale-k,:]
+            else:
+                s1[:,nscale-1-k,:]=np.exp(2*np.log(s1[:,nscale-k,:])-np.log(s1[:,nscale+1-k,:]))
+                p0[:,nscale-1-k,:]=np.exp(2*np.log(p0[:,nscale-k,:])-np.log(p0[:,nscale+1-k,:]))
+
+        j1,j2=self.get_j_idx()
+        s2=self.S2.numpy()
+        s2l=self.S2L.numpy()
+        for k in range(nscale):
+            """
+            i0=np.where((j1==nscale-1-k)*(j2>=nscale+1-k))[0]
+            i1=np.where((j1==nscale-k)*(j2>=nscale+1-k))[0]
+            i2=np.where((j1==nscale+1-k)*(j2>=nscale+1-k))[0]
+            print(i0,j1[i0],j2[i0],j1[i1],j2[i1],j1[i2],j2[i2])
+            s2[:,i0]=np.exp(2*np.log(s2[:,i1])-np.log(s2[:,i2]))
+            s2l[:,i0]=np.exp(2*np.log(s2l[:,i1])-np.log(s2l[:,i2]))
+            """
+            for l in range(nscale):
+                i0=np.where((j1==nscale-1-k)*(j2==nscale-k-l))[0]
+                i1=np.where((j1==nscale-1-k)*(j2==nscale+1-k-l))[0]
+                i2=np.where((j1==nscale-1-k)*(j2==nscale+2-k-l))[0]
+                if constant:
+                    s2[:,i0]=s2[:,i1]
+                    s2l[:,i0]=s2l[:,i1]
+                else:
+                    s2[:,i0]=np.exp(2*np.log(s2[:,i1])-np.log(s2[:,i2]))
+                    s2l[:,i0]=np.exp(2*np.log(s2l[:,i1])-np.log(s2l[:,i2]))
+
+        if extend:
+            for k in range(nscale):
+                for l in range(1,nscale):
+                    i0=np.where((j1==2*nscale-1-k)*(j2==2*nscale-k-l))[0]
+                    i1=np.where((j1==2*nscale-1-k)*(j2==2*nscale+1-k-l))[0]
+                    i2=np.where((j1==2*nscale-1-k)*(j2==2*nscale+2-k-l))[0]
+                    if constant:
+                        s2[:,i0]=s2[:,i1]
+                        s2l[:,i0]=s2l[:,i1]
+                    else:
+                        s2[:,i0]=np.exp(2*np.log(s2[:,i1])-np.log(s2[:,i2]))
+                        s2l[:,i0]=np.exp(2*np.log(s2l[:,i1])-np.log(s2l[:,i2]))
+        
+        return scat(self.backend.constant(p0),self.S0,
+                    self.backend.constant(s1),
+                    self.backend.constant(s2),
+                    self.backend.constant(s2l),backend=self.backend)
 
     # ---------------------------------------------−---------
     def model(self,i__y,add=0,dx=3,dell=2,weigth=None,inverse=False):
@@ -893,9 +961,9 @@ class funct(FOC.FoCUS):
                 return(scat(p00[0],s0[0],s1[0],s2[0],s2l[0],cross,backend=self.backend))
 
         if Add_R45:
-            return(scat(p00,s0,s1,s2,s2l,cross,backend=self.backend))
-        else:
             return(sc+scat(p00,s0,s1,s2,s2l,cross,backend=self.backend))
+        else:
+            return(scat(p00,s0,s1,s2,s2l,cross,backend=self.backend))
 
     def square(self,x):
         # the abs make the complex value usable for reduce_sum or mean

@@ -686,7 +686,7 @@ class scat_cov:
         self.idx1=self.backend.constant(idx1)
         self.idx2=self.backend.constant(idx2)
         
-    def iso_mean(self):
+    def iso_mean(self,repeat=False):
         shape=list(self.P00.shape)
         norient=shape[3]
 
@@ -696,7 +696,11 @@ class scat_cov:
         S1=self.S1
         if self.S1 is not None:
             S1  = self.backend.bk_reduce_mean(self.S1,3)
+            if repeat:
+                S1=self.backend.bk_reshape(self.backend.bk_repeat(S1,norient),self.S1.shape)
         P00 = self.backend.bk_reduce_mean(self.P00,3)
+        if repeat:
+            P00=self.backend.bk_reshape(self.backend.bk_repeat(P00,norient),self.P00.shape)
 
         C01=self.C01
         shape=list(self.C01.shape)
@@ -705,12 +709,16 @@ class scat_cov:
                 self.backend.bk_reshape(self.C01,[shape[0],shape[1],shape[2],norient*norient]),self.idx1,3),
                                         [shape[0],shape[1],shape[2],norient,norient])
             C01=self.backend.bk_reduce_mean(C01,4)
+            if repeat:
+                C01=self.backend.bk_reshape(self.backend.bk_repeat(C01,norient),self.C01.shape)
         C10=self.C10
         if self.C10 is not None:
             C10=self.backend.bk_reshape(self.backend.bk_gather(
                 self.backend.bk_reshape(self.C10,[shape[0],shape[1],shape[2],norient*norient]),self.idx1,3),
                                         [shape[0],shape[1],shape[2],norient,norient])
             C10=self.backend.bk_reduce_mean(C10,4)
+            if repeat:
+                C10=self.backend.bk_reshape(self.backend.bk_repeat(C10,norient),self.C10.shape)
 
         C11=self.C11
         if self.C11 is not None:
@@ -720,6 +728,8 @@ class scat_cov:
                                         [shape[0],shape[1],shape[2],norient,norient,norient])
 
             C11=self.backend.bk_reduce_mean(C11,5)
+            if repeat:
+                C11=self.backend.bk_reshape(self.backend.bk_repeat(C11,norient),self.C11.shape)
 
         return scat_cov(P00, C01, C11, s1=S1, c10=C10,backend=self.backend)
 
@@ -1187,7 +1197,7 @@ class funct(FOC.FoCUS):
                 M2convPsi_dic = {}
 
             ###### C01
-            for j2 in range(0, j3):  # j2 < j3
+            for j2 in range(0, j3+1):  # j2 <= j3
                 ### C01_auto = < (I1 * Psi)_j3 x (|I1 * Psi_j2| * Psi_j3)^* >_pix
                 if not cross:
                     c01 = self._compute_C01(j2,
@@ -1241,7 +1251,7 @@ class funct(FOC.FoCUS):
 
 
                 ##### C11
-                for j1 in range(0, j2):  # j1 < j2
+                for j1 in range(0, j2+1):  # j1 <= j2
                     ### C11_auto = <(|I1 * psi1| * psi3)(|I1 * psi2| * psi3)^*>
                     if not cross:
                         c11 = self._compute_C11(j1, j2, vmask,
