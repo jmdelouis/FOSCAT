@@ -567,6 +567,21 @@ class scat:
         return scat(P00,self.backend.bk_abs(self.S0),S1,S2,S2L,backend=self.backend)
 
     # ---------------------------------------------−---------
+    def cleanval(self,x):
+        x=x.numpy()
+        x[np.isfinite(x)==False]=np.median(x[np.isfinite(x)])
+        return x
+
+    def filter_inf(self):
+        S1  = self.cleanval(self.S1)
+        S0  = self.cleanval(self.S0)
+        P00 = self.cleanval(self.P00)
+        S2  = self.cleanval(self.S2)
+        S2L = self.cleanval(self.S2L)
+
+        return scat(P00,S0,S1,S2,S2L,backend=self.backend)
+
+    # ---------------------------------------------−---------
     def interp(self,nscale,extend=True,constant=False):
         
         if nscale+2>self.S1.shape[1]:
@@ -587,6 +602,7 @@ class scat:
         s2=self.S2.numpy()
         s2l=self.S2L.numpy()
         for k in range(nscale):
+
             """
             i0=np.where((j1==nscale-1-k)*(j2>=nscale+1-k))[0]
             i1=np.where((j1==nscale-k)*(j2>=nscale+1-k))[0]
@@ -595,10 +611,11 @@ class scat:
             s2[:,i0]=np.exp(2*np.log(s2[:,i1])-np.log(s2[:,i2]))
             s2l[:,i0]=np.exp(2*np.log(s2l[:,i1])-np.log(s2l[:,i2]))
             """
-            for l in range(nscale):
-                i0=np.where((j1==nscale-1-k)*(j2==nscale-k-l))[0]
-                i1=np.where((j1==nscale-1-k)*(j2==nscale+1-k-l))[0]
-                i2=np.where((j1==nscale-1-k)*(j2==nscale+2-k-l))[0]
+
+            for l in range(nscale-k):
+                i0=np.where((j1==nscale-1-k-l)*(j2==nscale-1-k))[0]
+                i1=np.where((j1==nscale-1-k-l)*(j2==nscale  -k))[0]
+                i2=np.where((j1==nscale-1-k-l)*(j2==nscale+1-k))[0]
                 if constant:
                     s2[:,i0]=s2[:,i1]
                     s2l[:,i0]=s2l[:,i1]
@@ -609,9 +626,9 @@ class scat:
         if extend:
             for k in range(nscale):
                 for l in range(1,nscale):
-                    i0=np.where((j1==2*nscale-1-k)*(j2==2*nscale-k-l))[0]
-                    i1=np.where((j1==2*nscale-1-k)*(j2==2*nscale+1-k-l))[0]
-                    i2=np.where((j1==2*nscale-1-k)*(j2==2*nscale+2-k-l))[0]
+                    i0=np.where((j1==2*nscale-1-k)*(j2==2*nscale-1-k-l))[0]
+                    i1=np.where((j1==2*nscale-1-k)*(j2==2*nscale  -k-l))[0]
+                    i2=np.where((j1==2*nscale-1-k)*(j2==2*nscale+1-k-l))[0]
                     if constant:
                         s2[:,i0]=s2[:,i1]
                         s2l[:,i0]=s2l[:,i1]

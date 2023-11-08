@@ -72,17 +72,23 @@ class scat_cov:
 
     def get_j_idx(self):
         shape=list(self.P00.shape)
-        nscale=shape[2]
-        n=nscale*(nscale-1)//2
+        if len(shape)==4:
+            nscale=shape[2]
+        else:
+            nscale=shape[3]
+
+        n=nscale*(nscale+1)//2
         j1=np.zeros([n],dtype='int')
         j2=np.zeros([n],dtype='int')
         n=0
         for i in range(nscale):
-            for j in range(i):
+            for j in range(i+1):
                 j1[n]=j
                 j2[n]=i
                 n=n+1
-        return(j1,j2)
+
+        return j1,j2
+
     
     def get_jc11_idx(self):
         shape=list(self.P00.shape)
@@ -93,8 +99,8 @@ class scat_cov:
         j3=np.zeros([n*2],dtype='int')
         n=0
         for i in range(nscale):
-            for j in range(i):
-                for k in range(j):
+            for j in range(i+1):
+                for k in range(j+1):
                     j1[n]=k
                     j2[n]=j
                     j3[n]=i
@@ -448,6 +454,74 @@ class scat_cov:
     def __rmul__(self, other):
         return self.__mul__(other)
 
+    # ---------------------------------------------−---------
+    def interp(self,nscale,extend=True,constant=False):
+        
+        if nscale+2>self.P00.shape[2]:
+            print('Can not *interp* %d with a statistic described over %d'%(nscale,self.P00.shape[2]))
+            return scat_cov(self.P00,self.C01,self.C11,s1=self.S1,c10=self.C10,backend=self.backend)
+            
+        if self.S1 is not None:
+            s1=self.S1.numpy()
+        else:
+            s1=self.S1
+
+        p0=self.P00.numpy()
+        for k in range(nscale):
+            if constant:
+                if self.S1 is not None:
+                    s1[:,:,nscale-1-k,:]=s1[:,:,nscale-k,:]
+                p0[:,:,nscale-1-k,:]=p0[:,:,nscale-k,:]
+            else:
+                if self.S1 is not None:
+                    s1[:,:,nscale-1-k,:]=np.exp(2*np.log(s1[:,:,nscale-k,:])-np.log(s1[:,:,nscale+1-k,:]))
+                p0[:,:,nscale-1-k,:]=np.exp(2*np.log(p0[:,:,nscale-k,:])-np.log(p0[:,:,nscale+1-k,:]))
+
+        j1,j2=self.get_j_idx()
+
+        if self.C10 is not None:
+            c10=self.C10.numpy()
+        else:
+            c10=self.C10
+        c01=self.C01.numpy()
+
+        for k in range(nscale):
+
+            for l in range(nscale-k):
+                i0=np.where((j1==nscale-1-k-l)*(j2==nscale-1-k))[0]
+                i1=np.where((j1==nscale-1-k-l)*(j2==nscale  -k))[0]
+                i2=np.where((j1==nscale-1-k-l)*(j2==nscale+1-k))[0]
+                if constant:
+                    c10[:,:,i0]=c10[:,:,i1]
+                    c01[:,:,i0]=c01[:,:,i1]
+                else:
+                    c10[:,:,i0]=np.exp(2*np.log(c10[:,:,i1])-np.log(c10[:,:,i2]))
+                    c01[:,:,i0]=np.exp(2*np.log(c01[:,:,i1])-np.log(c01[:,:,i2]))
+
+
+        c11=self.C11.numpy()
+        j1,j2,j3=self.get_jc11_idx()
+
+        for k in range(nscale):
+
+            for l in range(nscale-k):
+                for m in range(nscale-k-l):
+                    i0=np.where((j1==nscale-1-k-l-m)*(j2==nscale-1-k-l)*(j3==nscale-1-k))[0]
+                    i1=np.where((j1==nscale-1-k-l-m)*(j2==nscale-1-k-l)*(j3==nscale  -k))[0]
+                    i2=np.where((j1==nscale-1-k-l-m)*(j2==nscale-1-k-l)*(j3==nscale+1-k))[0]
+                if constant:
+                    c11[:,:,i0]=c11[:,:,i1]
+                else:
+                    c11[:,:,i0]=np.exp(2*np.log(c11[:,:,i1])-np.log(c11[:,:,i2]))
+
+        if s1 is not None:
+            s1=self.backend.constant(s1)
+        if c10 is not None:
+            c10=self.backend.constant(c10)
+
+        return scat_cov(self.backend.constant(p0),self.backend.constant(c01),
+                        self.backend.constant(c11),s1=s1,c10=c10,backend=self.backend)
+
     def plot(self, name=None, hold=True, color='blue', lw=1, legend=True):
 
         import matplotlib.pyplot as plt
@@ -508,6 +582,7 @@ class scat_cov:
         tabnx=[]
         tab2x=[]
         tab2nx=[]
+        print(tmp.shape,j1.shape,j2.shape)
         for i0 in range(tmp.shape[0]):
             for i1 in range(tmp.shape[1]):
                 for i2 in range(j1.max()+1):

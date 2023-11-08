@@ -369,6 +369,7 @@ class Synthesis:
             grd_mask=None,
             SHOWGPU=False,
             MESSAGE='',
+            factr=10.0,
             batchsz=1,
             totalsz=1,
             do_lbfgs=True,
@@ -481,7 +482,7 @@ class Synthesis:
                 
             self.info_back(x)
 
-            maxitt=NUM_EPOCHS//NUM_STEP_BIAS
+            maxitt=NUM_EPOCHS
 
             start_x=x.copy()
             
@@ -491,12 +492,14 @@ class Synthesis:
                                         x.astype('float64'),
                                         callback=self.info_back,
                                         pgtol=1E-32,
-                                        factr=10.0,
+                                        factr=factr,
                                         maxiter=maxitt)
                 
                 # update bias input data
                 if iteration<NUM_STEP_BIAS-1:
-
+                    if self.mpi_rank==0:
+                        print('%s Hessian restart'%(self.MESSAGE))
+                    
                     omap=self.xtractmap(x,axis)
 
                     for k in range(self.number_of_loss):
