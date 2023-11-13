@@ -1087,7 +1087,7 @@ class FoCUS:
                     
                 for k in range(12*nside*nside):
                     if k%(nside*nside)==0:
-                        print('compute nside=%6d %.2f%%'%(nside,100*k/(12*nside*nside)))
+                        print('Pre-compute nside=%6d %.2f%%'%(nside,100*k/(12*nside*nside)))
                     if nside>scale*2:
                         lidx=hp.get_all_neighbours(nside//scale,th[k//(scale*scale)],ph[k//(scale*scale)],nest=True)
                         lidx=np.concatenate([lidx,np.array([(k//(scale*scale))])],0)

@@ -582,7 +582,7 @@ class scat_cov:
         tabnx=[]
         tab2x=[]
         tab2nx=[]
-        print(tmp.shape,j1.shape,j2.shape)
+        
         for i0 in range(tmp.shape[0]):
             for i1 in range(tmp.shape[1]):
                 for i2 in range(j1.max()+1):
