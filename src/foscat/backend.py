@@ -67,6 +67,8 @@ class foscat_backend:
         if self.BACKEND==self.TORCH:
             gpus=torch.cuda.is_available()
             
+        if self.BACKEND==self.NUMPY:
+            gpus=[]
         gpuname='CPU:0'
         self.gpulist={}
         self.gpulist[0]=gpuname

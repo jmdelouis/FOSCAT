@@ -3,9 +3,10 @@ import numpy as np
 import foscat.Rformat as Rformat
 import tensorflow as tf
 import pickle
+import foscat.backend as bk
   
 def read(filename):
-    thescat=scat(1,1,1,1,1)
+    thescat=scat(1,1,1,1,1,[0],[0])
     return thescat.read(filename)
     
 class scat:
@@ -374,7 +375,6 @@ class scat:
                         ax1.axvline((j2[j1==i2]+n).max()+0.5,ls=':',color='gray') 
                         n=n+j2[j1==i2].shape[0]-1
         else:
-            print(tmp.shape)
             for i0 in range(tmp.shape[0]):
                 for i2 in range(j1.max()+1):
                     for i3 in range(tmp.shape[2]):
@@ -521,7 +521,7 @@ class scat:
         
         outlist=pickle.load(open("%s.pkl"%(filename),"rb"))
 
-        return scat(outlist[4],outlist[0],outlist[1],outlist[2],outlist[3],outlist[4],outlist[5])
+        return scat(outlist[4],outlist[0],outlist[1],outlist[2],outlist[3],outlist[5],outlist[6],backend=bk.foscat_backend('numpy'))
     
     def get_np(self,x):
         if isinstance(x, np.ndarray):
@@ -551,11 +551,11 @@ class scat:
 
         S1  = self.backend.bk_reduce_mean(self.S1,2)
         if repeat:
-            S1=self.backend.bk_reshape(self.backend.bk_repeat(S1,shape[2]),self.S1.shape)
+            S1=self.backend.bk_reshape(self.backend.bk_repeat(S1,shape[2],1),self.S1.shape)
 
         P00 = self.backend.bk_reduce_mean(self.P00,2)
         if repeat:
-            P00=self.backend.bk_reshape(self.backend.bk_repeat(P00,shape[2]),self.S1.shape)
+            P00=self.backend.bk_reshape(self.backend.bk_repeat(P00,shape[2],1),self.S1.shape)
 
         S2=self.backend.bk_reshape(self.backend.bk_gather(
             self.backend.bk_reshape(self.S2,[shape[0],shape[1],shape[2]*shape[2]]),idx,2),
@@ -567,8 +567,8 @@ class scat:
         S2  =self.backend.bk_reduce_mean(S2,3)
         S2L=self.backend.bk_reduce_mean(S2L,3)
         if repeat:
-            S2=self.backend.bk_reshape(self.backend.bk_repeat(S2,shape[2]),self.S2.shape)
-            S2L=self.backend.bk_reshape(self.backend.bk_repeat(S2L,shape[2]),self.S2.shape)
+            S2=self.backend.bk_reshape(self.backend.bk_repeat(S2,shape[2],2),self.S2.shape)
+            S2L=self.backend.bk_reshape(self.backend.bk_repeat(S2L,shape[2],2),self.S2.shape)
 
         return scat(P00,self.S0,S1,S2,S2L,self.j1,self.j2,backend=self.backend)
 
@@ -621,19 +621,30 @@ class scat:
         if nscale+2>self.S1.shape[1]:
             print('Can not *interp* %d with a statistic described over %d'%(nscale,self.S1.shape[1]))
             return scat(self.P00,self.S0,self.S1,self.S2,self.S2L,self.j1,self.j2,backend=self.backend)
-
-        s1=self.S1.numpy()
-        p0=self.P00.numpy()
-        s2=self.S2.numpy()
-        s2l=self.S2L.numpy()
+        if isinstance(self.S1,np.ndarray):
+            s1=self.S1
+            p0=self.P00
+            s2=self.S2
+            s2l=self.S2L
+        else:
+            s1=self.S1.numpy()
+            p0=self.P00.numpy()
+            s2=self.S2.numpy()
+            s2l=self.S2L.numpy()
 
         print(s1.sum(),p0.sum(),s2.sum(),s2l.sum())
 
         if isinstance(threshold,scat):
-            s1th=threshold.S1.numpy()
-            p0th=threshold.P00.numpy()
-            s2th=threshold.S2.numpy()
-            s2lth=threshold.S2L.numpy()
+            if isinstance(self.threshold.S1,np.ndarray):
+                s1th=threshold.S1
+                p0th=threshold.P00
+                s2th=threshold.S2
+                s2lth=threshold.S2L
+            else:
+                s1th=threshold.S1.numpy()
+                p0th=threshold.P00.numpy()
+                s2th=threshold.S2.numpy()
+                s2lth=threshold.S2L.numpy()
         else:
             s1th=threshold+0*s1
             p0th=threshold+0*p0
@@ -679,6 +690,7 @@ class scat:
                 i1=np.where((j1==nscale-1-k-l)*(j2==nscale  -k))[0]
                 i2=np.where((j1==nscale-1-k-l)*(j2==nscale+1-k))[0]
                 i3=np.where((j1==nscale-1-k-l)*(j2==nscale+2-k))[0]
+                
                 if constant:
                     s2[:,i0]=s2[:,i1]
                     s2l[:,i0]=s2l[:,i1]
