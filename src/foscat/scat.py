@@ -23,7 +23,6 @@ class scat:
         
     def get_j_idx(self):
         return self.j1,self.j2
-        return j1,j2
     
     def get_S0(self):
         return(self.S0)
@@ -635,7 +634,7 @@ class scat:
         print(s1.sum(),p0.sum(),s2.sum(),s2l.sum())
 
         if isinstance(threshold,scat):
-            if isinstance(self.threshold.S1,np.ndarray):
+            if isinstance(threshold.S1,np.ndarray):
                 s1th=threshold.S1
                 p0th=threshold.P00
                 s2th=threshold.S2
