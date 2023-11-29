@@ -20,11 +20,12 @@ class FoCUS:
                  isMPI=False,
                  TEMPLATE_PATH='data',
                  BACKEND='tensorflow',
-                 use_R_format=True,
+                 use_R_format=False,
                  chans=12,
                  Healpix=True,
                  JmaxDelta=0,
                  DODIV=False,
+                 InitWave=None,
                  mpi_size=1,
                  mpi_rank=0):
 
@@ -34,6 +35,7 @@ class FoCUS:
         self.isMPI=isMPI
         self.mask_thres = mask_thres
         self.mask_norm = mask_norm
+        self.InitWave=InitWave
 
         self.mpi_size=mpi_size
         self.mpi_rank=mpi_rank
@@ -239,11 +241,18 @@ class FoCUS:
 
             for i in range(1,6):
                 lout=(2**i)
-                self.init_index(lout)
+                print('Init Wave ',lout)
+                if self.InitWave is None:
+                    self.init_index(lout)
                 
-                self.ww_Real[lout]=self.backend.constant(np.load('%s/FOSCAT_V2_2_W%d_%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,self.KERNELSZ**2,self.NORIENT,lout)).real.astype(self.all_type))
-                self.ww_Imag[lout]=self.backend.constant(np.load('%s/FOSCAT_V2_2_W%d_%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,self.KERNELSZ**2,self.NORIENT,lout)).imag.astype(self.all_type))
-                self.w_smooth[lout]=self.backend.constant(slope*np.load('%s/FOSCAT_V2_2_W%d_%d_%d_SMOO.npy'%(self.TEMPLATE_PATH,self.KERNELSZ**2,self.NORIENT,lout)).astype(self.all_type))
+                    self.ww_Real[lout]=self.backend.constant(np.load('%s/FOSCAT_V2_2_W%d_%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,self.KERNELSZ**2,self.NORIENT,lout)).real.astype(self.all_type))
+                    self.ww_Imag[lout]=self.backend.constant(np.load('%s/FOSCAT_V2_2_W%d_%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,self.KERNELSZ**2,self.NORIENT,lout)).imag.astype(self.all_type))
+                    self.w_smooth[lout]=self.backend.constant(slope*np.load('%s/FOSCAT_V2_2_W%d_%d_%d_SMOO.npy'%(self.TEMPLATE_PATH,self.KERNELSZ**2,self.NORIENT,lout)).astype(self.all_type))
+                else:
+                    wr,wi,ws=self.InitWave(self,lout)
+                    self.ww_Real[lout]=self.backend.constant(wr.astype(self.all_type))
+                    self.ww_Imag[lout]=self.backend.constant(wi.astype(self.all_type))
+                    self.w_smooth[lout]=self.backend.constant(ws.astype(self.all_type))
         else:
             self.w_smooth=slope*(w_smooth/w_smooth.sum()).astype(self.all_type)
             for i in range(nstep_max):
@@ -988,23 +997,26 @@ class FoCUS:
             if lout==nout:
                 imout=im
             else:
+                """
                 if axis==0:
                     print('compute here')
                     imout=self.backend.bk_reduce_sum(self.backend.bk_gather(im,self.pix_interp_val[lout][nout],axis=axis)\
                                         *self.weight_interp_val[lout][nout],axis=0)
 
                 else:
-                    amap=self.backend.bk_gather(im,self.pix_interp_val[lout][nout],axis=axis)
-                    aw=self.weight_interp_val[lout][nout]
-                    for k in range(axis):
-                        aw=self.backend.bk_expand_dims(aw, axis=0)
-                    for k in range(axis+1,len(im.shape)):
-                        aw=self.backend.bk_expand_dims(aw, axis=-1)
-                    if amap.dtype==self.all_cbk_type:
-                        imout=self.backend.bk_complex(self.backend.bk_reduce_sum(aw*self.backend.bk_real(amap),axis=axis), \
-                                              self.backend.bk_reduce_sum(aw*self.backend.bk_imag(amap),axis=axis))
-                    else:
-                        imout=self.backend.bk_reduce_sum(aw*amap,axis=axis)
+                """
+                amap=self.backend.bk_gather(im,self.pix_interp_val[lout][nout],axis=axis)
+                aw=self.weight_interp_val[lout][nout]
+                for k in range(axis):
+                    aw=self.backend.bk_expand_dims(aw, axis=0)
+                for k in range(axis+1,len(im.shape)):
+                    aw=self.backend.bk_expand_dims(aw, axis=-1)
+                
+                if amap.dtype==self.all_cbk_type:
+                    imout=self.backend.bk_complex(self.backend.bk_reduce_sum(aw*self.backend.bk_real(amap),axis=axis), \
+                                                  self.backend.bk_reduce_sum(aw*self.backend.bk_imag(amap),axis=axis))
+                else:
+                    imout=self.backend.bk_reduce_sum(aw*amap,axis=axis)
         return(imout)
 
     # ---------------------------------------------−---------
@@ -1382,13 +1394,21 @@ class FoCUS:
             nside=int(np.sqrt(image.shape[axis]//12))
 
             if self.Idx_convol[nside] is None:
-                self.init_index(nside)
+                if self.InitWave is None:
+                    self.init_index(nside)
+                else:
+                    wr,wi,ws=self.InitWave(self,nside)
+                    self.ww_Real[nside]=self.backend.constant(wr.astype(self.all_type))
+                    self.ww_Imag[nside]=self.backend.constant(wi.astype(self.all_type))
+                    self.w_smooth[nside]=self.backend.constant(ws.astype(self.all_type))
+                    
 
             imX9=self.backend.bk_expand_dims(self.backend.bk_gather(self.backend.bk_cast(image),
                                                     self.Idx_convol[nside],axis=axis),-1)
 
             if self.ww_Real[nside] is None:
                 self.init_index(nside)
+                
                 self.ww_Real[nside]=self.backend.constant(np.load('%s/FOSCAT_V2_2_W%d_%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,self.KERNELSZ**2,self.NORIENT,nside)).real.astype(self.all_type))
                 self.ww_Imag[nside]=self.backend.constant(np.load('%s/FOSCAT_V2_2_W%d_%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,self.KERNELSZ**2,self.NORIENT,nside)).imag.astype(self.all_type))
                 self.w_smooth[nside]=self.backend.constant(self.slope*np.load('%s/FOSCAT_V2_2_W%d_%d_%d_SMOO.npy'%(self.TEMPLATE_PATH,self.KERNELSZ**2,self.NORIENT,nside)).astype(self.all_type))
@@ -1475,7 +1495,13 @@ class FoCUS:
             nside=int(np.sqrt(image.shape[axis]//12))
 
             if self.Idx_Neighbours[nside] is None:
-                self.init_index(nside)
+                if self.InitWave is None:
+                    self.init_index(nside)
+                else:
+                    wr,wi,ws=self.InitWave(self,nside)
+                    self.ww_Real[nside]=self.backend.constant(wr.astype(self.all_type))
+                    self.ww_Imag[nside]=self.backend.constant(wi.astype(self.all_type))
+                    self.w_smooth[nside]=self.backend.constant(ws.astype(self.all_type))
             
             imX9=self.backend.bk_gather(image,self.Idx_Neighbours[nside],axis=axis)
 
