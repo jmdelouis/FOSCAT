@@ -143,92 +143,76 @@ class FoCUS:
         self.ww_RealT = {} 
         self.ww_ImagT = {}
         
-        if KERNELSZ>5:
-            for i in range(nstep_max):
-                lout=(2**i)
-                all_nmax=128
-                self.ww_Real[lout]=self.backend.constant(np.load('ALLWAVE_%s_%d_%d_Wr.npy'%(TMPFILE_VERSION,lout,all_nmax)).astype(self.all_type))
-                self.ww_Imag[lout]=self.backend.constant(np.load('ALLWAVE_%s_%d_%d_Wi.npy'%(TMPFILE_VERSION,lout,all_nmax)).astype(self.all_type))
-                
-            KERNELSZ=5
-            x=np.repeat(np.arange(KERNELSZ)-KERNELSZ//2,KERNELSZ).reshape(KERNELSZ,KERNELSZ)
-            y=x.T
+        wwc=np.zeros([KERNELSZ**2,l_NORIENT]).astype(all_type)
+        wws=np.zeros([KERNELSZ**2,l_NORIENT]).astype(all_type)
+
+        x=np.repeat(np.arange(KERNELSZ)-KERNELSZ//2,KERNELSZ).reshape(KERNELSZ,KERNELSZ)
+        y=x.T
+
+        if NORIENT==1:
             xx=(3/float(KERNELSZ))*LAMBDA*x
             yy=(3/float(KERNELSZ))*LAMBDA*y
-            w_smooth=np.exp(-(xx**2+yy**2)).flatten()
-            self.do_wigner=True
+
+            if KERNELSZ==5:
+                #w_smooth=np.exp(-2*((3.0/float(KERNELSZ)*xx)**2+(3.0/float(KERNELSZ)*yy)**2))
+                w_smooth=np.exp(-(xx**2+yy**2))
+                tmp=np.exp(-2*(xx**2+yy**2))-0.25*np.exp(-0.5*(xx**2+yy**2))
+            else:
+                w_smooth=np.exp(-0.5*(xx**2+yy**2))
+                tmp=np.exp(-2*(xx**2+yy**2))-0.25*np.exp(-0.5*(xx**2+yy**2))
+
+            wwc[:,0]=tmp.flatten()-tmp.mean()
+            tmp=0*w_smooth
+            wws[:,0]=tmp.flatten()
+            sigma=np.sqrt((wwc[:,0]**2).mean())
+            wwc[:,0]/=sigma
+            wws[:,0]/=sigma
+
+            w_smooth=w_smooth.flatten()
         else:
-            self.do_wigner=False
-            wwc=np.zeros([KERNELSZ**2,l_NORIENT]).astype(all_type)
-            wws=np.zeros([KERNELSZ**2,l_NORIENT]).astype(all_type)
-
-            x=np.repeat(np.arange(KERNELSZ)-KERNELSZ//2,KERNELSZ).reshape(KERNELSZ,KERNELSZ)
-            y=x.T
-
-            if NORIENT==1:
-                xx=(3/float(KERNELSZ))*LAMBDA*x
-                yy=(3/float(KERNELSZ))*LAMBDA*y
+            for i in range(NORIENT):
+                a=i/float(NORIENT)*np.pi
+                xx=(3/float(KERNELSZ))*LAMBDA*(x*np.cos(a)+y*np.sin(a))
+                yy=(3/float(KERNELSZ))*LAMBDA*(x*np.sin(a)-y*np.cos(a))
 
                 if KERNELSZ==5:
                     #w_smooth=np.exp(-2*((3.0/float(KERNELSZ)*xx)**2+(3.0/float(KERNELSZ)*yy)**2))
                     w_smooth=np.exp(-(xx**2+yy**2))
-                    tmp=np.exp(-2*(xx**2+yy**2))-0.25*np.exp(-0.5*(xx**2+yy**2))
                 else:
                     w_smooth=np.exp(-0.5*(xx**2+yy**2))
-                    tmp=np.exp(-2*(xx**2+yy**2))-0.25*np.exp(-0.5*(xx**2+yy**2))
+                tmp1=np.cos(yy*np.pi)*w_smooth
+                tmp2=np.sin(yy*np.pi)*w_smooth
 
-                wwc[:,0]=tmp.flatten()-tmp.mean()
-                tmp=0*w_smooth
-                wws[:,0]=tmp.flatten()
-                sigma=np.sqrt((wwc[:,0]**2).mean())
-                wwc[:,0]/=sigma
-                wws[:,0]/=sigma
+                wwc[:,i]=tmp1.flatten()-tmp1.mean()
+                wws[:,i]=tmp2.flatten()-tmp2.mean()
+                sigma=np.sqrt((wwc[:,i]**2).mean())
+                wwc[:,i]/=sigma
+                wws[:,i]/=sigma
+                    
+                if DODIV and i==0:
+                    r=(xx**2+yy**2)
+                    theta=np.arctan2(yy,xx)
+                    theta[KERNELSZ//2,KERNELSZ//2]=0.0
+                    tmp1=r*np.cos(2*theta)*w_smooth
+                    tmp2=r*np.sin(2*theta)*w_smooth
+                        
+                    wwc[:,NORIENT]=tmp1.flatten()-tmp1.mean()
+                    wws[:,NORIENT]=tmp2.flatten()-tmp2.mean()
+                    sigma=np.sqrt((wwc[:,NORIENT]**2).mean())
+                        
+                    wwc[:,NORIENT]/=sigma
+                    wws[:,NORIENT]/=sigma
+                    tmp1=r*np.cos(2*theta+np.pi)
+                    tmp2=r*np.sin(2*theta+np.pi)
+                        
+                    wwc[:,NORIENT+1]=tmp1.flatten()-tmp1.mean()
+                    wws[:,NORIENT+1]=tmp2.flatten()-tmp2.mean()
+                    sigma=np.sqrt((wwc[:,NORIENT+1]**2).mean())
+                    wwc[:,NORIENT+1]/=sigma
+                    wws[:,NORIENT+1]/=sigma
+                        
 
                 w_smooth=w_smooth.flatten()
-            else:
-                for i in range(NORIENT):
-                    a=i/float(NORIENT)*np.pi
-                    xx=(3/float(KERNELSZ))*LAMBDA*(x*np.cos(a)+y*np.sin(a))
-                    yy=(3/float(KERNELSZ))*LAMBDA*(x*np.sin(a)-y*np.cos(a))
-
-                    if KERNELSZ==5:
-                        #w_smooth=np.exp(-2*((3.0/float(KERNELSZ)*xx)**2+(3.0/float(KERNELSZ)*yy)**2))
-                        w_smooth=np.exp(-(xx**2+yy**2))
-                    else:
-                        w_smooth=np.exp(-0.5*(xx**2+yy**2))
-                    tmp1=np.cos(yy*np.pi)*w_smooth
-                    tmp2=np.sin(yy*np.pi)*w_smooth
-
-                    wwc[:,i]=tmp1.flatten()-tmp1.mean()
-                    wws[:,i]=tmp2.flatten()-tmp2.mean()
-                    sigma=np.sqrt((wwc[:,i]**2).mean())
-                    wwc[:,i]/=sigma
-                    wws[:,i]/=sigma
-                    
-                    if DODIV and i==0:
-                        r=(xx**2+yy**2)
-                        theta=np.arctan2(yy,xx)
-                        theta[KERNELSZ//2,KERNELSZ//2]=0.0
-                        tmp1=r*np.cos(2*theta)*w_smooth
-                        tmp2=r*np.sin(2*theta)*w_smooth
-                        
-                        wwc[:,NORIENT]=tmp1.flatten()-tmp1.mean()
-                        wws[:,NORIENT]=tmp2.flatten()-tmp2.mean()
-                        sigma=np.sqrt((wwc[:,NORIENT]**2).mean())
-                        
-                        wwc[:,NORIENT]/=sigma
-                        wws[:,NORIENT]/=sigma
-                        tmp1=r*np.cos(2*theta+np.pi)
-                        tmp2=r*np.sin(2*theta+np.pi)
-                        
-                        wwc[:,NORIENT+1]=tmp1.flatten()-tmp1.mean()
-                        wws[:,NORIENT+1]=tmp2.flatten()-tmp2.mean()
-                        sigma=np.sqrt((wwc[:,NORIENT+1]**2).mean())
-                        wwc[:,NORIENT+1]/=sigma
-                        wws[:,NORIENT+1]/=sigma
-                        
-
-                    w_smooth=w_smooth.flatten()
 
         self.KERNELSZ=KERNELSZ
 
@@ -257,14 +241,10 @@ class FoCUS:
             self.w_smooth=slope*(w_smooth/w_smooth.sum()).astype(self.all_type)
             for i in range(nstep_max):
                 lout=(2**i)
-                if not self.do_wigner:
-                    self.ww_Real[lout]=(wwc.astype(self.all_type))
-                    self.ww_Imag[lout]=(wws.astype(self.all_type))
-                    self.ww_RealT[lout]=(wwc.astype(self.all_type))
-                    self.ww_ImagT[lout]=(wws.astype(self.all_type))
-                else:
-                    self.ww_RealT[lout]=self.backend.constant(np.zeros([KERNELSZ**2,l_NORIENT]).astype(all_type))
-                    self.ww_ImagT[lout]=self.backend.constant(np.zeros([KERNELSZ**2,l_NORIENT]).astype(all_type))
+                self.ww_Real[lout]=(wwc.astype(self.all_type))
+                self.ww_Imag[lout]=(wws.astype(self.all_type))
+                self.ww_RealT[lout]=(wwc.astype(self.all_type))
+                self.ww_ImagT[lout]=(wws.astype(self.all_type))
 
             def trans_kernel(a):
                 b=1*a.reshape(KERNELSZ,KERNELSZ)
@@ -275,16 +255,11 @@ class FoCUS:
 
             self.ww_SmoothT = self.w_smooth.reshape(KERNELSZ,KERNELSZ,1)
         
-            if not self.do_wigner:
-                for i in range(nstep_max):
-                    lout=(2**i)
-                    for j in range(l_NORIENT):
-                        self.ww_RealT[lout][:,j]=self.backend.constant(trans_kernel(self.ww_Real[lout][:,j]))
-                        self.ww_ImagT[lout][:,j]=self.backend.constant(trans_kernel(self.ww_Imag[lout][:,j]))
-                    #self.ww_Real[lout]=self.backend.constant(self.ww_Real[lout])
-                    #self.ww_Imag[lout]=self.backend.constant(self.ww_Imag[lout])
-                    #self.ww_RealT[lout]=self.backend.constant(self.ww_RealT[lout])
-                    #self.ww_ImagT[lout]=self.backend.constant(self.ww_ImagT[lout])
+            for i in range(nstep_max):
+                lout=(2**i)
+                for j in range(l_NORIENT):
+                    self.ww_RealT[lout][:,j]=self.backend.constant(trans_kernel(self.ww_Real[lout][:,j]))
+                    self.ww_ImagT[lout][:,j]=self.backend.constant(trans_kernel(self.ww_Imag[lout][:,j]))
           
         self.pix_interp_val={}
         self.weight_interp_val={}
@@ -1074,6 +1049,9 @@ class FoCUS:
                 tmp=np.load('%s/FOSCAT_%s_W%d_%d_%d_PIDX.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel**2,self.NORIENT,nside))
         except:
             if self.use_R_format==False:
+                if self.KERNELSZ*self.KERNELSZ>12*nside*nside:
+                    l_kernel=2*nside
+                    
                 aa=np.cos(np.arange(self.NORIENT)/self.NORIENT*np.pi).reshape(1,self.NORIENT)
                 bb=np.sin(np.arange(self.NORIENT)/self.NORIENT*np.pi).reshape(1,self.NORIENT)
                 x,y,z=hp.pix2vec(nside,np.arange(12*nside*nside),nest=True)
@@ -1089,12 +1067,18 @@ class FoCUS:
                 else:
                     lidx=np.arange(12*nside*nside)
 
-                if self.KERNELSZ==5:
-                    pw=1/2.0*1.5 # correction for a better wavelet definition
+                pw=np.pi/4.0
+                pw2=1/2.0
+        
+                if l_kernel==5:
+                    pw=np.pi/4.0
                     pw2=1/2.0
-                else:
+                elif l_kernel==3:
                     pw=1.0
                     pw2=1.0
+                elif l_kernel==7:
+                    pw=np.pi/4.0
+                    pw2=1.0/3.0
                     
                 for k in range(12*nside*nside):
                     if k%(nside*nside)==0:
@@ -1106,7 +1090,9 @@ class FoCUS:
                               np.tile(np.arange((scale*scale)),lidx.shape[0])
         
                     delta=(x[lidx]-x[k])**2+(y[lidx]-y[k])**2+(z[lidx]-z[k])**2
-                    pidx=np.where(delta<10/(nside**2))[0]
+                    pidx=np.where(delta<(10)/(nside**2))[0]
+                    if len(pidx)<l_kernel**2:
+                        pidx=np.arange(delta.shape[0])
                     
                     w=np.exp(-pw2*delta[pidx]*(nside**2))
                     pidx=pidx[np.argsort(-w)[0:l_kernel**2]]
@@ -1129,10 +1115,10 @@ class FoCUS:
                 wav=wav/np.expand_dims(np.std(wav,1),1)
                 wwav=wwav/np.expand_dims(np.sum(wwav,1),1)
 
-                print('Write FOSCAT_%s_W%d_%d_%d_PIDX.npy'%(TMPFILE_VERSION,l_kernel**2,self.NORIENT,nside))
-                np.save('%s/FOSCAT_%s_W%d_%d_%d_PIDX.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel**2,self.NORIENT,nside),iwav)
-                np.save('%s/FOSCAT_%s_W%d_%d_%d_SMOO.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel**2,self.NORIENT,nside),wwav)
-                np.save('%s/FOSCAT_%s_W%d_%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel**2,self.NORIENT,nside),wav)
+                print('Write FOSCAT_%s_W%d_%d_%d_PIDX.npy'%(TMPFILE_VERSION,self.KERNELSZ**2,self.NORIENT,nside))
+                np.save('%s/FOSCAT_%s_W%d_%d_%d_PIDX.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,self.KERNELSZ**2,self.NORIENT,nside),iwav)
+                np.save('%s/FOSCAT_%s_W%d_%d_%d_SMOO.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,self.KERNELSZ**2,self.NORIENT,nside),wwav)
+                np.save('%s/FOSCAT_%s_W%d_%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,self.KERNELSZ**2,self.NORIENT,nside),wav)
             else:
                 if l_kernel**2==9:
                     if self.rank==0:
@@ -1149,10 +1135,10 @@ class FoCUS:
         if self.use_R_format:          
             tmp=np.load('%s/W%d_%s_%d_IDX.npy'%(self.TEMPLATE_PATH,l_kernel**2,TMPFILE_VERSION,nside))
         else:
-            tmp=np.load('%s/FOSCAT_%s_W%d_%d_%d_PIDX.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel**2,self.NORIENT,nside))
-            wr=np.load('%s/FOSCAT_%s_W%d_%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel**2,self.NORIENT,nside)).real
-            wi=np.load('%s/FOSCAT_%s_W%d_%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel**2,self.NORIENT,nside)).imag
-            ws=self.slope*np.load('%s/FOSCAT_%s_W%d_%d_%d_SMOO.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel**2,self.NORIENT,nside))
+            tmp=np.load('%s/FOSCAT_%s_W%d_%d_%d_PIDX.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,self.KERNELSZ**2,self.NORIENT,nside))
+            wr=np.load('%s/FOSCAT_%s_W%d_%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,self.KERNELSZ**2,self.NORIENT,nside)).real
+            wi=np.load('%s/FOSCAT_%s_W%d_%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,self.KERNELSZ**2,self.NORIENT,nside)).imag
+            ws=self.slope*np.load('%s/FOSCAT_%s_W%d_%d_%d_SMOO.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,self.KERNELSZ**2,self.NORIENT,nside))
                 
         if kernel==-1:
             if self.backend.BACKEND==self.backend.TORCH:
@@ -1409,14 +1395,9 @@ class FoCUS:
             l_ww_real=self.ww_Real[nside]
             l_ww_imag=self.ww_Imag[nside]
 
-            if self.do_wigner:
-                for i in range(axis):
-                    l_ww_real=self.backend.bk_expand_dims(l_ww_real,0)
-                    l_ww_imag=self.backend.bk_expand_dims(l_ww_imag,0)
-            else:
-                for i in range(axis):
-                    l_ww_real=self.backend.bk_expand_dims(l_ww_real,0)
-                    l_ww_imag=self.backend.bk_expand_dims(l_ww_imag,0)
+            for i in range(axis):
+                l_ww_real=self.backend.bk_expand_dims(l_ww_real,0)
+                l_ww_imag=self.backend.bk_expand_dims(l_ww_imag,0)
                     
 
             for i in range(axis+2,len(imX9.shape)-1):
