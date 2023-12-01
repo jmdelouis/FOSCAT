@@ -4,6 +4,8 @@ import os, sys
 import foscat.backend as bk
 import foscat.Rformat as Rformat
 
+TMPFILE_VERSION='V2_4'
+
 class FoCUS:
     def __init__(self,
                  NORIENT=4,
@@ -145,8 +147,8 @@ class FoCUS:
             for i in range(nstep_max):
                 lout=(2**i)
                 all_nmax=128
-                self.ww_Real[lout]=self.backend.constant(np.load('ALLWAVE_V2_3_%d_%d_Wr.npy'%(lout,all_nmax)).astype(self.all_type))
-                self.ww_Imag[lout]=self.backend.constant(np.load('ALLWAVE_V2_3_%d_%d_Wi.npy'%(lout,all_nmax)).astype(self.all_type))
+                self.ww_Real[lout]=self.backend.constant(np.load('ALLWAVE_%s_%d_%d_Wr.npy'%(TMPFILE_VERSION,lout,all_nmax)).astype(self.all_type))
+                self.ww_Imag[lout]=self.backend.constant(np.load('ALLWAVE_%s_%d_%d_Wi.npy'%(TMPFILE_VERSION,lout,all_nmax)).astype(self.all_type))
                 
             KERNELSZ=5
             x=np.repeat(np.arange(KERNELSZ)-KERNELSZ//2,KERNELSZ).reshape(KERNELSZ,KERNELSZ)
@@ -231,7 +233,6 @@ class FoCUS:
         self.KERNELSZ=KERNELSZ
 
         self.Idx_Neighbours={}
-        self.Idx_convol={}
         
         if not self.use_R_format:
             self.w_smooth = {}
@@ -242,17 +243,16 @@ class FoCUS:
             for i in range(1,6):
                 lout=(2**i)
                 print('Init Wave ',lout)
-                if self.InitWave is None:
-                    self.init_index(lout)
                 
-                    self.ww_Real[lout]=self.backend.constant(np.load('%s/FOSCAT_V2_3_W%d_%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,self.KERNELSZ**2,self.NORIENT,lout)).real.astype(self.all_type))
-                    self.ww_Imag[lout]=self.backend.constant(np.load('%s/FOSCAT_V2_3_W%d_%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,self.KERNELSZ**2,self.NORIENT,lout)).imag.astype(self.all_type))
-                    self.w_smooth[lout]=self.backend.constant(slope*np.load('%s/FOSCAT_V2_3_W%d_%d_%d_SMOO.npy'%(self.TEMPLATE_PATH,self.KERNELSZ**2,self.NORIENT,lout)).astype(self.all_type))
+                if self.InitWave is None:
+                    wr,wi,ws,widx=self.init_index(lout)
                 else:
-                    wr,wi,ws=self.InitWave(self,lout)
-                    self.ww_Real[lout]=self.backend.constant(wr.astype(self.all_type))
-                    self.ww_Imag[lout]=self.backend.constant(wi.astype(self.all_type))
-                    self.w_smooth[lout]=self.backend.constant(ws.astype(self.all_type))
+                    wr,wi,ws,widx=self.InitWave(self,lout)
+        
+                self.Idx_Neighbours[lout]=self.backend.constant(widx)
+                self.ww_Real[lout]=self.backend.constant(wr.astype(self.all_type))
+                self.ww_Imag[lout]=self.backend.constant(wi.astype(self.all_type))
+                self.w_smooth[lout]=self.backend.constant(ws.astype(self.all_type))
         else:
             self.w_smooth=slope*(w_smooth/w_smooth.sum()).astype(self.all_type)
             for i in range(nstep_max):
@@ -309,7 +309,6 @@ class FoCUS:
                 self.weight_interp_val[lout][lout2]=None
             self.ring2nest[lout]=None
             self.Idx_Neighbours[lout]=None
-            self.Idx_convol[lout]=None
             self.nest2R[lout]=None
             self.nest2R1[lout]=None
             self.nest2R2[lout]=None
@@ -356,11 +355,11 @@ class FoCUS:
         self.barrier()
         
         try:
-            fidx =np.load('%s/%s_V2_3_%d_%d_FIDX.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
-            fidx1=np.load('%s/%s_V2_3_%d_%d_FIDX1.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
-            fidx2=np.load('%s/%s_V2_3_%d_%d_FIDX2.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
-            fidx3=np.load('%s/%s_V2_3_%d_%d_FIDX3.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
-            fidx4=np.load('%s/%s_V2_3_%d_%d_FIDX4.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
+            fidx =np.load('%s/%s_%s_%d_%d_FIDX.npy'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans))
+            fidx1=np.load('%s/%s_%s_%d_%d_FIDX1.npy'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans))
+            fidx2=np.load('%s/%s_%s_%d_%d_FIDX2.npy'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans))
+            fidx3=np.load('%s/%s_%s_%d_%d_FIDX3.npy'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans))
+            fidx4=np.load('%s/%s_%s_%d_%d_FIDX4.npy'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans))
         except:
             
             if self.rank==0:
@@ -483,25 +482,25 @@ class FoCUS:
                     fidx4 = (fidx4+nside*nside)%(nside*nside)
                 
                 
-                np.save('%s/%s_V2_3_%d_%d_FIDX.npy'%(self.TEMPLATE_PATH,outname,nside,chans),fidx)
-                print('%s/%s_V2_3_%d_%d_FIDX.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
-                np.save('%s/%s_V2_3_%d_%d_FIDX1.npy'%(self.TEMPLATE_PATH,outname,nside,chans),fidx1)
-                print('%s/%s_V2_3_%d_%d_FIDX1.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
-                np.save('%s/%s_V2_3_%d_%d_FIDX2.npy'%(self.TEMPLATE_PATH,outname,nside,chans),fidx2)
-                print('%s/%s_V2_3_%d_%d_FIDX2.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
-                np.save('%s/%s_V2_3_%d_%d_FIDX3.npy'%(self.TEMPLATE_PATH,outname,nside,chans),fidx3)
-                print('%s/%s_V2_3_%d_%d_FIDX3.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
-                np.save('%s/%s_V2_3_%d_%d_FIDX4.npy'%(self.TEMPLATE_PATH,outname,nside,chans),fidx4)
-                print('%s/%s_V2_3_%d_%d_FIDX4.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nside,chans))
+                np.save('%s/%s_%s_%d_%d_FIDX.npy'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans),fidx)
+                print('%s/%s_%s_%d_%d_FIDX.npy COMPUTED'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans))
+                np.save('%s/%s_%s_%d_%d_FIDX1.npy'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans),fidx1)
+                print('%s/%s_%s_%d_%d_FIDX1.npy COMPUTED'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans))
+                np.save('%s/%s_%s_%d_%d_FIDX2.npy'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans),fidx2)
+                print('%s/%s_%s_%d_%d_FIDX2.npy COMPUTED'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans))
+                np.save('%s/%s_%s_%d_%d_FIDX3.npy'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans),fidx3)
+                print('%s/%s_%s_%d_%d_FIDX3.npy COMPUTED'%(self.TEMPLATE_PATH,TMPFILE_VERSION,outname,nside,chans))
+                np.save('%s/%s_%s_%d_%d_FIDX4.npy'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans),fidx4)
+                print('%s/%s_%s_%d_%d_FIDX4.npy COMPUTED'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans))
                 sys.stdout.flush()
 
         self.barrier()
             
-        fidx =np.load('%s/%s_V2_3_%d_%d_FIDX.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
-        fidx1=np.load('%s/%s_V2_3_%d_%d_FIDX1.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
-        fidx2=np.load('%s/%s_V2_3_%d_%d_FIDX2.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
-        fidx3=np.load('%s/%s_V2_3_%d_%d_FIDX3.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
-        fidx4=np.load('%s/%s_V2_3_%d_%d_FIDX4.npy'%(self.TEMPLATE_PATH,outname,nside,chans))
+        fidx =np.load('%s/%s_%s_%d_%d_FIDX.npy'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans))
+        fidx1=np.load('%s/%s_%s_%d_%d_FIDX1.npy'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans))
+        fidx2=np.load('%s/%s_%s_%d_%d_FIDX2.npy'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans))
+        fidx3=np.load('%s/%s_%s_%d_%d_FIDX3.npy'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans))
+        fidx4=np.load('%s/%s_%s_%d_%d_FIDX4.npy'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans))
 
         self.nest2R[nside]=self.backend.constant(fidx)
         self.nest2R1[nside]=self.backend.constant(fidx1)
@@ -725,8 +724,8 @@ class FoCUS:
         for iii in range(12*nout*nout):
             idx[iii,:]=allidx[:,iii]
 
-        np.save('%s/%s_V2_3_%d_IDX.npy'%(self.TEMPLATE_PATH,outname,nout),idx)
-        print('%s/%s_V2_3_%d_IDX.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nout))
+        np.save('%s/%s_%s_%d_IDX.npy'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nout),idx)
+        print('%s/%s_%s_%d_IDX.npy COMPUTED'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nout))
         sys.stdout.flush()
 
     # ---------------------------------------------−---------
@@ -792,8 +791,8 @@ class FoCUS:
         for iii in range(12*nout*nout):
             idx[iii,:]=allidx[:,iii]
 
-        np.save('%s/%s_V2_3_%d_IDX.npy'%(self.TEMPLATE_PATH,outname,nout),idx)
-        print('%s/%s_V2_3_%d_IDX.npy COMPUTED'%(self.TEMPLATE_PATH,outname,nout))
+        np.save('%s/%s_%s_%d_IDX.npy'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nout),idx)
+        print('%s/%s_%s_%d_IDX.npy COMPUTED'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nout))
         sys.stdout.flush()
         
     # ---------------------------------------------−---------
@@ -1054,14 +1053,14 @@ class FoCUS:
             wi[l,:,:]=wwi[idx[0:nmax],:]
             iii[l,:]=idx[0:nmax]
 
-        print('Write ALLWAVE_V2_3_%d_%d_W.npy'%(nside,k),wr.shape[1]/(12*nside**2))
-        np.save('ALLWAVE_V2_3_%d_%d_Wr.npy'%(nside,all_nmax),wr)
-        np.save('ALLWAVE_V2_3_%d_%d_Wi.npy'%(nside,all_nmax),wi)
-        np.save('ALLWAVE_V2_3_%d_%d_I.npy'%(nside,all_nmax),iii)
+        print('Write ALLWAVE_%s_%d_%d_W.npy'%(TMPFILE_VERSION,nside,k),wr.shape[1]/(12*nside**2))
+        np.save('ALLWAVE_%s_%d_%d_Wr.npy'%(TMPFILE_VERSION,nside,all_nmax),wr)
+        np.save('ALLWAVE_%s_%d_%d_Wi.npy'%(TMPFILE_VERSION,nside,all_nmax),wi)
+        np.save('ALLWAVE_%s_%d_%d_I.npy'%(TMPFILE_VERSION,nside,all_nmax),iii)
         
     # ---------------------------------------------−---------
     def init_index(self,nside,kernel=-1):
-        
+
         if kernel==-1:
             l_kernel=self.KERNELSZ
         else:
@@ -1070,9 +1069,9 @@ class FoCUS:
         
         try:
             if self.use_R_format:
-                tmp=self.backend.constant(np.load('%s/W%d_V2_3_%d_IDX.npy'%(self.TEMPLATE_PATH,l_kernel**2,nside)))
+                tmp=np.load('%s/W%d_%s_%d_IDX.npy'%(self.TEMPLATE_PATH,l_kernel**2,TMPFILE_VERSION,nside))
             else:
-                tmp=self.backend.constant(np.load('%s/FOSCAT_V2_3_W%d_%d_%d_PIDX.npy'%(self.TEMPLATE_PATH,l_kernel**2,self.NORIENT,nside)))
+                tmp=np.load('%s/FOSCAT_%s_W%d_%d_%d_PIDX.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel**2,self.NORIENT,nside))
         except:
             if self.use_R_format==False:
                 aa=np.cos(np.arange(self.NORIENT)/self.NORIENT*np.pi).reshape(1,self.NORIENT)
@@ -1108,9 +1107,11 @@ class FoCUS:
         
                     delta=(x[lidx]-x[k])**2+(y[lidx]-y[k])**2+(z[lidx]-z[k])**2
                     pidx=np.where(delta<10/(nside**2))[0]
-        
+                    
                     w=np.exp(-pw2*delta[pidx]*(nside**2))
                     pidx=pidx[np.argsort(-w)[0:l_kernel**2]]
+                    pidx=pidx[np.argsort(lidx[pidx])]
+                    
                     w=np.exp(-pw2*delta[pidx]*(nside**2))
                     iwav[k]=lidx[pidx]
                     wwav[k]=w
@@ -1128,10 +1129,10 @@ class FoCUS:
                 wav=wav/np.expand_dims(np.std(wav,1),1)
                 wwav=wwav/np.expand_dims(np.sum(wwav,1),1)
 
-                print('Write FOSCAT_V2_3_W%d_%d_%d_PIDX.npy'%(l_kernel**2,self.NORIENT,nside))
-                np.save('%s/FOSCAT_V2_3_W%d_%d_%d_PIDX.npy'%(self.TEMPLATE_PATH,l_kernel**2,self.NORIENT,nside),iwav)
-                np.save('%s/FOSCAT_V2_3_W%d_%d_%d_SMOO.npy'%(self.TEMPLATE_PATH,l_kernel**2,self.NORIENT,nside),wwav)
-                np.save('%s/FOSCAT_V2_3_W%d_%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,l_kernel**2,self.NORIENT,nside),wav)
+                print('Write FOSCAT_%s_W%d_%d_%d_PIDX.npy'%(TMPFILE_VERSION,l_kernel**2,self.NORIENT,nside))
+                np.save('%s/FOSCAT_%s_W%d_%d_%d_PIDX.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel**2,self.NORIENT,nside),iwav)
+                np.save('%s/FOSCAT_%s_W%d_%d_%d_SMOO.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel**2,self.NORIENT,nside),wwav)
+                np.save('%s/FOSCAT_%s_W%d_%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel**2,self.NORIENT,nside),wav)
             else:
                 if l_kernel**2==9:
                     if self.rank==0:
@@ -1146,27 +1147,24 @@ class FoCUS:
 
         self.barrier()  
         if self.use_R_format:          
-            tmp=self.backend.constant(np.load('%s/W%d_V2_3_%d_IDX.npy'%(self.TEMPLATE_PATH,l_kernel**2,nside)))
+            tmp=np.load('%s/W%d_%s_%d_IDX.npy'%(self.TEMPLATE_PATH,l_kernel**2,TMPFILE_VERSION,nside))
         else:
-            tmp=self.backend.constant(np.load('%s/FOSCAT_V2_3_W%d_%d_%d_PIDX.npy'%(self.TEMPLATE_PATH,l_kernel**2,self.NORIENT,nside)))
+            tmp=np.load('%s/FOSCAT_%s_W%d_%d_%d_PIDX.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel**2,self.NORIENT,nside))
+            wr=np.load('%s/FOSCAT_%s_W%d_%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel**2,self.NORIENT,nside)).real
+            wi=np.load('%s/FOSCAT_%s_W%d_%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel**2,self.NORIENT,nside)).imag
+            ws=self.slope*np.load('%s/FOSCAT_%s_W%d_%d_%d_SMOO.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel**2,self.NORIENT,nside))
                 
         if kernel==-1:
             if self.backend.BACKEND==self.backend.TORCH:
                 self.Idx_Neighbours[nside]=tmp.as_type('int64')
             else:
                 self.Idx_Neighbours[nside]=tmp
-
-        
-        if self.do_wigner:
-            try:
-                self.Idx_convol[nside]=np.load('ALLWAVE_V2_3_%d_%d_I.npy'%(nside,128))
-            except:
-                self.computeWigner(nside)
-        else:
-            self.Idx_convol[nside]=self.Idx_Neighbours[nside]
                 
-        if kernel!=-1:
-            return tmp
+        if self.use_R_format:
+            if kernel!=-1:
+                return tmp
+            
+        return wr,wi,ws,tmp
         
     # ---------------------------------------------−---------
     # Compute x [....,a,....] to [....,a*a,....]
@@ -1268,6 +1266,7 @@ class FoCUS:
 
             if l_x.dtype==self.all_cbk_type:
                 l_mask=self.backend.bk_complex(l_mask,0.0*l_mask)
+                
             return self.backend.bk_reduce_mean(l_mask*l_x,axis=axis+1)
         
     # ---------------------------------------------−---------
@@ -1393,25 +1392,19 @@ class FoCUS:
         else:
             nside=int(np.sqrt(image.shape[axis]//12))
 
-            if self.Idx_convol[nside] is None:
+            if self.Idx_Neighbours[nside] is None:
                 if self.InitWave is None:
-                    self.init_index(nside)
+                    wr,wi,ws,widx=self.init_index(nside)
                 else:
-                    wr,wi,ws=self.InitWave(self,nside)
-                    self.ww_Real[nside]=self.backend.constant(wr.astype(self.all_type))
-                    self.ww_Imag[nside]=self.backend.constant(wi.astype(self.all_type))
-                    self.w_smooth[nside]=self.backend.constant(ws.astype(self.all_type))
-                    
-
-            imX9=self.backend.bk_expand_dims(self.backend.bk_gather(self.backend.bk_cast(image),
-                                                    self.Idx_convol[nside],axis=axis),-1)
-
-            if self.ww_Real[nside] is None:
-                self.init_index(nside)
+                    wr,wi,ws,widx=self.InitWave(self,nside)
+        
+                self.Idx_Neighbours[nside]=self.backend.constant(widx)
+                self.ww_Real[nside]=self.backend.constant(wr.astype(self.all_type))
+                self.ww_Imag[nside]=self.backend.constant(wi.astype(self.all_type))
+                self.w_smooth[nside]=self.backend.constant(ws.astype(self.all_type))
                 
-                self.ww_Real[nside]=self.backend.constant(np.load('%s/FOSCAT_V2_3_W%d_%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,self.KERNELSZ**2,self.NORIENT,nside)).real.astype(self.all_type))
-                self.ww_Imag[nside]=self.backend.constant(np.load('%s/FOSCAT_V2_3_W%d_%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,self.KERNELSZ**2,self.NORIENT,nside)).imag.astype(self.all_type))
-                self.w_smooth[nside]=self.backend.constant(self.slope*np.load('%s/FOSCAT_V2_3_W%d_%d_%d_SMOO.npy'%(self.TEMPLATE_PATH,self.KERNELSZ**2,self.NORIENT,nside)).astype(self.all_type))
+            imX9=self.backend.bk_expand_dims(self.backend.bk_gather(self.backend.bk_cast(image),
+                                                    self.Idx_Neighbours[nside],axis=axis),-1)
                 
             l_ww_real=self.ww_Real[nside]
             l_ww_imag=self.ww_Imag[nside]
@@ -1495,13 +1488,16 @@ class FoCUS:
             nside=int(np.sqrt(image.shape[axis]//12))
 
             if self.Idx_Neighbours[nside] is None:
+                
                 if self.InitWave is None:
-                    self.init_index(nside)
+                    wr,wi,ws,widx=self.init_index(nside)
                 else:
-                    wr,wi,ws=self.InitWave(self,nside)
-                    self.ww_Real[nside]=self.backend.constant(wr.astype(self.all_type))
-                    self.ww_Imag[nside]=self.backend.constant(wi.astype(self.all_type))
-                    self.w_smooth[nside]=self.backend.constant(ws.astype(self.all_type))
+                    wr,wi,ws,widx=self.InitWave(self,nside)
+        
+                self.Idx_Neighbours[nside]=self.backend.constant(widx)
+                self.ww_Real[nside]=self.backend.constant(wr.astype(self.all_type))
+                self.ww_Imag[nside]=self.backend.constant(wi.astype(self.all_type))
+                self.w_smooth[nside]=self.backend.constant(ws.astype(self.all_type))
             
             imX9=self.backend.bk_gather(image,self.Idx_Neighbours[nside],axis=axis)
 
