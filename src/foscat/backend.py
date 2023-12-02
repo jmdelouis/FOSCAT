@@ -102,6 +102,22 @@ class foscat_backend:
     # ---------------------------------------------−---------
     # --             BACKEND DEFINITION                    --
     # ---------------------------------------------−---------
+    def bk_SparseTensor(self,indice,w,dense_shape=[]):
+        if self.BACKEND==self.TENSORFLOW:
+            return(self.backend.SparseTensor(indice,w,dense_shape=dense_shape))
+        if self.BACKEND==self.TORCH:
+            return(self.backend.SparseTensor(indice,w,dense_shape=dense_shape))
+        if self.BACKEND==self.NUMPY:
+            return np.sparse_matrix(indice,w,dense_shape=dense_shape)
+
+    def bk_sparse_dense_matmul(self,smat,mat):
+        if self.BACKEND==self.TENSORFLOW:
+            return self.backend.sparse.sparse_dense_matmul(smat,mat) 
+        if self.BACKEND==self.TORCH:
+            return self.backend.sparse.sparse_dense_matmul(smat,mat)
+        if self.BACKEND==self.NUMPY:
+            return np.sparse.sparse_dense_matmul(smat,mat)
+
     def conv2d(self,x,w,strides=[1, 1, 1, 1],padding='SAME'):
         if self.BACKEND==self.TENSORFLOW:
                 return self.backend.nn.conv2d(x,w,
