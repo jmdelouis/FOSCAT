@@ -1031,8 +1031,15 @@ class scat_cov_map:
         
 
 class funct(FOC.FoCUS):
-
-    def eval(self, image1, image2=None, mask=None, norm=None, Auto=True, Add_R45=False):
+    
+    #======================================================================================
+    # TO BE MODIFIED
+    #======================================================================================
+    # Change S1, P00, C01,C11 and C10 as a map instead of a sum
+    # remove the mask information that does not mean anything
+    #======================================================================================
+    
+    def eval(self, image1, image2=None, mask=None, norm=None, Auto=True, Add_R45=False,out_size=None):
         """
         Calculates the scattering correlations for a batch of images. Mean are done over pixels.
         mean of modulus:
@@ -1104,7 +1111,10 @@ class funct(FOC.FoCUS):
 
         J = int(np.log(nside) / np.log(2))  # Number of j scales
         Jmax = J - self.OSTEP  # Number of steps for the loop on scales
-        
+
+        if out_size is None:
+            out_size=nside
+            
         ### LOCAL VARIABLES (IMAGES and MASK)
         # Check if image1 is [Npix] or [Nbatch, Npix] or Rformat
         if len(image1.shape) == 1 or (len(image1.shape)==2 and self.chans==1) or (len(image1.shape) == 3 and isinstance(image1, Rformat.Rformat)):
@@ -1201,22 +1211,26 @@ class funct(FOC.FoCUS):
                 
                 ### P00_auto = < M1^2 >_pix
                 # Apply the mask [Nmask, Npix_j3] and average over pixels
-                p00 = self.masked_mean(M1_square, vmask, axis=1,rank=j3)
+                # NE PLUS FAIRE MASKED MEAN
+                print(M1_square.shape,nside)
+                # UN ARGUMENT SUR LA TAILLE DE L'IMAGE DE SORTIE
+                p00 = self.up_grade(M1_square,nside,axis=2).get_data() #self.masked_mean(M1_square, vmask, axis=1,rank=j3)
                 if cond_init_P1_dic:
                     # We fill P1_dic with P00 for normalisation of C01 and C11
                     P1_dic[j3] = p00  # [Nbatch, Nmask, Norient3]
-                if norm == 'auto':  # Normalize P00
-                    p00 /= P1_dic[j3]
+                #if norm == 'auto':  # Normalize P00
+                #    p00 /= P1_dic[j3]
 
                 # We store P00_auto to return it [Nbatch, Nmask, NP00, Norient3]
                 if P00 is None:
-                    P00 = p00[:, :, None, :]  # Add a dimension for NP00
+                    P00 = p00[:, :,:, :, None, :]  # Add a dimension for NP00
                 else:
-                    P00 = self.backend.bk_concat([P00, p00[:, :, None, :]], axis=2)
+                    P00 = self.backend.bk_concat([P00, p00[:, :, :, :, None, :]], axis=2)
 
                 #### S1_auto computation
                 ### Image 1 : S1 = < M1 >_pix
                 # Apply the mask [Nmask, Npix_j3] and average over pixels
+                # NE PLUS FAIRE MASKED MEAN
                 s1 = self.masked_mean(M1, vmask, axis=1,rank=j3)  # [Nbatch, Nmask, Norient3]
                 ### Normalize S1
                 if norm is not None:
@@ -1240,6 +1254,7 @@ class funct(FOC.FoCUS):
                 # Not returned, only for normalization
                 if cond_init_P1_dic:
                     # Apply the mask [Nmask, Npix_j3] and average over pixels
+                    # NE PLUS FAIRE MASKED MEAN
                     p1 = self.masked_mean(M1_square, vmask, axis=1,rank=j3)  # [Nbatch, Nmask, Norient3]
                     p2 = self.masked_mean(M2_square, vmask, axis=1,rank=j3)  # [Nbatch, Nmask, Norient3]
                     # We fill P1_dic with P00 for normalisation of C01 and C11
@@ -1250,6 +1265,7 @@ class funct(FOC.FoCUS):
                 # z_1 x z_2^* = (a1a2 + b1b2) + i(b1a2 - a1b2)
                 p00 = conv1 * self.backend.bk_conjugate(conv2)
                 # Apply the mask [Nmask, Npix_j3] and average over pixels
+                # NE PLUS FAIRE MASKED MEAN
                 p00 = self.masked_mean(p00, vmask, axis=1,rank=j3)
 
                 ### Normalize P00_cross
@@ -1446,6 +1462,8 @@ class funct(FOC.FoCUS):
         c01 = self.backend.bk_expand_dims(conv, -1) * self.backend.bk_conjugate(MconvPsi)   # [Nbatch, Npix_j3, Norient3, Norient2]
 
         ### Apply the mask [Nmask, Npix_j3] and sum over pixels
+        
+        # NE PLUS FAIRE MASKED MEAN
         c01 = self.masked_mean(c01, vmask, axis=1,rank=j2)  # [Nbatch, Nmask, Norient3, Norient2]
         return c01
 
@@ -1466,6 +1484,7 @@ class funct(FOC.FoCUS):
         c11 = self.backend.bk_expand_dims(M1, -2) * self.backend.bk_conjugate(self.backend.bk_expand_dims(M2, -1))  # [Nbatch, Npix_j3, Norient3, Norient2, Norient1]
 
         ### Apply the mask and sum over pixels
+        # NE PLUS FAIRE MASKED MEAN
         c11 = self.masked_mean(c11, vmask, axis=1,rank=j2)  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
         return c11
 
