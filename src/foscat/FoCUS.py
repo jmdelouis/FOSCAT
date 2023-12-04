@@ -955,42 +955,71 @@ class FoCUS:
             lout=int(np.sqrt(im.shape[axis]//12))
             
             if self.pix_interp_val[lout][nout] is None:
-                import tensorflow as tf
                 print('compute lout nout',lout,nout)
                 th,ph=hp.pix2ang(nout,np.arange(12*nout**2,dtype='int'),nest=True)
                 p, w = hp.get_interp_weights(lout,th,ph,nest=True)
                 del th
                 del ph
-                if self.backend.BACKEND==self.backend.TORCH:
-                    self.pix_interp_val[lout][nout] = p.astype('int64')
-                else:
-                    self.pix_interp_val[lout][nout] = self.backend.constant(p)
+                
+                indice=np.zeros([12*nout*nout*4,2],dtype='int')
+                p=p.T
+                w=w.T
+                t=np.argsort(p,1).flatten() # to make oder indices for sparsematrix computation
+                t=(t+np.repeat(np.arange(12*nout*nout)*4,4))
+                p=p.flatten()[t]
+                w=w.flatten()[t]
+                indice[:,0]=np.repeat(np.arange(12*nout**2),4)
+                indice[:,1]=p
 
-                self.weight_interp_val[lout][nout] = self.backend.constant(w.astype(self.all_type))
+                self.pix_interp_val[lout][nout]=1
+                self.weight_interp_val[lout][nout] = self.backend.bk_SparseTensor(self.backend.constant(indice), \
+                                                                                  self.backend.constant(self.backend.bk_cast(w.flatten())), \
+                                                                                  dense_shape=[12*nout**2,12*lout**2])
 
             if lout==nout:
                 imout=im
             else:
-                """
-                if axis==0:
-                    print('compute here')
-                    imout=self.backend.bk_reduce_sum(self.backend.bk_gather(im,self.pix_interp_val[lout][nout],axis=axis)\
-                                        *self.weight_interp_val[lout][nout],axis=0)
 
-                else:
-                """
-                amap=self.backend.bk_gather(im,self.pix_interp_val[lout][nout],axis=axis)
-                aw=self.weight_interp_val[lout][nout]
+                ishape=list(im.shape)
+                odata=1
+                for k in range(axis+1,len(ishape)):
+                    odata=odata*ishape[k]
+                    
+                ndata=1
                 for k in range(axis):
-                    aw=self.backend.bk_expand_dims(aw, axis=0)
-                for k in range(axis+1,len(im.shape)):
-                    aw=self.backend.bk_expand_dims(aw, axis=-1)
-                
-                if amap.dtype==self.all_cbk_type:
-                    imout=self.backend.bk_complex(self.backend.bk_reduce_sum(aw*self.backend.bk_real(amap),axis=axis), \
-                                                  self.backend.bk_reduce_sum(aw*self.backend.bk_imag(amap),axis=axis))
+                    ndata=ndata*ishape[k]
+                tim=self.backend.bk_reshape(self.backend.bk_cast(im),[ndata,12*lout**2,odata])
+                if tim.dtype==self.all_cbk_type:
+                    rr=self.backend.bk_reshape(self.backend.bk_sparse_dense_matmul(self.weight_interp_val[lout][nout]
+                                                                                   ,self.backend.bk_real(tim[0])),[1,12*nout**2,odata])
+                    ii=self.backend.bk_reshape(self.backend.bk_sparse_dense_matmul(self.weight_interp_val[lout][nout]
+                                                                                   ,self.backend.bk_imag(tim[0])),[1,12*nout**2,odata])
+                    imout=self.backend.bk_complex(rr,ii)
                 else:
-                    imout=self.backend.bk_reduce_sum(aw*amap,axis=axis)
+                    imout=self.backend.bk_reshape(self.backend.bk_sparse_dense_matmul(self.weight_interp_val[lout][nout]
+                                                                                    ,tim[0]),[1,12*nout**2,odata])
+
+                for k in range(1,ndata):
+                    if tim.dtype==self.all_cbk_type:
+                        rr=self.backend.bk_reshape(self.backend.bk_sparse_dense_matmul(self.weight_interp_val[lout][nout]
+                                                                                       ,self.backend.bk_real(tim[k])),[1,12*nout**2,odata])
+                        ii=self.backend.bk_reshape(self.backend.bk_sparse_dense_matmul(self.weight_interp_val[lout][nout]
+                                                                                       ,self.backend.bk_imag(tim[k])),[1,12*nout**2,odata])
+                        imout=self.backend.bk_concat([imout,self.backend.bk_complex(rr,ii)],0)
+                    else:
+                        imout=self.backend.bk_concat([imout,self.backend.bk_reshape(self.backend.bk_sparse_dense_matmul(self.weight_interp_val[lout][nout]
+                                                                                                                    ,tim[k]),[1,12*nout**2,odata])],0)
+
+                if axis==0:
+                    if len(ishape)==1:
+                        return self.backend.bk_reshape(imout,[12*nout**2])
+                    else:
+                        return self.backend.bk_reshape(imout,[12*nout**2]+ishape[axis+1:])
+                else:
+                    if len(ishape)==axis+1:
+                        return self.backend.bk_reshape(imout,ishape[0:axis]+[12*nout**2])
+                    else:
+                        return self.backend.bk_reshape(imout,ishape[0:axis]+[12*nout**2]+ishape[axis+1:])
         return(imout)
 
     # ---------------------------------------------−---------
