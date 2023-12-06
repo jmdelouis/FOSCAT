@@ -294,22 +294,20 @@ class scat1D:
         plt.subplot(2, 2, 1)
         tmp=abs(self.get_np(self.S1))
         if len(tmp.shape)==4:
-            for k in range(tmp.shape[3]):
-                for i1 in range(tmp.shape[0]):
-                    for i2 in range(tmp.shape[1]):
-                        if test is None:
-                            test=1
-                            plt.plot(tmp[i1,i2,:,k],color=color, label=r'%s $S_{1}$' % (name), lw=lw)
-                        else:
-                            plt.plot(tmp[i1,i2,:,k],color=color, lw=lw)
-        else:
-            for k in range(tmp.shape[2]):
-                for i1 in range(tmp.shape[0]):
+            for i1 in range(tmp.shape[0]):
+                for i2 in range(tmp.shape[1]):
                     if test is None:
                         test=1
-                        plt.plot(tmp[i1,:,k],color=color, label=r'%s $S_{1}$' % (name), lw=lw)
+                        plt.plot(tmp[i1,i2,:],color=color, label=r'%s $S_{1}$' % (name), lw=lw)
                     else:
-                        plt.plot(tmp[i1,:,k],color=color, lw=lw)
+                        plt.plot(tmp[i1,i2,:],color=color, lw=lw)
+        else:
+            for i1 in range(tmp.shape[0]):
+                if test is None:
+                    test=1
+                    plt.plot(tmp[i1,:],color=color, label=r'%s $S_{1}$' % (name), lw=lw)
+                else:
+                    plt.plot(tmp[i1,:],color=color, lw=lw)
         plt.yscale('log')
         plt.ylabel('S1')
         plt.xlabel(r'$j_{1}$')
@@ -319,22 +317,20 @@ class scat1D:
         plt.subplot(2, 2, 2)
         tmp=abs(self.get_np(self.P00))
         if len(tmp.shape)==4:
-            for k in range(tmp.shape[3]):
-                for i1 in range(tmp.shape[0]):
-                    for i2 in range(tmp.shape[0]):
-                        if test is None:
-                            test=1
-                            plt.plot(tmp[i1,i2,:,k],color=color, label=r'%s $P_{00}$' % (name), lw=lw)
-                        else:
-                            plt.plot(tmp[i1,i2,:,k],color=color, lw=lw)
-        else:
-            for k in range(tmp.shape[2]):
-                for i1 in range(tmp.shape[0]):
+            for i1 in range(tmp.shape[0]):
+                for i2 in range(tmp.shape[0]):
                     if test is None:
                         test=1
-                        plt.plot(tmp[i1,:,k],color=color, label=r'%s $P_{00}$' % (name), lw=lw)
+                        plt.plot(tmp[i1,i2,:],color=color, label=r'%s $P_{00}$' % (name), lw=lw)
                     else:
-                        plt.plot(tmp[i1,:,k],color=color, lw=lw)
+                        plt.plot(tmp[i1,i2,:],color=color, lw=lw)
+        else:
+            for i1 in range(tmp.shape[0]):
+                if test is None:
+                    test=1
+                    plt.plot(tmp[i1,:],color=color, label=r'%s $P_{00}$' % (name), lw=lw)
+                else:
+                    plt.plot(tmp[i1,:],color=color, lw=lw)
         plt.yscale('log')
         plt.ylabel('P00')
         plt.xlabel(r'$j_{1}$')
@@ -355,38 +351,34 @@ class scat1D:
             for i0 in range(tmp.shape[0]):
                 for i1 in range(tmp.shape[1]):
                     for i2 in range(j1.max()+1):
-                        for i3 in range(tmp.shape[3]):
-                            for i4 in range(tmp.shape[4]):
-                                if j2[j1==i2].shape[0]==1:
-                                    ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3,i4],'.', \
-                                                 color=color, lw=lw)
-                                else:
-                                    if legend and test is None:
-                                        ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3,i4], \
-                                                 color=color, label=lname, lw=lw)
-                                        test=1
-                                    ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3,i4], \
-                                             color=color, lw=lw)
-                        tabnx=tabnx+[r'%d'%(k) for k in j2[j1==i2]]
-                        tabx=tabx+[k+n for k in j2[j1==i2]]
-                        tab2x=tab2x+[(j2[j1==i2]+n).mean()]
-                        tab2nx=tab2nx+['%d'%(i2)]
-                        ax1.axvline((j2[j1==i2]+n).max()+0.5,ls=':',color='gray') 
-                        n=n+j2[j1==i2].shape[0]-1
+                        if j2[j1==i2].shape[0]==1:
+                            ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2],'.', \
+                                     color=color, lw=lw)
+                        else:
+                            if legend and test is None:
+                                ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2], \
+                                         color=color, label=lname, lw=lw)
+                                test=1
+                            ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2], \
+                                     color=color, lw=lw)
+                    tabnx=tabnx+[r'%d'%(k) for k in j2[j1==i2]]
+                    tabx=tabx+[k+n for k in j2[j1==i2]]
+                    tab2x=tab2x+[(j2[j1==i2]+n).mean()]
+                    tab2nx=tab2nx+['%d'%(i2)]
+                    ax1.axvline((j2[j1==i2]+n).max()+0.5,ls=':',color='gray') 
+                    n=n+j2[j1==i2].shape[0]-1
         else:
             for i0 in range(tmp.shape[0]):
                 for i2 in range(j1.max()+1):
-                    for i3 in range(tmp.shape[2]):
-                        for i4 in range(tmp.shape[3]):
-                            if j2[j1==i2].shape[0]==1:
-                                ax1.plot(j2[j1==i2]+n,tmp[i0,j1==i2,i3,i4],'.', \
-                                         color=color, lw=lw)
-                            else:
-                                if legend and test is None:
-                                    ax1.plot(j2[j1==i2]+n,tmp[i0,j1==i2,i3,i4], \
-                                             color=color, label=lname, lw=lw)
-                                    test=1
-                                ax1.plot(j2[j1==i2]+n,tmp[i0,j1==i2,i3,i4], \
+                    if j2[j1==i2].shape[0]==1:
+                        ax1.plot(j2[j1==i2]+n,tmp[i0,j1==i2],'.', \
+                                 color=color, lw=lw)
+                    else:
+                        if legend and test is None:
+                            ax1.plot(j2[j1==i2]+n,tmp[i0,j1==i2], \
+                                     color=color, label=lname, lw=lw)
+                            test=1
+                        ax1.plot(j2[j1==i2]+n,tmp[i0,j1==i2], \
                                          color=color, lw=lw)
                     tabnx=tabnx+[r'%d'%(k) for k in j2[j1==i2]]
                     tabx=tabx+[k+n for k in j2[j1==i2]]
@@ -436,18 +428,16 @@ class scat1D:
             for i0 in range(tmp.shape[0]):
                 for i1 in range(tmp.shape[1]):
                     for i2 in range(j1.max()+1):
-                        for i3 in range(tmp.shape[3]):
-                            for i4 in range(tmp.shape[4]):
-                                if j2[j1==i2].shape[0]==1:
-                                    ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3,i4],'.', \
-                                                 color=color, lw=lw)
-                                else:
-                                    if legend and test is None:
-                                        ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3,i4], \
-                                                 color=color, label=lname, lw=lw)
-                                        test=1
-                                    ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3,i4], \
-                                             color=color, lw=lw)
+                        if j2[j1==i2].shape[0]==1:
+                            ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2],'.', \
+                                     color=color, lw=lw)
+                        else:
+                            if legend and test is None:
+                                ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2], \
+                                         color=color, label=lname, lw=lw)
+                                test=1
+                            ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2], \
+                                     color=color, lw=lw)
                         tabnx=tabnx+[r'%d'%(k) for k in j2[j1==i2]]
                         tabx=tabx+[k+n for k in j2[j1==i2]]
                         tab2x=tab2x+[(j2[j1==i2]+n).mean()]
@@ -457,18 +447,16 @@ class scat1D:
         else:
             for i0 in range(tmp.shape[0]):
                 for i2 in range(j1.max()+1):
-                    for i3 in range(tmp.shape[2]):
-                        for i4 in range(tmp.shape[3]):
-                            if j2[j1==i2].shape[0]==1:
-                                ax1.plot(j2[j1==i2]+n,tmp[i0,j1==i2,i3,i4],'.', \
-                                             color=color, lw=lw)
-                            else:
-                                if legend and test is None:
-                                    ax1.plot(j2[j1==i2]+n,tmp[i0,j1==i2,i3,i4], \
-                                             color=color, label=lname, lw=lw)
-                                    test=1
-                                ax1.plot(j2[j1==i2]+n,tmp[i0,j1==i2,i3,i4], \
-                                         color=color, lw=lw)
+                    if j2[j1==i2].shape[0]==1:
+                        ax1.plot(j2[j1==i2]+n,tmp[i0,j1==i2],'.', \
+                                 color=color, lw=lw)
+                    else:
+                        if legend and test is None:
+                            ax1.plot(j2[j1==i2]+n,tmp[i0,j1==i2], \
+                                     color=color, label=lname, lw=lw)
+                            test=1
+                        ax1.plot(j2[j1==i2]+n,tmp[i0,j1==i2], \
+                                 color=color, lw=lw)
                     tabnx=tabnx+[r'%d'%(k) for k in j2[j1==i2]]
                     tabx=tabx+[k+n for k in j2[j1==i2]]
                     tab2x=tab2x+[(j2[j1==i2]+n).mean()]
@@ -856,18 +844,12 @@ class scat1D:
     
 class funct(FOC.FoCUS):
     
-    def eval(self, image1, image2=None,mask=None,Auto=True,s0_off=1E-6,Add_R45=False):
+    def eval(self, image1, image2=None,mask=None,Auto=True,s0_off=1E-6,Add_R45=False,axis=0):
         # Check input consistency
-        if not isinstance(image1,Rformat.Rformat):
-            if image2 is not None and not isinstance(image2,Rformat.Rformat):
-                if list(image1.shape)!=list(image2.shape):
-                    print('The two input image should have the same size to eval Scattering')
-                    
-                    exit(0)
-            if mask is not None:
-                if list(image1.shape)!=list(mask.shape)[1:]:
-                    print('The mask should have the same size than the input image to eval Scattering')
-                    exit(0)
+        if mask is not None:
+            if list(image1.shape)!=list(mask.shape)[1:]:
+                print('The mask should have the same size than the input timeline to eval Scattering')
+                exit(0)
             
         ### AUTO OR CROSS
         cross = False
@@ -876,35 +858,18 @@ class funct(FOC.FoCUS):
             all_cross=not Auto
         else:
             all_cross=False
-            
-        axis=1
         
         # determine jmax and nside corresponding to the input map
         im_shape = image1.shape
-        if self.use_R_format and isinstance(image1,Rformat.Rformat):
-            if len(image1.shape)==4:
-                nside=im_shape[2]-2*self.R_off
-                npix = self.chans*nside*nside # Number of pixels
-            else:
-                nside=im_shape[1]-2*self.R_off
-                npix = self.chans*nside*nside  # Number of pixels
-        else:
-            if len(image1.shape)==2:
-                npix = int(im_shape[1])  # Number of pixels
-            else:
-                npix = int(im_shape[0])  # Number of pixels
 
-            if self.chans==1:
-                nside=im_shape[axis]
-                npix=nside*nside
-            else:
-                nside=int(np.sqrt(npix//self.chans))
-                
+        nside=im_shape[axis]
+        npix=nside
+        
         jmax=int(np.log(nside)/np.log(2)) #-self.OSTEP
 
         ### LOCAL VARIABLES (IMAGES and MASK)
         # Check if image1 is [Npix] or [Nbatch,Npix]
-        if len(image1.shape)==1 or (len(image1.shape)==2 and self.chans==1) or (len(image1.shape)==3 and isinstance(image1,Rformat.Rformat)):
+        if len(image1.shape)==1:
             # image1 is [Nbatch, Npix]
             I1 = self.backend.bk_cast(self.backend.bk_expand_dims(image1,0))  # Local image1 [Nbatch, Npix]
             if cross:
@@ -913,67 +878,30 @@ class funct(FOC.FoCUS):
             I1=self.backend.bk_cast(image1)
             if cross:
                 I2=self.backend.bk_cast(image2)
-                
+        
         # self.mask is [Nmask, Npix]
-        if Add_R45:
-            if mask is None:
-                vmask = self.backend.bk_cast(self.wsin45[nside])
-
-                if self.use_R_format:
-                    vmask = self.to_R(vmask, axis=1,chans=self.chans)
-            else:
-                vmask = self.backend.bk_cast(mask*self.wsin45[nside])  # [Nmask, Npix]
-                if self.use_R_format:
-                    vmask = self.to_R(vmask, axis=1,chans=self.chans)
+        
+        if mask is None:
+            vmask = self.backend.bk_ones([1, npix], dtype=self.all_type)
         else:
-            if mask is None:
-                if self.chans==1:
-                    vmask = self.backend.bk_ones([1, nside, nside],dtype=self.all_type)
-                else:
-                    vmask = self.backend.bk_ones([1, npix], dtype=self.all_type)
-
-                if self.use_R_format:
-                    vmask = self.to_R(vmask, axis=1,chans=self.chans)
-            else:
-                vmask = self.backend.bk_cast(mask)  # [Nmask, Npix]
-                if self.use_R_format:
-                    vmask = self.to_R(vmask, axis=1,chans=self.chans)
-
-        if self.use_R_format:
-            I1=self.to_R(I1,axis=axis,chans=self.chans)
-            if cross:
-                I2=self.to_R(I2,axis=axis,chans=self.chans)
-
-        if Add_R45:
-            I1 = self.rot45_R(I1,axis=axis)
-            if cross:
-                I2 = self.rot45_R(I2,axis=axis)
+            vmask = self.backend.bk_cast(mask)  # [Nmask, Npix]
 
         if self.KERNELSZ>3:
             # if the kernel size is bigger than 3 increase the binning before smoothing
-            l_image1=self.up_grade(I1,nside*2,axis=axis)
-            vmask=self.up_grade(vmask,nside*2,axis=1)
+            l_image1=self.up_grade_1d(I1,nside*2,axis=axis+1)
+            vmask=self.up_grade_1d(vmask,nside*2,axis=1)
                 
             if cross:
-                l_image2=self.up_grade(I2,nside*2,axis=axis)
+                l_image2=self.up_grade_1d(I2,nside*2,axis=axis+1)
         else:
             l_image1=I1
             if cross:
                 l_image2=I2
 
-        s0 = self.masked_mean(l_image1,vmask,axis=axis)+s0_off
+        s0 = self.backend.bk_reduce_sum(l_image1*vmask,axis=axis+1)+s0_off
         
         if cross and Auto==False:
-            if len(image1.shape)==1 or (len(image1.shape)==3 and isinstance(image1,Rformat.Rformat)):
-                if s0.dtype!='complex64' and s0.dtype!='complex128':
-                    s0 = self.backend.bk_complex(s0,self.masked_mean(l_image2,vmask,axis=axis)+s0_off)
-                else:
-                    s0 = self.backend.bk_concat([s0,self.masked_mean(l_image2,vmask,axis=axis)],axis=0)
-            else:
-                if s0.dtype!='complex64' and s0.dtype!='complex128':
-                    s0 = self.backend.bk_complex(s0,self.masked_mean(l_image2,vmask,axis=axis)+s0_off)
-                else:
-                    s0 = self.backend.bk_concat([s0,self.masked_mean(l_image2,vmask,axis=axis)],axis=0)
+            s0 = self.backend.bk_concat([s0,self.backend.bk_reduce_sum(l_image2*vmask,axis=axis)+s0_off])
 
         s1=None
         s2=None
@@ -990,9 +918,9 @@ class funct(FOC.FoCUS):
                 # Convol image along the axis defined by 'axis' using the wavelet defined at
                 # the foscat initialisation
                 #c_image_real is [....,Npix_j1,....,Norient]
-                c_image1=self.convol(l_image1,axis=axis)
+                c_image1=self.convol_1d(l_image1,axis=axis+1)
                 if cross:
-                    c_image2=self.convol(l_image2,axis=axis)
+                    c_image2=self.convol_1d(l_image2,axis=axis+1)
                 else:
                     c_image2=c_image1
 
@@ -1002,30 +930,30 @@ class funct(FOC.FoCUS):
                 if Auto:
                     conj=self.backend.bk_real(conj)
 
-                # Compute l_p00 [....,....,Nmask,1,Norient]  
-                l_p00 = self.backend.bk_expand_dims(self.masked_mean(conj,vmask,axis=axis,rank=j1),-2)
+                # Compute l_p00 [....,....,Nmask,1]
+                l_p00 = self.backend.bk_expand_dims(self.backend.bk_reduce_sum(conj*vmask,axis=1),-1)
 
                 conj=self.backend.bk_L1(conj)
 
-                # Compute l_s1 [....,....,Nmask,1,Norient] 
-                l_s1 = self.backend.bk_expand_dims(self.masked_mean(conj,vmask,axis=axis,rank=j1),-2)
-
-                # Concat S1,P00 [....,....,Nmask,j1,Norient] 
+                # Compute l_s1 [....,....,Nmask,1]
+                l_s1 = self.backend.bk_expand_dims(self.backend.bk_reduce_sum(conj*vmask,axis=1),-1)
+                
+                # Concat S1,P00 [....,....,Nmask,j1] 
                 if s1 is None:
                     s1=l_s1
                     p00=l_p00
                 else:
-                    s1=self.backend.bk_concat([s1,l_s1],axis=-2)
-                    p00=self.backend.bk_concat([p00,l_p00],axis=-2)
+                    s1=self.backend.bk_concat([s1,l_s1],axis=-1)
+                    p00=self.backend.bk_concat([p00,l_p00],axis=-1)
 
-                # Concat l2_image [....,Npix_j1,....,j1,Norient]
+                # Concat l2_image [....,Npix_j1,....,j1]
                 if l2_image is None:
-                    l2_image=self.backend.bk_expand_dims(self.update_R_border(conj,axis=axis),axis=-2)
+                    l2_image=self.backend.bk_expand_dims(conj,axis=1)
                 else:
-                    l2_image=self.backend.bk_concat([self.backend.bk_expand_dims(self.update_R_border(conj,axis=axis),axis=-2),l2_image],axis=-2)
+                    l2_image=self.backend.bk_concat([self.backend.bk_expand_dims(conj,axis=1),l2_image],axis=1)
 
             # Convol l2_image [....,Npix_j1,....,j1,Norient,Norient]
-            c2_image=self.convol(self.backend.bk_relu(l2_image),axis=axis)
+            c2_image=self.convol_1d(self.backend.bk_relu(l2_image),axis=axis+2)
 
             conj2p=c2_image*self.backend.bk_conjugate(c2_image)
             conj2pl1=self.backend.bk_L1(conj2p)
@@ -1034,7 +962,7 @@ class funct(FOC.FoCUS):
                 conj2p=self.backend.bk_real(conj2p)
                 conj2pl1=self.backend.bk_real(conj2pl1)
 
-            c2_image=self.convol(self.backend.bk_relu(-l2_image),axis=axis)
+            c2_image=self.convol_1d(self.backend.bk_relu(-l2_image),axis=axis+2)
 
             conj2m=c2_image*self.backend.bk_conjugate(c2_image)
             conj2ml1=self.backend.bk_L1(conj2m)
@@ -1043,58 +971,41 @@ class funct(FOC.FoCUS):
                 conj2m=self.backend.bk_real(conj2m)
                 conj2ml1=self.backend.bk_real(conj2ml1)
                 
-            # Convol l_s2 [....,....,Nmask,j1,Norient,Norient]
-            l_s2 = self.masked_mean(conj2p-conj2m,vmask,axis=axis,rank=j1)
-            l_s2l1 = self.masked_mean(conj2pl1-conj2ml1,vmask,axis=axis,rank=j1)
+            # Convol l_s2 [....,....,Nmask,j1]
+            l_s2 = self.backend.bk_reduce_sum((conj2p-conj2m)*self.backend.bk_expand_dims(vmask,1),axis=axis+2)
+            l_s2l1 = self.backend.bk_reduce_sum((conj2pl1-conj2ml1)*self.backend.bk_expand_dims(vmask,1),axis=axis+2)
 
             # Concat l_s2 [....,....,Nmask,j1*(j1+1)/2,Norient,Norient]
             if s2 is None:
                 s2l=l_s2
                 s2=l_s2l1
-                s2j1=np.arange(l_s2.shape[axis+1],dtype='int')
-                s2j2=j1*np.ones(l_s2.shape[axis+1],dtype='int')
+                s2j1=np.arange(l_s2.shape[axis],dtype='int')
+                s2j2=j1*np.ones(l_s2.shape[axis],dtype='int')
             else:
-                s2=self.backend.bk_concat([s2,l_s2l1],axis=-3)
-                s2l=self.backend.bk_concat([s2l,l_s2],axis=-3)
+                s2=self.backend.bk_concat([s2,l_s2l1],axis=-1)
+                s2l=self.backend.bk_concat([s2l,l_s2],axis=-1)
                 s2j1=np.concatenate([s2j1,np.arange(l_s2.shape[axis+1],dtype='int')],0)
                 s2j2=np.concatenate([s2j2,j1*np.ones(l_s2.shape[axis+1],dtype='int')],0)
 
             if j1!=jmax-1:
                 # Rescale vmask [Nmask,Npix_j1//4]   
-                vmask = self.smooth(vmask,axis=1)
-                vmask = self.ud_grade_2(vmask,axis=1)
+                vmask = self.smooth_1d(vmask,axis=1)
+                vmask = self.ud_grade_1d(vmask,vmask.shape[1]//2,axis=1)
                 if self.mask_thres is not None:
                     vmask = self.backend.bk_threshold(vmask,self.mask_thres)
 
                 # Rescale l2_image [....,Npix_j1//4,....,j1,Norient]   
-                l2_image = self.smooth(l2_image,axis=axis)
-                l2_image = self.ud_grade_2(l2_image,axis=axis)
+                l2_image = self.smooth_1d(l2_image,axis=axis+2)
+                l2_image = self.ud_grade_1d(l2_image,l2_image.shape[axis+2]//2,axis=axis+2)
 
                 # Rescale l_image [....,Npix_j1//4,....]  
-                l_image1 = self.smooth(l_image1,axis=axis)
-                l_image1 = self.ud_grade_2(l_image1,axis=axis)
+                l_image1 = self.smooth_1d(l_image1,axis=axis+1)
+                l_image1 = self.ud_grade_1d(l_image1,l_image1.shape[axis+1]//2,axis=axis+1)
                 if cross:
-                    l_image2 = self.smooth(l_image2,axis=axis)
-                    l_image2 = self.ud_grade_2(l_image2,axis=axis)
-                    
-        if Add_R45:
-            if mask is None:
-                vmask=self.wsin45[nside]
-            else:
-                vmask=mask*self.wsin45[nside]
-                
-            sc=self.eval(image1, image2=image2, mask=vmask, Auto=Auto, s0_off=s0_off,Add_R45=False)
+                    l_image2 = self.smooth_1d(l_image2,axis=axis+2)
+                    l_image2 = self.ud_grade_1d(l_image2,l_image2.shape[axis+2]//2,axis=axis+2)
 
-        if len(image1.shape)==1 or (len(image1.shape)==3 and isinstance(image1,Rformat.Rformat)):
-            if Add_R45:
-                return(sc+scat1D(p00[0],s0[0],s1[0],s2[0],s2l[0],s2j1,s2j2,cross=cross,backend=self.backend))
-            else:
-                return(scat1D(p00[0],s0[0],s1[0],s2[0],s2l[0],s2j1,s2j2,cross=cross,backend=self.backend))
-
-        if Add_R45:
-            return(sc+scat1D(p00,s0,s1,s2,s2l,s2j1,s2j2,cross=cross,backend=self.backend))
-        else:
-            return(scat1D(p00,s0,s1,s2,s2l,s2j1,s2j2,cross=cross,backend=self.backend))
+        return(scat1D(p00,s0,s1,s2,s2l,s2j1,s2j2,cross=cross,backend=self.backend))
 
     def square(self,x):
         # the abs make the complex value usable for reduce_sum or mean

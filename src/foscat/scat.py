@@ -551,10 +551,15 @@ class scat:
         S1  = self.backend.bk_reduce_mean(self.S1,2)
         if repeat:
             S1=self.backend.bk_reshape(self.backend.bk_repeat(S1,shape[2],1),self.S1.shape)
+        else:
+            S1=self.backend.bk_expand_dims(S1,-1)
+            
 
         P00 = self.backend.bk_reduce_mean(self.P00,2)
         if repeat:
             P00=self.backend.bk_reshape(self.backend.bk_repeat(P00,shape[2],1),self.S1.shape)
+        else:
+            P00=self.backend.bk_expand_dims(P00,-1)
 
         S2=self.backend.bk_reshape(self.backend.bk_gather(
             self.backend.bk_reshape(self.S2,[shape[0],shape[1],shape[2]*shape[2]]),idx,2),
@@ -568,6 +573,9 @@ class scat:
         if repeat:
             S2=self.backend.bk_reshape(self.backend.bk_repeat(S2,shape[2],2),self.S2.shape)
             S2L=self.backend.bk_reshape(self.backend.bk_repeat(S2L,shape[2],2),self.S2.shape)
+        else:
+            S2=self.backend.bk_expand_dims(S2,-1)
+            S2L=self.backend.bk_expand_dims(S2L,-1)
 
         return scat(P00,self.S0,S1,S2,S2L,self.j1,self.j2,backend=self.backend)
 
@@ -581,9 +589,13 @@ class scat:
         S1  = self.backend.bk_reduce_std(self.S1,2)
         if repeat:
             S1=self.backend.bk_reshape(self.backend.bk_repeat(S1,shape[2]),self.S1.shape)
+        else:
+            S1=self.backend.bk_expand_dims(S1,-1)
         P00 = self.backend.bk_reduce_std(self.P00,2)
         if repeat:
             P00=self.backend.bk_reshape(self.backend.bk_repeat(P00,shape[2]),self.S1.shape)
+        else:
+            P00=self.backend.bk_expand_dims(P00,-1)
         S2=self.backend.bk_reshape(self.backend.bk_gather(
             self.backend.bk_reshape(self.S2,[shape[0],shape[1],shape[2]*shape[2]]),idx,2),
                                       [shape[0],shape[1],shape[2],shape[2]])
@@ -596,6 +608,10 @@ class scat:
         if repeat:
             S2=self.backend.bk_reshape(self.backend.bk_repeat(S2,shape[2]),self.S2.shape)
             S2L=self.backend.bk_reshape(self.backend.bk_repeat(S2L,shape[2]),self.S2.shape)
+        else:
+            S2=self.backend.bk_expand_dims(S2,-1)
+            S2L=self.backend.bk_expand_dims(S2L,-1)
+        
 
         return scat(P00,self.backend.bk_abs(self.S0),S1,S2,S2L,self.j1,self.j2,backend=self.backend)
 
@@ -615,7 +631,7 @@ class scat:
         return scat(P00,S0,S1,S2,S2L,self.j1,self.j2,backend=self.backend)
 
     # ---------------------------------------------−---------
-    def interp(self,nscale,extend=False,constant=False,threshold=1E30):
+    def interp(self,nscale,extend=False,constant=False,threshold=1E30,use_mask=False):
         
         if nscale+2>self.S1.shape[1]:
             print('Can not *interp* %d with a statistic described over %d'%(nscale,self.S1.shape[1]))
@@ -632,7 +648,7 @@ class scat:
             s2l=self.S2L.numpy()
 
         print(s1.sum(),p0.sum(),s2.sum(),s2l.sum())
-
+                
         if isinstance(threshold,scat):
             if isinstance(threshold.S1,np.ndarray):
                 s1th=threshold.S1

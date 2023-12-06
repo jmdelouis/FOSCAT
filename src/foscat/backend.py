@@ -155,7 +155,16 @@ class foscat_backend:
         if dtype is None:
             dtype=self.all_type
         return(self.backend.ones(shape,dtype=dtype))
-
+    
+    def bk_conv1d(self,x,w):
+        if self.BACKEND==self.TENSORFLOW:
+            return self.backend.nn.conv1d(x,w, stride=[1,1,1], padding='SAME')
+        if self.BACKEND==self.TORCH:
+            return self.backend.nn.conv1d(x,w, stride=1, padding='SAME')
+        if self.BACKEND==self.NUMPY:
+            return self.backend.nn.conv1d(x,w, stride=1, padding='SAME')
+        
+            
     def bk_L1(self,x):
         if isinstance(x,Rformat.Rformat):
             return Rformat.Rformat(self.bk_L1(x.get()),x.off,x.axis,chans=x.chans)
