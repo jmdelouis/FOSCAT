@@ -11,6 +11,7 @@ def read(filename):
     
 class scat:
     def __init__(self,p00,s0,s1,s2,s2l,j1,j2,cross=False,backend=None):
+        self.bk_type='SCAT'
         self.P00=p00
         self.S0=s0
         self.S1=s1
@@ -20,6 +21,9 @@ class scat:
         self.j2=j2
         self.cross=cross
         self.backend=backend
+
+    def set_bk_type(self,bk_type):
+        self.bk_type=bk_type
         
     def get_j_idx(self):
         return self.j1,self.j2
@@ -519,7 +523,6 @@ class scat:
     def read(self,filename):
         
         outlist=pickle.load(open("%s.pkl"%(filename),"rb"))
-
         return scat(outlist[4],outlist[0],outlist[1],outlist[2],outlist[3],outlist[5],outlist[6],backend=bk.foscat_backend('numpy'))
     
     def get_np(self,x):
@@ -738,7 +741,6 @@ class scat:
                         s2l[:,i0]=s2l[:,i1]
                     else:
                         idx=np.where((s2[:,i2]>0)*(s2[:,i3]>0)*(s2[:,i2]<s2th[:,i2]))
-                        print(i0,i2)
                         if len(idx[0])>0:
                             s2[idx[0],i0,idx[1],idx[2]]=np.exp(3*np.log(s2[idx[0],i2,idx[1],idx[2]])-2*np.log(s2[idx[0],i3,idx[1],idx[2]]))
                         idx=np.where((s2[:,i1]>0)*(s2[:,i2]>0)*(s2[:,i1]<s2th[:,i1]))
@@ -763,6 +765,21 @@ class scat:
                     self.backend.constant(s2),
                     self.backend.constant(s2l),self.j1,self.j2,backend=self.backend)
 
+    # ---------------------------------------------−---------
+    def flatten(self):
+        if isinstance(self.S1,np.ndarray):
+            return np.concatenate([self.S0.flatten(),
+                                   self.S1.flatten(),
+                                   self.P00.flatten(),
+                                   self.S2.flatten(),
+                                   self.S2L.flatten()])
+        else:
+            return self.backend.bk_concat([self.backend.bk_flattenR(self.S0),
+                                           self.backend.bk_flattenR(self.S1),
+                                           self.backend.bk_flattenR(self.P00),
+                                           self.backend.bk_flattenR(self.S2),
+                                           self.backend.bk_flattenR(self.S2)],axis=0)
+    
     # ---------------------------------------------−---------
     def model(self,i__y,add=0,dx=3,dell=2,weigth=None,inverse=False):
 
@@ -872,18 +889,17 @@ class scat:
     
 class funct(FOC.FoCUS):
     
-    def eval(self, image1, image2=None,mask=None,Auto=True,s0_off=1E-6,Add_R45=False):
+    def eval(self, image1, image2=None,mask=None,Auto=True,s0_off=1E-6):
         # Check input consistency
-        if not isinstance(image1,Rformat.Rformat):
-            if image2 is not None and not isinstance(image2,Rformat.Rformat):
-                if list(image1.shape)!=list(image2.shape):
-                    print('The two input image should have the same size to eval Scattering')
+        if image2 is not None:
+            if list(image1.shape)!=list(image2.shape):
+                print('The two input image should have the same size to eval Scattering')
                     
-                    exit(0)
-            if mask is not None:
-                if list(image1.shape)!=list(mask.shape)[1:]:
-                    print('The mask should have the same size than the input image to eval Scattering')
-                    exit(0)
+                exit(0)
+        if mask is not None:
+            if list(image1.shape)!=list(mask.shape)[1:]:
+                print('The mask should have the same size than the input image to eval Scattering')
+                exit(0)
             
         ### AUTO OR CROSS
         cross = False
@@ -893,34 +909,31 @@ class funct(FOC.FoCUS):
         else:
             all_cross=False
             
+        # Check if image1 is [Npix] or [Nbatch,Npix]
         axis=1
         
         # determine jmax and nside corresponding to the input map
         im_shape = image1.shape
-        if self.use_R_format and isinstance(image1,Rformat.Rformat):
-            if len(image1.shape)==4:
-                nside=im_shape[2]-2*self.R_off
-                npix = self.chans*nside*nside # Number of pixels
+        if self.use_2D:
+            if len(image1.shape)==2:
+                nside=np.min([im_shape[0],im_shape[1]])
+                npix = im_shape[0]*im_shape[1] # Number of pixels
             else:
-                nside=im_shape[1]-2*self.R_off
-                npix = self.chans*nside*nside  # Number of pixels
+                nside=np.min([im_shape[1],im_shape[2]])
+                npix = im_shape[1]*im_shape[2] # Number of pixels
         else:
             if len(image1.shape)==2:
                 npix = int(im_shape[1])  # Number of pixels
             else:
                 npix = int(im_shape[0])  # Number of pixels
 
-            if self.chans==1:
-                nside=im_shape[axis]
-                npix=nside*nside
-            else:
-                nside=int(np.sqrt(npix//self.chans))
+            nside=int(np.sqrt(npix//12))
                 
         jmax=int(np.log(nside)/np.log(2)) #-self.OSTEP
 
         ### LOCAL VARIABLES (IMAGES and MASK)
         # Check if image1 is [Npix] or [Nbatch,Npix]
-        if len(image1.shape)==1 or (len(image1.shape)==2 and self.chans==1) or (len(image1.shape)==3 and isinstance(image1,Rformat.Rformat)):
+        if len(image1.shape)==1 or (len(image1.shape)==2 and self.use_2D):
             # image1 is [Nbatch, Npix]
             I1 = self.backend.bk_cast(self.backend.bk_expand_dims(image1,0))  # Local image1 [Nbatch, Npix]
             if cross:
@@ -931,47 +944,28 @@ class funct(FOC.FoCUS):
                 I2=self.backend.bk_cast(image2)
                 
         # self.mask is [Nmask, Npix]
-        if Add_R45:
-            if mask is None:
-                vmask = self.backend.bk_cast(self.wsin45[nside])
-
-                if self.use_R_format:
-                    vmask = self.to_R(vmask, axis=1,chans=self.chans)
+        if mask is None:
+            if self.use_2D:
+                vmask = self.backend.bk_ones([1, I1.shape[axis], I1.shape[axis+1]],dtype=self.all_type)
             else:
-                vmask = self.backend.bk_cast(mask*self.wsin45[nside])  # [Nmask, Npix]
-                if self.use_R_format:
-                    vmask = self.to_R(vmask, axis=1,chans=self.chans)
+                vmask = self.backend.bk_ones([1, I1.shape[axis]], dtype=self.all_type)
         else:
-            if mask is None:
-                if self.chans==1:
-                    vmask = self.backend.bk_ones([1, nside, nside],dtype=self.all_type)
-                else:
-                    vmask = self.backend.bk_ones([1, npix], dtype=self.all_type)
-
-                if self.use_R_format:
-                    vmask = self.to_R(vmask, axis=1,chans=self.chans)
-            else:
-                vmask = self.backend.bk_cast(mask)  # [Nmask, Npix]
-                if self.use_R_format:
-                    vmask = self.to_R(vmask, axis=1,chans=self.chans)
-
-        if self.use_R_format:
-            I1=self.to_R(I1,axis=axis,chans=self.chans)
-            if cross:
-                I2=self.to_R(I2,axis=axis,chans=self.chans)
-
-        if Add_R45:
-            I1 = self.rot45_R(I1,axis=axis)
-            if cross:
-                I2 = self.rot45_R(I2,axis=axis)
+            vmask = self.backend.bk_cast(mask)  # [Nmask, Npix]
 
         if self.KERNELSZ>3:
             # if the kernel size is bigger than 3 increase the binning before smoothing
-            l_image1=self.up_grade(I1,nside*2,axis=axis)
-            vmask=self.up_grade(vmask,nside*2,axis=1)
+            if self.use_2D:
+                l_image1=self.up_grade(I1,image1.shape[axis]*2,axis=axis,nouty=image1.shape[axis+1]*2)
+                vmask=self.up_grade(vmask,image1.shape[axis]*2,axis=1,nouty=image1.shape[axis+1]*2)
+            else:
+                l_image1=self.up_grade(I1,nside*2,axis=axis)
+                vmask=self.up_grade(vmask,nside*2,axis=1)
                 
             if cross:
-                l_image2=self.up_grade(I2,nside*2,axis=axis)
+                if self.use_2D:
+                    l_image2=self.up_grade(I2,image1.shape[axis]*2,axis=axis,nouty=mage1.shape[axis+1]*2)
+                else:
+                    l_image2=self.up_grade(I2,nside*2,axis=axis)
         else:
             l_image1=I1
             if cross:
@@ -1018,7 +1012,7 @@ class funct(FOC.FoCUS):
                 if Auto:
                     conj=self.backend.bk_real(conj)
 
-                # Compute l_p00 [....,....,Nmask,1,Norient]  
+                # Compute l_p00 [....,....,Nmask,j1,Norient]
                 l_p00 = self.backend.bk_expand_dims(self.masked_mean(conj,vmask,axis=axis,rank=j1),-2)
 
                 conj=self.backend.bk_L1(conj)
@@ -1034,14 +1028,20 @@ class funct(FOC.FoCUS):
                     s1=self.backend.bk_concat([s1,l_s1],axis=-2)
                     p00=self.backend.bk_concat([p00,l_p00],axis=-2)
 
-                # Concat l2_image [....,Npix_j1,....,j1,Norient]
+                # Concat l2_image [....,j1,Npix_j1,,....,Norient]
                 if l2_image is None:
-                    l2_image=self.backend.bk_expand_dims(self.update_R_border(conj,axis=axis),axis=-2)
+                    if self.use_2D:
+                        l2_image=self.backend.bk_expand_dims(conj,axis=-4)
+                    else:
+                        l2_image=self.backend.bk_expand_dims(conj,axis=-3)
                 else:
-                    l2_image=self.backend.bk_concat([self.backend.bk_expand_dims(self.update_R_border(conj,axis=axis),axis=-2),l2_image],axis=-2)
+                    if self.use_2D:
+                        l2_image=self.backend.bk_concat([self.backend.bk_expand_dims(conj,axis=-4),l2_image],axis=-4)
+                    else:
+                        l2_image=self.backend.bk_concat([self.backend.bk_expand_dims(conj,axis=-3),l2_image],axis=-3)
 
-            # Convol l2_image [....,Npix_j1,....,j1,Norient,Norient]
-            c2_image=self.convol(self.backend.bk_relu(l2_image),axis=axis)
+            # Convol l2_image [....,Npix_j1,j1,....,Norient,Norient]
+            c2_image=self.convol(self.backend.bk_relu(l2_image),axis=axis+1)
 
             conj2p=c2_image*self.backend.bk_conjugate(c2_image)
             conj2pl1=self.backend.bk_L1(conj2p)
@@ -1050,7 +1050,7 @@ class funct(FOC.FoCUS):
                 conj2p=self.backend.bk_real(conj2p)
                 conj2pl1=self.backend.bk_real(conj2pl1)
 
-            c2_image=self.convol(self.backend.bk_relu(-l2_image),axis=axis)
+            c2_image=self.convol(self.backend.bk_relu(-l2_image),axis=axis+1)
 
             conj2m=c2_image*self.backend.bk_conjugate(c2_image)
             conj2ml1=self.backend.bk_L1(conj2m)
@@ -1058,10 +1058,10 @@ class funct(FOC.FoCUS):
             if Auto:
                 conj2m=self.backend.bk_real(conj2m)
                 conj2ml1=self.backend.bk_real(conj2ml1)
-                
+            
             # Convol l_s2 [....,....,Nmask,j1,Norient,Norient]
-            l_s2 = self.masked_mean(conj2p-conj2m,vmask,axis=axis,rank=j1)
-            l_s2l1 = self.masked_mean(conj2pl1-conj2ml1,vmask,axis=axis,rank=j1)
+            l_s2 = self.masked_mean(conj2p-conj2m,vmask,axis=axis+1,rank=j1)
+            l_s2l1 = self.masked_mean(conj2pl1-conj2ml1,vmask,axis=axis+1,rank=j1)
 
             # Concat l_s2 [....,....,Nmask,j1*(j1+1)/2,Norient,Norient]
             if s2 is None:
@@ -1074,7 +1074,7 @@ class funct(FOC.FoCUS):
                 s2l=self.backend.bk_concat([s2l,l_s2],axis=-3)
                 s2j1=np.concatenate([s2j1,np.arange(l_s2.shape[axis+1],dtype='int')],0)
                 s2j2=np.concatenate([s2j2,j1*np.ones(l_s2.shape[axis+1],dtype='int')],0)
-
+                
             if j1!=jmax-1:
                 # Rescale vmask [Nmask,Npix_j1//4]   
                 vmask = self.smooth(vmask,axis=1)
@@ -1083,8 +1083,8 @@ class funct(FOC.FoCUS):
                     vmask = self.backend.bk_threshold(vmask,self.mask_thres)
 
                 # Rescale l2_image [....,Npix_j1//4,....,j1,Norient]   
-                l2_image = self.smooth(l2_image,axis=axis)
-                l2_image = self.ud_grade_2(l2_image,axis=axis)
+                l2_image = self.smooth(l2_image,axis=axis+1)
+                l2_image = self.ud_grade_2(l2_image,axis=axis+1)
 
                 # Rescale l_image [....,Npix_j1//4,....]  
                 l_image1 = self.smooth(l_image1,axis=axis)
@@ -1093,24 +1093,11 @@ class funct(FOC.FoCUS):
                     l_image2 = self.smooth(l_image2,axis=axis)
                     l_image2 = self.ud_grade_2(l_image2,axis=axis)
                     
-        if Add_R45:
-            if mask is None:
-                vmask=self.wsin45[nside]
-            else:
-                vmask=mask*self.wsin45[nside]
-                
-            sc=self.eval(image1, image2=image2, mask=vmask, Auto=Auto, s0_off=s0_off,Add_R45=False)
+        
+        if len(image1.shape)==1 or (len(image1.shape)==2 and self.use_2D):
+            return(scat(p00[0],s0[0],s1[0],s2[0],s2l[0],s2j1,s2j2,cross=cross,backend=self.backend))
 
-        if len(image1.shape)==1 or (len(image1.shape)==3 and isinstance(image1,Rformat.Rformat)):
-            if Add_R45:
-                return(sc+scat(p00[0],s0[0],s1[0],s2[0],s2l[0],s2j1,s2j2,cross=cross,backend=self.backend))
-            else:
-                return(scat(p00[0],s0[0],s1[0],s2[0],s2l[0],s2j1,s2j2,cross=cross,backend=self.backend))
-
-        if Add_R45:
-            return(sc+scat(p00,s0,s1,s2,s2l,s2j1,s2j2,cross=cross,backend=self.backend))
-        else:
-            return(scat(p00,s0,s1,s2,s2l,s2j1,s2j2,cross=cross,backend=self.backend))
+        return(scat(p00,s0,s1,s2,s2l,s2j1,s2j2,cross=cross,backend=self.backend))
 
     def square(self,x):
         # the abs make the complex value usable for reduce_sum or mean

@@ -1028,11 +1028,34 @@ class scat_cov:
                          (c11),
                         s1=(s1),backend=self.backend)
         
-        
+    # ---------------------------------------------−---------
+    def flatten(self):
+        if isinstance(self.S1,np.ndarray):
+
+            tmp=np.concatenate([self.P00.flatten(),
+                                self.C01.flatten(),
+                                self.C11,flatten()],0)
+            if self.S1 is not None:
+                tmp=np.concatenate([self.S1.flatten(),tmp])
+            if self.C10 is not None:
+                tmp=np.concatenate([tmp,self.C10.flatten()])
+                
+            return tmp
+        else:
+
+            tmp=self.backend.bk_concat([self.backend.bk_flattenR(self.P00),
+                                        self.backend.bk_flattenR(self.C01),
+                                        self.backend.bk_flattenR(self.C11)],axis=0)
+            if self.S1 is not None:
+                tmp=self.backend.bk_concat([self.backend.bk_flattenR(self.S1),tmp],axis=0)
+            if self.C10 is not None:
+                tmp=self.backend.bk_concat([tmp,self.backend.bk_flattenR(self.C10)],axis=0)
+                
+            return tmp
 
 class funct(FOC.FoCUS):
 
-    def eval(self, image1, image2=None, mask=None, norm=None, Auto=True, Add_R45=False):
+    def eval(self, image1, image2=None, mask=None, norm=None, Auto=True):
         """
         Calculates the scattering correlations for a batch of images. Mean are done over pixels.
         mean of modulus:
@@ -1066,15 +1089,14 @@ class funct(FOC.FoCUS):
         """
 
         # Check input consistency
-        if not isinstance(image1,Rformat.Rformat):
-            if image2 is not None and not isinstance(image2,Rformat.Rformat):
-                if list(image1.shape)!=list(image2.shape):
-                    print('The two input image should have the same size to eval Scattering Covariance')
-                    exit(0)
-            if mask is not None:
-                if list(image1.shape)!=list(mask.shape)[1:]:
-                    print('The mask should have the same size ',mask.shape,'than the input image ',image1.shape,'to eval Scattering Covariance')
-                    exit(0)
+        if image2 is not None:
+            if list(image1.shape)!=list(image2.shape):
+                print('The two input image should have the same size to eval Scattering Covariance')
+                exit(0)
+        if mask is not None:
+            if list(image1.shape)!=list(mask.shape)[1:]:
+                print('The mask should have the same size ',mask.shape,'than the input image ',image1.shape,'to eval Scattering Covariance')
+                exit(0)
 
         ### AUTO OR CROSS
         cross = False
@@ -1088,26 +1110,27 @@ class funct(FOC.FoCUS):
         axis = 1
         # determine jmax and nside corresponding to the input map
         im_shape = image1.shape
-        if self.use_R_format and isinstance(image1, Rformat.Rformat):
-            if len(image1.shape) == 4:
-                nside = im_shape[2] - 2 * self.R_off
+        if self.use_2D:
+            if len(image1.shape)==2:
+                nside=np.min([im_shape[0],im_shape[1]])
+                npix = im_shape[0]*im_shape[1] # Number of pixels
             else:
-                nside = im_shape[1] - 2 * self.R_off
-            npix = 12 * nside * nside  # Number of pixels
+                nside=np.min([im_shape[1],im_shape[2]])
+                npix = im_shape[1]*im_shape[2] # Number of pixels
         else:
-            if self.chans==1:
-                nside=im_shape[axis]
-                npix=nside*nside
+            if len(image1.shape)==2:
+                npix = int(im_shape[1])  # Number of pixels
             else:
-                npix = image1.shape[-1]  # image1 is [Npix] or [Nbatch, Npix]
-                nside = int(np.sqrt(npix / 12))
+                npix = int(im_shape[0])  # Number of pixels
+                
+            nside=int(np.sqrt(npix//12))
 
         J = int(np.log(nside) / np.log(2))  # Number of j scales
         Jmax = J - self.OSTEP  # Number of steps for the loop on scales
         
         ### LOCAL VARIABLES (IMAGES and MASK)
         # Check if image1 is [Npix] or [Nbatch, Npix] or Rformat
-        if len(image1.shape) == 1 or (len(image1.shape)==2 and self.chans==1) or (len(image1.shape) == 3 and isinstance(image1, Rformat.Rformat)):
+        if len(image1.shape) == 1 or (len(image1.shape)==2 and self.use_2D):
             I1 = self.backend.bk_cast(self.backend.bk_expand_dims(image1, 0))  # Local image1 [Nbatch, Npix]
             if cross:
                 I2 = self.backend.bk_cast(self.backend.bk_expand_dims(image2, 0))  # Local image2 [Nbatch, Npix]
@@ -1116,42 +1139,22 @@ class funct(FOC.FoCUS):
             if cross:
                 I2 = self.backend.bk_cast(image2)  # Local image2 [Nbatch, Npix]
 
-        if Add_R45:
-            if mask is None:
-                vmask = self.backend.bk_cast(self.wsin45[nside])
-
-                if self.use_R_format:
-                    vmask = self.to_R(vmask, axis=1,chans=self.chans)
+        if mask is None:
+            if self.use_2D:
+                vmask = self.backend.bk_ones([1, nside, nside],dtype=self.all_type)
             else:
-                vmask = self.backend.bk_cast(mask*self.wsin45[nside])  # [Nmask, Npix]
-                if self.use_R_format:
-                    vmask = self.to_R(vmask, axis=1,chans=self.chans)
+                vmask = self.backend.bk_ones([1, npix], dtype=self.all_type)
         else:
-            if mask is None:
-                if self.chans==1:
-                    vmask = self.backend.bk_ones([1, nside, nside],dtype=self.all_type)
-                else:
-                    vmask = self.backend.bk_ones([1, npix], dtype=self.all_type)
-
-                if self.use_R_format:
-                    vmask = self.to_R(vmask, axis=1,chans=self.chans)
-            else:
-                vmask = self.backend.bk_cast(mask)  # [Nmask, Npix]
-                if self.use_R_format:
-                    vmask = self.to_R(vmask, axis=1,chans=self.chans)
-
-        if self.use_R_format:
-            I1 = self.to_R(I1, axis=axis,chans=self.chans)
-            if cross:
-                I2 = self.to_R(I2, axis=axis,chans=self.chans)
-
-        if Add_R45:
-            I1 = self.rot45_R(I1,axis=axis)
-            if cross:
-                I2 = self.rot45_R(I2,axis=axis)
+            vmask = self.backend.bk_cast(mask)  # [Nmask, Npix]
 
         if self.KERNELSZ > 3:
             # if the kernel size is bigger than 3 increase the binning before smoothing
+            if self.use_2D:
+                I1=self.up_grade(I1,I1.shape[axis]*2,axis=axis,nouty=I1.shape[axis+1]*2)
+                vmask=self.up_grade(vmask,I1.shape[axis]*2,axis=1,nouty=I1.shape[axis+1]*2)
+                if cross:
+                    I2=self.up_grade(I2,I1.shape[axis]*2,axis=axis,nouty=I1.shape[axis+1]*2)
+                    
             I1 = self.up_grade(I1, nside * 2, axis=axis)
             vmask = self.up_grade(vmask, nside * 2, axis=1)
             if cross:
@@ -1194,7 +1197,7 @@ class funct(FOC.FoCUS):
             M1_square = conv1*self.backend.bk_conjugate(conv1) # [Nbatch, Npix_j3, Norient3]
             M1 = self.backend.bk_L1(M1_square)  # [Nbatch, Npix_j3, Norient3]
             # Store M1_j3 in a dictionary
-            M1_dic[j3] = self.update_R_border(M1, axis=axis)
+            M1_dic[j3] = M1
 
             if not cross:  # Auto
                 M1_square=self.backend.bk_real(M1_square)
@@ -1202,6 +1205,7 @@ class funct(FOC.FoCUS):
                 ### P00_auto = < M1^2 >_pix
                 # Apply the mask [Nmask, Npix_j3] and average over pixels
                 p00 = self.masked_mean(M1_square, vmask, axis=1,rank=j3)
+                
                 if cond_init_P1_dic:
                     # We fill P1_dic with P00 for normalisation of C01 and C11
                     P1_dic[j3] = p00  # [Nbatch, Nmask, Norient3]
@@ -1234,7 +1238,7 @@ class funct(FOC.FoCUS):
                 M2_square = conv2*self.backend.bk_conjugate(conv2)  # [Nbatch, Npix_j3, Norient3]
                 M2 = self.backend.bk_L1(M2_square)  # [Nbatch, Npix_j3, Norient3]
                 # Store M2_j3 in a dictionary
-                M2_dic[j3] = self.update_R_border(M2, axis=axis)
+                M2_dic[j3] = M2
 
                 ### P00_auto = < M2^2 >_pix
                 # Not returned, only for normalization
@@ -1249,6 +1253,7 @@ class funct(FOC.FoCUS):
                 ### P00_cross = < (I1 * Psi_j3) (I2 * Psi_j3)^* >_pix
                 # z_1 x z_2^* = (a1a2 + b1b2) + i(b1a2 - a1b2)
                 p00 = conv1 * self.backend.bk_conjugate(conv2)
+                MX = self.backend.bk_L1(p00)
                 # Apply the mask [Nmask, Npix_j3] and average over pixels
                 p00 = self.masked_mean(p00, vmask, axis=1,rank=j3)
 
@@ -1265,6 +1270,18 @@ class funct(FOC.FoCUS):
                 else:
                     P00 = self.backend.bk_concat([P00, p00[:,:,None,:]], axis=2)
                     
+                #### S1_auto computation
+                ### Image 1 : S1 = < M1 >_pix
+                # Apply the mask [Nmask, Npix_j3] and average over pixels
+                s1 = self.masked_mean(MX, vmask, axis=1,rank=j3)  # [Nbatch, Nmask, Norient3]
+                ### Normalize S1
+                if norm is not None:
+                    s1 /= (P1_dic[j3]) ** 0.5
+                ### We store S1 for image1  [Nbatch, Nmask, NS1, Norient3]
+                if S1 is None:
+                    S1 = s1[:, :, None, :]  # Add a dimension for NS1
+                else:
+                    S1 = self.backend.bk_concat([S1, s1[:, :, None, :]], axis=2)
             # Initialize dictionaries for |I1*Psi_j| * Psi_j3
             M1convPsi_dic = {}
             if cross:
@@ -1397,24 +1414,10 @@ class funct(FOC.FoCUS):
             if cross:
                 self.P2_dic = P2_dic
             
-        if Add_R45:
-            if mask is None:
-                vmask=self.wsin45[nside]
-            else:
-                vmask=mask*self.wsin45[nside]
-                
-            sc=self.eval(image1, image2=image2, mask=vmask, norm=norm, Auto=Auto, Add_R45=False)
-        
         if not cross:
-            if Add_R45:
-                return sc+scat_cov(P00, C01, C11, s1=S1,backend=self.backend)
-            else:
-                return scat_cov(P00, C01, C11, s1=S1,backend=self.backend)
+            return scat_cov(P00, C01, C11, s1=S1,backend=self.backend)
         else:
-            if Add_R45:
-                return sc+scat_cov(P00, C01, C11, c10=C10,backend=self.backend)
-            else:
-                return scat_cov(P00, C01, C11, c10=C10,backend=self.backend)
+            return scat_cov(P00, C01, C11, s1=S1,c10=C10,backend=self.backend)
 
     def clean_norm(self):
         self.P1_dic = None

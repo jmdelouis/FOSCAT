@@ -22,9 +22,7 @@ class FoCUS:
                  isMPI=False,
                  TEMPLATE_PATH='data',
                  BACKEND='tensorflow',
-                 use_R_format=False,
-                 chans=12,
-                 Healpix=True,
+                 use_2D=False,
                  JmaxDelta=0,
                  DODIV=False,
                  InitWave=None,
@@ -62,11 +60,7 @@ class FoCUS:
 
         self.history=np.zeros([10])
         self.nlog=0
-        
         self.padding=padding
-        if Healpix==True and padding!='SAME':
-            print('convolution padding should be equal to SAME while working with HEALPIX data')
-            self.padding='SAME'
             
         if OSTEP!=0:
             print('OPTION option is deprecated after version 2.0.6. Please use Jmax option')
@@ -79,18 +73,7 @@ class FoCUS:
             exit(0)
             
         self.OSTEP=JmaxDelta
-        self.use_R_format=use_R_format
-        
-        if chans!=12:
-            print('chans option is deprecated after version 2.0.6. Please use Healpix option')
-            if chans==1:
-                Healpix=False
-        if Healpix==False:
-            chans=1
-        else:
-            chans=12
-            
-        self.chans=chans
+        self.use_2D=use_2D
         
         if isMPI:
             from mpi4py import MPI
@@ -141,8 +124,6 @@ class FoCUS:
             
         self.ww_Real  = {} 
         self.ww_Imag  = {} 
-        self.ww_RealT = {} 
-        self.ww_ImagT = {}
         
         wwc=np.zeros([KERNELSZ**2,l_NORIENT]).astype(all_type)
         wws=np.zeros([KERNELSZ**2,l_NORIENT]).astype(all_type)
@@ -219,7 +200,7 @@ class FoCUS:
 
         self.Idx_Neighbours={}
         
-        if not self.use_R_format:
+        if not self.use_2D:
             self.w_smooth = {}
             for i in range(nstep_max):
                 lout=(2**i)
@@ -240,28 +221,24 @@ class FoCUS:
                 self.w_smooth[lout]=ws
         else:
             self.w_smooth=slope*(w_smooth/w_smooth.sum()).astype(self.all_type)
-            for i in range(nstep_max):
-                lout=(2**i)
-                self.ww_Real[lout]=(wwc.astype(self.all_type))
-                self.ww_Imag[lout]=(wws.astype(self.all_type))
-                self.ww_RealT[lout]=(wwc.astype(self.all_type))
-                self.ww_ImagT[lout]=(wws.astype(self.all_type))
+            self.ww_RealT={}
+            self.ww_ImagT={}
+            self.ww_SmoothT={}
 
-            def trans_kernel(a):
-                b=1*a.reshape(KERNELSZ,KERNELSZ)
-                for i in range(KERNELSZ):
-                    for j in range(KERNELSZ):
-                        b[i,j]=a.reshape(KERNELSZ,KERNELSZ)[KERNELSZ-1-i,KERNELSZ-1-j]
-                return b.reshape(KERNELSZ*KERNELSZ)
-
-            self.ww_SmoothT = self.w_smooth.reshape(KERNELSZ,KERNELSZ,1)
-        
-            for i in range(nstep_max):
-                lout=(2**i)
-                for j in range(l_NORIENT):
-                    self.ww_RealT[lout][:,j]=self.backend.constant(trans_kernel(self.ww_Real[lout][:,j]))
-                    self.ww_ImagT[lout][:,j]=self.backend.constant(trans_kernel(self.ww_Imag[lout][:,j]))
-          
+            self.ww_SmoothT[1] = self.backend.constant(self.w_smooth.reshape(KERNELSZ,KERNELSZ,1,1))
+            www=np.zeros([KERNELSZ,KERNELSZ,NORIENT,NORIENT],dtype=self.all_type)
+            for k in range(NORIENT):
+                www[:,:,k,k]=self.w_smooth.reshape(KERNELSZ,KERNELSZ)
+            self.ww_SmoothT[NORIENT] = self.backend.constant(www.reshape(KERNELSZ,KERNELSZ,NORIENT,NORIENT))
+            self.ww_RealT[1]=self.backend.constant(self.backend.bk_reshape(wwc.astype(self.all_type),[KERNELSZ,KERNELSZ,1,NORIENT]))
+            self.ww_ImagT[1]=self.backend.constant(self.backend.bk_reshape(wws.astype(self.all_type),[KERNELSZ,KERNELSZ,1,NORIENT]))
+            def doorientw(x):
+                y=np.zeros([KERNELSZ,KERNELSZ,NORIENT,NORIENT*NORIENT],dtype=self.all_type)
+                for k in range(NORIENT):
+                    y[:,:,k,k*NORIENT:k*NORIENT+NORIENT]=x.reshape(KERNELSZ,KERNELSZ,NORIENT)
+                return y
+            self.ww_RealT[NORIENT]=self.backend.constant(doorientw(wwc.astype(self.all_type)))
+            self.ww_ImagT[NORIENT]=self.backend.constant(doorientw(wws.astype(self.all_type)))
         self.pix_interp_val={}
         self.weight_interp_val={}
         self.ring2nest={}
@@ -302,7 +279,7 @@ class FoCUS:
         return self.MPI_ALL_TYPE
     
     def get_use_R(self):
-        return self.use_R_format
+        return self.use_2D
     
     def is_R(self,data):
         return isinstance(data,Rformat.Rformat)
@@ -312,464 +289,18 @@ class FoCUS:
     # ---------------------------------------------−---------
     # convert all numpy array in the used bakcend format (e.g. Rformat if it is used)
     def conv_to_FoCUS(self,x,axis=0):
-        if self.use_R_format and isinstance(x,np.ndarray):
+        if self.use_2D and isinstance(x,np.ndarray):
             return(self.to_R(x,axis,chans=self.chans))
         return x
 
     def diffang(self,a,b):
         return np.arctan2(np.sin(a)-np.sin(b),np.cos(a)-np.cos(b))
         
-    def calc_R_index(self,nside,chans=12):
-        # if chans=12 healpix sinon chans=1
-
-        outname='BRD%d'%(self.R_off)
-                
-        #if self.Idx_Neighbours[nside] is None:
-        r_idx=self.init_index(nside,kernel=5)
-        r_idx2=self.init_index(nside,kernel=3)
-
-        self.barrier()
-        
-        try:
-            fidx =np.load('%s/%s_%s_%d_%d_FIDX.npy'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans))
-            fidx1=np.load('%s/%s_%s_%d_%d_FIDX1.npy'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans))
-            fidx2=np.load('%s/%s_%s_%d_%d_FIDX2.npy'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans))
-            fidx3=np.load('%s/%s_%s_%d_%d_FIDX3.npy'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans))
-            fidx4=np.load('%s/%s_%s_%d_%d_FIDX4.npy'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans))
-        except:
-            
-            if self.rank==0:
-                print('compute BR2 ',nside)
-                nstep=int(np.log(nside)/np.log(2))
-                yy=(np.arange(chans*nside*nside)//nside)%nside
-                xx=nside-1-np.arange(chans*nside*nside)%nside
-                idx=(nside*nside)*(np.arange(chans*nside*nside)//(nside*nside))
-
-                if chans==12:
-                    for i in range(nstep):
-                        idx=idx+(((xx)//(2**i))%2)*(4**i)+2*((yy//(2**i))%2)*(4**i)
-                else:
-                    idx=yy*nside+nside-1-xx
-
-                off=self.R_off
-
-                fidx=idx
-
-                if chans==12:
-                    tab=np.array([[1,3,4,5],[2,0,5,6],[3,1,6,7],[0,2,7,4],
-                                  [0,3,11,8],[1,0,8,9],[2,1,9,10],[3,2,10,11],
-                                  [5,4,11,9],[6,5,8,10],[7,6,9,11],[4,7,10,8]])
-
-
-                    fidx1=np.zeros([12,off,nside],dtype='int')
-                    fidx2=np.zeros([12,off,nside],dtype='int')
-                    fidx3=np.zeros([12,nside+2*off,off],dtype='int')
-                    fidx4=np.zeros([12,nside+2*off,off],dtype='int')
-
-                    lidx=np.arange(nside,dtype='int')
-                    lidx2=np.arange(off*nside,dtype='int')
-
-                    for i in range(0,4):
-                        fidx1[i,:,:]=(tab[i,3]*(nside*nside)+(nside-off+lidx2//nside)*nside+lidx2%nside).reshape(off,nside)
-                        fidx2[i,:,:]=(tab[i,1]*(nside*nside)+(nside-1-lidx2%nside)*nside+lidx2//nside).reshape(off,nside)
-                        fidx3[i,off:-off,:]=(tab[i,0]*(nside*nside)+(nside-off+lidx2%off)*nside+nside-1-lidx2//off).reshape(nside,off)
-                        fidx4[i,off:-off,:]=(tab[i,2]*(nside*nside)+(lidx2//off)*nside+lidx2%off).reshape(nside,off)
-
-                    for i in range(4,8):
-                        fidx1[i,:,:]=(tab[i,3]*(nside*nside)+(nside-off+lidx2//nside)*nside+lidx2%nside).reshape(off,nside)
-                        fidx2[i,:,:]=(tab[i,1]*(nside*nside)+(lidx2//nside)*nside+lidx2%nside).reshape(off,nside)
-                        fidx3[i,off:-off,:]=(tab[i,0]*(nside*nside)+(lidx2//2)*nside+nside-off+lidx2%2).reshape(nside,off)
-                        fidx4[i,off:-off,:]=(tab[i,2]*(nside*nside)+(lidx2//2)*nside+lidx2%2).reshape(nside,off)
-
-                    for i in range(8,12):
-                        fidx1[i,:,:]=(tab[i,3]*(nside*nside)+(nside-1-lidx2%nside)*nside+nside-off+lidx2//nside).reshape(off,nside)
-                        fidx2[i,:,:]=(tab[i,1]*(nside*nside)+(lidx2//nside)*nside+lidx2%nside).reshape(off,nside)
-                        fidx3[i,off:-off,:]=(tab[i,0]*(nside*nside)+(lidx2//2)*nside+nside-off+lidx2%2).reshape(nside,off)
-                        fidx4[i,off:-off,:]=(tab[i,2]*(nside*nside)+(lidx2%2)*nside+nside-1-lidx2//2).reshape(nside,off)
-
-                    for k in range(12):
-                        lidx=fidx.reshape(12,nside,nside)[k,0,0]
-                        fidx3[k,0,0]=np.where(fidx==r_idx[lidx,24])[0]
-                        fidx3[k,0,1]=np.where(fidx==r_idx[lidx,23])[0]
-                        fidx3[k,1,0]=np.where(fidx==r_idx[lidx,19])[0]
-                        fidx3[k,1,1]=np.where(fidx==r_idx2[lidx,8])[0]
-                        #print('+++',k)
-                        #print(fidx.reshape(12,nside,nside)[k,0:3,0:3],':',fidx[fidx1[k,:,0:3]],':',fidx[fidx3[k,0:5,:]])
-                        #print(r_idx[lidx,:].reshape(5,5))
-                        #print(r_idx2[lidx,:].reshape(3,3))
-                        lidx=fidx.reshape(12,nside,nside)[k,-1,0]
-                        fidx3[k,-1,0]=np.where(fidx==r_idx[lidx,4])[0]
-                        fidx3[k,-1,1]=np.where(fidx==r_idx[lidx,3])[0]
-                        fidx3[k,-2,0]=np.where(fidx==r_idx[lidx,9])[0]
-                        fidx3[k,-2,1]=np.where(fidx==r_idx2[lidx,2])[0]
-                        #print('====',k)
-                        #print(fidx.reshape(12,nside,nside)[k,-3:,0:3],':',fidx[fidx2[k,:,0:3]],':',fidx[fidx3[k,-5:,:]])
-                        #print(r_idx[lidx,:].reshape(5,5))
-                        #print(r_idx2[lidx,:].reshape(3,3))
-                        #fidx4[k,off-1,0]=np.where(fidx==r_idx[lidx,6])[0]
-                        lidx=fidx.reshape(12,nside,nside)[k,0,-1]
-                        fidx4[k,0,0]=np.where(fidx==r_idx[lidx,21])[0]
-                        fidx4[k,0,1]=np.where(fidx==r_idx[lidx,20])[0]
-                        fidx4[k,1,1]=np.where(fidx==r_idx[lidx,15])[0]
-                        fidx4[k,1,0]=np.where(fidx==r_idx2[lidx,6])[0]
-                        #print('====',k)
-                        #print(fidx.reshape(12,nside,nside)[k,0:3,-3:],':',fidx[fidx1[k,:,-2:]],':',fidx[fidx4[k,0:5,:]])
-                        #print(r_idx[lidx,:].reshape(5,5))
-                        #print(r_idx2[lidx,:].reshape(3,3))
-                        #fidx4[k,off-1,0]=np.where(fidx==r_idx[lidx,6])[0]
-                        lidx=fidx.reshape(12,nside,nside)[k,-1,-1]
-                        fidx4[k,-1,1]=np.where(fidx==r_idx[lidx,0])[0]
-                        fidx4[k,-1,0]=np.where(fidx==r_idx[lidx,1])[0]
-                        fidx4[k,-2,1]=np.where(fidx==r_idx[lidx,5])[0]
-                        fidx4[k,-2,0]=np.where(fidx==r_idx2[lidx,0])[0]
-                        #print('+++',k)
-                        #print(fidx.reshape(12,nside,nside)[k,-3:,-3:],':',fidx[fidx2[k,:,-3:]],':',fidx[fidx4[k,-5:,:]])
-                        #print(r_idx[lidx,:].reshape(5,5))
-                        #print(r_idx2[lidx,:].reshape(3,3))
-                        #fidx4[k,-off,0]=np.where(fidx==r_idx[lidx,0])[0]
-
-                    fidx = (fidx+12*nside*nside)%(12*nside*nside)
-                    fidx1 = (fidx1+12*nside*nside)%(12*nside*nside)
-                    fidx2 = (fidx2+12*nside*nside)%(12*nside*nside)
-                    fidx3 = (fidx3+12*nside*nside)%(12*nside*nside)
-                    fidx4 = (fidx4+12*nside*nside)%(12*nside*nside)
-                else:
-                    ll_idx=np.arange(nside,dtype='int')
-                    fidx1=np.zeros([1,off,nside],dtype='int')
-                    fidx2=np.zeros([1,off,nside],dtype='int')
-                    fidx3=np.zeros([1,nside+2*off,off],dtype='int')
-                    fidx4=np.zeros([1,nside+2*off,off],dtype='int')
-                    for i in range(2):
-                        fidx1[0,i,:] = (nside-off+i)*nside+ll_idx
-                        fidx2[0,i,:] = i*nside+ll_idx
-                        fidx3[0,off:-off,i] = nside-2+i+nside*ll_idx
-                        fidx4[0,off:-off,i] = i+nside*ll_idx
-
-                        for j in range(2):
-                            fidx3[0,j,i]=nside-2+i+nside*(nside-2+j)
-                            fidx3[0,nside+off+j,i]=nside-2+i+nside*(j)
-                            fidx4[0,j,i]=i+nside*(nside-2+j)
-                            fidx4[0,nside+off+j,i]=i+nside*(j)
-
-                    fidx = (fidx+nside*nside)%(nside*nside)
-                    fidx1 = (fidx1+nside*nside)%(nside*nside)
-                    fidx2 = (fidx2+nside*nside)%(nside*nside)
-                    fidx3 = (fidx3+nside*nside)%(nside*nside)
-                    fidx4 = (fidx4+nside*nside)%(nside*nside)
-                
-                
-                np.save('%s/%s_%s_%d_%d_FIDX.npy'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans),fidx)
-                print('%s/%s_%s_%d_%d_FIDX.npy COMPUTED'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans))
-                np.save('%s/%s_%s_%d_%d_FIDX1.npy'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans),fidx1)
-                print('%s/%s_%s_%d_%d_FIDX1.npy COMPUTED'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans))
-                np.save('%s/%s_%s_%d_%d_FIDX2.npy'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans),fidx2)
-                print('%s/%s_%s_%d_%d_FIDX2.npy COMPUTED'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans))
-                np.save('%s/%s_%s_%d_%d_FIDX3.npy'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans),fidx3)
-                print('%s/%s_%s_%d_%d_FIDX3.npy COMPUTED'%(self.TEMPLATE_PATH,TMPFILE_VERSION,outname,nside,chans))
-                np.save('%s/%s_%s_%d_%d_FIDX4.npy'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans),fidx4)
-                print('%s/%s_%s_%d_%d_FIDX4.npy COMPUTED'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans))
-                sys.stdout.flush()
-
-        self.barrier()
-            
-        fidx =np.load('%s/%s_%s_%d_%d_FIDX.npy'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans))
-        fidx1=np.load('%s/%s_%s_%d_%d_FIDX1.npy'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans))
-        fidx2=np.load('%s/%s_%s_%d_%d_FIDX2.npy'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans))
-        fidx3=np.load('%s/%s_%s_%d_%d_FIDX3.npy'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans))
-        fidx4=np.load('%s/%s_%s_%d_%d_FIDX4.npy'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nside,chans))
-
-        self.nest2R[nside]=self.backend.constant(fidx)
-        self.nest2R1[nside]=self.backend.constant(fidx1)
-        self.nest2R2[nside]=self.backend.constant(fidx2)
-        self.nest2R3[nside]=self.backend.constant(fidx3)
-        self.nest2R4[nside]=self.backend.constant(fidx4)
-            
-    
-    def calc_R_inv_index(self,nside,chans=12):
-        nstep=int(np.log(nside)/np.log(2))
-        idx=np.arange(nside*nside)
-        
-        if chans==1:
-            return (self.R_off+idx//nside)*(nside+2*self.R_off)+self.R_off+idx%nside
-        
-        xx=np.zeros([nside*nside],dtype='int')
-        yy=np.zeros([nside*nside],dtype='int')
-        
-        for i in range(nstep):
-            l_idx=(idx//(4**i))%4
-            xx=xx+(2**i)*((l_idx)%2)
-            yy=yy+(2**i)*((l_idx)//2)
-            
-        return np.repeat(np.arange(12,dtype='int'),nside*nside)*(nside+2*self.R_off)*(nside+2*self.R_off)+ \
-            np.tile(self.R_off+yy,12)*(nside+2*self.R_off)+self.R_off+np.tile(nside-1-xx,12)
-            
-    def update_R_border(self,im,axis=0):
-        if not isinstance(im,Rformat.Rformat):
-            return im
-
-        nside=im.shape[axis+1]-2*self.R_off
-            
-        if axis==0:
-            im_center=im.get()[:,self.R_off:-self.R_off,self.R_off:-self.R_off]
-        if axis==1:
-            im_center=im.get()[:,:,self.R_off:-self.R_off,self.R_off:-self.R_off]
-        if axis==2:
-            im_center=im.get()[:,:,:,self.R_off:-self.R_off,self.R_off:-self.R_off]
-        if axis==3:
-            im_center=im.get()[:,:,:,:,self.R_off:-self.R_off,self.R_off:-self.R_off]
-
-        shape=list(im.shape)
-        
-        oshape=shape[0:axis]+[self.chans*nside*nside]
-        if len(shape)>axis+3:
-            oshape=oshape+shape[axis+3:]
-
-        l_im=self.backend.bk_reshape(im_center,oshape)
-        
-        if self.nest2R[nside] is None:
-            self.calc_R_index(nside,chans=self.chans)
-                
-        v1=self.backend.bk_gather(l_im,self.nest2R1[nside],axis=axis)
-        v2=self.backend.bk_gather(l_im,self.nest2R2[nside],axis=axis)
-        v3=self.backend.bk_gather(l_im,self.nest2R3[nside],axis=axis)
-        v4=self.backend.bk_gather(l_im,self.nest2R4[nside],axis=axis)
-            
-        imout=self.backend.bk_concat([v1,im_center,v2],axis=axis+1)
-        imout=self.backend.bk_concat([v3,imout,v4],axis=axis+2)
-            
-        return Rformat.Rformat(imout,self.R_off,axis,chans=self.chans)
-        
-    def to_R_center(self,im,axis=0,chans=12):
-        if isinstance(im,Rformat.Rformat):
-            return im
-        
-        if chans==12:
-            nside=int(np.sqrt(im.shape[axis]//chans))
-        else:
-            nside=im.shape[axis]
-        
-        if chans==1:
-            lim=self.reduce_dim(im,axis=axis)
-        else:
-            lim=im
-            
-        if self.nest2R[nside] is None:
-            self.calc_R_index(nside,chans=chans)
-        
-        im_center=self.backend.bk_gather(lim,self.nest2R[nside],axis=axis)
-        
-        return self.backend.bk_reshape(im_center,[chans*nside*nside])
-        
-    def to_R(self,im,axis=0,only_border=False,chans=12):
-        if isinstance(im,Rformat.Rformat):
-            return im
-                    
-            
-        padding=self.padding
-        if chans==1 and len(im.shape)>1:
-            nside=im.shape[axis]
-        else:
-            nside=int(np.sqrt(im.shape[axis]//chans))
-                
-        if self.nest2R[nside] is None:
-            self.calc_R_index(nside,chans=chans)
-            
-        if only_border:
-            
-            if axis==0:
-                im_center=self.backend.bk_reshape(im,[chans,nside,nside])
-            if axis==1:
-                im_center=self.backend.bk_reshape(im,[im.shape[0],chans,nside,nside])
-            if axis==2:
-                im_center=self.backend.bk_reshape(im,[im.shape[0],im.shape[1],chans,nside,nside])
-            if axis==3:
-                im_center=self.backend.bk_reshape(im,[im.shape[0],im.shape[1],im.shape[2],chans,nside,nside])
-            
-            if chans==1 and len(im.shape)>1:
-                lim=self.reduce_dim(im,axis=axis)
-            else:
-                lim=im
-
-            v1=self.backend.bk_gather(lim,self.nest2R1[nside],axis=axis)
-            v2=self.backend.bk_gather(lim,self.nest2R2[nside],axis=axis)
-            v3=self.backend.bk_gather(lim,self.nest2R3[nside],axis=axis)
-            v4=self.backend.bk_gather(lim,self.nest2R4[nside],axis=axis)
-                
-            imout=self.backend.bk_concat([v1,im_center,v2],axis=axis+1)
-            imout=self.backend.bk_concat([v3,imout,v4],axis=axis+2)
-                
-            return Rformat.Rformat(imout,self.R_off,axis,chans=chans)
-        
-        else:
-                    
-            if chans==1:
-                im_center=self.reduce_dim(im,axis=axis)
-            else:
-                im_center=self.backend.bk_gather(im,self.nest2R[nside],axis=axis)
-                
-            shape=list(im.shape)
-            oshape=shape[0:axis]+[chans,nside,nside]
-            
-            if chans==1:
-                if axis+2<len(shape):
-                    oshape=oshape+shape[axis+2:]
-            else:
-                if axis+1<len(shape):
-                    oshape=oshape+shape[axis+1:]
-
-            v1=self.backend.bk_gather(im_center,self.nest2R1[nside],axis=axis)
-            v2=self.backend.bk_gather(im_center,self.nest2R2[nside],axis=axis)
-            v3=self.backend.bk_gather(im_center,self.nest2R3[nside],axis=axis)
-            v4=self.backend.bk_gather(im_center,self.nest2R4[nside],axis=axis)
-
-            im_center=self.backend.bk_reshape(im_center,oshape)
-            
-            imout=self.backend.bk_concat([v1,im_center,v2],axis=axis+1)
-            imout=self.backend.bk_concat([v3,imout,v4],axis=axis+2)
-                
-            return Rformat.Rformat(imout,self.R_off,axis,chans=chans)
-    
-    def from_R(self,im,axis=0):
-        if not isinstance(im,Rformat.Rformat):
-            print('fromR function only works with Rformat.Rformat class')
-            
-        image=im.get()
-        if im.chans==1:
-            if axis==0:
-                im_center=im.get()[0,self.R_off:-self.R_off,self.R_off:-self.R_off]
-            if axis==1:
-                im_center=im.get()[0,:,self.R_off:-self.R_off,self.R_off:-self.R_off]
-            if axis==2:
-                im_center=im.get()[0,:,:,self.R_off:-self.R_off,self.R_off:-self.R_off]
-            if axis==3:
-                im_center=im.get()[0,:,:,:,self.R_off:-self.R_off,self.R_off:-self.R_off]
-            return im_center
-        else:
-            nside=image.shape[axis+1]-self.R_off*2
-        
-            if self.inv_nest2R[nside] is None:
-                self.inv_nest2R[nside]=self.calc_R_inv_index(nside,chans=im.chans)
-
-            res=self.reduce_dim(self.reduce_dim(image,axis=axis),axis=axis)
-
-            return self.backend.bk_gather(res,self.inv_nest2R[nside],axis=axis)
-        
     def corr_idx_wXX(self,x,y):
         idx=np.where(x==-1)[0]
         res=x
         res[idx]=y[idx]
         return(res)
-    
-    def comp_idx_w9(self,nout):
-        
-        x,y,z=hp.pix2vec(nout,np.arange(12*nout**2),nest=True)
-        vec=np.zeros([3,12*nout**2])
-        vec[0,:]=x
-        vec[1,:]=y
-        vec[2,:]=z
-
-        radius=np.sqrt(4*np.pi/(12*nout*nout))
-
-        npt=9
-        outname='W9'
-
-        th,ph=hp.pix2ang(nout,np.arange(12*nout**2),nest=True)
-        idx=hp.get_all_neighbours(nout,th,ph,nest=True)
-
-        allidx=np.zeros([9,12*nout*nout],dtype='int')
-
-        def corr(x,y):
-            idx=np.where(x==-1)[0]
-            res=x
-            res[idx]=y[idx]
-            return(res)
-
-        allidx[4,:] = np.arange(12*nout**2)
-        allidx[0,:] = self.corr_idx_wXX(idx[1,:],idx[2,:])
-        allidx[1,:] = self.corr_idx_wXX(idx[2,:],idx[3,:])
-        allidx[2,:] = self.corr_idx_wXX(idx[3,:],idx[4,:])
-
-        allidx[3,:] = self.corr_idx_wXX(idx[0,:],idx[1,:])
-        allidx[5,:] = self.corr_idx_wXX(idx[4,:],idx[5,:])
-
-        allidx[6,:] = self.corr_idx_wXX(idx[7,:],idx[0,:])
-        allidx[7,:] = self.corr_idx_wXX(idx[6,:],idx[7,:])
-        allidx[8,:] = self.corr_idx_wXX(idx[5,:],idx[6,:])
-
-        idx=np.zeros([12*nout*nout,npt],dtype='int')
-        for iii in range(12*nout*nout):
-            idx[iii,:]=allidx[:,iii]
-
-        np.save('%s/%s_%s_%d_IDX.npy'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nout),idx)
-        print('%s/%s_%s_%d_IDX.npy COMPUTED'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nout))
-        sys.stdout.flush()
-
-    # ---------------------------------------------−---------
-    # --       COMPUTE 5X5 INDEX FOR HEALPIX WORK          --
-    # ---------------------------------------------−---------
-    def comp_idx_w25(self,nout):
-        
-        x,y,z=hp.pix2vec(nout,np.arange(12*nout**2),nest=True)
-        vec=np.zeros([3,12*nout**2])
-        vec[0,:]=x
-        vec[1,:]=y
-        vec[2,:]=z
-
-        radius=np.sqrt(4*np.pi/(12*nout*nout))
-
-        npt=25
-        outname='W25'
-
-        th,ph=hp.pix2ang(nout,np.arange(12*nout**2),nest=True)
-        idx=hp.get_all_neighbours(nout,th,ph,nest=True)
-
-        allidx=np.zeros([25,12*nout*nout],dtype='int')
-
-        allidx[12,:] = np.arange(12*nout**2)
-        allidx[11,:] = self.corr_idx_wXX(idx[0,:],idx[1,:])
-        allidx[ 7,:] = self.corr_idx_wXX(idx[2,:],idx[3,:])
-        allidx[13,:] = self.corr_idx_wXX(idx[4,:],idx[5,:])
-        allidx[17,:] = self.corr_idx_wXX(idx[6,:],idx[7,:])
-
-        allidx[10,:] = self.corr_idx_wXX(idx[0,allidx[11,:]],idx[1,allidx[11,:]])
-        allidx[ 6,:] = self.corr_idx_wXX(idx[2,allidx[11,:]],idx[3,allidx[11,:]])
-        allidx[16,:] = self.corr_idx_wXX(idx[6,allidx[11,:]],idx[7,allidx[11,:]])
-
-        allidx[2,:]  = self.corr_idx_wXX(idx[2,allidx[7,:]],idx[3,allidx[7,:]])
-        allidx[8,:]  = self.corr_idx_wXX(idx[4,allidx[7,:]],idx[5,allidx[7,:]])
-
-        allidx[14,:]  = self.corr_idx_wXX(idx[4,allidx[13,:]],idx[5,allidx[13,:]])
-        allidx[18,:]  = self.corr_idx_wXX(idx[6,allidx[13,:]],idx[7,allidx[13,:]])
-
-        allidx[22,:]  = self.corr_idx_wXX(idx[6,allidx[17,:]],idx[7,allidx[17,:]])
-
-        allidx[1,:]   = self.corr_idx_wXX(idx[2,allidx[6,:]],idx[3,allidx[6,:]])
-        allidx[5,:]   = self.corr_idx_wXX(idx[0,allidx[6,:]],idx[1,allidx[6,:]])
-
-        allidx[3,:]   = self.corr_idx_wXX(idx[2,allidx[8,:]],idx[3,allidx[8,:]])
-        allidx[9,:]   = self.corr_idx_wXX(idx[4,allidx[8,:]],idx[5,allidx[8,:]])
-
-        allidx[19,:]  = self.corr_idx_wXX(idx[4,allidx[18,:]],idx[5,allidx[18,:]])
-        allidx[23,:]  = self.corr_idx_wXX(idx[6,allidx[18,:]],idx[7,allidx[18,:]])
-
-        allidx[15,:]  = self.corr_idx_wXX(idx[0,allidx[16,:]],idx[1,allidx[16,:]])
-        allidx[21,:]  = self.corr_idx_wXX(idx[6,allidx[16,:]],idx[7,allidx[16,:]])
-
-        allidx[0,:]   = self.corr_idx_wXX(idx[0,allidx[1,:]],idx[1,allidx[1,:]])
-
-        allidx[4,:]   = self.corr_idx_wXX(idx[4,allidx[3,:]],idx[5,allidx[3,:]])
-
-        allidx[20,:]   = self.corr_idx_wXX(idx[0,allidx[21,:]],idx[1,allidx[21,:]])
-
-        allidx[24,:]   = self.corr_idx_wXX(idx[4,allidx[23,:]],idx[5,allidx[23,:]])
-
-        idx=np.zeros([12*nout*nout,npt],dtype='int')
-        for iii in range(12*nout*nout):
-            idx[iii,:]=allidx[:,iii]
-
-        np.save('%s/%s_%s_%d_IDX.npy'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nout),idx)
-        print('%s/%s_%s_%d_IDX.npy COMPUTED'%(self.TEMPLATE_PATH,outname,TMPFILE_VERSION,nout))
-        sys.stdout.flush()
         
     # ---------------------------------------------−---------
     def get_rank(self):
@@ -795,69 +326,40 @@ class FoCUS:
     #--------------------------------------------------------
     def ud_grade_2(self,im,axis=0):
         
-        if self.use_R_format:
-            if isinstance(im, Rformat.Rformat):
-                l_image=im.get()
-            else:
-                l_image=self.to_R(im,axis=axis,chans=self.chans).get()
-
-            lout=int(l_image.shape[axis+1]-2*self.R_off)
+        if self.use_2D:
+            ishape=list(im.shape)
+            if len(ishape)<axis+2:
+                print('Use of 2D scat with data that has less than 2D')
+                exit(0)
                 
-            shape=list(im.shape)
-            
-            if axis==0:
-                l_image=l_image[:,self.R_off:-self.R_off,self.R_off:-self.R_off]
-                oshape=[self.chans,lout//2,2,lout//2,2]
-                oshape2=[self.chans*(lout//2)*(lout//2)]
-                if len(shape)>3:
-                    oshape=oshape+shape[3:]
-                    oshape2=oshape2+shape[3:]
-            if axis==1:
-                l_image=l_image[:,:,self.R_off:-self.R_off,self.R_off:-self.R_off]
-                oshape=[shape[0],self.chans,lout//2,2,lout//2,2]
-                oshape2=[shape[0],self.chans*(lout//2)*(lout//2)]
-                if len(shape)>4:
-                    oshape=oshape+shape[4:]
-                    oshape2=oshape2+shape[4:]
-            if axis==2:
-                l_image=l_image[:,:,:,self.R_off:-self.R_off,self.R_off:-self.R_off]
-                oshape=[shape[0],shape[1],self.chans,lout//2,2,lout//2,2]
-                oshape2=[shape[0],shape[1],self.chans*(lout//2)*(lout//2)]
-                if len(shape)>5:
-                    oshape=oshape+shape[5:]
-                    oshape2=oshape2+shape[5:]
-            if axis==3:
-                l_image=l_image[:,:,:,:,self.R_off:-self.R_off,self.R_off:-self.R_off]
-                oshape=[shape[0],shape[1],shape[2],self.chans,lout//2,2,lout//2,2]
-                oshape2=[shape[0],shape[1],shape[2],self.chans*(lout//2)*(lout//2)]
-                if len(shape)>6:
-                    oshape=oshape+shape[6:]
-                    oshape2=oshape2+shape[6:]
+            npix=im.shape[axis]
+            npiy=im.shape[axis+1]
+            odata=1
+            if len(ishape)>axis+2:
+                for k in range(axis+2,len(ishape)):
+                    odata=odata*ishape[k]
                     
-            if axis>3:
-                print('ud_grade_2 function not yet implemented for axis>3')
-                
-            l_image=self.backend.bk_reduce_sum(self.backend.bk_reduce_sum(self.backend.bk_reshape(l_image,oshape) \
-                                                          ,axis=axis+2),axis=axis+3)/4
-            imout=self.backend.bk_reshape(l_image,oshape2)
+            ndata=1
+            for k in range(axis):
+                ndata=ndata*ishape[k]
 
-            if self.nest2R[lout//2] is None:
-                self.calc_R_index(lout//2,chans=self.chans)
-                
-            v1=self.backend.bk_gather(imout,self.nest2R1[lout//2],axis=axis)
-            v2=self.backend.bk_gather(imout,self.nest2R2[lout//2],axis=axis)
-            v3=self.backend.bk_gather(imout,self.nest2R3[lout//2],axis=axis)
-            v4=self.backend.bk_gather(imout,self.nest2R4[lout//2],axis=axis)
-            
-            imout=self.backend.bk_concat([v1,l_image,v2],axis=axis+1)
-            imout=self.backend.bk_concat([v3,imout,v4],axis=axis+2)
-                
-            imout=Rformat.Rformat(imout,self.R_off,axis,chans=self.chans)
-            
-            if not isinstance(im, Rformat.Rformat):
-                imout=self.from_R(imout,axis=axis)
+            tim=self.backend.bk_reshape(self.backend.bk_cast(im),[ndata,npix,npiy,odata])
+            tim=self.backend.bk_reshape(tim[:,0:2*(npix//2),0:2*(npiy//2),:],[ndata,npix//2,2,npiy//2,2,odata])
 
-            return imout
+            res=self.backend.bk_reduce_mean(self.backend.bk_reduce_sum(tim,4),2)
+        
+            if axis==0:
+                if len(ishape)==2:
+                    return self.backend.bk_reshape(res,[npix//2,npiy//2])
+                else:
+                    return self.backend.bk_reshape(res,[npix//2,npiy//2]+ishape[axis+2:])
+            else:
+                if len(ishape)==axis+2:
+                    return self.backend.bk_reshape(res,ishape[0:axis]+[npix//2,npiy//2])
+                else:
+                    return self.backend.bk_reshape(res,ishape[0:axis]+[npix//2,npiy//2]+ishape[axis+2:])
+                
+            return self.backend.bk_reshape(res,[npix//2,npiy//2])
             
         else:
             shape=im.shape
@@ -879,76 +381,45 @@ class FoCUS:
                     oshape=oshape+shape[axis+1:]
 
             return(self.backend.bk_reduce_mean(self.backend.bk_reshape(im,oshape),axis=axis+1))
-    
+        
     #--------------------------------------------------------
-    def up_grade_2_R_format(self,l_image,axis=0):
+    def up_grade(self,im,nout,axis=0,nouty=None):
         
-        #l_image is [....,12,nside+2*R_off,nside+2*R_off,...]
-        res=self.backend.bk_repeat(self.backend.bk_repeat(l_image,2,axis=axis+1),2,axis=axis+2)
-
-        y00=res
-        y10=self.backend.bk_roll(res,-1,axis=axis+1)
-        y01=self.backend.bk_roll(res,-1,axis=axis+2)
-        y11=self.backend.bk_roll(y10,-1,axis=axis+2)
-        #imout is [....,12,2*nside+4*R_off,2*nside+4*R_off,...]
-        imout=(0.25*y00+0.25*y10+0.25*y01+0.25*y11)
-        
-        y10=self.backend.bk_roll(res,1,axis=axis+1)
-        y01=self.backend.bk_roll(res,1,axis=axis+2)
-        y11=self.backend.bk_roll(y10,1,axis=axis+2)
-        #imout is [....,12,2*nside+4*R_off,2*nside+4*R_off,...]
-        imout=imout+(0.25*y00+0.25*y10+0.25*y01+0.25*y11)
-        
-        y10=self.backend.bk_roll(res,1,axis=axis+1)
-        y01=self.backend.bk_roll(res,-1,axis=axis+2)
-        y11=self.backend.bk_roll(y10,-1,axis=axis+2)
-        #imout is [....,12,2*nside+4*R_off,2*nside+4*R_off,...]
-        imout=imout+(0.25*y00+0.25*y10+0.25*y01+0.25*y11)
-        
-        y10=self.backend.bk_roll(res,-1,axis=axis+1)
-        y01=self.backend.bk_roll(res,1,axis=axis+2)
-        y11=self.backend.bk_roll(y10,1,axis=axis+2)
-        #imout is [....,12,2*nside+4*R_off,2*nside+4*R_off,...]
-        imout=imout+(0.25*y00+0.25*y10+0.25*y01+0.25*y11)
-
-        imout=imout/4
-        
-        #reshape imout [NPRE,to cut axes
-        if axis==0:
-            # cas c'est une simple image
-            imout=imout[:,self.R_off:-self.R_off,self.R_off:-self.R_off]
-        if axis==1:
-            imout=imout[:,:,self.R_off:-self.R_off,self.R_off:-self.R_off]
-        if axis==2:
-            imout=imout[:,:,:,self.R_off:-self.R_off,self.R_off:-self.R_off]
-        if axis==3:
-            imout=imout[:,:,:,:,self.R_off:-self.R_off,self.R_off:-self.R_off]
+        if self.use_2D:
+            ishape=list(im.shape)
+            if len(ishape)<axis+2:
+                print('Use of 2D scat with data that has less than 2D')
+                exit(0)
                 
-        return(imout)
-    
-    #--------------------------------------------------------
-    def up_grade(self,im,nout,axis=0):
+            if nouty is None:
+                nouty=nout
+            npix=im.shape[axis]
+            npiy=im.shape[axis+1]
+            odata=1
+            if len(ishape)>axis+2:
+                for k in range(axis+2,len(ishape)):
+                    odata=odata*ishape[k]
+                    
+            ndata=1
+            for k in range(axis):
+                ndata=ndata*ishape[k]
+
+            tim=self.backend.bk_reshape(self.backend.bk_cast(im),[ndata,npix,npiy,odata])
+
+            res=self.backend.bk_resize_image(tim,[nout,nouty])
         
-        if self.use_R_format:
-            if isinstance(im, Rformat.Rformat):
-                l_image=im.get()
+            if axis==0:
+                if len(ishape)==2:
+                    return self.backend.bk_reshape(res,[nout,nouty])
+                else:
+                    return self.backend.bk_reshape(res,[nout,nouty]+ishape[axis+2:])
             else:
-                l_image=self.to_R(im,axis=axis,chans=self.chans).get()
-
-            lout=int(l_image.shape[axis+1]-2*self.R_off)
-            nscale=int(np.log(nout//lout)/np.log(2))
-
-            if lout==nout:
-                imout=l_image
-            else:
-                imout=self.up_grade_2_R_format(l_image,axis=axis)
-                for i in range(1,nscale):
-                    imout=self.up_grade_2_R_format(imout,axis=axis)
-                        
-            imout=Rformat.Rformat(imout,self.R_off,axis,chans=self.chans)
-            
-            if not isinstance(im, Rformat.Rformat):
-                imout=self.from_R(imout,axis=axis)
+                if len(ishape)==axis+2:
+                    return self.backend.bk_reshape(res,ishape[0:axis]+[nout,nouty])
+                else:
+                    return self.backend.bk_reshape(res,ishape[0:axis]+[nout,nouty]+ishape[axis+2:])
+                
+            return self.backend.bk_reshape(res,[nout,nouty])
             
         else:
 
@@ -1118,10 +589,10 @@ class FoCUS:
         tim = self.backend.bk_reshape(self.backend.bk_cast(im),[ndata,npix,odata])
 
         if tim.dtype==self.all_cbk_type:
-            rr1 = self.conv1d(self.backend.bk_real(tim),wr)
-            ii1 = self.conv1d(self.backend.bk_real(tim),wi)
-            rr2 = self.conv1d(self.backend.bk_imag(tim),wr)
-            ii2 = self.conv1d(self.backend.bk_imag(tim),wi)
+            rr1 = self.backend.bk_conv1d(self.backend.bk_real(tim),wr)
+            ii1 = self.backend.bk_conv1d(self.backend.bk_real(tim),wi)
+            rr2 = self.backend.bk_conv1d(self.backend.bk_imag(tim),wr)
+            ii2 = self.backend.bk_conv1d(self.backend.bk_imag(tim),wi)
             res=self.backend.bk_complex(rr1-ii2,ii1+rr2)
         else:
             rr = self.backend.bk_conv1d(tim,wr)
@@ -1169,8 +640,8 @@ class FoCUS:
         tim = self.backend.bk_reshape(self.backend.bk_cast(im),[ndata,npix,odata])
 
         if tim.dtype==self.all_cbk_type:
-            rr = self.conv1d(self.backend.bk_real(tim),w)
-            ii = self.conv1d(self.backend.bk_real(tim),w)
+            rr = self.backend.bk_conv1d(self.backend.bk_real(tim),w)
+            ii = self.backend.bk_conv1d(self.backend.bk_real(tim),w)
             res=self.backend.bk_complex(rr,ii)
         else:
             res=self.backend.bk_conv1d(tim,w)
@@ -1196,46 +667,6 @@ class FoCUS:
         for k in range(nscale):
             res=self.up_grade_2_1d(res,axis=axis)
         return(res)
-    
-    # ---------------------------------------------−---------
-    def computeWigner(self,nside,lmax=1.5,all_nmax=128):
-        
-        nmax=np.min([12*nside**2,all_nmax])
-        lidx=hp.ring2nest(nside,np.arange(12*nside**2))
-        th,ph=hp.pix2ang(nside,np.arange(12*nside**2),nest=True)
-        a=np.exp(-0.1*(nside**2)*((th-np.pi/2)**2+(ph-np.pi)**2))+ \
-           np.exp(-0.1*(nside**2)*((th-np.pi/2)**2+(ph+np.pi)**2))
-        filter=a*np.cos(lmax*(nside+1)*(th-np.pi/2))
-        tmp=hp.anafast(filter[lidx])
-        norm=1/np.sqrt(tmp.max())
-        filter*=norm
-        tmp=hp.anafast(filter[lidx])
-        tot[0:tmp.shape[0]]+=tmp
-        plt.plot(tmp)
-        wr=np.zeros([12*nside**2,nmax,4])
-        wi=np.zeros([12*nside**2,nmax,4])
-        iii=np.zeros([12*nside**2,nmax],dtype='int')
-            
-        for l in range(12*nside**2):
-            wwr=np.zeros([12*nside**2,4])
-            wwi=np.zeros([12*nside**2,4])
-            for k in range(4):
-                r=hp.Rotator(rot=((np.pi-ph[l])/np.pi*180,(np.pi/2-th[l])/np.pi*180,45*k))
-                th2,ph2=r(th,ph)
-                a=np.exp(-0.1*(nside**2)*((th2-np.pi/2)**2+(ph2-np.pi)**2))+ \
-                   np.exp(-0.1*(nside**2)*((th2-np.pi/2)**2+(ph2+np.pi)**2))
-                wwr[:,k]=norm*a*np.cos(lmax*(nside+1)*(th2-np.pi/2))
-                wwi[:,k]=norm*a*np.sin(lmax*(nside+1)*(th2-np.pi/2))
-
-            idx=np.argsort(-np.sum(abs(wwr+complex(0,1)*wwi),1))
-            wr[l,:,:]=wwr[idx[0:nmax],:]
-            wi[l,:,:]=wwi[idx[0:nmax],:]
-            iii[l,:]=idx[0:nmax]
-
-        print('Write ALLWAVE_%s_%d_%d_W.npy'%(TMPFILE_VERSION,nside,k),wr.shape[1]/(12*nside**2))
-        np.save('ALLWAVE_%s_%d_%d_Wr.npy'%(TMPFILE_VERSION,nside,all_nmax),wr)
-        np.save('ALLWAVE_%s_%d_%d_Wi.npy'%(TMPFILE_VERSION,nside,all_nmax),wi)
-        np.save('ALLWAVE_%s_%d_%d_I.npy'%(TMPFILE_VERSION,nside,all_nmax),iii)
         
     # ---------------------------------------------−---------
     def init_index(self,nside,kernel=-1):
@@ -1247,12 +678,12 @@ class FoCUS:
             
         
         try:
-            if self.use_R_format:
+            if self.use_2D:
                 tmp=np.load('%s/W%d_%s_%d_IDX.npy'%(self.TEMPLATE_PATH,l_kernel**2,TMPFILE_VERSION,nside))
             else:
                 tmp=np.load('%s/FOSCAT_%s_W%d_%d_%d_PIDX.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel**2,self.NORIENT,nside))
         except:
-            if self.use_R_format==False:
+            if self.use_2D==False:
                 if self.KERNELSZ*self.KERNELSZ>12*nside*nside:
                     l_kernel=2*nside
                     
@@ -1356,7 +787,7 @@ class FoCUS:
                         exit(0)
 
         self.barrier()  
-        if self.use_R_format:          
+        if self.use_2D:          
             tmp=np.load('%s/W%d_%s_%d_IDX.npy'%(self.TEMPLATE_PATH,l_kernel**2,TMPFILE_VERSION,nside))
         else:
             tmp=np.load('%s/FOSCAT_%s_W%d_%d_%d_PIDX.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,self.KERNELSZ**2,self.NORIENT,nside))
@@ -1375,7 +806,7 @@ class FoCUS:
             else:
                 self.Idx_Neighbours[nside]=tmp
                 
-        if self.use_R_format:
+        if self.use_2D:
             if kernel!=-1:
                 return tmp
             
@@ -1425,62 +856,65 @@ class FoCUS:
     
     # ---------------------------------------------−---------
     # Mean using mask x [....,Npix,....], mask[Nmask,Npix]  to [....,Nmask,....]
-    # if use_R_format
+    # if use_2D
     # Mean using mask x [....,12,Nside+2*off,Nside+2*off,....], mask[Nmask,12,Nside+2*off,Nside+2*off]  to [....,Nmask,....]
     def masked_mean(self,x,mask,axis=0,rank=0):
         
+        #==========================================================================
+        # in input data=[Nbatch,...,X[,Y],NORIENT[,NORIENT]]
+        # in input mask=[Nmask,X[,Y]]
+        # if self.use_2D :  X[,Y]] = [X,Y]
+        # if second level:  NORIENT[,NORIENT]= NORIENT,NORIENT
+        #==========================================================================
+        
         shape=x.shape.as_list()
         
-        l_x=self.backend.bk_expand_dims(x,axis)
+        if not self.use_2D:
+            nside=int(np.sqrt(x.shape[axis]//12))
             
-        if self.use_R_format:
-            nside=mask.nside
-            if self.padding!='SAME':
-                self.remove_border[nside]=np.ones([1,shape[axis-1],nside+2*self.R_off,nside+2*self.R_off])
-                self.remove_border[nside][0,:,0:self.R_off+rank+self.KERNELSZ//2,:]=0.0
-                self.remove_border[nside][0,:,-(self.R_off+rank+self.KERNELSZ//2):,:]=0.0
-                self.remove_border[nside][0,:,:,0:self.R_off+rank+self.KERNELSZ//2]=0.0
-                self.remove_border[nside][0,:,:,-(self.R_off+rank+self.KERNELSZ//2):]=0.0
-                    
-            if self.remove_border[nside] is None:
-                self.remove_border[nside]=np.ones([1,shape[axis-1],nside+2*self.R_off,nside+2*self.R_off])
-                self.remove_border[nside][0,:,0:self.R_off,:]=0.0
-                self.remove_border[nside][0,:,-self.R_off:,:]=0.0
-                self.remove_border[nside][0,:,:,0:self.R_off]=0.0
-                self.remove_border[nside][0,:,:,-self.R_off:]=0.0
-                
-            l_mask=mask.get()*self.remove_border[nside]
-        else:
-            nside=int(np.sqrt(mask.shape[axis]//12))
-            l_mask=mask
-
+        l_mask=mask
         if self.mask_norm:
             sum_mask=self.backend.bk_reduce_sum(self.backend.bk_reshape(l_mask,[l_mask.shape[0],np.prod(np.array(l_mask.shape[1:]))]),1)
-            l_mask=12*nside*nside*l_mask/self.backend.bk_reshape(sum_mask,[l_mask.shape[0]]+[1 for i in l_mask.shape[1:]])
-                        
-        for i in range(axis):
-            l_mask=self.backend.bk_expand_dims(l_mask,0)
-            
-        if self.use_R_format:
-            for i in range(axis+3,len(x.shape)):
-                l_mask=self.backend.bk_expand_dims(l_mask,-1)
+            if not self.use_2D:
+                l_mask=12*nside*nside*l_mask/self.backend.bk_reshape(sum_mask,[l_mask.shape[0]]+[1 for i in l_mask.shape[1:]])
+            else:
+                l_mask=mask.shape[1]*mask.shape[2]*l_mask/self.backend.bk_reshape(sum_mask,[l_mask.shape[0]]+[1 for i in l_mask.shape[1:]])
 
-            if l_x.get().dtype==self.all_cbk_type:
-                l_mask=self.backend.bk_complex(l_mask,0*l_mask)
+        if self.use_2D and self.padding=='VALID' and shape[axis]!=l_mask.shape[1]:
+            l_mask=l_mask[:,self.KERNELSZ//2:-self.KERNELSZ//2+1,self.KERNELSZ//2:-self.KERNELSZ//2+1]
+            if shape[axis]!=l_mask.shape[1]:
+                l_mask=l_mask[:,self.KERNELSZ//2:-self.KERNELSZ//2+1,self.KERNELSZ//2:-self.KERNELSZ//2+1]
+            
+        # data=[Nbatch,...,X[,Y],NORIENT[,NORIENT]] => data=[Nbatch,1,...,X[,Y],NORIENT[,NORIENT]]
+        l_x=self.backend.bk_expand_dims(x,1)
+        
+        # mask=[Nmask,X[,Y]] => mask=[1,Nmask,X[,Y]]
+        l_mask=self.backend.bk_expand_dims(l_mask,0)
+        
+        # mask=[1,Nmask,X[,Y]] => mask=[1,Nmask,....,X[,Y]]
+        for i in range(1,axis):
+            l_mask=self.backend.bk_expand_dims(l_mask,axis)
+            
+        if l_x.dtype==self.all_cbk_type:
+            l_mask=self.backend.bk_complex(l_mask,0.0*l_mask)
+            
+        if self.use_2D:
+
+            # mask=[1,Nmask,....,X,Y] => mask=[1,Nmask,....,X,Y,....]
+            for i in range(axis+2,len(x.shape)):
+                l_mask=self.backend.bk_expand_dims(l_mask,-1)
 
             shape1=list(l_mask.shape)
-            shape2=list(l_x.get().shape)
+            shape2=list(l_x.shape)
 
-            oshape1=shape1[0:axis+1]+[shape1[axis+3]*shape1[axis+1]*shape1[axis+2]]+shape1[axis+4:]
-            oshape2=shape2[0:axis+1]+[shape2[axis+3]*shape2[axis+1]*shape2[axis+2]]+shape2[axis+4:]
-            
-            return self.backend.bk_reduce_sum(self.backend.bk_reshape(l_mask,oshape1)*self.backend.bk_reshape(l_x.get(),oshape2),axis=axis+1)/(12*nside*nside)
+            oshape1=shape1[0:axis+1]+[shape1[axis+1]*shape1[axis+2]]+shape1[axis+3:]
+            oshape2=shape2[0:axis+1]+[shape2[axis+1]*shape2[axis+2]]+shape2[axis+3:]
+            res=self.backend.bk_reduce_mean(self.backend.bk_reshape(l_mask,oshape1)*self.backend.bk_reshape(l_x,oshape2),axis=axis+1)
+            return res
         else:
+            # mask=[1,Nmask,....,X] => mask=[1,Nmask,....,X,....]
             for i in range(axis+1,len(x.shape)):
                 l_mask=self.backend.bk_expand_dims(l_mask,-1)
-
-            if l_x.dtype==self.all_cbk_type:
-                l_mask=self.backend.bk_complex(l_mask,0.0*l_mask)
                 
             return self.backend.bk_reduce_mean(l_mask*l_x,axis=axis+1)
         
@@ -1541,14 +975,14 @@ class FoCUS:
                 r=self.backend.conv2d(self.backend.bk_real(l_image),
                                       l_ww,
                                       strides=[1, 1, 1, 1],
-                                      padding='SAME')
+                                      padding=self.padding)
                 i=self.backend.conv2d(self.backend.bk_imag(l_image),
                                       l_ww,
                                       strides=[1, 1, 1, 1],
-                                      padding='SAME')
+                                      padding=self.padding)
                 res=self.backend.bk_complex(r,i)
             else:
-                res=self.backend.conv2d(l_image,l_ww,strides=[1, 1, 1, 1],padding='SAME')
+                res=self.backend.conv2d(l_image,l_ww,strides=[1, 1, 1, 1],padding=self.padding)
 
             res=self.backend.bk_reshape(res,[o_shape,shape[axis+1],shape[axis+2],ishape,norient])
         else:
@@ -1560,17 +994,17 @@ class FoCUS:
                 r=self.backend.conv2d(self.backend.bk_real(tmp),
                                       l_ww,
                                       strides=[1, 1, 1, 1],
-                                      padding='SAME')
+                                      padding=self.padding)
                 i=self.backend.conv2d(self.backend.bk_imag(tmp),
                                          l_ww,
                                          strides=[1, 1, 1, 1],
-                                         padding='SAME')
+                                         padding=self.padding)
                 res=self.backend.bk_complex(r,i)
             else:
                 res=self.backend.conv2d(tmp,
                                         l_ww,
                                         strides=[1, 1, 1, 1],
-                                        padding='SAME')
+                                        padding=self.padding)
 
         return self.backend.bk_reshape(res,shape+[norient])
     
@@ -1579,30 +1013,49 @@ class FoCUS:
 
         image=self.backend.bk_cast(in_image)
         
-        if self.use_R_format:
+        if self.use_2D:
             
-            if isinstance(image, Rformat.Rformat):
-                l_image=image
-            else:
-                l_image=self.to_R(image,axis=axis,chans=self.chans)
+            ishape=list(in_image.shape)
+            if len(ishape)<axis+2:
+                print('Use of 2D scat with data that has less than 2D')
+                exit(0)
+                
+            npix=ishape[axis]
+            npiy=ishape[axis+1]
+            odata=1
+            if len(ishape)>axis+2:
+                for k in range(axis+2,len(ishape)):
+                    odata=odata*ishape[k]
+                    
+            ndata=1
+            for k in range(axis):
+                ndata=ndata*ishape[k]
 
-            nside=l_image.shape[axis+1]-2*self.R_off
-    
-            rr=self.conv2d(l_image.get(),self.ww_RealT[nside],axis=axis)
-            ii=self.conv2d(l_image.get(),self.ww_ImagT[nside],axis=axis)
-                
-            if rr.dtype==self.all_cbk_type:
-                if self.all_cbk_type=='complex128':
-                    res=rr+self.backend.bk_complex(np.float64(0.0),np.float64(1.0))*ii
-                else:
-                    res=rr+self.backend.bk_complex(np.float32(0.0),np.float32(1.0))*ii
-            else:
-                res=self.backend.bk_complex(rr,ii) 
-                
-            res=Rformat.Rformat(res,self.R_off,axis,chans=self.chans)
+            tim=self.backend.bk_reshape(self.backend.bk_cast(in_image),[ndata,npix,npiy,odata])
             
-            if not isinstance(image, Rformat.Rformat):
-                res=self.from_R(res,axis=axis)
+            if tim.dtype=='complex128' or tim.dtype=='complex64':
+                rr1=self.backend.conv2d(self.backend.bk_real(tim),self.ww_RealT[odata],strides=[1, 1, 1, 1],padding=self.padding)
+                ii1=self.backend.conv2d(self.backend.bk_real(tim),self.ww_ImagT[odata],strides=[1, 1, 1, 1],padding=self.padding)
+                rr2=self.backend.conv2d(self.backend.bk_imag(tim),self.ww_RealT[odata],strides=[1, 1, 1, 1],padding=self.padding)
+                ii2=self.backend.conv2d(self.backend.bk_imag(tim),self.ww_ImagT[odata],strides=[1, 1, 1, 1],padding=self.padding)
+                res=self.backend.bk_complex(rr1-ii2,ii1+rr2)
+            else:
+                rr=self.backend.conv2d(tim,self.ww_RealT[odata],strides=[1, 1, 1, 1],padding=self.padding)
+                ii=self.backend.conv2d(tim,self.ww_ImagT[odata],strides=[1, 1, 1, 1],padding=self.padding)
+                res=self.backend.bk_complex(rr,ii)
+                
+            if axis==0:
+                if len(ishape)==2:
+                    return self.backend.bk_reshape(res,[res.shape[1],res.shape[2],self.NORIENT])
+                else:
+                    return self.backend.bk_reshape(res,[res.shape[1],res.shape[2],self.NORIENT]+ishape[axis+2:])
+            else:
+                if len(ishape)==axis+2:
+                    return self.backend.bk_reshape(res,ishape[0:axis]+[res.shape[1],res.shape[2],self.NORIENT])
+                else:
+                    return self.backend.bk_reshape(res,ishape[0:axis]+[res.shape[1],res.shape[2],self.NORIENT]+ishape[axis+2:])
+                
+            return self.backend.bk_reshape(res,[nout,nouty])
                 
         else:
             nside=int(np.sqrt(image.shape[axis]//12))
@@ -1636,11 +1089,11 @@ class FoCUS:
                     ii1=self.backend.bk_reshape(self.backend.bk_sparse_dense_matmul(l_ww_imag,self.backend.bk_real(tim[0])),[1,12*nside**2,self.NORIENT,odata])
                     rr2=self.backend.bk_reshape(self.backend.bk_sparse_dense_matmul(l_ww_real,self.backend.bk_imag(tim[0])),[1,12*nside**2,self.NORIENT,odata])
                     ii2=self.backend.bk_reshape(self.backend.bk_sparse_dense_matmul(l_ww_imag,self.backend.bk_imag(tim[0])),[1,12*nside**2,self.NORIENT,odata])
-                    res=self.swapaxes(self.backend.bk_complex(rr1-ii2,ii1+rr2),2,3)
+                    res=self.backend.bk_complex(rr1-ii2,ii1+rr2)
                 else:
                     rr=self.backend.bk_reshape(self.backend.bk_sparse_dense_matmul(l_ww_real,tim[0]),[1,12*nside**2,self.NORIENT,odata])
                     ii=self.backend.bk_reshape(self.backend.bk_sparse_dense_matmul(l_ww_imag,tim[0]),[1,12*nside**2,self.NORIENT,odata])
-                    res=self.swapaxes(self.backend.bk_complex(rr,ii),2,3)
+                    res=self.backend.bk_complex(rr,ii)
                 
                 for k in range(1,ndata):
                     if tim.dtype==self.all_cbk_type:
@@ -1648,11 +1101,11 @@ class FoCUS:
                         ii1=self.backend.bk_reshape(self.backend.bk_sparse_dense_matmul(l_ww_imag,self.backend.bk_real(tim[k])),[1,12*nside**2,self.NORIENT,odata])
                         rr2=self.backend.bk_reshape(self.backend.bk_sparse_dense_matmul(l_ww_real,self.backend.bk_imag(tim[k])),[1,12*nside**2,self.NORIENT,odata])
                         ii2=self.backend.bk_reshape(self.backend.bk_sparse_dense_matmul(l_ww_imag,self.backend.bk_imag(tim[k])),[1,12*nside**2,self.NORIENT,odata])
-                        res=self.swapaxes(self.backend.bk_complex(rr1-ii2,ii1+rr2),2,3)
+                        res=self.backend.bk_concat([res,self.backend.bk_complex(rr1-ii2,ii1+rr2)],0)
                     else:
                         rr=self.backend.bk_reshape(self.backend.bk_sparse_dense_matmul(l_ww_real,tim[k]),[1,12*nside**2,self.NORIENT,odata])
                         ii=self.backend.bk_reshape(self.backend.bk_sparse_dense_matmul(l_ww_imag,tim[k]),[1,12*nside**2,self.NORIENT,odata])
-                        res=self.backend.bk_concat([res,self.swapaxes(self.backend.bk_complex(rr,ii),2,3)],0)
+                        res=self.backend.bk_concat([res,self.backend.bk_complex(rr,ii)],0)
                     
                 if len(ishape)==axis+1:
                     return self.backend.bk_reshape(res,ishape[0:axis]+[12*nside**2,self.NORIENT])
@@ -1666,93 +1119,63 @@ class FoCUS:
                     ii1=self.backend.bk_reshape(self.backend.bk_sparse_dense_matmul(l_ww_imag,self.backend.bk_real(tim)),[12*nside**2,self.NORIENT,odata])
                     rr2=self.backend.bk_reshape(self.backend.bk_sparse_dense_matmul(l_ww_real,self.backend.bk_imag(tim)),[12*nside**2,self.NORIENT,odata])
                     ii2=self.backend.bk_reshape(self.backend.bk_sparse_dense_matmul(l_ww_imag,self.backend.bk_imag(tim)),[12*nside**2,self.NORIENT,odata])
-                    res=self.swapaxes(self.backend.bk_complex(rr1-ii2,ii1+rr2),1,2)
+                    res=self.backend.bk_complex(rr1-ii2,ii1+rr2)
                 else:
                     rr=self.backend.bk_reshape(self.backend.bk_sparse_dense_matmul(l_ww_real,tim),[12*nside**2,self.NORIENT,odata])
                     ii=self.backend.bk_reshape(self.backend.bk_sparse_dense_matmul(l_ww_imag,tim),[12*nside**2,self.NORIENT,odata])
-                    res=self.swapaxes(self.backend.bk_complex(rr,ii),1,2)
+                    res=self.backend.bk_complex(rr,ii)
                 
                 if len(ishape)==1:
                     return self.backend.bk_reshape(res,[12*nside**2,self.NORIENT])
                 else:
                     return self.backend.bk_reshape(res,[12*nside**2]+ishape[axis+1:]+[self.NORIENT])
-                
-            """
-            imX9=self.backend.bk_expand_dims(self.backend.bk_gather(self.backend.bk_cast(image),
-                                                    self.Idx_Neighbours[nside],axis=axis),-1)
-                
-            l_ww_real=self.ww_Real[nside]
-            l_ww_imag=self.ww_Imag[nside]
-
-            for i in range(axis):
-                l_ww_real=self.backend.bk_expand_dims(l_ww_real,0)
-                l_ww_imag=self.backend.bk_expand_dims(l_ww_imag,0)
-                    
-
-            for i in range(axis+2,len(imX9.shape)-1):
-                l_ww_real=self.backend.bk_expand_dims(l_ww_real,axis+2)
-                l_ww_imag=self.backend.bk_expand_dims(l_ww_imag,axis+2)
-
-            if imX9.dtype==self.all_cbk_type:
-                rr=self.backend.bk_complex(self.backend.bk_reduce_sum(self.backend.bk_real(imX9)*l_ww_real,axis+1), \
-                                   self.backend.bk_reduce_sum(self.backend.bk_imag(imX9)*l_ww_real,axis+1))
-                ii=self.backend.bk_complex(self.backend.bk_reduce_sum(self.backend.bk_real(imX9)*l_ww_imag,axis+1), \
-                                   self.backend.bk_reduce_sum(self.backend.bk_imag(imX9)*l_ww_imag,axis+1))
-                res=rr+ii
-            else:
-                rr=self.backend.bk_reduce_sum(l_ww_real*imX9,axis+1)
-                ii=self.backend.bk_reduce_sum(l_ww_imag*imX9,axis+1)
-
-                res=self.backend.bk_complex(rr,ii)
-            """
         return(res)
         
-
-    # ---------------------------------------------−---------
-    def gauss_filter(self,in_image,sigma,ksz=1):
-        gauss_kernel=np.zeros([int(sigma)*2*ksz+1,int(sigma)*2*ksz+1,1,1])
-        vv=((np.arange(int(sigma)*2*ksz+1)-int(sigma)*ksz)/sigma)
-        vv=np.exp(-vv**2).reshape(int(sigma)*2*ksz+1,1)
-        gauss_kernel[:,:,0,0]=np.dot(vv,vv.T)
-        gauss_kernel/=gauss_kernel.sum()
-
-        R=self.backend.bk_reshape(self.backend.bk_tile(in_image[0],[int(sigma)*ksz]),[int(sigma)*ksz,in_image.shape[1]])
-        D=self.backend.bk_reshape(self.backend.bk_tile(in_image[-1],[int(sigma)*ksz]),[int(sigma)*ksz,in_image.shape[1]])
-        image=self.backend.bk_concat([R,in_image,D],0)
-        
-        U=self.backend.bk_reshape(self.backend.bk_repeat(self.backend.bk_reshape(image[:,0],[image.shape[0]]), \
-                                                       int(sigma)*ksz),[image.shape[0],int(sigma)*ksz])
-        D=self.backend.bk_reshape(self.backend.bk_repeat(self.backend.bk_reshape(image[:,-1],[image.shape[0]]), \
-                                                       int(sigma)*ksz),[image.shape[0],int(sigma)*ksz])
-        image=self.backend.bk_concat([U,image,D],1)
-        
-        image=self.backend.bk_reshape(image,[1,image.shape[0],image.shape[1],1])
-
-        res = self.backend.conv2d(image, gauss_kernel, strides=[1, 1, 1, 1], padding="VALID")
-
-        return(self.backend.bk_reshape(res,[in_image.shape[0],in_image.shape[1]]))
 
     # ---------------------------------------------−---------
     def smooth(self,in_image,axis=0):
 
         image=self.backend.bk_cast(in_image)
         
-        if self.use_R_format:
-            if isinstance(image, Rformat.Rformat):
-                l_image=image.get()
-            else:
-                l_image=self.to_R(image,axis=axis,chans=self.chans).get()
+        if self.use_2D:
+            
+            ishape=list(in_image.shape)
+            if len(ishape)<axis+2:
+                print('Use of 2D scat with data that has less than 2D')
+                exit(0)
                 
-            nside=l_image.shape[axis+1]-2*self.R_off
-            
-            res=self.conv2d(l_image,self.ww_SmoothT,axis=axis)
+            npix=ishape[axis]
+            npiy=ishape[axis+1]
+            odata=1
+            if len(ishape)>axis+2:
+                for k in range(axis+2,len(ishape)):
+                    odata=odata*ishape[k]
+                    
+            ndata=1
+            for k in range(axis):
+                ndata=ndata*ishape[k]
 
-            res=self.backend.bk_reshape(res,l_image.shape)
-            
-            res=Rformat.Rformat(res,self.R_off,axis,chans=self.chans)
-            
-            if not isinstance(image, Rformat.Rformat):
-                res=self.from_R(res,axis=axis)
+            tim=self.backend.bk_reshape(self.backend.bk_cast(in_image),[ndata,npix,npiy,odata])
+
+            if tim.dtype=='complex128' or tim.dtype=='complex64':
+                rr=self.backend.conv2d(self.backend.bk_real(tim),self.ww_SmoothT[odata],strides=[1, 1, 1, 1],padding=self.padding)
+                ii=self.backend.conv2d(self.backend.bk_imag(tim),self.ww_SmoothT[odata],strides=[1, 1, 1, 1],padding=self.padding)
+                res=self.backend.bk_complex(rr,ii)
+            else:
+                res=self.backend.conv2d(tim,self.ww_SmoothT[odata],strides=[1, 1, 1, 1],padding=self.padding)
+                    
+            if axis==0:
+                if len(ishape)==2:
+                    return self.backend.bk_reshape(res,[res.shape[1],res.shape[2]])
+                else:
+                    return self.backend.bk_reshape(res,[res.shape[1],res.shape[2]]+ishape[axis+2:])
+            else:
+                if len(ishape)==axis+2:
+                    return self.backend.bk_reshape(res,ishape[0:axis]+[res.shape[1],res.shape[2]])
+                else:
+                    return self.backend.bk_reshape(res,ishape[0:axis]+[res.shape[1],res.shape[2]]+ishape[axis+2:])
+                
+            return self.backend.bk_reshape(res,[nout,nouty])
                 
         else:
             nside=int(np.sqrt(image.shape[axis]//12))
@@ -1770,23 +1193,6 @@ class FoCUS:
                 self.w_smooth[nside]=ws
 
             l_w_smooth=self.w_smooth[nside]
-            
-            """
-            imX9=self.backend.bk_gather(image,self.Idx_Neighbours[nside],axis=axis)
-
-            
-            for i in range(axis):
-                l_w_smooth=self.backend.bk_expand_dims(l_w_smooth,0)
-        
-            for i in range(axis+2,len(imX9.shape)):
-                l_w_smooth=self.backend.bk_expand_dims(l_w_smooth,axis+2)
-
-            if imX9.dtype==self.all_cbk_type:
-                res=self.backend.bk_complex(self.backend.bk_reduce_sum(self.backend.bk_real(imX9)*l_w_smooth,axis+1), \
-                                    self.backend.bk_reduce_sum(self.backend.bk_imag(imX9)*l_w_smooth,axis+1))
-            else:
-                res=self.backend.bk_reduce_sum(l_w_smooth*imX9,axis+1)
-            """
             ishape=list(image.shape)
             
             odata=1

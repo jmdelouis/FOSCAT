@@ -164,7 +164,37 @@ class foscat_backend:
         if self.BACKEND==self.NUMPY:
             return self.backend.nn.conv1d(x,w, stride=1, padding='SAME')
         
+    def bk_flattenR(self,x):
+        if self.BACKEND==self.TENSORFLOW or self.BACKEND==self.TORCH:
+            if x.dtype=='complex32' or x.dtype=='complex64':
+                rr=self.backend.reshape(self.bk_real(x),[np.prod(np.array(list(x.shape)))])
+                ii=self.backend.reshape(self.bk_imag(x),[np.prod(np.array(list(x.shape)))])
+                return self.bk_concat([rr,ii],axis=0) 
+            else:
+                return self.backend.reshape(x,[np.prod(np.array(list(x.shape)))])
             
+        if self.BACKEND==self.NUMPY:
+            if x.dtype=='complex32' or x.dtype=='complex64':
+                return np.concatenate([x.real.flatten(),x.imag.flatten()],0)
+            else:
+                return x.flatten()
+        
+    def bk_flatten(self,x):
+        if self.BACKEND==self.TENSORFLOW:
+            return self.backend.reshape(x,[np.prod(np.array(list(x.shape)))])
+        if self.BACKEND==self.TORCH:
+            return self.backend.reshape(x,[np.prod(np.array(list(x.shape)))])
+        if self.BACKEND==self.NUMPY:
+            return x.flatten()
+        
+    def bk_resize_image(self,x,shape):
+        if self.BACKEND==self.TENSORFLOW:
+            return self.backend.image.resize(x,shape, method='bilinear')
+        if self.BACKEND==self.TORCH:
+            return self.backend.image.resize(x,shape, method='bilinear')
+        if self.BACKEND==self.NUMPY:
+            return self.backend.image.resize(x,shape, method='bilinear')
+        
     def bk_L1(self,x):
         if isinstance(x,Rformat.Rformat):
             return Rformat.Rformat(self.bk_L1(x.get()),x.off,x.axis,chans=x.chans)

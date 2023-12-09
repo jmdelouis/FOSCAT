@@ -31,8 +31,7 @@ def dodown(a,nside):
 #=============================================================================
 import foscat.scat as sc
 
-r_format=[False,True,False,True]
-tabtype=['float32','float64','float32','float64']
+tabtype=['float32','float64']
 
 nside=16
 data='Venus_256.npy'
@@ -66,10 +65,9 @@ for itest in range(len(tabtype)):
                      TEMPLATE_PATH=scratch_path,
                      slope=1.0,
                      gpupos=0,
-                     use_R_format=r_format[itest],
                      all_type=tabtype[itest])
     
-    print('Start Test Synthesis no cross 0 : R_format=%s Type=%s ....'%(r_format[itest],tabtype[itest]))
+    print('Start Test Synthesis no cross 0 : Type=%s ....'%(tabtype[itest]))
     ref=scat_op.eval(ims,mask=mask)
     loss1=synthe.Loss(lossX,scat_op,ref,ims,mask,False)
     sy = synthe.Synthesis([loss1])
@@ -82,9 +80,9 @@ for itest in range(len(tabtype)):
                 LEARNING_RATE = 0.03,
                 EPSILON = 1E-15)
     
-    print('Test Synthesis no cross 0 : R_format=%s Type=%s DONE'%(r_format[itest],tabtype[itest]))
+    print('Test Synthesis no cross 0 : Type=%s DONE'%(tabtype[itest]))
     
-    print('Start Test Synthesis cross : R_format=%s Type=%s ....'%(r_format[itest],tabtype[itest]))
+    print('Start Test Synthesis cross :Type=%s ....'%(tabtype[itest]))
     
     ref=scat_op.eval(ims,image2=ims,mask=mask,Auto=False)
     loss1=synthe.Loss(lossX,scat_op,ref,ims,mask,True)
@@ -99,9 +97,9 @@ for itest in range(len(tabtype)):
                 LEARNING_RATE = 0.03,
                 EPSILON = 1E-15)
     
-    print('Test Synthesis cross : R_format=%s Type=%s DONE'%(r_format[itest],tabtype[itest]))
+    print('Test Synthesis cross : Type=%s DONE'%(tabtype[itest]))
     
-    print('Start Test : R_format=%s Type=%s ....'%(r_format[itest],tabtype[itest]))
+    print('Start Test :  Type=%s ....'%(tabtype[itest]))
     
 
     im=np.random.randn(12*16*16)
@@ -131,10 +129,9 @@ for itest in range(len(tabtype)):
                      TEMPLATE_PATH=scratch_path,
                      slope=1.0,
                      gpupos=0,
-                     use_R_format=r_format[itest],
                      all_type=tabtype[itest])
     
-    print('Start Test COMPLEX Synthesis no cross : R_format=%s Type=%s ....'%(r_format[itest],tabtype[itest]))
+    print('Start Test COMPLEX Synthesis no cross : Type=%s ....'%(tabtype[itest]))
     
     ref=scat_op.eval(im,mask=mask)
     loss1=synthe.Loss(lossX,scat_op,ref,im,mask,False)
@@ -149,9 +146,9 @@ for itest in range(len(tabtype)):
                 LEARNING_RATE = 0.03,
                 EPSILON = 1E-15)
     
-    print('Test Synthesis COMPLEX no cross : R_format=%s Type=%s DONE'%(r_format[itest],tabtype[itest]))
+    print('Test Synthesis COMPLEX no cross : Type=%s DONE'%(tabtype[itest]))
     
-    print('Start Test Synthesis cross : R_format=%s Type=%s ....'%(r_format[itest],tabtype[itest]))
+    print('Start Test Synthesis cross :Type=%s ....'%(tabtype[itest]))
     
     ref=scat_op.eval(im,image2=im,mask=mask,Auto=False)
     loss1=synthe.Loss(lossX,scat_op,ref,im,mask,True)
@@ -166,7 +163,7 @@ for itest in range(len(tabtype)):
                 LEARNING_RATE = 0.03,
                 EPSILON = 1E-15)
     
-    print('Test Synthesis cross : R_format=%s Type=%s DONE'%(r_format[itest],tabtype[itest]))
+    print('Test Synthesis cross : Type=%s DONE'%(tabtype[itest]))
     
     a=scat_op.convol(im)
 
@@ -186,7 +183,7 @@ for itest in range(len(tabtype)):
     r=r1-3
     r=r1+3
 
-    print('Test : R_format=%s Type=%s OK'%(r_format[itest],tabtype[itest]))
+    print('Test : Type=%s OK'%(tabtype[itest]))
 
 
 #=============================================================================
@@ -203,10 +200,9 @@ for itest in range(len(tabtype)):
                      TEMPLATE_PATH=scratch_path,
                      slope=1.0,
                      gpupos=0,
-                     use_R_format=r_format[itest],
                      all_type=tabtype[itest])
     
-    print('Start Test Synthesis no cross 1 : R_format=%s Type=%s ....'%(r_format[itest],tabtype[itest]))
+    print('Start Test Synthesis no cross 1 : Type=%s ....'%(tabtype[itest]))
     
     ref=scat_op.eval(ims,mask=mask)
     loss1=synthe.Loss(lossX,scat_op,ref,ims,mask,False)
@@ -218,9 +214,9 @@ for itest in range(len(tabtype)):
                 NUM_EPOCHS = 10,
                 LEARNING_RATE = 0.03,
                 EPSILON = 1E-15)
-    print('Test Synthesis no cross 1 : R_format=%s Type=%s DONE'%(r_format[itest],tabtype[itest]))
+    print('Test Synthesis no cross 1 :  Type=%s DONE'%(tabtype[itest]))
     
-    print('Start Test Synthesis cross 1 : R_format=%s Type=%s ....'%(r_format[itest],tabtype[itest]))
+    print('Start Test Synthesis cross 1 :  Type=%s ....'%(tabtype[itest]))
     
     ref=scat_op.eval(ims,image2=ims,mask=mask,Auto=False)
     loss1=synthe.Loss(lossX,scat_op,ref,ims,mask,True)
@@ -232,9 +228,9 @@ for itest in range(len(tabtype)):
                 LEARNING_RATE = 0.03,
                 EPSILON = 1E-15)
     
-    print('Test Synthesis cross 1 : R_format=%s Type=%s DONE'%(r_format[itest],tabtype[itest]))
+    print('Test Synthesis cross 1 :  Type=%s DONE'%(tabtype[itest]))
     
-    print('Start Test : R_format=%s Type=%s ....'%(r_format[itest],tabtype[itest]))
+    print('Start Test : Type=%s ....'%(tabtype[itest]))
     
 
     im=np.random.randn(12*16*16)
@@ -257,7 +253,7 @@ for itest in range(len(tabtype)):
     
     im=np.random.randn(12*16*16)+complex(0,1)*np.random.randn(12*16*16)
 
-    print('Start Test Synthesis no cross 2 : R_format=%s Type=%s ....'%(r_format[itest],tabtype[itest]))
+    print('Start Test Synthesis no cross 2 : Type=%s ....'%(tabtype[itest]))
     
     ref=scat_op.eval(im,mask=mask)
     loss1=synthe.Loss(lossX,scat_op,ref,im,mask,False)
@@ -272,9 +268,9 @@ for itest in range(len(tabtype)):
                 LEARNING_RATE = 0.03,
                 EPSILON = 1E-15)
     
-    print('Test Synthesis no cross 2 : R_format=%s Type=%s DONE'%(r_format[itest],tabtype[itest]))
+    print('Test Synthesis no cross 2 :  Type=%s DONE'%(tabtype[itest]))
     
-    print('Start Test Synthesis cross : R_format=%s Type=%s ....'%(r_format[itest],tabtype[itest]))
+    print('Start Test Synthesis cross : Type=%s ....'%(tabtype[itest]))
     
     ref=scat_op.eval(im,image2=im,mask=mask,Auto=False)
     loss1=synthe.Loss(lossX,scat_op,ref,im,mask,True)
@@ -289,7 +285,7 @@ for itest in range(len(tabtype)):
                 LEARNING_RATE = 0.03,
                 EPSILON = 1E-15)
     
-    print('Test Synthesis cross : R_format=%s Type=%s DONE'%(r_format[itest],tabtype[itest]))
+    print('Test Synthesis cross :  Type=%s DONE'%(tabtype[itest]))
     
     a=scat_op.convol(im)
 
@@ -309,4 +305,4 @@ for itest in range(len(tabtype)):
     r=r1-3
     r=r1+3
 
-    print('Test : R_format=%s Type=%s OK'%(r_format[itest],tabtype[itest]))
+    print('Test : Type=%s OK'%(tabtype[itest]))

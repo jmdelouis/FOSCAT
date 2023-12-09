@@ -8,7 +8,10 @@ src/foscat/Synthesis.py
 src/foscat/__init__.py
 src/foscat/backend.py
 src/foscat/scat.py
+src/foscat/scat1D.py
 src/foscat/scat_cov.py
+src/foscat/scat_cov1D.py
+src/foscat/scat_cov_map.py
 src/foscat.egg-info/PKG-INFO
 src/foscat.egg-info/SOURCES.txt
 src/foscat.egg-info/dependency_links.txt

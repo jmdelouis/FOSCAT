@@ -7,6 +7,7 @@ from datetime import datetime
 from packaging import version
 from threading import Thread
 from threading import Event
+import scipy.optimize as opt
 
 class Loss:
     
@@ -117,24 +118,19 @@ class Synthesis:
             print('%s Run [PROC=%04d] on GPU %s'%(loss_function.name,self.mpi_rank,
                                       operation.gpulist[(operation.gpupos+self.curr_gpu)%operation.ngpu]))
             sys.stdout.flush()
-            
+
+            l_x=x
+            """
             if nx>1:
                 l_x={}
             for i in range(nx):
-                if nx==1:
-                    if operation.get_use_R() and loss_function.Rformat:
-                        l_x=operation.to_R(x,only_border=True,chans=operation.chans)
-                    else:
-                        l_x=x
-                    ndata=x.shape[0]
-                else:
-                    if operation.get_use_R() and loss_function.Rformat:
-                        l_x[i]=operation.to_R(x[i],only_border=True,chans=operation.chans)
-                    else:
-                        l_x[i]=x[i]
-
-                    ndata=x.shape[0]*x.shape[1]
-    
+            """
+            
+            if nx==1:    
+                ndata=x.shape[0]
+            else:
+                ndata=x.shape[0]*x.shape[1]
+                
             if self.KEEP_TRACK is not None:
                 l,linfo=loss_function.eval(l_x,batch,return_all=True)
             else:
@@ -148,61 +144,7 @@ class Synthesis:
             return l,g,linfo
         else:
             return l,g
-    #---------------------------------------------------------------
-    
-    def gradient(self,x):
-
-        if self.operation.get_use_R():
-            x=self.operation.to_R_center(x,chans=operation.chans)
-            
-        g_tot=None
-        l_tot=0.0
-        for k in range(self.number_of_loss):
-            l,g=self.loss(x,y,self.loss_class[k])
-            if g_tot is None:
-                g_tot=g
-            else:
-                g_tot=g_tot+g
-
-        if self.mpi_size==1:
-            grad=g_tot
-        else:
-            grad=np.zeros([g_tot.shape[0]],dtype='float32')
-            comm.Allreduce((g_tot.numpy(),self.MPI.FLOAT),(grad,self.MPI.FLOAT))
-            
-        operation=self.operation
-        if operation.get_use_R():
-            l_x=operation.to_R(grad,only_border=True,chans=operation.chans)
-            x=operation.from_R(l_x)
-        else:
-            x=grad
-            
-        return x
         
-    #---------------------------------------------------------------
-    
-    def update(self, dw):
-        ## dw are from current minibatch
-        ## momentum beta 1
-        # *** weights *** #
-        self.m_dw = self.beta1*self.m_dw + (1-self.beta1)*dw
-
-        ## rms beta 2
-        # *** weights *** #
-        self.v_dw = self.beta2*self.v_dw + (1-self.beta2)*(dw**2)
-
-        ## bias correction
-        m_dw_corr = self.m_dw/(1-self.pbeta1)
-        v_dw_corr = self.v_dw/(1-self.pbeta2)
-
-        self.pbeta1 = self.beta1*self.pbeta1
-        self.pbeta2 = self.beta2*self.pbeta2
-
-        self.eta    = self.eta*self.decay_rate
-
-        ## update weights and biases
-        return self.eta*(m_dw_corr/(tf.sqrt(v_dw_corr)+self.epsilon))
-
     # ---------------------------------------------−---------
     def getgpumem(self):
         try:
@@ -253,7 +195,7 @@ class Synthesis:
             nstep=1
 
         x=self.operation.backend.bk_cast(self.operation.backend.bk_reshape(in_x,self.oshape))
-
+        
         self.l_log[self.mpi_rank*self.MAXNUMLOSS:(self.mpi_rank+1)*self.MAXNUMLOSS]=-1.0
         
         for istep in range(nstep):
@@ -334,25 +276,6 @@ class Synthesis:
     def xtractmap(self,x,axis):
         x=self.operation.backend.bk_reshape(x,self.oshape)
         
-        operation=self.operation
-        if operation.get_use_R():
-            if axis==0:
-                l_x=operation.to_R(x,only_border=True,chans=self.operation.chans)
-                x=operation.from_R(l_x)
-            else:
-                l_x=operation.to_R(x[0],only_border=True,chans=self.operation.chans)
-                tmp_x=operation.from_R(l_x)
-                if self.operation.chans!=1:
-                    out_x=np.zeros([self.in_x_nshape,tmp_x.shape[0]])
-                else:
-                    out_x=np.zeros([self.in_x_nshape,tmp_x.shape[0],tmp_x.shape[1]])
-                out_x[0]=tmp_x
-                del tmp_x
-                for i in range(1,self.in_x_nshape):
-                    l_x=operation.to_R(x[i],only_border=True,chans=self.operation.chans)
-                    out_x[i]=operation.from_R(l_x)
-                x=out_x
-        
         return x
 
     # ---------------------------------------------−---------
@@ -398,20 +321,7 @@ class Synthesis:
             
         np.random.seed(self.mpi_rank*7+1234)
             
-        if self.operation.get_use_R():
-            # TO DO : detect acis error, is it possible ?
-            if axis==0:
-                x=self.operation.to_R_center(self.operation.backend.bk_cast(in_x),chans=self.operation.chans)
-            else:
-                tmp_x=self.operation.to_R_center(self.operation.backend.bk_cast(in_x[0]),chans=self.operation.chans)
-                x=np.zeros([in_x.shape[0],tmp_x.shape[0]],dtype=self.operation.all_type)
-                x[0]=tmp_x
-                del tmp_x
-                for i in range(1,in_x.shape[0]):
-                    x[i]=self.operation.to_R_center(self.operation.backend.bk_cast(in_x[i]),chans=self.operation.chans)
-        else:
-            x=in_x
-                
+        x=in_x        
                     
         self.curr_gpu=self.curr_gpu+self.mpi_rank
         
@@ -466,57 +376,44 @@ class Synthesis:
         x=x.flatten()
 
         self.do_all_noise=False
-            
-        if do_lbfgs:
-            import scipy.optimize as opt
-            
-            self.do_all_noise=True
 
-            self.noise_idx=None
+        self.do_all_noise=True
 
-            for k in range(self.number_of_loss):
-                if self.loss_class[k].batch is not None:
-                    l_batch=self.loss_class[k].batch(self.loss_class[k].batch_data,0,init=True)
-            
-            l_tot,g_tot=self.calc_grad(x)
-                
-            self.info_back(x)
+        self.noise_idx=None
 
-            maxitt=NUM_EPOCHS
+        for k in range(self.number_of_loss):
+            if self.loss_class[k].batch is not None:
+                l_batch=self.loss_class[k].batch(self.loss_class[k].batch_data,0,init=True)
+        
+        l_tot,g_tot=self.calc_grad(x)
 
-            start_x=x.copy()
-            
-            for iteration in range(NUM_STEP_BIAS):
+        self.info_back(x)
 
-                x,l,i=opt.fmin_l_bfgs_b(self.calc_grad,
-                                        x.astype('float64'),
-                                        callback=self.info_back,
-                                        pgtol=1E-32,
-                                        factr=factr,
-                                        maxiter=maxitt)
-                
-                # update bias input data
-                if iteration<NUM_STEP_BIAS-1:
-                    if self.mpi_rank==0:
-                        print('%s Hessian restart'%(self.MESSAGE))
-                    
-                    omap=self.xtractmap(x,axis)
+        maxitt=NUM_EPOCHS
 
-                    for k in range(self.number_of_loss):
-                        if self.loss_class[k].batch_update is not None:
-                            self.loss_class[k].batch_update(self.loss_class[k].batch_data,omap)
-                            l_batch=self.loss_class[k].batch(self.loss_class[k].batch_data,0,init=True)
-                    #x=start_x.copy()
-                    
-        else:
-            for itt in range(NUM_EPOCHS):
-                
-                self.noise_idx=((np.random.randn(self.batchsz)*(self.totalsz)+0.49999).astype('int'))%self.totalsz
-                l_tot,g_tot=self.calc_grad(x)
-                
-                x=x-self.update(g_tot)
-                
-                self.info_back(x)
+        start_x=x.copy()
+
+        for iteration in range(NUM_STEP_BIAS):
+
+            x,l,i=opt.fmin_l_bfgs_b(self.calc_grad,
+                                    x.astype('float64'),
+                                    callback=self.info_back,
+                                    pgtol=1E-32,
+                                    factr=factr,
+                                    maxiter=maxitt)
+
+            # update bias input data
+            if iteration<NUM_STEP_BIAS-1:
+                if self.mpi_rank==0:
+                    print('%s Hessian restart'%(self.MESSAGE))
+
+                omap=self.xtractmap(x,axis)
+
+                for k in range(self.number_of_loss):
+                    if self.loss_class[k].batch_update is not None:
+                        self.loss_class[k].batch_update(self.loss_class[k].batch_data,omap)
+                        l_batch=self.loss_class[k].batch(self.loss_class[k].batch_data,0,init=True)
+                #x=start_x.copy()
                     
 
         if self.mpi_rank==0 and SHOWGPU:
