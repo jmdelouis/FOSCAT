@@ -12,7 +12,8 @@ def read(filename):
 testwarn=0
 
 class scat_cov:
-    def __init__(self, p00, c01, c11, s1=None, c10=None,backend=None):
+    def __init__(self, s0, p00, c01, c11, s1=None, c10=None,backend=None):
+        self.S0     = s0
         self.P00     = p00
         self.C01     = c01
         self.C11     = c11
@@ -32,7 +33,8 @@ class scat_cov:
         else:
             c10=self.C10.numpy()
         
-        return scat_cov((self.P00.numpy()),
+        return scat_cov((self.S0.numpy()),
+                        (self.P00.numpy()),
                         (self.C01.numpy()),
                         (self.C11.numpy()),
                         s1=s1, c10=c10,backend=self.backend)
@@ -48,10 +50,196 @@ class scat_cov:
         else:
             c10=self.backend.constant(self.C10)
         
-        return scat_cov(self.backend.constant(self.P00),
+        return scat_cov(self.backend.constant(self.S0),
+                        self.backend.constant(self.P00),
                         self.backend.constant(self.C01),
                         self.backend.constant(self.C11),
                         s1=s1, c10=c10,backend=self.backend)
+
+    # ---------------------------------------------−---------
+    def flatten(self):
+        if isinstance(self.P00,np.ndarray):
+            if self.S1 is None:
+                if self.C10 is None:
+                    return np.concatenate([self.S0.flatten(),
+                                           self.P00.flatten(),
+                                           self.C01.flatten(),
+                                           self.C11.flatten()],0)
+                else:
+                    return np.concatenate([self.S0.flatten(),
+                                           self.P00.flatten(),
+                                           self.C01.flatten(),
+                                           self.C10.flatten(),
+                                           self.C11.flatten()],0)
+            else:
+                if self.C10 is None:
+                    return np.concatenate([self.S0.flatten(),
+                                           self.S1.flatten(),
+                                           self.P00.flatten(),
+                                           self.C01.flatten(),
+                                           self.C11.flatten()],0)
+                else:
+                    return np.concatenate([self.S0.flatten(),
+                                           self.S1.flatten(),
+                                           self.P00.flatten(),
+                                           self.C01.flatten(),
+                                           self.C10.flatten(),
+                                           self.C11.flatten()],0)
+        else:
+            if self.S1 is None:
+                if self.C10 is None:
+                    return self.backend.bk_concat([self.backend.bk_flattenR(self.S0),
+                                                   self.backend.bk_flattenR(self.P00),
+                                                   self.backend.bk_flattenR(self.C01),
+                                                   self.backend.bk_flattenR(self.C11)],0)
+                else:
+                    return self.backend.bk_concat([self.backend.bk_flattenR(self.S0),
+                                                   self.backend.bk_flattenR(self.P00),
+                                                   self.backend.bk_flattenR(self.C01),
+                                                   self.backend.bk_flattenR(self.C10),
+                                                   self.backend.bk_flattenR(self.C11)],0)
+            else:
+                if self.C10 is None:
+                    return self.backend.bk_concat([self.backend.bk_flattenR(self.S0),
+                                                   self.backend.bk_flattenR(self.S1),
+                                                   self.backend.bk_flattenR(self.P00),
+                                                   self.backend.bk_flattenR(self.C01),
+                                                   self.backend.bk_flattenR(self.C11)],0)
+                else:
+                    return self.backend.bk_concat([self.backend.bk_flattenR(self.S0),
+                                                   self.backend.bk_flattenR(self.S1),
+                                                   self.backend.bk_flattenR(self.P00),
+                                                   self.backend.bk_flattenR(self.C01),
+                                                   self.backend.bk_flattenR(self.C10),
+                                                   self.backend.bk_flattenR(self.C11)],0)
+
+    # ---------------------------------------------−---------
+    def flattenMask(self):
+        if isinstance(self.P00,np.ndarray):
+            if self.S1 is None:
+                if self.C10 is None:
+                    tmp=np.concatenate([self.S0[0].flatten(),
+                                        self.P00[0].flatten(),
+                                        self.C01[0].flatten(),
+                                        self.C11[0].flatten()],0)
+                else:
+                    tmp=np.concatenate([self.S0[0].flatten(),
+                                        self.P00[0].flatten(),
+                                        self.C01[0].flatten(),
+                                        self.C10[0].flatten(),
+                                        self.C11[0].flatten()],0)
+            else:
+                if self.C10 is None:
+                    tmp=np.concatenate([self.S0[0].flatten(),
+                                        self.S1[0].flatten(),
+                                        self.P00[0].flatten(),
+                                        self.C01[0].flatten(),
+                                        self.C11[0].flatten()],0)
+                else:
+                    tmp=np.concatenate([self.S0[0].flatten(),
+                                        self.S1[0].flatten(),
+                                        self.P00[0].flatten(),
+                                        self.C01[0].flatten(),
+                                        self.C10[0].flatten(),
+                                        self.C11[0].flatten()],0)
+            tmp=np.expand_dims(tmp,0)
+
+            for k in range(1,self.P00.shape[0]):
+                if self.S1 is None:
+                    if self.C10 is None:
+                        ltmp=np.concatenate([self.S0[k].flatten(),
+                                             self.P00[k].flatten(),
+                                             self.C01[k].flatten(),
+                                             self.C11[k].flatten()],0)
+                    else:
+                        ltmp=np.concatenate([self.S0[k].flatten(),
+                                             self.P00[k].flatten(),
+                                             self.C01[k].flatten(),
+                                             self.C10[k].flatten(),
+                                             self.C11[k].flatten()],0)
+                else:
+                    if self.C10 is None:
+                        ltmp=np.concatenate([self.S0[k].flatten(),
+                                             self.S1[k].flatten(),
+                                             self.P00[k].flatten(),
+                                             self.C01[k].flatten(),
+                                             self.C11[k].flatten()],0)
+                    else:
+                        ltmp=np.concatenate([self.S0[k].flatten(),
+                                             self.S1[k].flatten(),
+                                             self.P00[k].flatten(),
+                                             self.C01[k].flatten(),
+                                             self.C10[k].flatten(),
+                                             self.C11[k].flatten()],0)
+
+                tmp=np.concatenate([tmp,np.expand_dims(ltmp,0)],0)
+
+            
+            return tmp
+        else:
+            if self.S1 is None:
+                if self.C10 is None:
+                    tmp=self.backend.bk_concat([self.backend.bk_flattenR(self.S0[0]),
+                                                self.backend.bk_flattenR(self.P00[0]),
+                                                self.backend.bk_flattenR(self.C01[0]),
+                                                self.backend.bk_flattenR(self.C11[0])],0)
+                else:
+                    tmp=self.backend.bk_concat([self.backend.bk_flattenR(self.S0[0]),
+                                                self.backend.bk_flattenR(self.P00[0]),
+                                                self.backend.bk_flattenR(self.C01[0]),
+                                                self.backend.bk_flattenR(self.C10[0]),
+                                                self.backend.bk_flattenR(self.C11[0])],0)
+            else:
+                if self.C10 is None:
+                    tmp=self.backend.bk_concat([self.backend.bk_flattenR(self.S0[0]),
+                                                self.backend.bk_flattenR(self.S1[0]),
+                                                self.backend.bk_flattenR(self.P00[0]),
+                                                self.backend.bk_flattenR(self.C01[0]),
+                                                self.backend.bk_flattenR(self.C11[0])],0)
+                else:
+                    tmp=self.backend.bk_concat([self.backend.bk_flattenR(self.S0[0]),
+                                                self.backend.bk_flattenR(self.S1[0]),
+                                                self.backend.bk_flattenR(self.P00[0]),
+                                                self.backend.bk_flattenR(self.C01[0]),
+                                                self.backend.bk_flattenR(self.C10[0]),
+                                                self.backend.bk_flattenR(self.C11[0])],0)
+            tmp=self.backend.bk_expand_dims(tmp,0)
+
+            for k in range(1,self.P00.shape[0]):
+                if self.S1 is None:
+                    if self.C10 is None:
+                        ltmp=self.backend.bk_concat([self.backend.bk_flattenR(self.S0[k]),
+                                                     self.backend.bk_flattenR(self.P00[k]),
+                                                     self.backend.bk_flattenR(self.C01[k]),
+                                                     self.backend.bk_flattenR(self.C11[k])],0)
+                    else:
+                        ltmp=self.backend.bk_concat([self.backend.bk_flattenR(self.S0[k]),
+                                                     self.backend.bk_flattenR(self.P00[k]),
+                                                     self.backend.bk_flattenR(self.C01[k]),
+                                                     self.backend.bk_flattenR(self.C10[k]),
+                                                     self.backend.bk_flattenR(self.C11[k])],0)
+                else:
+                    if self.C10 is None:
+                        ltmp=self.backend.bk_concat([self.backend.bk_flattenR(self.S0[k]),
+                                                     self.backend.bk_flattenR(self.S1[k]),
+                                                     self.backend.bk_flattenR(self.P00[k]),
+                                                     self.backend.bk_flattenR(self.C01[k]),
+                                                     self.backend.bk_flattenR(self.C11[k])],0)
+                    else:
+                        ltmp=self.backend.bk_concat([self.backend.bk_flattenR(self.S0[k]),
+                                                     self.backend.bk_flattenR(self.S1[k]),
+                                                     self.backend.bk_flattenR(self.P00[k]),
+                                                     self.backend.bk_flattenR(self.C01[k]),
+                                                     self.backend.bk_flattenR(self.C10[k]),
+                                                     self.backend.bk_flattenR(self.C11[k])],0)
+
+                tmp=self.backend.bk_concat([tmp,self.backend.bk_expand_dims(ltmp,0)],0)
+
+            return tmp
+
+    def get_S0(self):
+        return self.S0
+
     def get_S1(self):
         return self.S1
 
@@ -145,11 +333,13 @@ class scat_cov:
                 c11 = self.C11+other 
 
         if isinstance(other, scat_cov):
-            return scat_cov(self.doadd(self.P00,other.P00),
+            return scat_cov(self.doadd(self.S0,other.S0),
+                            self.doadd(self.P00,other.P00),
                             (self.C01 + other.C01),
                             c11,s1=s1, c10=c10,backend=self.backend)
         else:
-            return scat_cov((self.P00 + other),
+            return scat_cov((self.S0 + other),
+                            (self.P00 + other),
                             (self.C01 + other),
                             c11,s1=s1, c10=c10,backend=self.backend)
 
@@ -171,7 +361,8 @@ class scat_cov:
         else:
             c11 = self.backend.bk_relu(self.c11)
 
-        return scat_cov(self.backend.bk_relu(self.P00),
+        return scat_cov(self.backend.bk_relu(self.S0),
+                        self.backend.bk_relu(self.P00),
                         self.backend.bk_relu(self.C01),
                         c11,
                         s1=s1, 
@@ -219,11 +410,13 @@ class scat_cov:
                 c11 = self.C11/other 
 
         if isinstance(other, scat_cov):
-            return scat_cov(self.dodiv(self.P00,other.P00),
+            return scat_cov(self.dodiv(self.S0,other.S0),
+                            self.dodiv(self.P00,other.P00),
                             (self.C01 / other.C01),
                             c11,s1=s1, c10=c10,backend=self.backend)
         else:
-            return scat_cov((self.P00 / other),
+            return scat_cov((self.S0 / other),
+                            (self.P00 / other),
                             (self.C01 / other),
                             c11,s1=s1, c10=c10,backend=self.backend)
 
@@ -259,11 +452,13 @@ class scat_cov:
                 c11 = other/self.C11
 
         if isinstance(other, scat_cov):
-            return scat_cov(self.dodiv(other.P00,self.P00),
+            return scat_cov(self.dodiv(other.S0,self.S0),
+                            self.dodiv(other.P00,self.P00),
                             (other.C01 / self.C01),
                             c11,s1=s1, c10=c10,backend=self.backend)
         else:
-            return scat_cov((other/self.P00 ),
+            return scat_cov((other/self.S0 ),
+                            (other/self.P00 ),
                             (other/self.C01 ),
                             (other/self.C11 ),
                             s1=s1, c10=c10,backend=self.backend)
@@ -307,12 +502,14 @@ class scat_cov:
                 c11 = other - self.C11
 
         if isinstance(other, scat_cov):
-            return scat_cov(self.domin(other.P00,self.P00),
+            return scat_cov(self.domin(other.S0,self.S0),
+                            self.domin(other.P00,self.P00),
                             (other.C01 - self.C01),
                             c11,s1=s1, c10=c10,
                             backend=self.backend)
         else:
-            return scat_cov((other-self.P00),
+            return scat_cov((other-self.S0),
+                            (other-self.P00),
                             (other-self.C01),
                             c11,s1=s1, c10=c10,
                             backend=self.backend)
@@ -355,12 +552,14 @@ class scat_cov:
                 c11 = self.C11 - other
 
         if isinstance(other, scat_cov):
-            return scat_cov(self.domin(self.P00,other.P00),
+            return scat_cov(self.domin(self.S0,other.S0),
+                            self.domin(self.P00,other.P00),
                             (self.C01 - other.C01),
                             c11,
                             s1=s1, c10=c10,backend=self.backend)
         else:
-            return scat_cov((self.P00 - other),
+            return scat_cov((self.S0 - other),
+                            (self.P00 - other),
                             (self.C01 - other),
                             c11,
                             s1=s1, c10=c10,backend=self.backend)
@@ -440,12 +639,14 @@ class scat_cov:
                 c11 = self.C11 * other
 
         if isinstance(other, scat_cov):
-            return scat_cov(self.domult(self.P00,other.P00),
+            return scat_cov(self.domult(self.S0,other.S0),
+                            self.domult(self.P00,other.P00),
                             self.domult(self.C01,other.C01),
                             c11,
                             s1=s1, c10=c10,backend=self.backend)
         else:
-            return scat_cov((self.P00 * other),
+            return scat_cov((self.S0 * other),
+                            (self.P00 * other),
                             (self.C01 * other),
                             c11,
                             s1=s1, c10=c10,backend=self.backend)
@@ -519,7 +720,7 @@ class scat_cov:
         if c10 is not None:
             c10=self.backend.constant(c10)
 
-        return scat_cov(self.backend.constant(p0),self.backend.constant(c01),
+        return scat_cov(self.S0,self.backend.constant(p0),self.backend.constant(c01),
                         self.backend.constant(c11),s1=s1,c10=c10,backend=self.backend)
 
     def plot(self, name=None, hold=True, color='blue', lw=1, legend=True):
@@ -706,7 +907,8 @@ class scat_cov:
         
     def save(self, filename):
         
-        outlist=[self.get_np(self.S1), \
+        outlist=[self.get_np(self.S0), \
+                 self.get_np(self.S1), \
                  self.get_np(self.C10), \
                  self.get_np(self.C01), \
                  self.get_np(self.C11), \
@@ -720,29 +922,33 @@ class scat_cov:
 
         outlist=pickle.load(open("%s.pkl"%(filename),"rb"))
 
-        return scat_cov(outlist[4], outlist[2], outlist[3], \
-                        s1=outlist[0], c10=outlist[1],backend=self.backend)
+        return scat_cov(outlist[0],outlist[5], outlist[3], outlist[4], \
+                        s1=outlist[1], c10=outlist[2],backend=self.backend)
 
     def std(self):
         if self.S1 is not None:  # Auto
-            return np.sqrt(((abs(self.get_np(self.S1)).std()) ** 2 +
+            return np.sqrt(((abs(self.get_np(self.S0)).std()) ** 2 +
+                            (abs(self.get_np(self.S1)).std()) ** 2 +
                             (abs(self.get_np(self.C01)).std()) ** 2 +
                             (abs(self.get_np(self.C11)).std()) ** 2 +
                             (abs(self.get_np(self.P00)).std()) ** 2 ) / 4)
         else:  # Cross
-            return np.sqrt(((abs(self.get_np(self.C01)).std()) ** 2 +
+            return np.sqrt(((abs(self.get_np(self.S0)).std()) ** 2 +
+                            (abs(self.get_np(self.C01)).std()) ** 2 +
                             (abs(self.get_np(self.C10)).std()) ** 2 +
                             (abs(self.get_np(self.C11)).std()) ** 2 +
                             (abs(self.get_np(self.P00)).std()) ** 2) / 4)
 
     def mean(self):
         if self.S1 is not None:  # Auto
-            return (abs(self.get_np(self.S1)).mean() +
+            return (abs(self.get_np(self.S0)).mean() +
+                    abs(self.get_np(self.S1)).mean() +
                     abs(self.get_np(self.C01)).mean() +
                     abs(self.get_np(self.C11)).mean() +
                     abs(self.get_np(self.P00)).mean()) / 4
         else:  # Cross
-            return (abs(self.get_np(self.C01)).mean() +
+            return (abs(self.get_np(self.S0)).mean() +
+                    abs(self.get_np(self.C01)).mean() +
                     abs(self.get_np(self.C10)).mean() +
                     abs(self.get_np(self.C11)).mean() +
                     abs(self.get_np(self.P00)).mean()) / 4
@@ -806,7 +1012,7 @@ class scat_cov:
             if repeat:
                 C11=self.backend.bk_reshape(self.backend.bk_repeat(C11,norient),self.C11.shape)
 
-        return scat_cov(P00, C01, C11, s1=S1, c10=C10,backend=self.backend)
+        return scat_cov(self.S0,P00, C01, C11, s1=S1, c10=C10,backend=self.backend)
 
 
     def iso_std(self,repeat=False):
@@ -854,7 +1060,7 @@ class scat_cov:
             if repeat:
                 C11=self.backend.bk_reshape(self.backend.bk_repeat(C11,norient),self.C11.shape)
 
-        return scat_cov(P00, C01, C11, s1=S1, c10=C10,backend=self.backend)
+        return scat_cov(self.S0,P00, C01, C11, s1=S1, c10=C10,backend=self.backend)
 
     def get_nscale(self):
         return self.P00.shape[2]
@@ -885,7 +1091,8 @@ class scat_cov:
     def up_grade(self,nscale,ds=3):
         noff=nscale-self.P00.shape[2]
         if noff==0:
-            return scat_cov((self.P00),
+            return scat_cov((self.S0),
+                            (self.P00),
                             (self.C01),
                             (self.C11),
                             s1=self.S1,
@@ -1023,35 +1230,11 @@ class scat_cov:
                                 for m in range(self.C11.shape[5]):
                                     c11[i,j,iii,k,l,m]=self.add_data_from_slope(c11[i,j,[iii1,iii2],k,l,m],1,ds=2)[0]
 
-        return scat_cov( (p00),
+        return scat_cov( self.S0,
+                         (p00),
                          (c01),
                          (c11),
                         s1=(s1),backend=self.backend)
-        
-    # ---------------------------------------------−---------
-    def flatten(self):
-        if isinstance(self.S1,np.ndarray):
-
-            tmp=np.concatenate([self.P00.flatten(),
-                                self.C01.flatten(),
-                                self.C11,flatten()],0)
-            if self.S1 is not None:
-                tmp=np.concatenate([self.S1.flatten(),tmp])
-            if self.C10 is not None:
-                tmp=np.concatenate([tmp,self.C10.flatten()])
-                
-            return tmp
-        else:
-
-            tmp=self.backend.bk_concat([self.backend.bk_flattenR(self.P00),
-                                        self.backend.bk_flattenR(self.C01),
-                                        self.backend.bk_flattenR(self.C11)],axis=0)
-            if self.S1 is not None:
-                tmp=self.backend.bk_concat([self.backend.bk_flattenR(self.S1),tmp],axis=0)
-            if self.C10 is not None:
-                tmp=self.backend.bk_concat([tmp,self.backend.bk_flattenR(self.C10)],axis=0)
-                
-            return tmp
 
 class funct(FOC.FoCUS):
 
@@ -1185,6 +1368,11 @@ class funct(FOC.FoCUS):
             if cross:
                 P2_dic = self.P2_dic
 
+
+        if not cross:
+            s0 = self.masked_mean(I1,vmask,axis=1)
+        else:
+            s0 = (self.masked_mean(I1,vmask,axis=1)+self.masked_mean(I2,vmask,axis=1))/2
 
         #### COMPUTE S1, P00, C01 and C11
         nside_j3 = nside  # NSIDE start (nside_j3 = nside / 2^j3)
@@ -1415,9 +1603,9 @@ class funct(FOC.FoCUS):
                 self.P2_dic = P2_dic
             
         if not cross:
-            return scat_cov(P00, C01, C11, s1=S1,backend=self.backend)
+            return scat_cov(s0,P00, C01, C11, s1=S1,backend=self.backend)
         else:
-            return scat_cov(P00, C01, C11, s1=S1,c10=C10,backend=self.backend)
+            return scat_cov(s0,P00, C01, C11, s1=S1,c10=C10,backend=self.backend)
 
     def clean_norm(self):
         self.P1_dic = None
@@ -1475,11 +1663,13 @@ class funct(FOC.FoCUS):
     def square(self, x):
         if isinstance(x, scat_cov):
             if x.S1 is None:
-                return scat_cov(self.backend.bk_square(self.backend.bk_abs(x.P00)),
+                return scat_cov(self.backend.bk_square(self.backend.bk_abs(x.S0)),
+                                self.backend.bk_square(self.backend.bk_abs(x.P00)),
                                 self.backend.bk_square(self.backend.bk_abs(x.C01)),
                                 self.backend.bk_square(self.backend.bk_abs(x.C11)),backend=self.backend)
             else:
-                return scat_cov(self.backend.bk_square(self.backend.bk_abs(x.P00)),
+                return scat_cov(self.backend.bk_square(self.backend.bk_abs(x.S0)),
+                                self.backend.bk_square(self.backend.bk_abs(x.P00)),
                                 self.backend.bk_square(self.backend.bk_abs(x.C01)),
                                 self.backend.bk_square(self.backend.bk_abs(x.C11)),
                                 s1=self.backend.bk_square(self.backend.bk_abs(x.S1)),backend=self.backend)
@@ -1489,11 +1679,13 @@ class funct(FOC.FoCUS):
     def sqrt(self, x):
         if isinstance(x, scat_cov):
             if x.S1 is None:
-                return scat_cov(self.backend.bk_sqrt(self.backend.bk_abs(x.P00)),
+                return scat_cov(self.backend.bk_sqrt(self.backend.bk_abs(x.S0)),
+                                self.backend.bk_sqrt(self.backend.bk_abs(x.P00)),
                                 self.backend.bk_sqrt(self.backend.bk_abs(x.C01)),
                                 self.backend.bk_sqrt(self.backend.bk_abs(x.C11)),backend=self.backend)
             else:
-                return scat_cov(self.backend.bk_sqrt(self.backend.bk_abs(x.P00)),
+                return scat_cov(self.backend.bk_sqrt(self.backend.bk_abs(x.S0)),
+                                self.backend.bk_sqrt(self.backend.bk_abs(x.P00)),
                                 self.backend.bk_sqrt(self.backend.bk_abs(x.C01)),
                                 self.backend.bk_sqrt(self.backend.bk_abs(x.C11)),
                                 s1=self.backend.bk_sqrt(self.backend.bk_abs(x.S1)),backend=self.backend)
@@ -1503,14 +1695,16 @@ class funct(FOC.FoCUS):
     def reduce_mean(self, x):
         if isinstance(x, scat_cov):
             if x.S1 is None:
-                result = (self.backend.bk_reduce_mean(self.backend.bk_abs(x.P00)) + \
-                         self.backend.bk_reduce_mean(self.backend.bk_abs(x.C01)) + \
+                result = (self.backend.bk_reduce_mean(self.backend.bk_abs(x.S0)) + \
+                          self.backend.bk_reduce_mean(self.backend.bk_abs(x.P00)) + \
+                          self.backend.bk_reduce_mean(self.backend.bk_abs(x.C01)) + \
                           self.backend.bk_reduce_mean(self.backend.bk_abs(x.C11)))/3
             else:
-                result = (self.backend.bk_reduce_mean(self.backend.bk_abs(x.P00)) + \
-                         self.backend.bk_reduce_mean(self.backend.bk_abs(x.S1)) + \
-                         self.backend.bk_reduce_mean(self.backend.bk_abs(x.C01)) + \
-                         self.backend.bk_reduce_mean(self.backend.bk_abs(x.C11)))/4
+                result = (self.backend.bk_reduce_mean(self.backend.bk_abs(x.S0)) + \
+                          self.backend.bk_reduce_mean(self.backend.bk_abs(x.P00)) + \
+                          self.backend.bk_reduce_mean(self.backend.bk_abs(x.S1)) + \
+                          self.backend.bk_reduce_mean(self.backend.bk_abs(x.C01)) + \
+                          self.backend.bk_reduce_mean(self.backend.bk_abs(x.C11)))/4
         else:
             return self.backend.bk_reduce_mean(x)
         return result
@@ -1519,11 +1713,13 @@ class funct(FOC.FoCUS):
         
         if isinstance(x, scat_cov):
             if x.S1 is None:
-                result = self.backend.bk_reduce_sum(x.P00) + \
+                result = self.backend.bk_reduce_sum(x.S0) + \
+                         self.backend.bk_reduce_sum(x.P00) + \
                          self.backend.bk_reduce_sum(x.C01) + \
                          self.backend.bk_reduce_sum(x.C11)
             else:
-                result = self.backend.bk_reduce_sum(x.P00) + \
+                result = self.backend.bk_reduce_sum(x.S0) + \
+                         self.backend.bk_reduce_sum(x.P00) + \
                          self.backend.bk_reduce_sum(x.S1) + \
                          self.backend.bk_reduce_sum(x.C01) + \
                          self.backend.bk_reduce_sum(x.C11)
@@ -1535,22 +1731,26 @@ class funct(FOC.FoCUS):
     def ldiff(self,sig,x):
 
         if x.S1 is None:
-            if x.C11 is not None:
-                return scat_cov(x.domult(sig.P00,x.P00)*x.domult(sig.P00,x.P00),
+            if x.C10 is not None:
+                return scat_cov(x.domult(sig.S0,x.S0)*x.domult(sig.S0,x.S0),
+                                x.domult(sig.P00,x.P00)*x.domult(sig.P00,x.P00),
+                                x.domult(sig.C01,x.C01)*x.domult(sig.C01,x.C01),
+                                x.domult(sig.C11,x.C11)*x.domult(sig.C11,x.C11),
+                                C10=x.domult(sig.C10,x.C10)*x.domult(sig.C10,x.C10),
+                                backend=self.backend)
+            else:
+                return scat_cov(x.domult(sig.S0,x.S0)*x.domult(sig.S0,x.S0),
+                                x.domult(sig.P00,x.P00)*x.domult(sig.P00,x.P00),
                                 x.domult(sig.C01,x.C01)*x.domult(sig.C01,x.C01),
                                 x.domult(sig.C11,x.C11)*x.domult(sig.C11,x.C11),
                                 backend=self.backend)
-            else:
-                return scat_cov(x.domult(sig.P00,x.P00)*x.domult(sig.P00,x.P00),
-                                x.domult(sig.C01,x.C01)*x.domult(sig.C01,x.C01),
-                                0*sig.C01,
-                                backend=self.backend)
         else:
-            if x.C11 is None:
+            if x.C10 is None:
                 return scat_cov(x.domult(sig.P00,x.P00)*x.domult(sig.P00,x.P00),
                                 x.domult(sig.S1,x.S1)*x.domult(sig.S1,x.S1),
                                 x.domult(sig.C01,x.C01)*x.domult(sig.C01,x.C01),
-                                0*sig.S1,
+                                x.domult(sig.C11,x.C11)*x.domult(sig.C11,x.C11),
+                                C10=x.domult(sig.C10,x.C10)*x.domult(sig.C10,x.C10),
                                 backend=self.backend)
             else:
                 return scat_cov(x.domult(sig.P00,x.P00)*x.domult(sig.P00,x.P00),
@@ -1564,11 +1764,13 @@ class funct(FOC.FoCUS):
         if isinstance(x, scat_cov):
 
             if x.S1 is None:
-                result = self.backend.bk_log(x.P00) + \
+                result = self.backend.bk_log(x.S0) + \
+                         self.backend.bk_log(x.P00) + \
                          self.backend.bk_log(x.C01) + \
                          self.backend.bk_log(x.C11)
             else:
-                result = self.backend.bk_log(x.P00) + \
+                result = self.backend.bk_log(x.S0) + \
+                         self.backend.bk_log(x.P00) + \
                          self.backend.bk_log(x.S1) + \
                          self.backend.bk_log(x.C01) + \
                          self.backend.bk_log(x.C11)
@@ -1581,10 +1783,10 @@ class funct(FOC.FoCUS):
     def eval_comp_fast(self, image1, image2=None,mask=None,norm=None, Auto=True,Add_R45=False):
 
         res=self.eval(image1, image2=image2,mask=mask,Auto=Auto,Add_R45=Add_R45)
-        return res.P00,res.S1,res.C01,res.C11,res.C10
+        return res.S0,res.P00,res.S1,res.C01,res.C11,res.C10
 
     def eval_fast(self, image1, image2=None,mask=None,norm=None, Auto=True,Add_R45=False):
-        p0,s1,c01,c11,c10=self.eval_comp_fast(image1, image2=image2,mask=mask,Auto=Auto,Add_R45=Add_R45)
-        return scat_cov(p0,  c01, c11, s1=s1,c10=c10,backend=self.backend)
+        s0,p0,s1,c01,c11,c10=self.eval_comp_fast(image1, image2=image2,mask=mask,Auto=Auto,Add_R45=Add_R45)
+        return scat_cov(s0, p0,  c01, c11, s1=s1,c10=c10,backend=self.backend)
         
         

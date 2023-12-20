@@ -402,14 +402,7 @@ class foscat_backend:
     def bk_roll(self,data,nn,axis=0):
         return(self.backend.roll(data,nn,axis=axis))
 
-    def bk_expand_dims(self,data,axis=0,chans=0):
-        if isinstance(data,Rformat.Rformat):
-            if axis<data.axis:
-                l_axis=data.axis+1
-            else:
-                l_axis=data.axis
-            return Rformat.Rformat(self.bk_expand_dims(data.get(),axis=axis),data.off,l_axis,chans=data.chans)
-            
+    def bk_expand_dims(self,data,axis=0):
         if self.BACKEND==self.TENSORFLOW:
             return(self.backend.expand_dims(data,axis=axis))
         if self.BACKEND==self.TORCH:

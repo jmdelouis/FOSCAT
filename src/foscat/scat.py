@@ -772,13 +772,42 @@ class scat:
                                    self.S1.flatten(),
                                    self.P00.flatten(),
                                    self.S2.flatten(),
-                                   self.S2L.flatten()])
+                                   self.S2L.flatten()],0)
         else:
             return self.backend.bk_concat([self.backend.bk_flattenR(self.S0),
                                            self.backend.bk_flattenR(self.S1),
                                            self.backend.bk_flattenR(self.P00),
                                            self.backend.bk_flattenR(self.S2),
                                            self.backend.bk_flattenR(self.S2)],axis=0)
+
+    # ---------------------------------------------−---------
+    def flattenMask(self):
+        if isinstance(self.S1,np.ndarray):
+            tmp=np.expand_dims(np.concatenate([self.S1[0].flatten(),
+                                               self.P00[0].flatten(),
+                                               self.S2[0].flatten(),
+                                               self.S2L[0].flatten()],0),0)
+            for k in range(1,self.P00.shape[0]):
+                tmp=np.concatenate([tmp,np.expand_dims(np.concatenate([self.S1[k].flatten(),
+                                                                       self.P00[k].flatten(),
+                                                                       self.S2[k].flatten(),
+                                                                       self.S2L[k].flatten()],0),0)],0)
+
+            
+            return np.concatenate([tmp,np.expand_dims(self.S0,1)],1)
+        else:
+            tmp=self.backend.bk_expand_dims(self.backend.bk_concat([self.backend.bk_flattenR(self.S1[0]),
+                                                                    self.backend.bk_flattenR(self.P00[0]),
+                                                                    self.backend.bk_flattenR(self.S2[0]),
+                                                                    self.backend.bk_flattenR(self.S2[0])],axis=0),0)
+            for k in range(1,self.P00.shape[0]):
+                ltmp=self.backend.bk_expand_dims(self.backend.bk_concat([self.backend.bk_flattenR(self.S1[k]),
+                                                                         self.backend.bk_flattenR(self.P00[k]),
+                                                                         self.backend.bk_flattenR(self.S2[k]),
+                                                                         self.backend.bk_flattenR(self.S2[k])],axis=0),0)
+                tmp=self.backend.bk_concat([tmp,ltmp],0)
+
+            return self.backend.bk_concat([tmp,self.backend.bk_expand_dims(self.S0,1)],1)
     
     # ---------------------------------------------−---------
     def model(self,i__y,add=0,dx=3,dell=2,weigth=None,inverse=False):
