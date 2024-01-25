@@ -899,7 +899,12 @@ class funct(FOC.FoCUS):
         if mask is not None:
             if list(image1.shape)!=list(mask.shape)[1:]:
                 print('The mask should have the same size than the input image to eval Scattering')
+                print(image1.shape,mask.shape)
                 exit(0)
+        if self.use_2D and len(image1.shape)<2:
+            print('To work with 2D scattering transform, two dimension is needed, input map has only on dimension')
+            exit(0)
+            
             
         ### AUTO OR CROSS
         cross = False
@@ -955,15 +960,16 @@ class funct(FOC.FoCUS):
         if self.KERNELSZ>3:
             # if the kernel size is bigger than 3 increase the binning before smoothing
             if self.use_2D:
-                l_image1=self.up_grade(I1,image1.shape[axis]*2,axis=axis,nouty=image1.shape[axis+1]*2)
-                vmask=self.up_grade(vmask,image1.shape[axis]*2,axis=1,nouty=image1.shape[axis+1]*2)
+                print(axis,image1.shape)
+                l_image1=self.up_grade(I1,I1.shape[axis]*2,axis=axis,nouty=I1.shape[axis+1]*2)
+                vmask=self.up_grade(vmask,I1.shape[axis]*2,axis=1,nouty=I1.shape[axis+1]*2)
             else:
                 l_image1=self.up_grade(I1,nside*2,axis=axis)
                 vmask=self.up_grade(vmask,nside*2,axis=1)
                 
             if cross:
                 if self.use_2D:
-                    l_image2=self.up_grade(I2,image1.shape[axis]*2,axis=axis,nouty=mage1.shape[axis+1]*2)
+                    l_image2=self.up_grade(I2,I1.shape[axis]*2,axis=axis,nouty=I1.shape[axis+1]*2)
                 else:
                     l_image2=self.up_grade(I2,nside*2,axis=axis)
         else:
@@ -974,10 +980,12 @@ class funct(FOC.FoCUS):
         s0 = self.masked_mean(l_image1,vmask,axis=axis)+s0_off
         
         if cross and Auto==False:
-            if len(image1.shape)==1 or (len(image1.shape)==3 and isinstance(image1,Rformat.Rformat)):
+            if len(image1.shape)==1 or (len(image1.shape)==2 and self.use_2D):
                 if s0.dtype!='complex64' and s0.dtype!='complex128':
                     s0 = self.backend.bk_complex(s0,self.masked_mean(l_image2,vmask,axis=axis)+s0_off)
                 else:
+                    print(s0)
+                    print(self.masked_mean(l_image2,vmask,axis=axis))
                     s0 = self.backend.bk_concat([s0,self.masked_mean(l_image2,vmask,axis=axis)],axis=0)
             else:
                 if s0.dtype!='complex64' and s0.dtype!='complex128':

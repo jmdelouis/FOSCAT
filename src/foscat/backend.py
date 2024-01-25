@@ -496,9 +496,6 @@ class foscat_backend:
                 return(np.float64(x))
             else:
                 return(x)
-        
-        if isinstance(x,Rformat.Rformat):
-            return Rformat.Rformat(self.bk_cast(x.get()),x.off,x.axis,chans=x.chans)
 
         if x.dtype=='complex128' or x.dtype=='complex64':
             out_type=self.all_cbk_type

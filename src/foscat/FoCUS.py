@@ -566,7 +566,7 @@ class FoCUS:
         s=np.sin((xx)*np.pi/2)
 
         wr=np.array(w*c).reshape(xx.shape[0],1,1)
-        wi=np.array(s*c).reshape(xx.shape[0],1,1)
+        wi=np.array(w*s).reshape(xx.shape[0],1,1)
         
         npix=im.shape[axis]
         
@@ -578,7 +578,7 @@ class FoCUS:
         ndata=1
         for k in range(axis):
             ndata=ndata*ishape[k]
-
+        
         if odata>1:
             wr=np.repeat(wr,odata,2)
             wi=np.repeat(wi,odata,2)

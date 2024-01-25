@@ -281,7 +281,7 @@ class Synthesis:
     # ---------------------------------------------−---------
     def run(self,
             in_x,
-            NUM_EPOCHS = 1000,
+            NUM_EPOCHS = 100,
             DECAY_RATE=0.95,
             EVAL_FREQUENCY = 100,
             DEVAL_STAT_FREQUENCY = 1000,
@@ -315,10 +315,11 @@ class Synthesis:
         self.axis=axis
         self.in_x_nshape=in_x.shape[0]
 
+        """
         if do_lbfgs and (in_x.dtype=='complex64' or in_x.dtype=='complex128'):
             print('L_BFGS minimisation not yet implemented for acomplex array, use default FOSCAT minimizer or convert your problem to float32 or float64')
             exit(0)
-            
+        """    
         np.random.seed(self.mpi_rank*7+1234)
             
         x=in_x        

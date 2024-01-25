@@ -1097,6 +1097,9 @@ class funct(FOC.FoCUS):
             if list(image1.shape)!=list(mask.shape)[1:]:
                 print('The mask should have the same size ',mask.shape,'than the input image ',image1.shape,'to eval Scattering Covariance')
                 exit(0)
+        if self.use_2D and len(image1.shape)<2:
+            print('To work with 2D scattering transform, two dimension is needed, input map has only on dimension')
+            exit(0)
 
         ### AUTO OR CROSS
         cross = False
