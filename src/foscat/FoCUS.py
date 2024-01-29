@@ -858,7 +858,7 @@ class FoCUS:
     # Mean using mask x [....,Npix,....], mask[Nmask,Npix]  to [....,Nmask,....]
     # if use_2D
     # Mean using mask x [....,12,Nside+2*off,Nside+2*off,....], mask[Nmask,12,Nside+2*off,Nside+2*off]  to [....,Nmask,....]
-    def masked_mean(self,x,mask,axis=0,rank=0):
+    def masked_mean(self,x,mask,axis=0,rank=0,calc_var=False):
         
         #==========================================================================
         # in input data=[Nbatch,...,X[,Y],NORIENT[,NORIENT]]
@@ -909,14 +909,47 @@ class FoCUS:
 
             oshape1=shape1[0:axis+1]+[shape1[axis+1]*shape1[axis+2]]+shape1[axis+3:]
             oshape2=shape2[0:axis+1]+[shape2[axis+1]*shape2[axis+2]]+shape2[axis+3:]
-            res=self.backend.bk_reduce_mean(self.backend.bk_reshape(l_mask,oshape1)*self.backend.bk_reshape(l_x,oshape2),axis=axis+1)
-            return res
+            
+            mtmp=self.backend.bk_reshape(l_mask,oshape1)
+            vtmp=self.backend.bk_reshape(l_x,oshape2)
+            
+            v1=self.backend.bk_reduce_sum(mtmp*vtmp,axis=axis+1)
+            v2=self.backend.bk_reduce_sum(mtmp*vtmp*vtmp,axis=axis+1)
+            vh=self.backend.bk_reduce_sum(mtmp,axis=axis+1)
+
+            res=v1/vh
+            if calc_var:
+                if vtmp.dtype=='complex128' or vtmp.dtype=='complex64':
+                    res2=self.backend.bk_complex(self.backend.bk_sqrt(self.backend.bk_real(v2)/self.backend.bk_real(vh)
+                                                                      -self.backend.bk_real(res)*self.backend.bk_real(res)), \
+                                                 self.backend.bk_sqrt(self.backend.bk_imag(v2)/self.backend.bk_real(vh)
+                                                                      -self.backend.bk_imag(res)*self.backend.bk_imag(res)))
+                else:
+                    res2=self.backend.bk_sqrt((v2/vh-res*res)/(vh))
+                return res,res2
+            else:
+                return res
         else:
             # mask=[1,Nmask,....,X] => mask=[1,Nmask,....,X,....]
             for i in range(axis+1,len(x.shape)):
                 l_mask=self.backend.bk_expand_dims(l_mask,-1)
                 
-            return self.backend.bk_reduce_mean(l_mask*l_x,axis=axis+1)
+            v1=self.backend.bk_reduce_sum(l_mask*l_x,axis=axis+1)
+            v2=self.backend.bk_reduce_sum(l_mask*l_x*l_x,axis=axis+1)
+            vh=self.backend.bk_reduce_sum(l_mask,axis=axis+1)
+            
+            res=v1/vh
+            if calc_var:
+                if l_x.dtype=='complex128' or l_x.dtype=='complex64':
+                    res2=self.backend.bk_complex(self.backend.bk_sqrt((self.backend.bk_real(v2)/self.backend.bk_real(vh)
+                                                                      -self.backend.bk_real(res)*self.backend.bk_real(res))/self.backend.bk_real(v2)), \
+                                                 self.backend.bk_sqrt((self.backend.bk_imag(v2)/self.backend.bk_real(vh)
+                                                                      -self.backend.bk_imag(res)*self.backend.bk_imag(res))/self.backend.bk_real(v2)))
+                else:
+                    res2=self.backend.bk_sqrt((v2/vh-res*res)/(vh))
+                return res,res2
+            else:
+                return res
         
     # ---------------------------------------------−---------
     # convert tensor x [....,a,b,....] to [....,a*b,....]
