@@ -288,6 +288,22 @@ class foscat_backend:
         if isinstance(data,Rformat.Rformat):
             return Rformat.Rformat(self.bk_abs(data.get()),data.off,0,chans=data.chans)
         return(self.backend.abs(data))
+
+    def bk_is_complex(self,data):
+        if self.BACKEND==self.TENSORFLOW:
+            return data.dtype==self.all_cbk_type
+        if self.BACKEND==self.TORCH:
+            return data.dtype==self.all_cbk_type
+        if self.BACKEND==self.NUMPY:
+            return data.dtype==self.all_cbk_type
+        
+    def bk_norm(self,data):
+        if self.bk_is_complex(data):
+            res=self.bk_square(self.bk_real(data))+self.bk_square(self.bk_imag(data))
+            return self.bk_sqrt(res)
+
+        else:
+            return self.bk_abs(data)
         
     def bk_square(self,data):
         

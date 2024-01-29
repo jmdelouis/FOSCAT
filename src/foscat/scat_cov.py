@@ -1300,9 +1300,13 @@ class funct(FOC.FoCUS):
             if len(image1.shape)==2:
                 nside=np.min([im_shape[0],im_shape[1]])
                 npix = im_shape[0]*im_shape[1] # Number of pixels
+                x1=im_shape[0]
+                x2=im_shape[1]
             else:
                 nside=np.min([im_shape[1],im_shape[2]])
                 npix = im_shape[1]*im_shape[2] # Number of pixels
+                x1=im_shape[1]
+                x2=im_shape[2]
         else:
             if len(image1.shape)==2:
                 npix = int(im_shape[1])  # Number of pixels
@@ -1327,7 +1331,7 @@ class funct(FOC.FoCUS):
 
         if mask is None:
             if self.use_2D:
-                vmask = self.backend.bk_ones([1, nside, nside],dtype=self.all_type)
+                vmask = self.backend.bk_ones([1, x1, x2],dtype=self.all_type)
             else:
                 vmask = self.backend.bk_ones([1, npix], dtype=self.all_type)
         else:

@@ -324,6 +324,14 @@ class FoCUS:
         return(self.backend.bk_gather(image,self.ring2nest[lout],axis=axis))
 
     #--------------------------------------------------------
+    def ud_grade(self,im,j,axis=0):
+        rim=im
+        for k in range(j):
+            rim=self.smooth(rim,axis=axis)
+            rim=self.ud_grade_2(rim,axis=axis)
+        return rim
+    
+    #--------------------------------------------------------
     def ud_grade_2(self,im,axis=0):
         
         if self.use_2D:
@@ -346,7 +354,7 @@ class FoCUS:
             tim=self.backend.bk_reshape(self.backend.bk_cast(im),[ndata,npix,npiy,odata])
             tim=self.backend.bk_reshape(tim[:,0:2*(npix//2),0:2*(npiy//2),:],[ndata,npix//2,2,npiy//2,2,odata])
 
-            res=self.backend.bk_reduce_mean(self.backend.bk_reduce_sum(tim,4),2)
+            res=self.backend.bk_reduce_mean(self.backend.bk_reduce_mean(tim,4),2)
         
             if axis==0:
                 if len(ishape)==2:
