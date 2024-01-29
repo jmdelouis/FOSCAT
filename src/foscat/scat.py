@@ -4,6 +4,7 @@ import foscat.Rformat as Rformat
 import tensorflow as tf
 import pickle
 import foscat.backend as bk
+import healpy as hp
   
 def read(filename):
     thescat=scat(1,1,1,1,1,[0],[0])
@@ -917,6 +918,9 @@ class scat:
         
     
 class funct(FOC.FoCUS):
+    
+    def fill(self,im,nullval=hp.UNSEEN):
+        return self.fill_healpy(im,nullval=nullval)
     
     def eval(self, image1, image2=None,mask=None,Auto=True,s0_off=1E-6):
         # Check input consistency

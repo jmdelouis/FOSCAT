@@ -501,6 +501,73 @@ class FoCUS:
                         return self.backend.bk_reshape(imout,ishape[0:axis]+[12*nout**2]+ishape[axis+1:])
         return(imout)
 
+    #--------------------------------------------------------
+    def fill_1d(self,i_arr,nullval=0):
+        arr=i_arr.copy()
+        # Indices des éléments non nuls
+        non_zero_indices = np.where(arr==nullval)[0]
+        
+        # Indices de tous les éléments
+        all_indices = np.arange(len(arr))
+        
+        # Interpoler linéairement en utilisant np.interp
+        # np.interp(x, xp, fp) : x sont les indices pour lesquels on veut obtenir des valeurs
+        # xp sont les indices des données existantes, fp sont les valeurs des données existantes
+        interpolated_values = np.interp(all_indices, non_zero_indices, arr[non_zero_indices])
+        
+        # Mise à jour du tableau original
+        arr[arr == 0] = interpolated_values[arr == 0]
+        
+        return arr
+
+    def fill_2d(self,i_arr,nullval=0):
+        arr=i_arr.copy()
+        # Créer une grille de coordonnées correspondant aux indices du tableau
+        x, y = np.indices(arr.shape)
+        
+        # Extraire les coordonnées des points non nuls ainsi que leurs valeurs
+        non_zero_points = np.array((x[arr != nullval], y[arr != nullval])).T
+        non_zero_values = arr[arr != nullval]
+        
+        # Extraire les coordonnées des points nuls
+        zero_points = np.array((x[arr == nullval], y[arr == nullval])).T
+
+        # Interpolation linéaire
+        interpolated_values = griddata(non_zero_points, non_zero_values, zero_points, method='linear')
+
+        # Remplacer les valeurs nulles par les valeurs interpolées
+        arr[arr == nullval] = interpolated_values
+
+        return arr
+    
+    def fill_healpy(self,i_map,nmax=10,nullval=hp.UNSEEN):
+        map=1*i_map
+        # Trouver les pixels nuls
+        nside = hp.npix2nside(len(map))
+        null_indices = np.where(map == nullval)[0]
+        
+        itt=0
+        while null_indices.shape[0]>0 and itt<nmax:
+            print(null_indices.shape[0])
+            # Trouver les coordonnées theta, phi pour les pixels nuls
+            theta, phi = hp.pix2ang(nside, null_indices)
+            
+            # Interpoler les valeurs en utilisant les pixels voisins
+            # La fonction get_interp_val peut être utilisée pour obtenir les valeurs interpolées
+            # pour des positions données en theta et phi.
+            i_idx = hp.get_all_neighbours(nside, theta, phi)
+            
+            i_w=(map[i_idx]!=nullval)*(i_idx!=-1)
+            vv=np.sum(i_w,0)
+            interpolated_values=np.sum(i_w*map[i_idx],0)
+
+            # Remplacer les valeurs nulles par les valeurs interpolées
+            map[null_indices[vv>0]] = interpolated_values[vv>0]/vv[vv>0]
+
+            null_indices = np.where(map == nullval)[0]
+            itt+=1
+        
+        return map
     
     #--------------------------------------------------------
     def ud_grade_1d(self,im,nout,axis=0):
@@ -564,7 +631,7 @@ class FoCUS:
                 return self.backend.bk_reshape(res,ishape[0:axis]+[npix*2]+ishape[axis+1:])
         return self.backend.bk_reshape(res,[npix*2])
 
-    
+        
     #--------------------------------------------------------
     def convol_1d(self,im,axis=0):
         

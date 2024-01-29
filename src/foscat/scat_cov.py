@@ -4,6 +4,7 @@ import foscat.backend as bk
 import foscat.Rformat as Rformat
 import tensorflow as tf
 import pickle
+import healpy as hp
 
 def read(filename):
     thescat = scat_cov(1, 1, 1, 1)
@@ -1238,6 +1239,9 @@ class scat_cov:
 
 class funct(FOC.FoCUS):
 
+    def fill(self,im,nullval=hp.UNSEEN):
+        return self.fill_healpy(im,nullval=nullval)
+    
     def eval(self, image1, image2=None, mask=None, norm=None, Auto=True, calc_var=False):
         """
         Calculates the scattering correlations for a batch of images. Mean are done over pixels.

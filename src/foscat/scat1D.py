@@ -843,6 +843,21 @@ class scat1D:
         
     
 class funct(FOC.FoCUS):
+
+    def fill(self,im,nullval=0):
+        return self.fill_1d(self,im,nullval=nullval)
+
+    def ud_grade(self,im,nout,axis=0):
+        return self.ud_grade_1d(im,nout,axis=axis)
+    
+    def up_grade(self,im,nout,axis=0):
+        return self.up_grade_1d(im,nout,axis=axis)
+    
+    def smooth(self,data,axis=0):
+        return self.smooth_1d(data,axis=axis)
+
+    def convol(self,data,axis=0):
+        return self.convol_1d(data,axis=axis)
     
     def eval(self, image1, image2=None,mask=None,Auto=True,s0_off=1E-6,Add_R45=False,axis=0):
         # Check input consistency

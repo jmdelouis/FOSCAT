@@ -6,6 +6,9 @@ class scat_cov2D:
         the_scat=scat(P00, C01, C11, s1=S1, c10=C10,backend=self.backend)
         the_scat.set_bk_type('SCAT_COV2D')
         return the_scat
+    
+    def fill(self,im,nullval=0):
+        return self.fill_2d(im,nullval=nullval)
 
 class funct(scat.funct):
     def __init__(self, *args, **kwargs):
