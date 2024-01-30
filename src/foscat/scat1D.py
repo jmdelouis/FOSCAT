@@ -1,6 +1,5 @@
 import foscat.FoCUS as FOC
 import numpy as np
-import foscat.Rformat as Rformat
 import tensorflow as tf
 import pickle
 import foscat.backend as bk
@@ -845,7 +844,7 @@ class scat1D:
 class funct(FOC.FoCUS):
 
     def fill(self,im,nullval=0):
-        return self.fill_1d(self,im,nullval=nullval)
+        return self.fill_1d(im,nullval=nullval)
 
     def ud_grade(self,im,nout,axis=0):
         return self.ud_grade_1d(im,nout,axis=axis)

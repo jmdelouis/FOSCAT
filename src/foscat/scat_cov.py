@@ -1,7 +1,6 @@
 import foscat.FoCUS as FOC
 import numpy as np
 import foscat.backend as bk
-import foscat.Rformat as Rformat
 import tensorflow as tf
 import pickle
 import healpy as hp
@@ -282,10 +281,10 @@ class scat_cov:
     def get_jc11_idx(self):
         shape=list(self.P00.shape)
         nscale=shape[2]
-        n=nscale*(nscale-1)*(nscale-2)
-        j1=np.zeros([n*2],dtype='int')
-        j2=np.zeros([n*2],dtype='int')
-        j3=np.zeros([n*2],dtype='int')
+        n=nscale*np.max([nscale-1,1])*np.max([nscale-2,1])
+        j1=np.zeros([n*4],dtype='int')
+        j2=np.zeros([n*4],dtype='int')
+        j3=np.zeros([n*4],dtype='int')
         n=0
         for i in range(nscale):
             for j in range(i+1):
@@ -1240,6 +1239,8 @@ class scat_cov:
 class funct(FOC.FoCUS):
 
     def fill(self,im,nullval=hp.UNSEEN):
+        if self.use_2D:
+            return self.fill_2d(im,nullval=nullval)
         return self.fill_healpy(im,nullval=nullval)
     
     def eval(self, image1, image2=None, mask=None, norm=None, Auto=True, calc_var=False):
@@ -1274,7 +1275,7 @@ class funct(FOC.FoCUS):
         -------
         S1, P00, C01, C11 normalized
         """
-
+        return_data=self.return_data
         # Check input consistency
         if image2 is not None:
             if list(image1.shape)!=list(image2.shape):
@@ -1311,6 +1312,7 @@ class funct(FOC.FoCUS):
                 npix = im_shape[1]*im_shape[2] # Number of pixels
                 x1=im_shape[1]
                 x2=im_shape[2]
+            J = int(np.log(nside-self.KERNELSZ) / np.log(2))  # Number of j scales
         else:
             if len(image1.shape)==2:
                 npix = int(im_shape[1])  # Number of pixels
@@ -1319,11 +1321,10 @@ class funct(FOC.FoCUS):
                 
             nside=int(np.sqrt(npix//12))
 
-        J = int(np.log(nside) / np.log(2))  # Number of j scales
+            J = int(np.log(nside) / np.log(2))  # Number of j scales
         Jmax = J - self.OSTEP  # Number of steps for the loop on scales
         
         ### LOCAL VARIABLES (IMAGES and MASK)
-        # Check if image1 is [Npix] or [Nbatch, Npix] or Rformat
         if len(image1.shape) == 1 or (len(image1.shape)==2 and self.use_2D):
             I1 = self.backend.bk_cast(self.backend.bk_expand_dims(image1, 0))  # Local image1 [Nbatch, Npix]
             if cross:
@@ -1344,15 +1345,29 @@ class funct(FOC.FoCUS):
         if self.KERNELSZ > 3:
             # if the kernel size is bigger than 3 increase the binning before smoothing
             if self.use_2D:
-                I1=self.up_grade(I1,I1.shape[axis]*2,axis=axis,nouty=I1.shape[axis+1]*2)
                 vmask=self.up_grade(vmask,I1.shape[axis]*2,axis=1,nouty=I1.shape[axis+1]*2)
+                I1=self.up_grade(I1,I1.shape[axis]*2,axis=axis,nouty=I1.shape[axis+1]*2)
                 if cross:
-                    I2=self.up_grade(I2,I1.shape[axis]*2,axis=axis,nouty=I1.shape[axis+1]*2)
+                    I2=self.up_grade(I2,I2.shape[axis]*2,axis=axis,nouty=I2.shape[axis+1]*2)
+            else:
+                I1 = self.up_grade(I1, nside * 2, axis=axis)
+                vmask = self.up_grade(vmask, nside * 2, axis=1)
+                if cross:
+                    I2 = self.up_grade(I2, nside * 2, axis=axis)
                     
-            I1 = self.up_grade(I1, nside * 2, axis=axis)
-            vmask = self.up_grade(vmask, nside * 2, axis=1)
-            if cross:
-                I2 = self.up_grade(I2, nside * 2, axis=axis)
+            if self.KERNELSZ > 5:
+                # if the kernel size is bigger than 3 increase the binning before smoothing
+                if self.use_2D:
+                    vmask=self.up_grade(vmask,I1.shape[axis]*2,axis=1,nouty=I1.shape[axis+1]*2)
+                    I1=self.up_grade(I1,I1.shape[axis]*2,axis=axis,nouty=I1.shape[axis+1]*2)
+                    if cross:
+                        I2=self.up_grade(I2,I2.shape[axis]*2,axis=axis,nouty=I2.shape[axis+1]*2)
+                else:
+                    I1 = self.up_grade(I1, nside * 4, axis=axis)
+                    vmask = self.up_grade(vmask, nside * 4, axis=1)
+                    if cross:
+                        I2 = self.up_grade(I2, nside * 4, axis=axis)
+                    
 
         # Normalize the masks because they have different pixel numbers
         # vmask /= self.backend.bk_reduce_sum(vmask, axis=1)[:, None]  # [Nmask, Npix]
@@ -1379,21 +1394,36 @@ class funct(FOC.FoCUS):
             if cross:
                 P2_dic = self.P2_dic
 
-        if calc_var:
-            if not cross:
-                s0,vs0 = self.masked_mean(I1,vmask,axis=1,calc_var=True)
-            else:
-                s0,vs0 = (self.masked_mean(I1,vmask,axis=1,calc_var=True)+self.masked_mean(I2,vmask,axis=1,calc_var=True))/2
+        if return_data:
+            s0=I1
         else:
-            if not cross:
-                s0 = self.masked_mean(I1,vmask,axis=1)
+            if calc_var:
+                if not cross:
+                    s0,vs0 = self.masked_mean(I1,vmask,axis=1,calc_var=True)
+                else:
+                    s0,vs0 = (self.masked_mean(I1,vmask,axis=1,calc_var=True)+self.masked_mean(I2,vmask,axis=1,calc_var=True))/2
             else:
-                s0 = (self.masked_mean(I1,vmask,axis=1)+self.masked_mean(I2,vmask,axis=1))/2
+                if not cross:
+                    s0 = self.masked_mean(I1,vmask,axis=1)
+                else:
+                    s0 = (self.masked_mean(I1,vmask,axis=1)+self.masked_mean(I2,vmask,axis=1))/2
             
 
         #### COMPUTE S1, P00, C01 and C11
         nside_j3 = nside  # NSIDE start (nside_j3 = nside / 2^j3)
         for j3 in range(Jmax):
+            if return_data:
+                if C01 is None:
+                    C01={}
+                C01[j3]=None
+                
+                if C10 is None:
+                    C10={}
+                C10[j3]=None
+                
+                if C11 is None:
+                    C11={}
+                C11[j3]=None
 
             ####### S1 and P00
             ### Make the convolution I1 * Psi_j3
@@ -1409,47 +1439,63 @@ class funct(FOC.FoCUS):
                 
                 ### P00_auto = < M1^2 >_pix
                 # Apply the mask [Nmask, Npix_j3] and average over pixels
-                if calc_var:
-                    p00,vp00 = self.masked_mean(M1_square, vmask, axis=1,rank=j3,calc_var=True)
+                if return_data:
+                    p00=M1_square
                 else:
-                    p00 = self.masked_mean(M1_square, vmask, axis=1,rank=j3)
+                    if calc_var:
+                        p00,vp00 = self.masked_mean(M1_square, vmask, axis=1,rank=j3,calc_var=True)
+                    else:
+                        p00 = self.masked_mean(M1_square, vmask, axis=1,rank=j3)
                 
                 if cond_init_P1_dic:
                     # We fill P1_dic with P00 for normalisation of C01 and C11
                     P1_dic[j3] = p00  # [Nbatch, Nmask, Norient3]
-                if norm == 'auto':  # Normalize P00
-                    p00 /= P1_dic[j3]
 
                 # We store P00_auto to return it [Nbatch, Nmask, NP00, Norient3]
-                if P00 is None:
-                    P00 = p00[:, :, None, :]  # Add a dimension for NP00
-                    if calc_var:
-                        VP00 = vp00[:, :, None, :]  # Add a dimension for NP00
+                if return_data:
+                    if P00 is None:
+                        P00={}
+                    P00[j3]=p00
                 else:
-                    P00 = self.backend.bk_concat([P00, p00[:, :, None, :]], axis=2)
-                    if calc_var:
-                        VP00 = self.backend.bk_concat([VP00, vp00[:, :, None, :]], axis=2)
+                    if norm == 'auto':  # Normalize P00
+                        p00 /= P1_dic[j3]
+                    if P00 is None:
+                        P00 = p00[:, :, None, :]  # Add a dimension for NP00
+                        if calc_var:
+                            VP00 = vp00[:, :, None, :]  # Add a dimension for NP00
+                    else:
+                        P00 = self.backend.bk_concat([P00, p00[:, :, None, :]], axis=2)
+                        if calc_var:
+                            VP00 = self.backend.bk_concat([VP00, vp00[:, :, None, :]], axis=2)
 
                 #### S1_auto computation
                 ### Image 1 : S1 = < M1 >_pix
                 # Apply the mask [Nmask, Npix_j3] and average over pixels
-                if calc_var:
-                    s1,vs1 = self.masked_mean(M1, vmask, axis=1,rank=j3,calc_var=True)  # [Nbatch, Nmask, Norient3]
+                if return_data:
+                    s1=M1
                 else:
-                    s1 = self.masked_mean(M1, vmask, axis=1,rank=j3)  # [Nbatch, Nmask, Norient3]
+                    if calc_var:
+                        s1,vs1 = self.masked_mean(M1, vmask, axis=1,rank=j3,calc_var=True)  # [Nbatch, Nmask, Norient3]
+                    else:
+                        s1 = self.masked_mean(M1, vmask, axis=1,rank=j3)  # [Nbatch, Nmask, Norient3]
                     
-                ### Normalize S1
-                if norm is not None:
-                    s1 /= (P1_dic[j3]) ** 0.5
-                ### We store S1 for image1  [Nbatch, Nmask, NS1, Norient3]
-                if S1 is None:
-                    S1 = s1[:, :, None, :]  # Add a dimension for NS1
-                    if calc_var:
-                        VS1 = vs1[:, :, None, :]  # Add a dimension for NS1
+                if return_data:
+                    if S1 is None:
+                        S1={}
+                    S1[j3]=s1
                 else:
-                    S1 = self.backend.bk_concat([S1, s1[:, :, None, :]], axis=2)
-                    if calc_var:
-                        VS1 = self.backend.bk_concat([VS1, vs1[:, :, None, :]], axis=2)
+                    ### Normalize S1
+                    if norm is not None:
+                        s1 /= (P1_dic[j3]) ** 0.5
+                    ### We store S1 for image1  [Nbatch, Nmask, NS1, Norient3]
+                    if S1 is None:
+                        S1 = s1[:, :, None, :]  # Add a dimension for NS1
+                        if calc_var:
+                            VS1 = vs1[:, :, None, :]  # Add a dimension for NS1
+                    else:
+                        S1 = self.backend.bk_concat([S1, s1[:, :, None, :]], axis=2)
+                        if calc_var:
+                            VS1 = self.backend.bk_concat([VS1, vs1[:, :, None, :]], axis=2)
 
             else:  # Cross
                 ### Make the convolution I2 * Psi_j3
@@ -1464,12 +1510,16 @@ class funct(FOC.FoCUS):
                 # Not returned, only for normalization
                 if cond_init_P1_dic:
                     # Apply the mask [Nmask, Npix_j3] and average over pixels
-                    if calc_var:
-                        p1,vp1 = self.masked_mean(M1_square, vmask, axis=1,rank=j3,calc_var=True)  # [Nbatch, Nmask, Norient3]
-                        p2,vp2 = self.masked_mean(M2_square, vmask, axis=1,rank=j3,calc_var=True)  # [Nbatch, Nmask, Norient3]
+                    if return_data:
+                        p1=M1_square
+                        p2=M2_square
                     else:
-                        p1 = self.masked_mean(M1_square, vmask, axis=1,rank=j3)  # [Nbatch, Nmask, Norient3]
-                        p2 = self.masked_mean(M2_square, vmask, axis=1,rank=j3)  # [Nbatch, Nmask, Norient3]
+                        if calc_var:
+                            p1,vp1 = self.masked_mean(M1_square, vmask, axis=1,rank=j3,calc_var=True)  # [Nbatch, Nmask, Norient3]
+                            p2,vp2 = self.masked_mean(M2_square, vmask, axis=1,rank=j3,calc_var=True)  # [Nbatch, Nmask, Norient3]
+                        else:
+                            p1 = self.masked_mean(M1_square, vmask, axis=1,rank=j3)  # [Nbatch, Nmask, Norient3]
+                            p2 = self.masked_mean(M2_square, vmask, axis=1,rank=j3)  # [Nbatch, Nmask, Norient3]
                     # We fill P1_dic with P00 for normalisation of C01 and C11
                     P1_dic[j3] = p1  # [Nbatch, Nmask, Norient3]
                     P2_dic[j3] = p2  # [Nbatch, Nmask, Norient3]
@@ -1479,47 +1529,63 @@ class funct(FOC.FoCUS):
                 p00 = conv1 * self.backend.bk_conjugate(conv2)
                 MX = self.backend.bk_L1(p00)
                 # Apply the mask [Nmask, Npix_j3] and average over pixels
-                if calc_var:
-                    p00,vp00 = self.masked_mean(p00, vmask, axis=1,rank=j3,calc_var=True)
+                if return_data:
+                    p00=p00
                 else:
-                    p00 = self.masked_mean(p00, vmask, axis=1,rank=j3)
-
-                ### Normalize P00_cross
-                if norm == 'auto':
-                    p00 /= (P1_dic[j3] * P2_dic[j3])**0.5
-
-                ### Store P00_cross as complex [Nbatch, Nmask, NP00, Norient3]
-                if not all_cross:
-                    p00=self.backend.bk_real(p00)
-                    
-                if P00 is None:
-                    P00 = p00[:,:,None,:]  # Add a dimension for NP00
                     if calc_var:
-                        VP00 = vp00[:,:,None,:]  # Add a dimension for NP00
+                        p00,vp00 = self.masked_mean(p00, vmask, axis=1,rank=j3,calc_var=True)
+                    else:
+                        p00 = self.masked_mean(p00, vmask, axis=1,rank=j3)
+
+                if return_data:
+                    if P00 is None:
+                        P00={}
+                    P00[j3]=p00
                 else:
-                    P00 = self.backend.bk_concat([P00, p00[:,:,None,:]], axis=2)
-                    if calc_var:
-                        VP00 = self.backend.bk_concat([VP00, vp00[:,:,None,:]], axis=2)
+                    ### Normalize P00_cross
+                    if norm == 'auto':
+                        p00 /= (P1_dic[j3] * P2_dic[j3])**0.5
+
+                    ### Store P00_cross as complex [Nbatch, Nmask, NP00, Norient3]
+                    if not all_cross:
+                        p00=self.backend.bk_real(p00)
+
+                    if P00 is None:
+                        P00 = p00[:,:,None,:]  # Add a dimension for NP00
+                        if calc_var:
+                            VP00 = vp00[:,:,None,:]  # Add a dimension for NP00
+                    else:
+                        P00 = self.backend.bk_concat([P00, p00[:,:,None,:]], axis=2)
+                        if calc_var:
+                            VP00 = self.backend.bk_concat([VP00, vp00[:,:,None,:]], axis=2)
                     
                 #### S1_auto computation
                 ### Image 1 : S1 = < M1 >_pix
                 # Apply the mask [Nmask, Npix_j3] and average over pixels
-                if calc_var:
-                    s1,vs1 = self.masked_mean(MX, vmask, axis=1,rank=j3,calc_var=True)  # [Nbatch, Nmask, Norient3]
+                if return_data:
+                    s1=MX
                 else:
-                    s1 = self.masked_mean(MX, vmask, axis=1,rank=j3)  # [Nbatch, Nmask, Norient3]
-                ### Normalize S1
-                if norm is not None:
-                    s1 /= (P1_dic[j3]) ** 0.5
-                ### We store S1 for image1  [Nbatch, Nmask, NS1, Norient3]
-                if S1 is None:
-                    S1 = s1[:, :, None, :]  # Add a dimension for NS1
                     if calc_var:
-                        VS1 = vs1[:, :, None, :]  # Add a dimension for NS1
+                        s1,vs1 = self.masked_mean(MX, vmask, axis=1,rank=j3,calc_var=True)  # [Nbatch, Nmask, Norient3]
+                    else:
+                        s1 = self.masked_mean(MX, vmask, axis=1,rank=j3)  # [Nbatch, Nmask, Norient3]
+                if return_data:
+                    if S1 is None:
+                        S1={}
+                    S1[j3]=s1
                 else:
-                    S1 = self.backend.bk_concat([S1, s1[:, :, None, :]], axis=2)
-                    if calc_var:
-                        VS1 = self.backend.bk_concat([VS1, vs1[:, :, None, :]], axis=2)
+                    ### Normalize S1
+                    if norm is not None:
+                        s1 /= (P1_dic[j3]) ** 0.5
+                    ### We store S1 for image1  [Nbatch, Nmask, NS1, Norient3]
+                    if S1 is None:
+                        S1 = s1[:, :, None, :]  # Add a dimension for NS1
+                        if calc_var:
+                            VS1 = vs1[:, :, None, :]  # Add a dimension for NS1
+                    else:
+                        S1 = self.backend.bk_concat([S1, s1[:, :, None, :]], axis=2)
+                        if calc_var:
+                            VS1 = self.backend.bk_concat([VS1, vs1[:, :, None, :]], axis=2)
                         
             # Initialize dictionaries for |I1*Psi_j| * Psi_j3
             M1convPsi_dic = {}
@@ -1529,6 +1595,11 @@ class funct(FOC.FoCUS):
 
             ###### C01
             for j2 in range(0, j3+1):  # j2 <= j3
+                if return_data:
+                    if C11[j3] is None:
+                        C11[j3]={}
+                    C11[j3][j2]=None
+                    
                 ### C01_auto = < (I1 * Psi)_j3 x (|I1 * Psi_j2| * Psi_j3)^* >_pix
                 if not cross:
                     if calc_var:
@@ -1536,30 +1607,37 @@ class funct(FOC.FoCUS):
                                                      conv1,
                                                      vmask,
                                                      M1_dic,
-                                                     M1convPsi_dic,calc_var=True)  # [Nbatch, Nmask, Norient3, Norient2]
+                                                     M1convPsi_dic,
+                                                     calc_var=True)  # [Nbatch, Nmask, Norient3, Norient2]
                     else:
                         c01 = self._compute_C01(j2,
                                                 conv1,
                                                 vmask,
                                                 M1_dic,
-                                                M1convPsi_dic)  # [Nbatch, Nmask, Norient3, Norient2]
+                                                M1convPsi_dic,
+                                                return_data=return_data)  # [Nbatch, Nmask, Norient3, Norient2]
                         
-                    ### Normalize C01 with P00_j [Nbatch, Nmask, Norient_j]
-                    if norm is not None:
-                        c01 /= (P1_dic[j2][:, :, None, :] *
-                                P1_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
-                        
-                    ### Store C01 as a complex [Nbatch, Nmask, NC01, Norient3, Norient2]
-                    if C01 is None:
-                        C01 = c01[:,:,None,:,:]  # Add a dimension for NC01
-                        if calc_var:
-                            VC01 = vc01[:,:,None,:,:]  # Add a dimension for NC01
+                    if return_data:
+                        if C01[j3] is None:
+                            C01[j3]={}
+                        C01[j3][j2]=c01
                     else:
-                        C01 = self.backend.bk_concat([C01, c01[:, :, None, :, :]],
-                                                 axis=2)  # Add a dimension for NC01
-                        if calc_var:
-                            VC01 = self.backend.bk_concat([VC01, vc01[:, :, None, :, :]],
-                                                          axis=2)  # Add a dimension for NC01
+                        ### Normalize C01 with P00_j [Nbatch, Nmask, Norient_j]
+                        if norm is not None:
+                            c01 /= (P1_dic[j2][:, :, None, :] *
+                                    P1_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
+
+                        ### Store C01 as a complex [Nbatch, Nmask, NC01, Norient3, Norient2]
+                        if C01 is None:
+                            C01 = c01[:,:,None,:,:]  # Add a dimension for NC01
+                            if calc_var:
+                                VC01 = vc01[:,:,None,:,:]  # Add a dimension for NC01
+                        else:
+                            C01 = self.backend.bk_concat([C01, c01[:, :, None, :, :]],
+                                                     axis=2)  # Add a dimension for NC01
+                            if calc_var:
+                                VC01 = self.backend.bk_concat([VC01, vc01[:, :, None, :, :]],
+                                                              axis=2)  # Add a dimension for NC01
 
                 ### C01_cross = < (I1 * Psi)_j3 x (|I2 * Psi_j2| * Psi_j3)^* >_pix
                 ### C10_cross = < (I2 * Psi)_j3 x (|I1 * Psi_j2| * Psi_j3)^* >_pix
@@ -1582,39 +1660,47 @@ class funct(FOC.FoCUS):
                                                 conv1,
                                                 vmask,
                                                 M2_dic,
-                                                M2convPsi_dic)
+                                                M2convPsi_dic,
+                                                return_data=return_data)
                         c10 = self._compute_C01(j2,
                                                 conv2,
                                                 vmask,
                                                 M1_dic,
-                                                M1convPsi_dic)
+                                                M1convPsi_dic,
+                                                return_data=return_data)
                     
-                    ### Normalize C01 and C10 with P00_j [Nbatch, Nmask, Norient_j]
-                    if norm is not None:
-                        c01 /= (P2_dic[j2][:, :, None, :] *
-                                P1_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
-                        c10 /= (P1_dic[j2][:, :, None, :] *
-                                P2_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
-                        
-                    ### Store C01 and C10 as a complex [Nbatch, Nmask, NC01, Norient3, Norient2]
-                    if C01 is None:
-                        C01 = c01[:, :, None, :, :] # Add a dimension for NC01
-                        if calc_var:
-                            VC01 = vc01[:, :, None, :, :] # Add a dimension for NC01
+                    if return_data:
+                        if C01[j3] is None:
+                            C01[j3]={}
+                            C10[j3]={}
+                        C01[j3][j2]=c01
+                        C10[j3][j2]=c10
                     else:
-                        C01 = self.backend.bk_concat([C01,c01[:, :, None, :, :]],axis=2)  # Add a dimension for NC01
-                        if calc_var:
-                            VC01 = self.backend.bk_concat([VC01,vc01[:, :, None, :, :]],axis=2)  # Add a dimension for NC01
-                    if C10 is None:
-                        C10 = c10[:, :, None, :, :]  # Add a dimension for NC01
-                        if calc_var:
-                            VC10 = vc10[:, :, None, :, :]  # Add a dimension for NC01
-                    else:
-                        C10 = self.backend.bk_concat([C10,c10[:, :, None, :, :]], axis=2)  # Add a dimension for NC01
-                        if calc_var:
-                            VC10 = self.backend.bk_concat([VC10,vc10[:, :, None, :, :]], axis=2)  # Add a dimension for NC01
-                        
+                        ### Normalize C01 and C10 with P00_j [Nbatch, Nmask, Norient_j]
+                        if norm is not None:
+                            c01 /= (P2_dic[j2][:, :, None, :] *
+                                    P1_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
+                            c10 /= (P1_dic[j2][:, :, None, :] *
+                                    P2_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
 
+                        ### Store C01 and C10 as a complex [Nbatch, Nmask, NC01, Norient3, Norient2]
+                        if C01 is None:
+                            C01 = c01[:, :, None, :, :] # Add a dimension for NC01
+                            if calc_var:
+                                VC01 = vc01[:, :, None, :, :] # Add a dimension for NC01
+                        else:
+                            C01 = self.backend.bk_concat([C01,c01[:, :, None, :, :]],axis=2)  # Add a dimension for NC01
+                            if calc_var:
+                                VC01 = self.backend.bk_concat([VC01,vc01[:, :, None, :, :]],axis=2)  # Add a dimension for NC01
+                        if C10 is None:
+                            C10 = c10[:, :, None, :, :]  # Add a dimension for NC01
+                            if calc_var:
+                                VC10 = vc10[:, :, None, :, :]  # Add a dimension for NC01
+                        else:
+                            C10 = self.backend.bk_concat([C10,c10[:, :, None, :, :]], axis=2)  # Add a dimension for NC01
+                            if calc_var:
+                                VC10 = self.backend.bk_concat([VC10,vc10[:, :, None, :, :]], axis=2)  # Add a dimension for NC01
+                        
 
                 ##### C11
                 for j1 in range(0, j2+1):  # j1 <= j2
@@ -1628,24 +1714,30 @@ class funct(FOC.FoCUS):
                         else:
                             c11 = self._compute_C11(j1, j2, vmask,
                                                     M1convPsi_dic,
-                                                    M2convPsi_dic=None) # [Nbatch, Nmask, Norient3, Norient2, Norient1]
+                                                    M2convPsi_dic=None,
+                                                    return_data=return_data) # [Nbatch, Nmask, Norient3, Norient2, Norient1]
                         
-                        ### Normalize C11 with P00_j [Nbatch, Nmask, Norient_j]
-                        if norm is not None:
-                            c11 /= (P1_dic[j1][:, :, None, None, :] *
-                                    P1_dic[j2][:, :, None, :,
-                                               None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
-                        ### Store C11 as a complex [Nbatch, Nmask, NC11, Norient3, Norient2, Norient1]
-                        if C11 is None:
-                            C11 = c11[:, :, None, :, :, :]  # Add a dimension for NC11
-                            if calc_var:
-                                VC11 = vc11[:, :, None, :, :, :]  # Add a dimension for NC11
+                        if return_data:
+                            if C11[j3][j2] is None:
+                                C11[j3][j2]={}
+                            C11[j3][j2][j1]=c11
                         else:
-                            C11 = self.backend.bk_concat([C11,c11[:, :, None, :, :, :]],
-                                                 axis=2)  # Add a dimension for NC11
-                            if calc_var:
-                                VC11 = self.backend.bk_concat([VC11,vc11[:, :, None, :, :, :]],
-                                                         axis=2)  # Add a dimension for NC11
+                            ### Normalize C11 with P00_j [Nbatch, Nmask, Norient_j]
+                            if norm is not None:
+                                c11 /= (P1_dic[j1][:, :, None, None, :] *
+                                        P1_dic[j2][:, :, None, :,
+                                                   None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
+                            ### Store C11 as a complex [Nbatch, Nmask, NC11, Norient3, Norient2, Norient1]
+                            if C11 is None:
+                                C11 = c11[:, :, None, :, :, :]  # Add a dimension for NC11
+                                if calc_var:
+                                    VC11 = vc11[:, :, None, :, :, :]  # Add a dimension for NC11
+                            else:
+                                C11 = self.backend.bk_concat([C11,c11[:, :, None, :, :, :]],
+                                                     axis=2)  # Add a dimension for NC11
+                                if calc_var:
+                                    VC11 = self.backend.bk_concat([VC11,vc11[:, :, None, :, :, :]],
+                                                             axis=2)  # Add a dimension for NC11
 
                         ### C11_cross = <(|I1 * psi1| * psi3)(|I2 * psi2| * psi3)^*>
                     else:
@@ -1657,22 +1749,29 @@ class funct(FOC.FoCUS):
                         else:
                             c11 = self._compute_C11(j1, j2, vmask,
                                                     M1convPsi_dic,
-                                                    M2convPsi_dic=M2convPsi_dic)  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
-                        ### Normalize C11 with P00_j [Nbatch, Nmask, Norient_j]
-                        if norm is not None:
-                            c11 /= (P1_dic[j1][:, :, None, None, :] *
-                                    P2_dic[j2][:, :, None, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
-                        ### Store C11 as a complex [Nbatch, Nmask, NC11, Norient3, Norient2, Norient1]
-                        if C11 is None:
-                            C11 = c11[:, :, None, :, :, :]  # Add a dimension for NC11
-                            if calc_var:
-                                VC11 = vc11[:, :, None, :, :, :]  # Add a dimension for NC11
+                                                    M2convPsi_dic=M2convPsi_dic,
+                                                    return_data=return_data)  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
+
+                        if return_data:
+                            if C11[j3][j2] is None:
+                                C11[j3][j2]={}
+                            C11[j3][j2][j1]=c11
                         else:
-                            C11 = self.backend.bk_concat([C11,c11[:, :, None, :, :, :]],
-                                                 axis=2)  # Add a dimension for NC11
-                            if calc_var:
-                                VC11 = self.backend.bk_concat([VC11,vc11[:, :, None, :, :, :]],
-                                                             axis=2)  # Add a dimension for NC11
+                            ### Normalize C11 with P00_j [Nbatch, Nmask, Norient_j]
+                            if norm is not None:
+                                c11 /= (P1_dic[j1][:, :, None, None, :] *
+                                        P2_dic[j2][:, :, None, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
+                            ### Store C11 as a complex [Nbatch, Nmask, NC11, Norient3, Norient2, Norient1]
+                            if C11 is None:
+                                C11 = c11[:, :, None, :, :, :]  # Add a dimension for NC11
+                                if calc_var:
+                                    VC11 = vc11[:, :, None, :, :, :]  # Add a dimension for NC11
+                            else:
+                                C11 = self.backend.bk_concat([C11,c11[:, :, None, :, :, :]],
+                                                     axis=2)  # Add a dimension for NC11
+                                if calc_var:
+                                    VC11 = self.backend.bk_concat([VC11,vc11[:, :, None, :, :, :]],
+                                                                 axis=2)  # Add a dimension for NC11
             
             ###### Reshape for next iteration on j3
             ### Image I1,
@@ -1732,7 +1831,8 @@ class funct(FOC.FoCUS):
     def _compute_C01(self, j2, conv,
                      vmask, M_dic,
                      MconvPsi_dic,
-                     calc_var=False):
+                     calc_var=False,
+                     return_data=False):
         """
         Compute the C01 coefficients (auto or cross)
         C01 = < (Ia * Psi)_j3 x (|Ib * Psi_j2| * Psi_j3)^* >_pix
@@ -1755,17 +1855,21 @@ class funct(FOC.FoCUS):
         c01 = self.backend.bk_expand_dims(conv, -1) * self.backend.bk_conjugate(MconvPsi)   # [Nbatch, Npix_j3, Norient3, Norient2]
 
         ### Apply the mask [Nmask, Npix_j3] and sum over pixels
-        if calc_var:
-            c01,vc01 = self.masked_mean(c01, vmask, axis=1,rank=j2,calc_var=True)  # [Nbatch, Nmask, Norient3, Norient2]
-            return c01,vc01
+        if return_data:
+            return c01
         else:
-            c01 = self.masked_mean(c01, vmask, axis=1,rank=j2)  # [Nbatch, Nmask, Norient3, Norient2]
+            if calc_var:
+                c01,vc01 = self.masked_mean(c01, vmask, axis=1,rank=j2,calc_var=True)  # [Nbatch, Nmask, Norient3, Norient2]
+                return c01,vc01
+            else:
+                c01 = self.masked_mean(c01, vmask, axis=1,rank=j2)  # [Nbatch, Nmask, Norient3, Norient2]
             return c01
 
     def _compute_C11(self, j1, j2, vmask,
                      M1convPsi_dic,
                      M2convPsi_dic=None,
-                     calc_var=False):
+                     calc_var=False,
+                     return_data=False):
         #### Simplify notations
         M1 = M1convPsi_dic[j1]  # [Nbatch, Npix_j3, Norient3, Norient1]
         
@@ -1780,12 +1884,15 @@ class funct(FOC.FoCUS):
         c11 = self.backend.bk_expand_dims(M1, -2) * self.backend.bk_conjugate(self.backend.bk_expand_dims(M2, -1))  # [Nbatch, Npix_j3, Norient3, Norient2, Norient1]
 
         ### Apply the mask and sum over pixels
-        if calc_var:
-            c11,vc11 = self.masked_mean(c11, vmask, axis=1,rank=j2,calc_var=True)  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
-            return c11,vc11
-        else:
-            c11 = self.masked_mean(c11, vmask, axis=1,rank=j2)  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
+        if return_data:
             return c11
+        else:
+            if calc_var:
+                c11,vc11 = self.masked_mean(c11, vmask, axis=1,rank=j2,calc_var=True)  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
+                return c11,vc11
+            else:
+                c11 = self.masked_mean(c11, vmask, axis=1,rank=j2)  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
+                return c11
 
     def square(self, x):
         if isinstance(x, scat_cov):

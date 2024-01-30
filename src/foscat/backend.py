@@ -1,6 +1,5 @@
 import sys
 import numpy as np
-import foscat.Rformat as Rformat
 
 class foscat_backend:
     
@@ -130,8 +129,6 @@ class foscat_backend:
             return x
 
     def bk_threshold(self,x,threshold,greater=True):
-        if isinstance(x,Rformat.Rformat):
-            return Rformat.Rformat(self.bk_threshold(x.get(),threshold,greater=greater),x.off,x.axis,chans=x.chans)
 
         if self.BACKEND==self.TENSORFLOW:
             return(self.backend.cast(x>threshold,x.dtype)*x)
@@ -196,23 +193,17 @@ class foscat_backend:
             return self.backend.image.resize(x,shape, method='bilinear')
         
     def bk_L1(self,x):
-        if isinstance(x,Rformat.Rformat):
-            return Rformat.Rformat(self.bk_L1(x.get()),x.off,x.axis,chans=x.chans)
-        else:
-            if x.dtype==self.all_cbk_type:
-                xr=self.bk_real(x)
-                xi=self.bk_imag(x)
+        if x.dtype==self.all_cbk_type:
+            xr=self.bk_real(x)
+            xi=self.bk_imag(x)
                 
-                r=self.backend.sign(xr)*self.backend.sqrt(self.backend.sign(xr)*xr)
-                i=self.backend.sign(xi)*self.backend.sqrt(self.backend.sign(xi)*xi)
-                return self.bk_complex(r,i)
-            else:
-                return self.backend.sign(x)*self.backend.sqrt(self.backend.sign(x)*x)
+            r=self.backend.sign(xr)*self.backend.sqrt(self.backend.sign(xr)*xr)
+            i=self.backend.sign(xi)*self.backend.sqrt(self.backend.sign(xi)*xi)
+            return self.bk_complex(r,i)
+        else:
+            return self.backend.sign(x)*self.backend.sqrt(self.backend.sign(x)*x)
         
     def bk_reduce_sum(self,data,axis=None):
-        
-        if isinstance(data,Rformat.Rformat):
-            return self.bk_reduce_sum(data.get())
         
         if axis is None:
             if self.BACKEND==self.TENSORFLOW:
@@ -237,9 +228,6 @@ class foscat_backend:
 
     def bk_reduce_mean(self,data,axis=None):
         
-        if isinstance(data,Rformat.Rformat):
-            return self.bk_reduce_mean(data.get())
-        
         if axis is None:
             if self.BACKEND==self.TENSORFLOW:
                 return(self.backend.reduce_mean(data))
@@ -256,9 +244,6 @@ class foscat_backend:
                 return(np.mean(data,axis))
 
     def bk_reduce_std(self,data,axis=None):
-        
-        if isinstance(data,Rformat.Rformat):
-            return self.bk_reduce_std(data.get())
         
         if axis is None:
             if self.BACKEND==self.TENSORFLOW:
@@ -278,15 +263,9 @@ class foscat_backend:
     
     def bk_sqrt(self,data):
         
-        if isinstance(data,Rformat.Rformat):
-            return Rformat.Rformat(self.bk_sqrt(data.get()),data.off,0,chans=data.chans)
-        
         return(self.backend.sqrt(self.backend.abs(data)))
     
     def bk_abs(self,data):
-        
-        if isinstance(data,Rformat.Rformat):
-            return Rformat.Rformat(self.bk_abs(data.get()),data.off,0,chans=data.chans)
         return(self.backend.abs(data))
 
     def bk_is_complex(self,data):
@@ -306,9 +285,6 @@ class foscat_backend:
             return self.bk_abs(data)
         
     def bk_square(self,data):
-        
-        if isinstance(data,Rformat.Rformat):
-            return Rformat.Rformat(self.bk_square(data.get()),data.off,0,chans=data.chans)
         
         if self.BACKEND==self.TENSORFLOW:
             return(self.backend.square(data))
@@ -368,45 +344,30 @@ class foscat_backend:
                 return(np.take(data,shape,axis=axis))
 
     def bk_exp(self,data):
-        if isinstance(data,Rformat.Rformat):
-            return Rformat.Rformat(self.bk_exp(data.get()),data.off,0,chans=data.chans)
         
         return(self.backend.exp(data))
     
     def bk_min(self,data):
-        if isinstance(data,Rformat.Rformat):
-            return Rformat.Rformat(self.bk_min(data.get()),data.off,0,chans=data.chans)
         
         return(self.backend.reduce_min(data))
     
     def bk_argmin(self,data):
-        if isinstance(data,Rformat.Rformat):
-            return Rformat.Rformat(self.bk_argmin(data.get()),data.off,0,chans=data.chans)
         
         return(self.backend.argmin(data))
     
     def bk_tanh(self,data):
-        if isinstance(data,Rformat.Rformat):
-            return Rformat.Rformat(self.bk_tanh(data.get()),data.off,0,chans=data.chans)
         
         return(self.backend.math.tanh(data))
     
     def bk_max(self,data):
-        if isinstance(data,Rformat.Rformat):
-            return Rformat.Rformat(self.bk_max(data.get()),data.off,0,chans=data.chans)
         
         return(self.backend.reduce_max(data))
     
     def bk_argmax(self,data):
-        if isinstance(data,Rformat.Rformat):
-            return Rformat.Rformat(self.bk_argmax(data.get()),data.off,0,chans=data.chans)
         
         return(self.backend.argmax(data))
     
     def bk_reshape(self,data,shape):
-        if isinstance(data,Rformat.Rformat):
-            return Rformat.Rformat(self.bk_reshape(data.get(),shape),data.off,0,chans=data.chans)
-        
         return(self.backend.reshape(data,shape))
     
     def bk_repeat(self,data,nn,axis=0):
@@ -435,9 +396,6 @@ class foscat_backend:
             return(np.transpose(data,thelist))
 
     def bk_concat(self,data,axis=None):
-        if isinstance(data[0],Rformat.Rformat):
-            l_data=[idata.get() for idata in data]
-            return Rformat.Rformat(self.bk_concat(l_data,axis=axis),data[0].off,data[0].axis,chans=data[0].chans)
                 
         if axis is None:
             return(self.backend.concat(data))
@@ -446,8 +404,6 @@ class foscat_backend:
 
     
     def bk_conjugate(self,data):
-        if isinstance(data,Rformat.Rformat):
-            return Rformat.Rformat(self.bk_conjugate(data.get()),data.off,data.axis,chans=data.chans)
                 
         if self.BACKEND==self.TENSORFLOW:
             return self.backend.math.conj(data)
@@ -457,9 +413,6 @@ class foscat_backend:
             return data.conjugate()
         
     def bk_real(self,data):
-        if isinstance(data,Rformat.Rformat):
-            return Rformat.Rformat(self.bk_real(data.get()),data.off,data.axis,chans=data.chans)
-                
         if self.BACKEND==self.TENSORFLOW:
             return self.backend.math.real(data)
         if self.BACKEND==self.TORCH:
@@ -468,9 +421,6 @@ class foscat_backend:
             return self.backend.real(data)
 
     def bk_imag(self,data):
-        if isinstance(data,Rformat.Rformat):
-            return Rformat.Rformat(self.bk_imag(data.get()),data.off,data.axis,chans=data.chans)
-                
         if self.BACKEND==self.TENSORFLOW:
             return self.backend.math.imag(data)
         if self.BACKEND==self.TORCH:
@@ -479,9 +429,6 @@ class foscat_backend:
             return self.backend.imag(data)
         
     def bk_relu(self,x):
-        if isinstance(x,Rformat.Rformat):
-            return Rformat.Rformat(self.bk_relu(x.get()),x.off,x.axis,chans=x.chans)
-        
         if self.BACKEND==self.TENSORFLOW:
             if x.dtype==self.all_cbk_type:
                 xr=self.backend.nn.relu(self.bk_real(x))

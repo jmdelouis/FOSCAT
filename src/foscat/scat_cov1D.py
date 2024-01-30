@@ -1,7 +1,6 @@
 import foscat.FoCUS as FOC
 import numpy as np
 import foscat.backend as bk
-import foscat.Rformat as Rformat
 import tensorflow as tf
 import pickle
 import matplotlib.pyplot as plt
@@ -1027,7 +1026,7 @@ class scat_cov1D:
 class funct(FOC.FoCUS):
 
     def fill(self,im,nullval=0):
-        return self.fill_1d(self,im,nullval=nullval)
+        return self.fill_1d(im,nullval=nullval)
 
     def ud_grade(self,im,nout,axis=0):
         return self.ud_grade_1d(im,nout,axis=axis)
@@ -1105,7 +1104,6 @@ class funct(FOC.FoCUS):
         Jmax = J - self.OSTEP  # Number of steps for the loop on scales
         
         ### LOCAL VARIABLES (IMAGES and MASK)
-        # Check if image1 is [Npix] or [Nbatch, Npix] or Rformat
         if len(image1.shape) == 1:
             I1 = self.backend.bk_cast(self.backend.bk_expand_dims(image1, 0))  # Local image1 [Nbatch, Npix]
             if cross:

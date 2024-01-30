@@ -12,7 +12,6 @@ import scipy.optimize as opt
 class Loss:
     
     def __init__(self,function,scat_operator,*param,
-                 Rformat=True,
                  name='',
                  batch=None,
                  batch_data=None,
@@ -22,7 +21,6 @@ class Loss:
         self.loss_function=function
         self.scat_operator=scat_operator
         self.args=param
-        self.Rformat=Rformat
         self.name=name
         self.batch=batch
         self.batch_data=batch_data

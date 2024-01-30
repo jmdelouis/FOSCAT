@@ -1,6 +1,5 @@
 import foscat.FoCUS as FOC
 import numpy as np
-import foscat.Rformat as Rformat
 import tensorflow as tf
 import pickle
 import foscat.backend as bk
@@ -922,7 +921,7 @@ class funct(FOC.FoCUS):
     def fill(self,im,nullval=hp.UNSEEN):
         return self.fill_healpy(im,nullval=nullval)
     
-    def eval(self, image1, image2=None,mask=None,Auto=True,s0_off=1E-6):
+    def eval(self, image1, image2=None,mask=None,Auto=True,s0_off=1E-6,calc_var=False):
         # Check input consistency
         if image2 is not None:
             if list(image1.shape)!=list(image2.shape):
@@ -963,6 +962,7 @@ class funct(FOC.FoCUS):
                 npix = im_shape[1]*im_shape[2] # Number of pixels
                 x1=im_shape[1]
                 x2=im_shape[2]
+            jmax = int(np.log(nside-self.KERNELSZ) / np.log(2))  # Number of j scales
         else:
             if len(image1.shape)==2:
                 npix = int(im_shape[1])  # Number of pixels
@@ -971,7 +971,7 @@ class funct(FOC.FoCUS):
 
             nside=int(np.sqrt(npix//12))
                 
-        jmax=int(np.log(nside)/np.log(2)) #-self.OSTEP
+            jmax=int(np.log(nside)/np.log(2)) #-self.OSTEP
 
         ### LOCAL VARIABLES (IMAGES and MASK)
         # Check if image1 is [Npix] or [Nbatch,Npix]
@@ -995,40 +995,71 @@ class funct(FOC.FoCUS):
             vmask = self.backend.bk_cast(mask)  # [Nmask, Npix]
 
         if self.KERNELSZ>3:
-            # if the kernel size is bigger than 3 increase the binning before smoothing
-            if self.use_2D:
-                print(axis,image1.shape)
-                l_image1=self.up_grade(I1,I1.shape[axis]*2,axis=axis,nouty=I1.shape[axis+1]*2)
-                vmask=self.up_grade(vmask,I1.shape[axis]*2,axis=1,nouty=I1.shape[axis+1]*2)
-            else:
-                l_image1=self.up_grade(I1,nside*2,axis=axis)
-                vmask=self.up_grade(vmask,nside*2,axis=1)
-                
-            if cross:
+            if self.KERNELSZ==5:
+                # if the kernel size is bigger than 3 increase the binning before smoothing
                 if self.use_2D:
-                    l_image2=self.up_grade(I2,I1.shape[axis]*2,axis=axis,nouty=I1.shape[axis+1]*2)
+                    print(axis,image1.shape)
+                    l_image1=self.up_grade(I1,I1.shape[axis]*2,axis=axis,nouty=I1.shape[axis+1]*2)
+                    vmask=self.up_grade(vmask,I1.shape[axis]*2,axis=1,nouty=I1.shape[axis+1]*2)
                 else:
-                    l_image2=self.up_grade(I2,nside*2,axis=axis)
+                    l_image1=self.up_grade(I1,nside*2,axis=axis)
+                    vmask=self.up_grade(vmask,nside*2,axis=1)
+                
+                if cross:
+                    if self.use_2D:
+                        l_image2=self.up_grade(I2,I2.shape[axis]*2,axis=axis,nouty=I2.shape[axis+1]*2)
+                    else:
+                        l_image2=self.up_grade(I2,nside*2,axis=axis)
+            else:
+                # if the kernel size is bigger than 3 increase the binning before smoothing
+                if self.use_2D:
+                    print(axis,image1.shape)
+                    l_image1=self.up_grade(l_image1,I1.shape[axis]*4,axis=axis,nouty=I1.shape[axis+1]*4)
+                    vmask=self.up_grade(vmask,I1.shape[axis]*4,axis=1,nouty=I1.shape[axis+1]*4)
+                else:
+                    l_image1=self.up_grade(l_image1,nside*4,axis=axis)
+                    vmask=self.up_grade(vmask,nside*4,axis=1)
+                
+                if cross:
+                    if self.use_2D:
+                        l_image2=self.up_grade(l_image2,I2.shape[axis]*4,axis=axis,nouty=I2.shape[axis+1]*4)
+                    else:
+                        l_image2=self.up_grade(l_image2,nside*4,axis=axis)
         else:
             l_image1=I1
             if cross:
                 l_image2=I2
 
-        s0 = self.masked_mean(l_image1,vmask,axis=axis)+s0_off
+        if calc_var:
+            s0,vs0 = self.masked_mean(l_image1,vmask,axis=axis,calc_var=True)
+            s0=s0+s0_off
+        else:
+            s0 = self.masked_mean(l_image1,vmask,axis=axis)+s0_off
         
         if cross and Auto==False:
+            if calc_var:
+                s02,vs02=self.masked_mean(l_image2,vmask,axis=axis,calc_var=True)
+            else:
+                s02=self.masked_mean(l_image2,vmask,axis=axis)
+                
             if len(image1.shape)==1 or (len(image1.shape)==2 and self.use_2D):
                 if s0.dtype!='complex64' and s0.dtype!='complex128':
-                    s0 = self.backend.bk_complex(s0,self.masked_mean(l_image2,vmask,axis=axis)+s0_off)
+                    s0 = self.backend.bk_complex(s0,s02+s0_off)
+                    if calc_var:
+                        vs0 = self.backend.bk_complex(vs0,vs02)
                 else:
-                    print(s0)
-                    print(self.masked_mean(l_image2,vmask,axis=axis))
-                    s0 = self.backend.bk_concat([s0,self.masked_mean(l_image2,vmask,axis=axis)],axis=0)
+                    s0 = self.backend.bk_concat([s0,s02],axis=0)
+                    if calc_var:
+                        vs0 = self.backend.bk_concat([vs0,vs02],axis=0)
             else:
                 if s0.dtype!='complex64' and s0.dtype!='complex128':
-                    s0 = self.backend.bk_complex(s0,self.masked_mean(l_image2,vmask,axis=axis)+s0_off)
+                    s0 = self.backend.bk_complex(s0,s02+s0_off)
+                    if calc_var:
+                        vs0 = self.backend.bk_complex(vs0,vs02)
                 else:
-                    s0 = self.backend.bk_concat([s0,self.masked_mean(l_image2,vmask,axis=axis)],axis=0)
+                    s0 = self.backend.bk_concat([s0,s02],axis=0)
+                    if calc_var:
+                        vs0 = self.backend.bk_concat([vs0,vs02],axis=0)
 
         s1=None
         s2=None
@@ -1058,20 +1089,37 @@ class funct(FOC.FoCUS):
                     conj=self.backend.bk_real(conj)
 
                 # Compute l_p00 [....,....,Nmask,j1,Norient]
-                l_p00 = self.backend.bk_expand_dims(self.masked_mean(conj,vmask,axis=axis,rank=j1),-2)
+                if calc_var:
+                    l_p00,l_vp00 = self.masked_mean(conj,vmask,axis=axis,rank=j1,calc_var=True)
+                    l_p00 = self.backend.bk_expand_dims(l_p00,-2)
+                    l_vp00 = self.backend.bk_expand_dims(l_vp00,-2)
+                else:
+                    l_p00 = self.masked_mean(conj,vmask,axis=axis,rank=j1)
+                    l_p00 = self.backend.bk_expand_dims(l_p00,-2)
 
                 conj=self.backend.bk_L1(conj)
 
                 # Compute l_s1 [....,....,Nmask,1,Norient] 
-                l_s1 = self.backend.bk_expand_dims(self.masked_mean(conj,vmask,axis=axis,rank=j1),-2)
+                if calc_var:
+                    l_s1,l_vs1 = self.masked_mean(conj,vmask,axis=axis,rank=j1,calc_var=True)
+                    l_s1 =self.backend.bk_expand_dims(l_s1,-2)
+                    l_vs1 =self.backend.bk_expand_dims(l_vs1,-2)
+                else:
+                    l_s1 = self.backend.bk_expand_dims(self.masked_mean(conj,vmask,axis=axis,rank=j1),-2)
 
                 # Concat S1,P00 [....,....,Nmask,j1,Norient] 
                 if s1 is None:
                     s1=l_s1
-                    p00=l_p00
+                    p00=l_p00 
+                    if calc_var:
+                        vs1=l_vs1
+                        vp00=l_vp00
                 else:
                     s1=self.backend.bk_concat([s1,l_s1],axis=-2)
                     p00=self.backend.bk_concat([p00,l_p00],axis=-2)
+                    if calc_var:
+                        vs1=self.backend.bk_concat([vs1,l_vs1],axis=-2)
+                        vp00=self.backend.bk_concat([vp00,l_vp00],axis=-2)
 
                 # Concat l2_image [....,j1,Npix_j1,,....,Norient]
                 if l2_image is None:
@@ -1105,18 +1153,30 @@ class funct(FOC.FoCUS):
                 conj2ml1=self.backend.bk_real(conj2ml1)
             
             # Convol l_s2 [....,....,Nmask,j1,Norient,Norient]
-            l_s2 = self.masked_mean(conj2p-conj2m,vmask,axis=axis+1,rank=j1)
-            l_s2l1 = self.masked_mean(conj2pl1-conj2ml1,vmask,axis=axis+1,rank=j1)
+            if calc_var:
+                l_s2,l_vs2 = self.masked_mean(conj2p-conj2m,vmask,axis=axis+1,rank=j1,calc_var=True)
+                l_s2l1,l_vs2l1 = self.masked_mean(conj2pl1-conj2ml1,vmask,axis=axis+1,rank=j1,calc_var=True)
+            else:
+                l_s2 = self.masked_mean(conj2p-conj2m,vmask,axis=axis+1,rank=j1)
+                l_s2l1 = self.masked_mean(conj2pl1-conj2ml1,vmask,axis=axis+1,rank=j1)
 
             # Concat l_s2 [....,....,Nmask,j1*(j1+1)/2,Norient,Norient]
             if s2 is None:
                 s2l=l_s2
                 s2=l_s2l1
+                if calc_var:
+                    vs2l=l_vs2
+                    vs2=l_vs2l1
+                    
                 s2j1=np.arange(l_s2.shape[axis+1],dtype='int')
                 s2j2=j1*np.ones(l_s2.shape[axis+1],dtype='int')
             else:
                 s2=self.backend.bk_concat([s2,l_s2l1],axis=-3)
                 s2l=self.backend.bk_concat([s2l,l_s2],axis=-3)
+                if calc_var:
+                    vs2=self.backend.bk_concat([vs2,l_vs2l1],axis=-3)
+                    vs2l=self.backend.bk_concat([vs2l,l_vs2],axis=-3)
+                    
                 s2j1=np.concatenate([s2j1,np.arange(l_s2.shape[axis+1],dtype='int')],0)
                 s2j2=np.concatenate([s2j2,j1*np.ones(l_s2.shape[axis+1],dtype='int')],0)
                 
@@ -1140,9 +1200,18 @@ class funct(FOC.FoCUS):
                     
         
         if len(image1.shape)==1 or (len(image1.shape)==2 and self.use_2D):
-            return(scat(p00[0],s0[0],s1[0],s2[0],s2l[0],s2j1,s2j2,cross=cross,backend=self.backend))
-
-        return(scat(p00,s0,s1,s2,s2l,s2j1,s2j2,cross=cross,backend=self.backend))
+            sc_ret=scat(p00[0],s0[0],s1[0],s2[0],s2l[0],s2j1,s2j2,cross=cross,backend=self.backend)
+        else:
+            sc_ret=scat(p00,s0,s1,s2,s2l,s2j1,s2j2,cross=cross,backend=self.backend)
+        
+        if calc_var:
+            if len(image1.shape)==1 or (len(image1.shape)==2 and self.use_2D):
+                vsc_ret=scat(vp00[0],vs0[0],vs1[0],vs2[0],vs2l[0],s2j1,s2j2,cross=cross,backend=self.backend)
+            else:
+                vsc_ret=scat(vp00,vs0,vs1,vs2,vs2l,s2j1,s2j2,cross=cross,backend=self.backend)
+            return sc_ret,vsc_ret
+        else:
+            return sc_ret
 
     def square(self,x):
         # the abs make the complex value usable for reduce_sum or mean

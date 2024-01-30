@@ -2,7 +2,7 @@ import numpy as np
 import healpy as hp
 import os, sys
 import foscat.backend as bk
-import foscat.Rformat as Rformat
+from scipy.interpolate import griddata
 
 TMPFILE_VERSION='V2_6'
 
@@ -23,6 +23,7 @@ class FoCUS:
                  TEMPLATE_PATH='data',
                  BACKEND='tensorflow',
                  use_2D=False,
+                 return_data=False,
                  JmaxDelta=0,
                  DODIV=False,
                  InitWave=None,
@@ -40,6 +41,7 @@ class FoCUS:
 
         self.mpi_size=mpi_size
         self.mpi_rank=mpi_rank
+        self.return_data=return_data
         
         print('================================================')
         print('          START FOSCAT CONFIGURATION')
@@ -278,16 +280,9 @@ class FoCUS:
     def get_mpi_type(self):
         return self.MPI_ALL_TYPE
     
-    def get_use_R(self):
-        return self.use_2D
-    
-    def is_R(self,data):
-        return isinstance(data,Rformat.Rformat)
-    
     # ---------------------------------------------−---------
     # --       COMPUTE 3X3 INDEX FOR HEALPIX WORK          --
     # ---------------------------------------------−---------
-    # convert all numpy array in the used bakcend format (e.g. Rformat if it is used)
     def conv_to_FoCUS(self,x,axis=0):
         if self.use_2D and isinstance(x,np.ndarray):
             return(self.to_R(x,axis,chans=self.chans))
@@ -505,7 +500,7 @@ class FoCUS:
     def fill_1d(self,i_arr,nullval=0):
         arr=i_arr.copy()
         # Indices des éléments non nuls
-        non_zero_indices = np.where(arr==nullval)[0]
+        non_zero_indices = np.where(arr!=nullval)[0]
         
         # Indices de tous les éléments
         all_indices = np.arange(len(arr))
@@ -516,7 +511,7 @@ class FoCUS:
         interpolated_values = np.interp(all_indices, non_zero_indices, arr[non_zero_indices])
         
         # Mise à jour du tableau original
-        arr[arr == 0] = interpolated_values[arr == 0]
+        arr[arr==nullval] = interpolated_values[arr==nullval]
         
         return arr
 
@@ -548,7 +543,6 @@ class FoCUS:
         
         itt=0
         while null_indices.shape[0]>0 and itt<nmax:
-            print(null_indices.shape[0])
             # Trouver les coordonnées theta, phi pour les pixels nuls
             theta, phi = hp.pix2ang(nside, null_indices)
             
