@@ -1242,6 +1242,62 @@ class funct(FOC.FoCUS):
         if self.use_2D:
             return self.fill_2d(im,nullval=nullval)
         return self.fill_healpy(im,nullval=nullval)
+
+    def moments(self,list_scat):
+        vS0=None
+        for k in list_scat:
+            tmp=list_scat[k]
+            nS0=np.expand_dims(tmp.S0.numpy(),0)
+            nPOO=np.expand_dims(tmp.P00.numpy(),0)
+            nC01=np.expand_dims(tmp.C01.numpy(),0)
+            nC11=np.expand_dims(tmp.C11.numpy(),0)
+            if tmp.C10 is not None:
+                nC10=np.expan_dims(tmp.C10.numpy(),0)
+            if tmp.S1 is not None:
+                nS1=np.expan_dims(tmp.S1.numpy(),0)
+                
+            if v is None:
+                S0=nS0
+                P00=nP00
+                C01=nC01
+                C11=nC11
+                if tmp.C10 is not None:
+                    C10=nC10
+                if tmp.S1 is not None:
+                    S1=nS1
+            else:
+                S0=np.concatenate([S0,nS0],0)
+                P00=np.concatenate([P00,nP00],0)
+                C01=np.concatenate([C01,nC01],0)
+                C11=np.concatenate([C11,nC11],0)
+                if tmp.C10 is not None:
+                    C10=np.concatenate([C10,nC10],0)
+                if tmp.S1 is not None:
+                    S1=np.concatenate([S1,nS1],0)
+        sS0=np.std(S0,0)
+        sP00=np.std(P00,0)
+        sC01=np.std(C01,0)
+        sC11=np.std(C11,0)
+        mS0=np.mean(S0,0)
+        mP00=np.mean(P00,0)
+        mC01=np.mean(C01,0)
+        mC11=np.mean(C11,0)
+        if tmp.C10 is not None:
+            sC10=np.std(C10,0)
+            mC10=np.mean(C10,0)
+        else:
+            sC10=None
+            mC10=None
+            
+        if tmp.S1 is not None:
+            sS1=np.std(S1,0)
+            mS1=np.mean(S1,0)
+        else:
+            sS1=None
+            mS1=None
+            
+        return scat_cov(mS0, mP00, mC01, MC11, s1=mS1,c10=mC10,backend=self.backend), \
+            scat_cov(sS0, sP00, sC01, sC11, s1=sS1,c10=sC10,backend=self.backend)
     
     def eval(self, image1, image2=None, mask=None, norm=None, Auto=True, calc_var=False):
         """

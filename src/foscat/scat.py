@@ -921,6 +921,42 @@ class funct(FOC.FoCUS):
     def fill(self,im,nullval=hp.UNSEEN):
         return self.fill_healpy(im,nullval=nullval)
     
+    def moments(self,list_scat):
+        vS0=None
+        for k in list_scat:
+            tmp=list_scat[k]
+            nS0=np.expand_dims(tmp.S0.numpy(),0)
+            nPOO=np.expand_dims(tmp.P00.numpy(),0)
+            nS1=np.expand_dims(tmp.S1.numpy(),0)
+            nS2=np.expand_dims(tmp.S2.numpy(),0)
+            nS2L=np.expand_dims(tmp.S2L.numpy(),0)
+                
+            if v is None:
+                S0=nS0
+                P00=nP00
+                S1=nS1
+                S2=nS2
+                S2L=nS2L
+            else:
+                S0=np.concatenate([S0,nS0],0)
+                P00=np.concatenate([P00,nP00],0)
+                S1=np.concatenate([S1,nS1],0)
+                S2=np.concatenate([S2,nS2],0)
+                S2L=np.concatenate([S2L,nS2L],0)
+        sS0=np.std(S0,0)
+        sP00=np.std(P00,0)
+        sS1=np.std(S1,0)
+        sS2=np.std(S2,0)
+        sS2L=np.std(S2L,0)
+        mS0=np.mean(S0,0)
+        mP00=np.mean(P00,0)
+        mS1=np.mean(S1,0)
+        mS2=np.mean(S2,0)
+        mS2L=np.mean(S2L,0)
+            
+        return scat(mP00,mS0,mS1,mS2,mS2L,tmp.j1,tmp.j2,backend=self.backend), \
+            scat(sP00,sS0,sS1,sS2,sS2L,tmp.j1,tmp.j2,backend=self.backend)
+    
     def eval(self, image1, image2=None,mask=None,Auto=True,s0_off=1E-6,calc_var=False):
         # Check input consistency
         if image2 is not None:

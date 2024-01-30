@@ -4,7 +4,6 @@ setup.py
 src/foscat/CircSpline.py
 src/foscat/FoCUS.py
 src/foscat/GetGPUinfo.py
-src/foscat/Rformat.py
 src/foscat/Spline1D.py
 src/foscat/Synthesis.py
 src/foscat/__init__.py
@@ -16,6 +15,7 @@ src/foscat/scat_cov.py
 src/foscat/scat_cov1D.py
 src/foscat/scat_cov2D.py
 src/foscat/scat_cov_map.py
+src/foscat/scat_cov_map2D.py
 src/foscat.egg-info/PKG-INFO
 src/foscat.egg-info/SOURCES.txt
 src/foscat.egg-info/dependency_links.txt
