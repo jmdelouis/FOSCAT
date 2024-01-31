@@ -9,6 +9,9 @@ class foscat_backend:
         self.TORCH=2
         self.NUMPY=3
         
+        # table use to compute the iso orientation rotation
+        self._iso_orient={}
+        
         self.BACKEND=name
         
         if name not in ['tensorflow','torch','numpy']:
@@ -96,6 +99,13 @@ class foscat_backend:
             except RuntimeError as e:
                 # Memory growth must be set before GPUs have been initialized
                 print(e)
+
+    def calc_iso_orient(self,norient):
+        tmp=np.zeros([norient*norient,norient])
+        for i in range(norient):
+            for j in range(norient):
+                tmp[j*norient+(j+i)%norient,i]=0.25
+        self._iso_orient[norient]=tmp
 
         
     # ---------------------------------------------−---------

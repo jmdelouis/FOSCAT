@@ -547,6 +547,7 @@ class scat:
 
     def iso_mean(self,repeat=False):
         shape=list(self.S2.shape)
+        norient=self.S1.shape[2]
         idx=np.zeros([shape[2]*shape[2]],dtype='int')
         for i in range(shape[2]):
             idx[i*shape[2]:(i+1)*shape[2]]=(np.arange(shape[2])+i)%shape[2]+np.arange(shape[2])*shape[2]
@@ -564,18 +565,23 @@ class scat:
         else:
             P00=self.backend.bk_expand_dims(P00,-1)
 
-        S2=self.backend.bk_reshape(self.backend.bk_gather(
-            self.backend.bk_reshape(self.S2,[shape[0],shape[1],shape[2]*shape[2]]),idx,2),
-                                      [shape[0],shape[1],shape[2],shape[2]])
-        S2L=self.backend.bk_reshape(self.backend.bk_gather(
-            self.backend.bk_reshape(self.S2L,[shape[0],shape[1],shape[2]*shape[2]]),idx,2),
-                                       [shape[0],shape[1],shape[2],shape[2]])
-
-        S2  =self.backend.bk_reduce_mean(S2,3)
-        S2L=self.backend.bk_reduce_mean(S2L,3)
+        if norient not in self.backend._iso_orient:
+            self.backend.calc_iso_orient(norient)
+            
+        S2=self.backend.bk_reshape(
+            self.backend.backend.matmul(
+                self.backend.bk_reshape(self.S2,[shape[0],shape[1],norient*norient]),
+                self.backend._iso_orient[norient]),
+            [shape[0],shape[1],norient])
+        S2L=self.backend.bk_reshape(
+            self.backend.backend.matmul(
+                self.backend.bk_reshape(self.S2L,[shape[0],shape[1],norient*norient]),
+                self.backend._iso_orient[norient]),
+            [shape[0],shape[1],norient])
+        
         if repeat:
-            S2=self.backend.bk_reshape(self.backend.bk_repeat(S2,shape[2],2),self.S2.shape)
-            S2L=self.backend.bk_reshape(self.backend.bk_repeat(S2L,shape[2],2),self.S2.shape)
+            S2=self.backend.bk_reshape(self.backend.bk_repeat(norient,2),self.S2.shape)
+            S2L=self.backend.bk_reshape(self.backend.bk_repeat(norient,2),self.S2.shape)
         else:
             S2=self.backend.bk_expand_dims(S2,-1)
             S2L=self.backend.bk_expand_dims(S2L,-1)
