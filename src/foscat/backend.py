@@ -11,6 +11,9 @@ class foscat_backend:
         
         # table use to compute the iso orientation rotation
         self._iso_orient={}
+        self._iso_orient_T={}
+        self._iso_orient_C={}
+        self._iso_orient_C_T={}
         
         self.BACKEND=name
         
@@ -105,8 +108,11 @@ class foscat_backend:
         for i in range(norient):
             for j in range(norient):
                 tmp[j*norient+(j+i)%norient,i]=0.25
-        self._iso_orient[norient]=tmp
-
+                
+        self._iso_orient[norient]=self.constant(self.bk_cast(tmp))
+        self._iso_orient_T[norient]=self.constant(self.bk_cast(4*tmp.T))
+        self._iso_orient_C[norient]=self.bk_complex(self._iso_orient[norient],0*self._iso_orient[norient])
+        self._iso_orient_C_T[norient]=self.bk_complex(self._iso_orient_T[norient],0*self._iso_orient_T[norient])
         
     # ---------------------------------------------−---------
     # --             BACKEND DEFINITION                    --
@@ -212,6 +218,17 @@ class foscat_backend:
             return self.bk_complex(r,i)
         else:
             return self.backend.sign(x)*self.backend.sqrt(self.backend.sign(x)*x)
+        
+    def bk_square_comp(self,x):
+        if x.dtype==self.all_cbk_type:
+            xr=self.bk_real(x)
+            xi=self.bk_imag(x)
+                
+            r=xr*xr
+            i=xi*xi
+            return self.bk_complex(r,i)
+        else:
+            return x*x
         
     def bk_reduce_sum(self,data,axis=None):
         

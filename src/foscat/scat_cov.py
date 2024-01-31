@@ -953,6 +953,7 @@ class scat_cov:
                     abs(self.get_np(self.C11)).mean() +
                     abs(self.get_np(self.P00)).mean()) / 4
 
+
     def initdx(self,norient):
         idx1=np.zeros([norient*norient],dtype='int')
         for i in range(norient):
@@ -966,107 +967,149 @@ class scat_cov:
                             +(np.arange(norient)+i+j)%norient+np.arange(norient)*norient*norient
         self.idx1=self.backend.constant(idx1)
         self.idx2=self.backend.constant(idx2)
+
+    def sqrt(self):
+
+        s1=None
+        c10=None
         
+        if self.S1 is not None:
+            s1=self.backend.bk_sqrt(self.S1)
+        if self.C10 is not None:
+            c10=self.backend.bk_sqrt(self.C10)
+
+        s0=self.backend.bk_sqrt(self.S0)
+        p00=self.backend.bk_sqrt(self.P00)
+        c01=self.backend.bk_sqrt(self.C01)
+        c11=self.backend.bk_sqrt(self.C11)
+        
+        return scat_cov(s0,p00, c01, c11, s1=s1, c10=c10,backend=self.backend)
+    
+    def L1(self):
+
+        s1=None
+        c10=None
+        
+        if self.S1 is not None:
+            s1=self.backend.bk_L1(self.S1)
+        if self.C10 is not None:
+            c10=self.backend.bk_L1(self.C10)
+
+        s0=self.backend.bk_L1(self.S0)
+        p00=self.backend.bk_L1(self.P00)
+        c01=self.backend.bk_L1(self.C01)
+        c11=self.backend.bk_L1(self.C11)
+        
+        return scat_cov(s0,p00, c01, c11, s1=s1, c10=c10,backend=self.backend)
+
+    
+    def square_comp(self):
+
+        s1=None
+        c10=None
+        
+        if self.S1 is not None:
+            s1=self.backend.bk_square_comp(self.S1)
+        if self.C10 is not None:
+            c10=self.backend.bk_square_comp(self.C10)
+
+        s0=self.backend.bk_square_comp(self.S0)
+        p00=self.backend.bk_square_comp(self.P00)
+        c01=self.backend.bk_square_comp(self.C01)
+        c11=self.backend.bk_square_comp(self.C11)
+        
+        return scat_cov(s0,p00, c01, c11, s1=s1, c10=c10,backend=self.backend)
+    
     def iso_mean(self,repeat=False):
         shape=list(self.P00.shape)
         norient=shape[3]
-
-        if self.idx1 is None:
-            self.initdx(norient)
 
         S1=self.S1
         if self.S1 is not None:
             S1  = self.backend.bk_reduce_mean(self.S1,3)
             if repeat:
-                S1=self.backend.bk_reshape(self.backend.bk_repeat(S1,norient),self.S1.shape)
+                S1=self.backend.bk_reshape(self.backend.bk_repeat(S1,norient,2),self.S1.shape)
         P00 = self.backend.bk_reduce_mean(self.P00,3)
         if repeat:
-            P00=self.backend.bk_reshape(self.backend.bk_repeat(P00,norient),self.P00.shape)
+            P00=self.backend.bk_reshape(self.backend.bk_repeat(P00,norient,2),self.P00.shape)
 
         C01=self.C01
 
         if norient not in self.backend._iso_orient:
             self.backend.calc_iso_orient(norient)
-            
+
+        
         shape=list(self.C01.shape)
         if self.C01 is not None:
+            if self.C01.dtype=='complex128' or self.C01.dtype=='complex64':
+                lmat   = self.backend._iso_orient_C[norient]
+                lmat_T = self.backend._iso_orient_C_T[norient]
+            else:
+                lmat   = self.backend._iso_orient[norient]
+                lmat_T = self.backend._iso_orient_T[norient]
+                
             C01=self.backend.bk_reshape(
                 self.backend.backend.matmul(
                     self.backend.bk_reshape(self.C01,[shape[0]*shape[1]*shape[2],norient*norient]),
-                    self.backend._iso_orient[norient]),
-                                        [shape[0],shape[1],shape[2],norient])
+                    lmat),
+                [shape[0],shape[1],shape[2],norient])
             if repeat:
-                C01=self.backend.bk_reshape(self.backend.bk_repeat(C01,norient),self.C01.shape)
+                C01=self.backend.bk_reshape(
+                    self.backend.backend.matmul(
+                        self.backend.bk_reshape(C01,[shape[0]*shape[1]*shape[2],norient]),
+                        lmat_T),
+                    [shape[0],shape[1],shape[2],norient,norient])
+                
         C10=self.C10
         if self.C10 is not None:
-            C01=self.backend.bk_reshape(
+            if self.C10.dtype=='complex128' or self.C10.dtype=='complex64':
+                lmat   = self.backend._iso_orient_C[norient]
+                lmat_T = self.backend._iso_orient_C_T[norient]
+            else:
+                lmat   = self.backend._iso_orient[norient]
+                lmat_T = self.backend._iso_orient_T[norient]
+                    
+            C10=self.backend.bk_reshape(
                 self.backend.backend.matmul(
                     self.backend.bk_reshape(self.C10,[shape[0]*shape[1]*shape[2],norient*norient]),
-                    self.backend._iso_orient[norient]),
-                                        [shape[0],shape[1],shape[2],norient])
+                    lmat),
+                [shape[0],shape[1],shape[2],norient])
             if repeat:
-                C10=self.backend.bk_reshape(self.backend.bk_repeat(C10,norient),self.C10.shape)
+                C10=self.backend.bk_reshape(
+                    self.backend.backend.matmul(
+                        self.backend.bk_reshape(C10,[shape[0]*shape[1]*shape[2],norient]),
+                        lmat_T),
+                    [shape[0],shape[1],shape[2],norient,norient])
 
         C11=self.C11
         if self.C11 is not None:
+            if self.C11.dtype=='complex128' or self.C11.dtype=='complex64':
+                lmat   = self.backend._iso_orient_C[norient]
+                lmat_T = self.backend._iso_orient_C_T[norient]
+            else:
+                lmat   = self.backend._iso_orient[norient]
+                lmat_T = self.backend._iso_orient_T[norient]
+                    
             shape=list(self.C11.shape)
             C11=self.backend.bk_reshape(
                 self.backend.backend.matmul(
                     self.backend.bk_reshape(self.C11,[shape[0]*shape[1]*shape[2]*norient,norient*norient]),
-                    self.backend._iso_orient[norient]),
-                                        [shape[0],shape[1],shape[2],norient,norient])
+                    lmat),
+                [shape[0],shape[1],shape[2],norient,norient])
             if repeat:
-                C11=self.backend.bk_reshape(self.backend.bk_repeat(C11,norient),self.C11.shape)
+                C11=self.backend.bk_reshape(
+                    self.backend.backend.matmul(
+                        self.backend.bk_reshape(C11,[shape[0]*shape[1]*shape[2]*norient,norient]),
+                        lmat_T),
+                    [shape[0],shape[1],shape[2],norient,norient,norient])
 
         return scat_cov(self.S0,P00, C01, C11, s1=S1, c10=C10,backend=self.backend)
 
 
     def iso_std(self,repeat=False):
-        shape=list(self.P00.shape)
-        norient=shape[3]
 
-        if self.idx1 is None:
-            self.initdx(norient)
-
-        S1=self.S1
-        if self.S1 is not None:
-            S1  = self.backend.bk_reduce_mean(self.S1,3)
-            if repeat:
-                S1=self.backend.bk_reshape(self.backend.bk_repeat(S1,norient),self.S1.shape)
-        P00 = self.backend.bk_reduce_mean(self.P00,3)
-        if repeat:
-            P00=self.backend.bk_reshape(self.backend.bk_repeat(P00,norient),self.P00.shape)
-
-        C01=self.C01
-        shape=list(self.C01.shape)
-        if self.C01 is not None:
-            C01=self.backend.bk_reshape(self.backend.bk_gather(
-                self.backend.bk_reshape(self.C01,[shape[0],shape[1],shape[2],norient*norient]),self.idx1,3),
-                                        [shape[0],shape[1],shape[2],norient,norient])
-            C01=self.backend.bk_reduce_mean(C01,4)
-            if repeat:
-                C01=self.backend.bk_reshape(self.backend.bk_repeat(C01,norient),self.C01.shape)
-        C10=self.C10
-        if self.C10 is not None:
-            C10=self.backend.bk_reshape(self.backend.bk_gather(
-                self.backend.bk_reshape(self.C10,[shape[0],shape[1],shape[2],norient*norient]),self.idx1,3),
-                                        [shape[0],shape[1],shape[2],norient,norient])
-            C10=self.backend.bk_reduce_mean(C10,4)
-            if repeat:
-                C10=self.backend.bk_reshape(self.backend.bk_repeat(C10,norient),self.C10.shape)
-
-        C11=self.C11
-        if self.C11 is not None:
-            shape=list(self.C11.shape)
-            C11=self.backend.bk_reshape(self.backend.bk_gather(
-                self.backend.bk_reshape(self.C11,[shape[0],shape[1],shape[2],norient*norient*norient]),self.idx2,3),
-                                        [shape[0],shape[1],shape[2],norient,norient,norient])
-
-            C11=self.backend.bk_reduce_mean(C11,5)
-            if repeat:
-                C11=self.backend.bk_reshape(self.backend.bk_repeat(C11,norient),self.C11.shape)
-
-        return scat_cov(self.S0,P00, C01, C11, s1=S1, c10=C10,backend=self.backend)
+        val=(self-self.iso_mean(repeat=True)).square_comp()
+        return (val.iso_mean(repeat=repeat)).L1()
 
     def get_nscale(self):
         return self.P00.shape[2]
