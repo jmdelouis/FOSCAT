@@ -42,4 +42,5 @@ for k in range(4):
         test3=test3+b.C11.numpy()[0,0,4,0,k]-np.mean(a.C11.numpy()[0,0,4,0,idx,(idx+k)%4])
         x=a.C11.numpy()[0,0,4,0,idx,(idx+k)%4]
         test4=test2+c.C11.numpy()[0,0,4,0,k]-np.std(x.real)-1J*np.std(x.imag)
+        
 print(test,test2,test3,test4)

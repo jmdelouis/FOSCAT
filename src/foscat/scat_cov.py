@@ -1106,6 +1106,76 @@ class scat_cov:
         return scat_cov(self.S0,P00, C01, C11, s1=S1, c10=C10,backend=self.backend)
 
 
+    def fft_ang(self,nharm=1):
+        shape=list(self.P00.shape)
+        norient=shape[3]
+
+        if (norient,nharm) not in self.backend._iso_orient:
+            self.backend.calc_fft_orient(norient,nharm)
+            
+            
+        S1=self.S1
+        if self.S1 is not None:
+            if self.S1.dtype=='complex128' or self.S1.dtype=='complex64':
+                lmat   = self.backend._fft_1_orient_C[(norient,nharm)]
+            else:
+                lmat   = self.backend._fft_1_orient[(norient,nharm)]
+            S1=self.backend.bk_reshape(
+                self.backend.backend.matmul(self.backend.bk_reshape(self.S1,[shape[0]*shape[1]*shape[2],norient]),lmat),
+                [shape[0],shape[1],shape[2],1+nharm])
+            
+        if self.P00.dtype=='complex128' or self.P00.dtype=='complex64':
+            lmat   = self.backend._fft_1_orient_C[(norient,nharm)]
+        else:
+            lmat   = self.backend._fft_1_orient[(norient,nharm)]
+            
+        P00=self.backend.bk_reshape(
+            self.backend.backend.matmul(self.backend.bk_reshape(self.P00,[shape[0]*shape[1]*shape[2],norient]),lmat),
+                [shape[0],shape[1],shape[2],1+nharm])
+            
+        C01=self.C01
+        shape=list(self.C01.shape)
+        if self.C01 is not None:
+            if self.C01.dtype=='complex128' or self.C01.dtype=='complex64':
+                lmat   = self.backend._fft_2_orient_C[(norient,nharm)]
+            else:
+                lmat   = self.backend._fft_2_orient[(norient,nharm)]
+                
+            C01=self.backend.bk_reshape(
+                self.backend.backend.matmul(
+                    self.backend.bk_reshape(self.C01,[shape[0]*shape[1]*shape[2],norient*norient]),
+                    lmat),
+                [shape[0],shape[1],shape[2],1+nharm,1+nharm])
+                
+        C10=self.C10
+        if self.C10 is not None:
+            if self.C10.dtype=='complex128' or self.C10.dtype=='complex64':
+                lmat   = self.backend._fft_2_orient_C[(norient,nharm)]
+            else:
+                lmat   = self.backend._fft_2_orient[(norient,nharm)]
+                
+            C10=self.backend.bk_reshape(
+                self.backend.backend.matmul(
+                    self.backend.bk_reshape(self.C10,[shape[0]*shape[1]*shape[2],norient*norient]),
+                    lmat),
+                [shape[0],shape[1],shape[2],1+nharm,1+nharm])
+
+        C11=self.C11
+        if self.C11 is not None:
+            if self.C01.dtype=='complex128' or self.C01.dtype=='complex64':
+                lmat   = self.backend._fft_3_orient_C[(norient,nharm)]
+            else:
+                lmat   = self.backend._fft_3_orient[(norient,nharm)]
+                    
+            shape=list(self.C11.shape)
+            C11=self.backend.bk_reshape(
+                self.backend.backend.matmul(
+                    self.backend.bk_reshape(self.C11,[shape[0]*shape[1]*shape[2],norient*norient*norient]),
+                    lmat),
+                [shape[0],shape[1],shape[2],1+nharm,1+nharm,1+nharm])
+
+        return scat_cov(self.S0,P00, C01, C11, s1=S1, c10=C10,backend=self.backend)
+    
     def iso_std(self,repeat=False):
 
         val=(self-self.iso_mean(repeat=True)).square_comp()

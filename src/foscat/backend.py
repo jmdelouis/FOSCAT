@@ -14,6 +14,12 @@ class foscat_backend:
         self._iso_orient_T={}
         self._iso_orient_C={}
         self._iso_orient_C_T={}
+        self._fft_1_orient={}
+        self._fft_1_orient_C={}
+        self._fft_2_orient={}
+        self._fft_2_orient_C={}
+        self._fft_3_orient={}
+        self._fft_3_orient_C={}
         
         self.BACKEND=name
         
@@ -113,6 +119,47 @@ class foscat_backend:
         self._iso_orient_T[norient]=self.constant(self.bk_cast(4*tmp.T))
         self._iso_orient_C[norient]=self.bk_complex(self._iso_orient[norient],0*self._iso_orient[norient])
         self._iso_orient_C_T[norient]=self.bk_complex(self._iso_orient_T[norient],0*self._iso_orient_T[norient])
+        
+    def calc_fft_orient(self,norient,nharm):
+
+        x=np.arange(norient)/norient*2*np.pi
+        
+        tmp=np.zeros([norient,1+nharm])
+        for k in range(nharm+1):
+            tmp[:,k]=np.cos(x*k)
+            
+        self._fft_1_orient[(norient,nharm)]=self.constant(self.bk_cast(tmp))
+        self._fft_1_orient_C[(norient,nharm)]=self.bk_complex(self._fft_1_orient[(norient,nharm)],0*self._fft_1_orient[(norient,nharm)])
+
+        x=np.repeat(x,norient).reshape(norient,norient)
+        
+        tmp=np.zeros([norient,norient,(1+nharm),(1+nharm)])
+        
+        for k in range(nharm+1):
+            for l in range(nharm+1):
+                tmp[:,:,k,l]=np.cos(x*k)*np.cos((x.T)*l)
+        
+        self._fft_2_orient[(norient,nharm)]=self.constant(self.bk_cast(tmp.reshape(norient*norient,(1+nharm)*(1+nharm))))
+        self._fft_2_orient_C[(norient,nharm)]=self.bk_complex(self._fft_2_orient[(norient,nharm)],0*self._fft_2_orient[(norient,nharm)])
+
+        tmp=np.zeros([norient,norient,norient,(1+nharm),(1+nharm),(1+nharm)])
+        x=np.arange(norient)/norient*2*np.pi
+        xx=np.zeros([norient,norient,norient])
+        yy=np.zeros([norient,norient,norient])
+        zz=np.zeros([norient,norient,norient])
+        for i in range(norient):
+            for j in range(norient):
+                xx[:,i,j]=x
+                yy[i,:,j]=x
+                zz[i,j,:]=x
+        
+        for k in range(nharm+1):
+            for l in range(nharm+1):
+                for m in range(nharm+1):
+                    tmp[:,:,:,k,l,m]=np.cos(xx*k)*np.cos(yy*l)*np.cos(zz*m)
+
+        self._fft_3_orient[(norient,nharm)]=self.constant(self.bk_cast(tmp.reshape(norient*norient*norient,(1+nharm)*(1+nharm)*(1+nharm))))
+        self._fft_3_orient_C[(norient,nharm)]=self.bk_complex(self._fft_3_orient[(norient,nharm)],0*self._fft_3_orient[(norient,nharm)])
         
     # ---------------------------------------------−---------
     # --             BACKEND DEFINITION                    --

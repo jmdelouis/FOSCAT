@@ -628,46 +628,38 @@ class scat:
         return scat(P00,self.S0,S1,S2,S2L,self.j1,self.j2,backend=self.backend)
 
     
-    def fft_ang(self,nharm=1,mean=False):
+    def fft_ang(self,nharm=1):
         shape=list(self.S2.shape)
         norient=self.S1.shape[2]
-        idx=np.zeros([shape[2]*shape[2]],dtype='int')
-        for i in range(shape[2]):
-            idx[i*shape[2]:(i+1)*shape[2]]=(np.arange(shape[2])+i)%shape[2]+np.arange(shape[2])*shape[2]
 
-        S1  = self.backend.bk_reduce_mean(self.S1,2)
-        if repeat:
-            S1=self.backend.bk_reshape(self.backend.bk_repeat(S1,shape[2],1),self.S1.shape)
-        else:
-            S1=self.backend.bk_expand_dims(S1,-1)
+        if (norient,nharm) not in self.backend._iso_orient:
+            self.backend.calc_fft_orient(norient,nharm)
             
-
-        P00 = self.backend.bk_reduce_mean(self.P00,2)
-        if repeat:
-            P00=self.backend.bk_reshape(self.backend.bk_repeat(P00,shape[2],1),self.S1.shape)
+        if self.S1.dtype=='complex128' or self.S1.dtype=='complex64':
+            lmat   = self.backend._fft_1_orient_C[(norient,nharm)]
         else:
-            P00=self.backend.bk_expand_dims(P00,-1)
-
-        if norient not in self.backend._iso_orient:
-            self.backend.calc_iso_orient(norient)
+            lmat   = self.backend._fft_1_orient[(norient,nharm)]
             
-        S2=self.backend.bk_reshape(
-            self.backend.backend.matmul(
-                self.backend.bk_reshape(self.S2,[shape[0],shape[1],norient*norient]),
-                self.backend._iso_orient[norient]),
-            [shape[0],shape[1],norient])
-        S2L=self.backend.bk_reshape(
-            self.backend.backend.matmul(
-                self.backend.bk_reshape(self.S2L,[shape[0],shape[1],norient*norient]),
-                self.backend._iso_orient[norient]),
-            [shape[0],shape[1],norient])
+        S1=self.backend.bk_reshape(
+            self.backend.backend.matmul(self.backend.bk_reshape(self.S1,[self.S1.shape[0],self.S1.shape[1],norient]),lmat),
+            [self.S1.shape[0],self.S1.shape[1],1+nharm])
+            
+        P00=self.backend.bk_reshape(
+            self.backend.backend.matmul(self.backend.bk_reshape(self.P00,[self.S1.shape[0],self.S1.shape[1],norient]),lmat),
+            [self.S1.shape[0],self.S1.shape[1],1+nharm])
+            
         
-        if repeat:
-            S2=self.backend.bk_reshape(self.backend.bk_repeat(norient,2),self.S2.shape)
-            S2L=self.backend.bk_reshape(self.backend.bk_repeat(norient,2),self.S2.shape)
+        if self.S2.dtype=='complex128' or self.S2.dtype=='complex64':
+            lmat   = self.backend._fft_2_orient_C[(norient,nharm)]
         else:
-            S2=self.backend.bk_expand_dims(S2,-1)
-            S2L=self.backend.bk_expand_dims(S2L,-1)
+            lmat   = self.backend._fft_2_orient[(norient,nharm)]
+        
+        S2=self.backend.bk_reshape(
+            self.backend.backend.matmul(self.backend.bk_reshape(self.S2,[shape[0],shape[1],norient*norient]),lmat),
+            [shape[0],shape[1],1+nharm,1+nharm])
+        S2L=self.backend.bk_reshape(
+            self.backend.backend.matmul(self.backend.bk_reshape(self.S2L,[shape[0],shape[1],norient*norient]),lmat),
+            [shape[0],shape[1],1+nharm,1+nharm])
 
         return scat(P00,self.S0,S1,S2,S2L,self.j1,self.j2,backend=self.backend)
 
