@@ -1110,7 +1110,7 @@ class scat_cov:
         shape=list(self.P00.shape)
         norient=shape[3]
 
-        if (norient,nharm) not in self.backend._iso_orient:
+        if (norient,nharm) not in self.backend._fft_1_orient:
             self.backend.calc_fft_orient(norient,nharm)
             
             

@@ -632,7 +632,7 @@ class scat:
         shape=list(self.S2.shape)
         norient=self.S1.shape[2]
 
-        if (norient,nharm) not in self.backend._iso_orient:
+        if (norient,nharm) not in self.backend._fft_1_orient:
             self.backend.calc_fft_orient(norient,nharm)
             
         if self.S1.dtype=='complex128' or self.S1.dtype=='complex64':
