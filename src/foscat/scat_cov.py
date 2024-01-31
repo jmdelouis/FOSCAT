@@ -1244,19 +1244,19 @@ class funct(FOC.FoCUS):
         return self.fill_healpy(im,nullval=nullval)
 
     def moments(self,list_scat):
-        vS0=None
+        S0=None
         for k in list_scat:
             tmp=list_scat[k]
             nS0=np.expand_dims(tmp.S0.numpy(),0)
-            nPOO=np.expand_dims(tmp.P00.numpy(),0)
+            nP00=np.expand_dims(tmp.P00.numpy(),0)
             nC01=np.expand_dims(tmp.C01.numpy(),0)
             nC11=np.expand_dims(tmp.C11.numpy(),0)
             if tmp.C10 is not None:
-                nC10=np.expan_dims(tmp.C10.numpy(),0)
+                nC10=np.expand_dims(tmp.C10.numpy(),0)
             if tmp.S1 is not None:
-                nS1=np.expan_dims(tmp.S1.numpy(),0)
+                nS1=np.expand_dims(tmp.S1.numpy(),0)
                 
-            if v is None:
+            if S0 is None:
                 S0=nS0
                 P00=nP00
                 C01=nC01
@@ -1296,7 +1296,7 @@ class funct(FOC.FoCUS):
             sS1=None
             mS1=None
             
-        return scat_cov(mS0, mP00, mC01, MC11, s1=mS1,c10=mC10,backend=self.backend), \
+        return scat_cov(mS0, mP00, mC01, mC11, s1=mS1,c10=mC10,backend=self.backend), \
             scat_cov(sS0, sP00, sC01, sC11, s1=sS1,c10=sC10,backend=self.backend)
     
     def eval(self, image1, image2=None, mask=None, norm=None, Auto=True, calc_var=False):

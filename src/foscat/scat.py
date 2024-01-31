@@ -922,16 +922,16 @@ class funct(FOC.FoCUS):
         return self.fill_healpy(im,nullval=nullval)
     
     def moments(self,list_scat):
-        vS0=None
+        S0=None
         for k in list_scat:
             tmp=list_scat[k]
             nS0=np.expand_dims(tmp.S0.numpy(),0)
-            nPOO=np.expand_dims(tmp.P00.numpy(),0)
+            nP00=np.expand_dims(tmp.P00.numpy(),0)
             nS1=np.expand_dims(tmp.S1.numpy(),0)
             nS2=np.expand_dims(tmp.S2.numpy(),0)
             nS2L=np.expand_dims(tmp.S2L.numpy(),0)
                 
-            if v is None:
+            if S0 is None:
                 S0=nS0
                 P00=nP00
                 S1=nS1
@@ -943,11 +943,13 @@ class funct(FOC.FoCUS):
                 S1=np.concatenate([S1,nS1],0)
                 S2=np.concatenate([S2,nS2],0)
                 S2L=np.concatenate([S2L,nS2L],0)
+                
         sS0=np.std(S0,0)
         sP00=np.std(P00,0)
         sS1=np.std(S1,0)
         sS2=np.std(S2,0)
         sS2L=np.std(S2L,0)
+        
         mS0=np.mean(S0,0)
         mP00=np.mean(P00,0)
         mS1=np.mean(S1,0)
