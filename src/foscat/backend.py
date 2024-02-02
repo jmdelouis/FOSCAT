@@ -249,11 +249,11 @@ class foscat_backend:
         
     def bk_resize_image(self,x,shape):
         if self.BACKEND==self.TENSORFLOW:
-            return self.backend.image.resize(x,shape, method='bilinear')
+            return self.bk_cast(self.backend.image.resize(x,shape, method='bilinear'))
         if self.BACKEND==self.TORCH:
-            return self.backend.image.resize(x,shape, method='bilinear')
+            return self.bk_cast(self.backend.image.resize(x,shape, method='bilinear'))
         if self.BACKEND==self.NUMPY:
-            return self.backend.image.resize(x,shape, method='bilinear')
+            return self.bk_cast(self.backend.image.resize(x,shape, method='bilinear'))
         
     def bk_L1(self,x):
         if x.dtype==self.all_cbk_type:

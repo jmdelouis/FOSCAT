@@ -1516,7 +1516,7 @@ class funct(FOC.FoCUS):
                 vmask = self.backend.bk_ones([1, npix], dtype=self.all_type)
         else:
             vmask = self.backend.bk_cast(mask)  # [Nmask, Npix]
-
+            
         if self.KERNELSZ > 3:
             # if the kernel size is bigger than 3 increase the binning before smoothing
             if self.use_2D:
@@ -1542,7 +1542,6 @@ class funct(FOC.FoCUS):
                     vmask = self.up_grade(vmask, nside * 4, axis=1)
                     if cross:
                         I2 = self.up_grade(I2, nside * 4, axis=axis)
-                    
 
         # Normalize the masks because they have different pixel numbers
         # vmask /= self.backend.bk_reduce_sum(vmask, axis=1)[:, None]  # [Nmask, Npix]

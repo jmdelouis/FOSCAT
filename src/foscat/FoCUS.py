@@ -948,14 +948,33 @@ class FoCUS:
                 l_mask=12*nside*nside*l_mask/self.backend.bk_reshape(sum_mask,[l_mask.shape[0]]+[1 for i in l_mask.shape[1:]])
             else:
                 l_mask=mask.shape[1]*mask.shape[2]*l_mask/self.backend.bk_reshape(sum_mask,[l_mask.shape[0]]+[1 for i in l_mask.shape[1:]])
-
-        if self.use_2D and self.padding=='VALID' and shape[axis]!=l_mask.shape[1]:
-            l_mask=l_mask[:,self.KERNELSZ//2:-self.KERNELSZ//2+1,self.KERNELSZ//2:-self.KERNELSZ//2+1]
-            if shape[axis]!=l_mask.shape[1]:
+            
+        if self.use_2D:
+            if self.padding=='VALID' and shape[axis]!=l_mask.shape[1]:
                 l_mask=l_mask[:,self.KERNELSZ//2:-self.KERNELSZ//2+1,self.KERNELSZ//2:-self.KERNELSZ//2+1]
+                if shape[axis]!=l_mask.shape[1]:
+                    l_mask=l_mask[:,self.KERNELSZ//2:-self.KERNELSZ//2+1,self.KERNELSZ//2:-self.KERNELSZ//2+1]
+            else:
+                l_mask=l_mask[:,self.KERNELSZ//2:-self.KERNELSZ//2+1,self.KERNELSZ//2:-self.KERNELSZ//2+1]
+                
+        # data=[Nbatch,...,X[,Y],NORIENT[,NORIENT]] => data=[Nbatch,...,KERNELSZ//2:-self.KERNELSZ//2,KERNELSZ//2:-self.KERNELSZ//2,NORIENT[,NORIENT]]
+        if self.use_2D:
+            ichannel=1
+            for i in range(axis):
+                ichannel*=shape[i]
+            ochannel=1
+            for i in range(axis+2,len(shape)):
+                ochannel*=shape[i]
+            l_x=self.backend.bk_reshape(x,[ichannel,shape[axis],shape[axis+1],ochannel])
+            oshape=[k for k in shape]
+            oshape[axis]=oshape[axis]-self.KERNELSZ+1
+            oshape[axis+1]=oshape[axis+1]-self.KERNELSZ+1
+            l_x=self.backend.bk_reshape(l_x[:,self.KERNELSZ//2:-self.KERNELSZ//2+1,self.KERNELSZ//2:-self.KERNELSZ//2+1,:],oshape)
+        else:
+            l_x=x
             
         # data=[Nbatch,...,X[,Y],NORIENT[,NORIENT]] => data=[Nbatch,1,...,X[,Y],NORIENT[,NORIENT]]
-        l_x=self.backend.bk_expand_dims(x,1)
+        l_x=self.backend.bk_expand_dims(l_x,1)
         
         # mask=[Nmask,X[,Y]] => mask=[1,Nmask,X[,Y]]
         l_mask=self.backend.bk_expand_dims(l_mask,0)
@@ -965,7 +984,7 @@ class FoCUS:
             l_mask=self.backend.bk_expand_dims(l_mask,axis)
             
         if l_x.dtype==self.all_cbk_type:
-            l_mask=self.backend.bk_complex(l_mask,0.0*l_mask)
+            l_mask=self.backend.bk_complex(l_mask,self.backend.bk_cast(0.0*l_mask))
             
         if self.use_2D:
 
@@ -981,7 +1000,7 @@ class FoCUS:
             
             mtmp=self.backend.bk_reshape(l_mask,oshape1)
             vtmp=self.backend.bk_reshape(l_x,oshape2)
-            
+
             v1=self.backend.bk_reduce_sum(mtmp*vtmp,axis=axis+1)
             v2=self.backend.bk_reduce_sum(mtmp*vtmp*vtmp,axis=axis+1)
             vh=self.backend.bk_reduce_sum(mtmp,axis=axis+1)
