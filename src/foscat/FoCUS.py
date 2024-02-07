@@ -89,7 +89,7 @@ class FoCUS:
             self.MPI_ALL_TYPE=None
             
         self.all_type=all_type
-        
+        self.BACKEND=BACKEND
         self.backend=bk.foscat_backend(BACKEND,
                                        all_type=all_type,
                                        mpi_rank=mpi_rank,
@@ -308,7 +308,7 @@ class FoCUS:
     def barrier(self):
         if self.isMPI:
             self.comm.Barrier()
-    
+        
     # ---------------------------------------------−---------
     def toring(self,image,axis=0):
         lout=int(np.sqrt(image.shape[axis]//12))
@@ -365,7 +365,8 @@ class FoCUS:
             return self.backend.bk_reshape(res,[npix//2,npiy//2])
             
         else:
-            shape=im.shape
+            shape=list(im.shape)
+            
             lout=int(np.sqrt(shape[axis]//12))
             if im.__class__==np.zeros([0]).__class__:
                 oshape=np.zeros([len(shape)+1],dtype='int')
@@ -870,10 +871,7 @@ class FoCUS:
             ws=self.backend.bk_SparseTensor(self.backend.constant(tmp2),self.backend.constant(self.backend.bk_cast(ws)),dense_shape=[12*nside**2,12*nside**2])
                 
         if kernel==-1:
-            if self.backend.BACKEND==self.backend.TORCH:
-                self.Idx_Neighbours[nside]=tmp.as_type('int64')
-            else:
-                self.Idx_Neighbours[nside]=tmp
+            self.Idx_Neighbours[nside]=tmp
                 
         if self.use_2D:
             if kernel!=-1:
@@ -907,7 +905,7 @@ class FoCUS:
     # ---------------------------------------------−---------
     # convert swap axes tensor x [....,a,....,b,....] to [....,b,....,a,....]
     def swapaxes(self,x,axis1,axis2):
-        shape=x.shape.as_list()
+        shape=list(x.shape)
         if axis1<0:
             laxis1=len(shape)+axis1
         else:
@@ -936,7 +934,7 @@ class FoCUS:
         # if second level:  NORIENT[,NORIENT]= NORIENT,NORIENT
         #==========================================================================
         
-        shape=x.shape.as_list()
+        shape=list(x.shape)
         
         if not self.use_2D:
             nside=int(np.sqrt(x.shape[axis]//12))

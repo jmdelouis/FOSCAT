@@ -1,7 +1,7 @@
 import foscat.FoCUS as FOC
 import numpy as np
 import foscat.backend as bk
-import tensorflow as tf
+#import tensorflow as tf
 import pickle
 import healpy as hp
 
@@ -2229,8 +2229,9 @@ class funct(FOC.FoCUS):
                                 x.domult(sig.C11,x.C11)*x.domult(sig.C11,x.C11),
                                 backend=self.backend)
         return(self.NORIENT)
-    
+    """
     @tf.function
+    """
     def eval_comp_fast(self, image1, image2=None,mask=None,norm=None, Auto=True,Add_R45=False):
 
         res=self.eval(image1, image2=image2,mask=mask,Auto=Auto,Add_R45=Add_R45)

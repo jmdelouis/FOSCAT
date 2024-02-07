@@ -168,7 +168,7 @@ class foscat_backend:
         if self.BACKEND==self.TENSORFLOW:
             return(self.backend.SparseTensor(indice,w,dense_shape=dense_shape))
         if self.BACKEND==self.TORCH:
-            return(self.backend.SparseTensor(indice,w,dense_shape=dense_shape))
+            return(self.backend.sparse_coo_tensor(indice.T,w,dense_shape))
         if self.BACKEND==self.NUMPY:
             return np.sparse_matrix(indice,w,dense_shape=dense_shape)
 
@@ -176,7 +176,7 @@ class foscat_backend:
         if self.BACKEND==self.TENSORFLOW:
             return self.backend.sparse.sparse_dense_matmul(smat,mat) 
         if self.BACKEND==self.TORCH:
-            return self.backend.sparse.sparse_dense_matmul(smat,mat)
+            return smat.matmul(mat)
         if self.BACKEND==self.NUMPY:
             return np.sparse.sparse_dense_matmul(smat,mat)
 
@@ -294,6 +294,20 @@ class foscat_backend:
             if self.BACKEND==self.NUMPY:
                 return(np.sum(data,axis))
         
+    # ---------------------------------------------−---------
+    def check_dense(self,data,datasz):
+        if self.BACKEND==self.TENSORFLOW:
+            if isinstance(data, tf.Tensor):
+                return data
+        
+            idx=tf.cast(data.indices, tf.int32)
+            data=tf.math.bincount(idx,weights=data.values,
+                                  minlength=datasz)
+            return data
+        
+        return data
+        
+    
     def constant(self,data):
         
         if self.BACKEND==self.TENSORFLOW:
@@ -439,6 +453,8 @@ class foscat_backend:
         if self.BACKEND==self.TENSORFLOW:
             return(self.backend.expand_dims(data,axis=axis))
         if self.BACKEND==self.TORCH:
+            if isinstance(data,np.ndarray):
+                data=self.backend.from_numpy(data)
             return(self.backend.unsqueeze(data,axis))
         if self.BACKEND==self.NUMPY:
             return(np.expand_dims(data,axis))
@@ -464,7 +480,7 @@ class foscat_backend:
         if self.BACKEND==self.TENSORFLOW:
             return self.backend.math.conj(data)
         if self.BACKEND==self.TORCH:
-            return self.backend.conjugate(data)
+            return self.backend.conj(data)
         if self.BACKEND==self.NUMPY:
             return data.conjugate()
         
@@ -516,7 +532,17 @@ class foscat_backend:
             
         if self.BACKEND==self.TENSORFLOW:
             return self.backend.cast(x,out_type)
+        
         if self.BACKEND==self.TORCH:
-            return self.backend.cast(x,out_type)
+            if isinstance(x,np.ndarray):
+                x=self.backend.from_numpy(x)
+            
+            if x.dtype.is_complex:
+                out_type=self.all_cbk_type
+            else:
+                out_type=self.all_bk_type
+                
+            return x.type(out_type)
+        
         if self.BACKEND==self.NUMPY:
             return x.astype(out_type)

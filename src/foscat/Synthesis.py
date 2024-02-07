@@ -1,4 +1,4 @@
-import tensorflow as tf
+#import tensorflow as tf
 import numpy as np
 import time
 import sys
@@ -26,6 +26,18 @@ class Loss:
         self.batch_data=batch_data
         self.batch_update=batch_update
         self.info=info_callback
+        
+        if scat_operator.BACKEND=='tensorflow':
+            import  loss_backend_tens as fbk
+            self.bk=fbk.loss_backend(scat_operator)
+            
+        if scat_operator.BACKEND=='torch':
+            import  loss_backend_torch as fbk
+            self.bk=fbk.loss_backend(scat_operator)
+            
+        if scat_operator.BACKEND=='numpy':
+            print('Synthesis does not work with numpy. Please use Torch or Tensorflow')
+            exit(0)
 
     def eval(self,x,batch,return_all=False):
         if self.batch is None:
@@ -92,56 +104,6 @@ class Synthesis:
         except:
             print('No thread to stop, everything is ok')
             sys.stdout.flush()
-
-    # ---------------------------------------------−---------
-    def check_dense(self,data,datasz):
-        if isinstance(data, tf.Tensor):
-            return data
-        
-        idx=tf.cast(data.indices, tf.int32)
-        data=tf.math.bincount(idx,weights=data.values,
-                              minlength=datasz)
-        return data
-
-    @tf.function
-    def loss(self,x,batch,loss_function):
-
-        operation=loss_function.scat_operator
-
-        nx=1
-        if len(x.shape)>1:
-            nx=x.shape[0]
-            
-        with tf.device(operation.gpulist[(operation.gpupos+self.curr_gpu)%operation.ngpu]):
-            print('%s Run [PROC=%04d] on GPU %s'%(loss_function.name,self.mpi_rank,
-                                      operation.gpulist[(operation.gpupos+self.curr_gpu)%operation.ngpu]))
-            sys.stdout.flush()
-
-            l_x=x
-            """
-            if nx>1:
-                l_x={}
-            for i in range(nx):
-            """
-            
-            if nx==1:    
-                ndata=x.shape[0]
-            else:
-                ndata=x.shape[0]*x.shape[1]
-                
-            if self.KEEP_TRACK is not None:
-                l,linfo=loss_function.eval(l_x,batch,return_all=True)
-            else:
-                l=loss_function.eval(l_x,batch)
-                
-            g=tf.gradients(l,x)[0]
-            g=self.check_dense(g,ndata)
-            self.curr_gpu=self.curr_gpu+1   
-            
-        if self.KEEP_TRACK is not None:
-            return l,g,linfo
-        else:
-            return l,g
         
     # ---------------------------------------------−---------
     def getgpumem(self):
@@ -205,10 +167,10 @@ class Synthesis:
                     l_batch=self.loss_class[k].batch(self.loss_class[k].batch_data,istep)
 
                 if self.KEEP_TRACK is not None:
-                    l,g,linfo=self.loss(x,l_batch,self.loss_class[k])
+                    l,g,linfo=self.bk.loss(x,l_batch,self.loss_class[k])
                     self.last_info=self.KEEP_TRACK(linfo,self.mpi_rank,add=True)
                 else:
-                    l,g=self.loss(x,l_batch,self.loss_class[k])
+                    l,g=self.bk.loss(x,l_batch,self.loss_class[k])
 
                 if g_tot is None:
                     g_tot=g
