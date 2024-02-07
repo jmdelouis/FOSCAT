@@ -316,7 +316,7 @@ class FoCUS:
         if self.ring2nest[lout] is None:
             self.ring2nest[lout]=hp.ring2nest(lout,np.arange(12*lout**2))
             
-        return(self.backend.bk_gather(image,self.ring2nest[lout],axis=axis))
+        return image.numpy()[self.ring2nest[lout]]
 
     #--------------------------------------------------------
     def ud_grade(self,im,j,axis=0):

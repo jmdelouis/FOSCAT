@@ -399,24 +399,6 @@ class foscat_backend:
         if self.BACKEND==self.NUMPY:
             return(np.complex(real,imag))
 
-    def bk_gather(self,data,shape,axis=None):
-        if self.BACKEND==self.TENSORFLOW:
-            if axis is None:
-                return(self.backend.gather(data,shape))
-            else:
-                return(self.backend.gather(data,shape,axis=axis))
-        if self.BACKEND==self.TORCH:
-            my_tensor = self.backend.LongTensor(shape)
-            my_data = self.backend.Tensor(data)
-            
-            return(self.backend.gather(my_data,axis,my_tensor))
-        
-        if self.BACKEND==self.NUMPY:
-            if axis is None:
-                return(np.take(data,shape))
-            else:
-                return(np.take(data,shape,axis=axis))
-
     def bk_exp(self,data):
         
         return(self.backend.exp(data))

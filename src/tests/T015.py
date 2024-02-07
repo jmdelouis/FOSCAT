@@ -2,7 +2,7 @@ import Softmax as SFT
 import numpy as np
 import matplotlib.pyplot as plt
 
-sft=SFT.SoftmaxClassifier(5,2)
+sft=SFT.SoftmaxClassifier(5,10)
 
 ndata=1000
 x_train = np.random.rand(ndata, 5)
