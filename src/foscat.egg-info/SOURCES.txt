@@ -4,6 +4,7 @@ setup.py
 src/foscat/CircSpline.py
 src/foscat/FoCUS.py
 src/foscat/GetGPUinfo.py
+src/foscat/Softmax.py
 src/foscat/Spline1D.py
 src/foscat/Synthesis.py
 src/foscat/__init__.py
