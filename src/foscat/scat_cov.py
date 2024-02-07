@@ -1497,6 +1497,7 @@ class funct(FOC.FoCUS):
             nside=int(np.sqrt(npix//12))
 
             J = int(np.log(nside) / np.log(2))  # Number of j scales
+            
         Jmax = J - self.OSTEP  # Number of steps for the loop on scales
         
         ### LOCAL VARIABLES (IMAGES and MASK)
