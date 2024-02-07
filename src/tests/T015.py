@@ -1,15 +1,27 @@
-import Softmax.SoftmaxClassifier as SFT
+import Softmax as SFT
 import numpy as np
 import matplotlib.pyplot as plt
 
-sft=SFT(5,2)
+sft=SFT.SoftmaxClassifier(5,2)
 
-xtrain=np.random.randn(100,5)
-ytrain=np.zeros([100,2])
-ytrain[np.arange(100),(np.random.rand(100)>.5).astype('int')]=1.0
+ndata=1000
+x_train = np.random.rand(ndata, 5)
+y_train = np.random.randint(0, 2, ndata)
+for k in range(5):
+    x_train[:,k]=y_train-0.5+np.random.randn(ndata)
 
-sft.fit(xtrain,ytrain)
+sft.fit(x_train,y_train,epochs=100)
 
-res=sft.predict(xtrain)
+res=sft.predict(x_train)
 
-print(res[0:10])
+ires=np.array([res[k,y_train[k]] for k in range(ndata)])
+ores=np.array([res[k,(y_train[k]+1)%2] for k in range(ndata)])
+
+hy,hx=np.histogram(ires,bins=10000)
+htrue=np.cumsum(hy)/ndata
+hy,hx=np.histogram(ores,bins=10000)
+hfalse=1.0-np.cumsum(hy)/ndata
+plt.plot(hfalse,htrue)
+plt.xlabel('False Rejection Rate')
+plt.ylabel('False Aceptation Rate')
+plt.show()
