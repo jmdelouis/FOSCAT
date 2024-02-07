@@ -9,6 +9,8 @@ src/foscat/Spline1D.py
 src/foscat/Synthesis.py
 src/foscat/__init__.py
 src/foscat/backend.py
+src/foscat/loss_backend_tens.py
+src/foscat/loss_backend_torch.py
 src/foscat/scat.py
 src/foscat/scat1D.py
 src/foscat/scat2D.py
