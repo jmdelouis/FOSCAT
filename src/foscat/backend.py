@@ -120,29 +120,55 @@ class foscat_backend:
         self._iso_orient_C[norient]=self.bk_complex(self._iso_orient[norient],0*self._iso_orient[norient])
         self._iso_orient_C_T[norient]=self.bk_complex(self._iso_orient_T[norient],0*self._iso_orient_T[norient])
         
-    def calc_fft_orient(self,norient,nharm):
+    def calc_fft_orient(self,norient,nharm,imaginary):
 
         x=np.arange(norient)/norient*2*np.pi
         
-        tmp=np.zeros([norient,1+nharm])
-        for k in range(nharm+1):
-            tmp[:,k]=np.cos(x*k)
+        if imaginary:
+            tmp=np.zeros([norient,1+nharm*2])
+            tmp[:,0]=1.0
+            for k in range(nharm):
+                tmp[:,k*2+1]=np.cos(x*(k+1))
+                tmp[:,k*2+2]=np.sin(x*(k+1))
             
-        self._fft_1_orient[(norient,nharm)]=self.constant(self.bk_cast(tmp))
-        self._fft_1_orient_C[(norient,nharm)]=self.bk_complex(self._fft_1_orient[(norient,nharm)],0*self._fft_1_orient[(norient,nharm)])
+            self._fft_1_orient[(norient,nharm,imaginary)]=self.constant(self.bk_cast(tmp))
+            self._fft_1_orient_C[(norient,nharm,imaginary)]=self.bk_complex(self._fft_1_orient[(norient,nharm,imaginary)],0*self._fft_1_orient[(norient,nharm,imaginary)])
+        else:
+            tmp=np.zeros([norient,1+nharm])
+            for k in range(nharm+1):
+                tmp[:,k]=np.cos(x*k)
+            
+            self._fft_1_orient[(norient,nharm,imaginary)]=self.constant(self.bk_cast(tmp))
+            self._fft_1_orient_C[(norient,nharm,imaginary)]=self.bk_complex(self._fft_1_orient[(norient,nharm,imaginary)],0*self._fft_1_orient[(norient,nharm,imaginary)])
 
         x=np.repeat(x,norient).reshape(norient,norient)
-        
-        tmp=np.zeros([norient,norient,(1+nharm),(1+nharm)])
-        
-        for k in range(nharm+1):
-            for l in range(nharm+1):
-                tmp[:,:,k,l]=np.cos(x*k)*np.cos((x.T)*l)
-        
-        self._fft_2_orient[(norient,nharm)]=self.constant(self.bk_cast(tmp.reshape(norient*norient,(1+nharm)*(1+nharm))))
-        self._fft_2_orient_C[(norient,nharm)]=self.bk_complex(self._fft_2_orient[(norient,nharm)],0*self._fft_2_orient[(norient,nharm)])
 
-        tmp=np.zeros([norient,norient,norient,(1+nharm),(1+nharm),(1+nharm)])
+        if imaginary:
+            tmp=np.zeros([norient,norient,(1+nharm*2),(1+nharm*2)])
+            tmp[:,:,0,0]=1.0
+            for k in range(nharm):
+                tmp[:,:,k*2+1,0]=np.cos(x*(k+1))
+                tmp[:,:,k*2+2,0]=np.sin(x*(k+1))
+                tmp[:,:,0,k*2+1]=np.cos((x.T)*(k+1))
+                tmp[:,:,0,k*2+2]=np.sin((x.T)*(k+1))
+                for l in range(nharm):
+                    tmp[:,:,k*2+1,l*2+1]=np.cos(x*(k+1))*np.cos((x.T)*(l+1))
+                    tmp[:,:,k*2+2,l*2+1]=np.sin(x*(k+1))*np.cos((x.T)*(l+1))
+                    tmp[:,:,k*2+1,l*2+2]=np.cos(x*(k+1))*np.sin((x.T)*(l+1))
+                    tmp[:,:,k*2+2,l*2+2]=np.sin(x*(k+1))*np.sin((x.T)*(l+1))
+            
+            self._fft_2_orient[(norient,nharm,imaginary)]=self.constant(self.bk_cast(tmp.reshape(norient*norient,(1+2*nharm)*(1+2*nharm))))
+            self._fft_2_orient_C[(norient,nharm,imaginary)]=self.bk_complex(self._fft_2_orient[(norient,nharm,imaginary)],0*self._fft_2_orient[(norient,nharm,imaginary)])
+        else:
+            tmp=np.zeros([norient,norient,(1+nharm),(1+nharm)])
+        
+            for k in range(nharm+1):
+                for l in range(nharm+1):
+                    tmp[:,:,k,l]=np.cos(x*k)*np.cos((x.T)*l)
+        
+            self._fft_2_orient[(norient,nharm,imaginary)]=self.constant(self.bk_cast(tmp.reshape(norient*norient,(1+nharm)*(1+nharm))))
+            self._fft_2_orient_C[(norient,nharm,imaginary)]=self.bk_complex(self._fft_2_orient[(norient,nharm,imaginary)],0*self._fft_2_orient[(norient,nharm,imaginary)])
+
         x=np.arange(norient)/norient*2*np.pi
         xx=np.zeros([norient,norient,norient])
         yy=np.zeros([norient,norient,norient])
@@ -152,14 +178,57 @@ class foscat_backend:
                 xx[:,i,j]=x
                 yy[i,:,j]=x
                 zz[i,j,:]=x
+                
+        if imaginary:
+            tmp=np.ones([norient,norient,norient,(1+nharm*2),(1+nharm*2),(1+nharm*2)])
+            
+            for k in range(nharm):
+                tmp[:,:,:,k*2+1,0,0]=np.cos(xx*(k+1))
+                tmp[:,:,:,0,k*2+1,0]=np.cos(yy*(k+1))
+                tmp[:,:,:,0,0,k*2+1]=np.cos(zz*(k+1))
+                
+                tmp[:,:,:,k*2+2,0,0]=np.sin(xx*(k+1))
+                tmp[:,:,:,0,k*2+2,0]=np.sin(yy*(k+1))
+                tmp[:,:,:,0,0,k*2+2]=np.sin(zz*(k+1))
+                for l in range(nharm):
+                    tmp[:,:,:,k*2+1,l*2+1,0]=np.cos(xx*(k+1))*np.cos(yy*(l+1))
+                    tmp[:,:,:,k*2+1,l*2+2,0]=np.cos(xx*(k+1))*np.sin(yy*(l+1))
+                    tmp[:,:,:,k*2+2,l*2+1,0]=np.sin(xx*(k+1))*np.cos(yy*(l+1))
+                    tmp[:,:,:,k*2+2,l*2+2,0]=np.sin(xx*(k+1))*np.sin(yy*(l+1))
+                    
+                    tmp[:,:,:,k*2+1,0,l*2+1]=np.cos(xx*(k+1))*np.cos(zz*(l+1))
+                    tmp[:,:,:,k*2+1,0,l*2+2]=np.cos(xx*(k+1))*np.sin(zz*(l+1))
+                    tmp[:,:,:,k*2+2,0,l*2+1]=np.sin(xx*(k+1))*np.cos(zz*(l+1))
+                    tmp[:,:,:,k*2+2,0,l*2+2]=np.sin(xx*(k+1))*np.sin(zz*(l+1))
+                    
+                    tmp[:,:,:,0,k*2+1,l*2+1]=np.cos(yy*(k+1))*np.cos(zz*(l+1))
+                    tmp[:,:,:,0,k*2+1,l*2+2]=np.cos(yy*(k+1))*np.sin(zz*(l+1))
+                    tmp[:,:,:,0,k*2+2,l*2+1]=np.sin(yy*(k+1))*np.cos(zz*(l+1))
+                    tmp[:,:,:,0,k*2+2,l*2+2]=np.sin(yy*(k+1))*np.sin(zz*(l+1))
+                    
+                    for m in range(nharm):
+                        tmp[:,:,:,k*2+1,l*2+1,m*2+1]=np.cos(xx*k)*np.cos(yy*l)*np.cos(zz*m)
+                        tmp[:,:,:,k*2+1,l*2+1,m*2+2]=np.cos(xx*k)*np.cos(yy*l)*np.sin(zz*m)
+                        tmp[:,:,:,k*2+1,l*2+2,m*2+1]=np.cos(xx*k)*np.sin(yy*l)*np.cos(zz*m)
+                        tmp[:,:,:,k*2+1,l*2+2,m*2+2]=np.cos(xx*k)*np.sin(yy*l)*np.sin(zz*m)
+                        tmp[:,:,:,k*2+2,l*2+1,m*2+1]=np.sin(xx*k)*np.cos(yy*l)*np.cos(zz*m)
+                        tmp[:,:,:,k*2+2,l*2+1,m*2+2]=np.sin(xx*k)*np.cos(yy*l)*np.sin(zz*m)
+                        tmp[:,:,:,k*2+2,l*2+2,m*2+1]=np.sin(xx*k)*np.sin(yy*l)*np.cos(zz*m)
+                        tmp[:,:,:,k*2+2,l*2+2,m*2+2]=np.sin(xx*k)*np.sin(yy*l)*np.sin(zz*m)
+                    
+            
+            self._fft_3_orient[(norient,nharm,imaginary)]=self.constant(self.bk_cast(tmp.reshape(norient*norient*norient,(1+nharm*2)*(1+nharm*2)*(1+nharm*2))))
+            self._fft_3_orient_C[(norient,nharm,imaginary)]=self.bk_complex(self._fft_3_orient[(norient,nharm,imaginary)],0*self._fft_3_orient[(norient,nharm,imaginary)])
+        else:
+            tmp=np.zeros([norient,norient,norient,(1+nharm),(1+nharm),(1+nharm)])
         
-        for k in range(nharm+1):
-            for l in range(nharm+1):
-                for m in range(nharm+1):
-                    tmp[:,:,:,k,l,m]=np.cos(xx*k)*np.cos(yy*l)*np.cos(zz*m)
+            for k in range(nharm+1):
+                for l in range(nharm+1):
+                    for m in range(nharm+1):
+                        tmp[:,:,:,k,l,m]=np.cos(xx*k)*np.cos(yy*l)*np.cos(zz*m)
 
-        self._fft_3_orient[(norient,nharm)]=self.constant(self.bk_cast(tmp.reshape(norient*norient*norient,(1+nharm)*(1+nharm)*(1+nharm))))
-        self._fft_3_orient_C[(norient,nharm)]=self.bk_complex(self._fft_3_orient[(norient,nharm)],0*self._fft_3_orient[(norient,nharm)])
+            self._fft_3_orient[(norient,nharm,imaginary)]=self.constant(self.bk_cast(tmp.reshape(norient*norient*norient,(1+nharm)*(1+nharm)*(1+nharm))))
+            self._fft_3_orient_C[(norient,nharm,imaginary)]=self.bk_complex(self._fft_3_orient[(norient,nharm,imaginary)],0*self._fft_3_orient[(norient,nharm,imaginary)])
         
     # ---------------------------------------------−---------
     # --             BACKEND DEFINITION                    --
@@ -308,6 +377,73 @@ class foscat_backend:
         return data
         
     
+    def iso_mean(self,x):
+        shape=list(x.shape)
+        
+        norient=shape[3]
+
+        if len(shape)==4:
+            return self.bk_reduce_mean(x,-1)
+            
+        if norient not in self._iso_orient:
+            self.calc_iso_orient(norient)
+
+        if self.bk_is_complex(x):
+            lmat   = self._iso_orient_C[norient]
+            lmat_T = self._iso_orient_C_T[norient]
+        else:
+            lmat   = self._iso_orient[norient]
+            lmat_T = self._iso_orient_T[norient]
+
+        oshape=shape[0]
+        for k in range(1,len(shape)-2):
+            oshape*=shape[k]
+            
+        oshape2=[shape[k] for k in range(1,len(shape)-1)]
+        
+        return self.bk_reshape(self.backend.matmul(
+            self.bk_reshape(x,[oshape,norient*norient]),lmat),oshape2)
+
+    
+    def fft_ang(self,x,nharm=1,imaginary=False):
+        shape=list(x.shape)
+        
+        norient=shape[3]
+        nout=1+nharm
+        
+        if imaginary:
+            nout=1+nharm*2
+            
+        if (norient,nharm) not in self._fft_1_orient:
+            self.calc_fft_orient(norient,nharm,imaginary)
+
+        if len(shape)==4:
+            if self.bk_is_complex(x):
+                lmat   = self._fft_1_orient_C[(norient,nharm,imaginary)]
+            else:
+                lmat   = self._fft_1_orient[(norient,nharm,imaginary)]
+            
+            return self.bk_reshape(self.backend.matmul(self.bk_reshape(x,[shape[0]*shape[1]*shape[2],norient]),lmat),
+                [shape[0],shape[1],shape[2],nout])
+        
+        if len(shape)==5:
+            if self.bk_is_complex(x):
+                lmat   = self._fft_2_orient_C[(norient,nharm,imaginary)]
+            else:
+                lmat   = self._fft_2_orient[(norient,nharm,imaginary)]
+            
+            return self.bk_reshape(self.backend.matmul(self.bk_reshape(x,[shape[0]*shape[1]*shape[2],norient*norient]),lmat),
+                [shape[0],shape[1],shape[2],nout,nout])
+        
+        if len(shape)==6:
+            if self.bk_is_complex(x):
+                lmat   = self._fft_3_orient_C[(norient,nharm,imaginary)]
+            else:
+                lmat   = self._fft_3_orient[(norient,nharm,imaginary)]
+            
+            return self.bk_reshape(self.backend.matmul(self.bk_reshape(x,[shape[0]*shape[1]*shape[2],norient*norient*norient]),lmat),
+                [shape[0],shape[1],shape[2],nout,nout,nout])
+        
     def constant(self,data):
         
         if self.BACKEND==self.TENSORFLOW:
