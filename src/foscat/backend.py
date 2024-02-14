@@ -377,12 +377,15 @@ class foscat_backend:
         return data
         
     
-    def iso_mean(self,x):
+    def iso_mean(self,x,use_2D=False):
         shape=list(x.shape)
         
-        norient=shape[3]
+        i_orient=2
+        if use_2D:
+            i_orient=3
+        norient=shape[i_orient]
 
-        if len(shape)==4:
+        if len(shape)==i_orient+1:
             return self.bk_reduce_mean(x,-1)
             
         if norient not in self._iso_orient:
@@ -399,50 +402,58 @@ class foscat_backend:
         for k in range(1,len(shape)-2):
             oshape*=shape[k]
             
-        oshape2=[shape[k] for k in range(1,len(shape)-1)]
+        oshape2=[shape[k] for k in range(0,len(shape)-1)]
         
         return self.bk_reshape(self.backend.matmul(
             self.bk_reshape(x,[oshape,norient*norient]),lmat),oshape2)
 
     
-    def fft_ang(self,x,nharm=1,imaginary=False):
+    def fft_ang(self,x,nharm=1,imaginary=False,use_2D=False):
         shape=list(x.shape)
+
+        i_orient=2
+        if use_2D:
+            i_orient=3
         
-        norient=shape[3]
+        norient=shape[i_orient]
         nout=1+nharm
+        
+        oshape_1=shape[0]
+        for k in range(1,i_orient):
+            oshape_1*=shape[k]
+        oshape_2=norient
+        for k in range(i_orient,len(shape)-1):
+            oshape_2*=shape[k]
+        oshape=[oshape_1,oshape_2]
+        
         
         if imaginary:
             nout=1+nharm*2
             
+        oshape2=[shape[k] for k in range(0,i_orient)]+[nout for k in range(i_orient,len(shape))]
+        
         if (norient,nharm) not in self._fft_1_orient:
             self.calc_fft_orient(norient,nharm,imaginary)
 
-        if len(shape)==4:
+        if len(shape)==i_orient+1:
             if self.bk_is_complex(x):
                 lmat   = self._fft_1_orient_C[(norient,nharm,imaginary)]
             else:
                 lmat   = self._fft_1_orient[(norient,nharm,imaginary)]
-            
-            return self.bk_reshape(self.backend.matmul(self.bk_reshape(x,[shape[0]*shape[1]*shape[2],norient]),lmat),
-                [shape[0],shape[1],shape[2],nout])
         
-        if len(shape)==5:
+        if len(shape)==i_orient+2:
             if self.bk_is_complex(x):
                 lmat   = self._fft_2_orient_C[(norient,nharm,imaginary)]
             else:
                 lmat   = self._fft_2_orient[(norient,nharm,imaginary)]
-            
-            return self.bk_reshape(self.backend.matmul(self.bk_reshape(x,[shape[0]*shape[1]*shape[2],norient*norient]),lmat),
-                [shape[0],shape[1],shape[2],nout,nout])
         
-        if len(shape)==6:
+        if len(shape)==i_orient+3:
             if self.bk_is_complex(x):
                 lmat   = self._fft_3_orient_C[(norient,nharm,imaginary)]
             else:
                 lmat   = self._fft_3_orient[(norient,nharm,imaginary)]
-            
-            return self.bk_reshape(self.backend.matmul(self.bk_reshape(x,[shape[0]*shape[1]*shape[2],norient*norient*norient]),lmat),
-                [shape[0],shape[1],shape[2],nout,nout,nout])
+                
+        return self.bk_reshape(self.backend.matmul(self.bk_reshape(x,oshape),lmat),oshape2)
         
     def constant(self,data):
         

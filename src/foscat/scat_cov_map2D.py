@@ -52,27 +52,13 @@ class funct(scat.funct):
                                no_order_3=no_order_3)
        
     def iso_mean(self,scat,no_order_1=False,no_order_2=False,no_order_3=False):
-       self.scat_coeffs_apply(scat,lambda x: self.backend.iso_mean(x),
+       self.scat_coeffs_apply(scat,lambda x: self.backend.iso_mean(x,use_2D=True),
                                no_order_1=no_order_1,
                                no_order_2=no_order_2,
                                no_order_3=no_order_3)
        
     def fft_ang(self,scat,nharm=1,imaginary=False,no_order_1=False,no_order_2=False,no_order_3=False):
-        for j in scat.P00:
-            if no_order_1==False:
-                scat.P00[j] = self.backend.fft_ang(scat.P00[j],nharm=nharm,imaginary=imaginary)
-                if scat.S1 is not None:
-                    scat.S1[j] = self.backend.fft_ang(scat.S1[j],nharm=nharm,imaginary=imaginary)
-            
-            if no_order_2==False:
-                for n1 in scat.C01[j]:
-                    scat.C01[j][n1] = self.backend.fft_ang(scat.C01[j][n1],nharm=nharm,imaginary=imaginary)
-
-                if scat.C10 is not None:
-                    for n1 in scat.C10[j]:
-                        scat.C10[j][n1] = self.backend.fft_ang(scat.C10[j][n1],nharm=nharm,imaginary=imaginary)
-
-            if no_order_3==False:
-                for n1 in scat.C11[j]:
-                    for n2 in scat.C11[j][n1]:
-                        scat.C11[j][n1][n2] = self.backend.fft_ang(scat.C11[j][n1][n2],nharm=nharm,imaginary=imaginary)
+       self.scat_coeffs_apply(scat,lambda x: self.backend.fft_ang(x,use_2D=True,nharm=nharm,imaginary=imaginary),
+                               no_order_1=no_order_1,
+                               no_order_2=no_order_2,
+                               no_order_3=no_order_3)
