@@ -1107,28 +1107,28 @@ class scat_cov:
         return scat_cov(self.S0,P00, C01, C11, s1=S1, c10=C10,backend=self.backend)
 
 
-    def fft_ang(self,nharm=1):
+    def fft_ang(self,nharm=1,imaginary=False):
         shape=list(self.P00.shape)
         norient=shape[3]
 
         if (norient,nharm) not in self.backend._fft_1_orient:
-            self.backend.calc_fft_orient(norient,nharm)
+            self.backend.calc_fft_orient(norient,nharm,imaginary)
             
             
         S1=self.S1
         if self.S1 is not None:
             if self.backend.bk_is_complex(self.S1):
-                lmat   = self.backend._fft_1_orient_C[(norient,nharm)]
+                lmat   = self.backend._fft_1_orient_C[(norient,nharm,imaginary)]
             else:
-                lmat   = self.backend._fft_1_orient[(norient,nharm)]
+                lmat   = self.backend._fft_1_orient[(norient,nharm,imaginary)]
             S1=self.backend.bk_reshape(
                 self.backend.backend.matmul(self.backend.bk_reshape(self.S1,[shape[0]*shape[1]*shape[2],norient]),lmat),
                 [shape[0],shape[1],shape[2],1+nharm])
             
         if self.backend.bk_is_complex(self.P00):
-            lmat   = self.backend._fft_1_orient_C[(norient,nharm)]
+            lmat   = self.backend._fft_1_orient_C[(norient,nharm,imaginary)]
         else:
-            lmat   = self.backend._fft_1_orient[(norient,nharm)]
+            lmat   = self.backend._fft_1_orient[(norient,nharm,imaginary)]
             
         P00=self.backend.bk_reshape(
             self.backend.backend.matmul(self.backend.bk_reshape(self.P00,[shape[0]*shape[1]*shape[2],norient]),lmat),
@@ -1138,9 +1138,9 @@ class scat_cov:
         shape=list(self.C01.shape)
         if self.C01 is not None:
             if self.backend.bk_is_complex(self.C01):
-                lmat   = self.backend._fft_2_orient_C[(norient,nharm)]
+                lmat   = self.backend._fft_2_orient_C[(norient,nharm,imaginary)]
             else:
-                lmat   = self.backend._fft_2_orient[(norient,nharm)]
+                lmat   = self.backend._fft_2_orient[(norient,nharm,imaginary)]
                 
             C01=self.backend.bk_reshape(
                 self.backend.backend.matmul(
@@ -1151,9 +1151,9 @@ class scat_cov:
         C10=self.C10
         if self.C10 is not None:
             if self.backend.bk_is_complex(self.C10):
-                lmat   = self.backend._fft_2_orient_C[(norient,nharm)]
+                lmat   = self.backend._fft_2_orient_C[(norient,nharm,imaginary)]
             else:
-                lmat   = self.backend._fft_2_orient[(norient,nharm)]
+                lmat   = self.backend._fft_2_orient[(norient,nharm,imaginary)]
                 
             C10=self.backend.bk_reshape(
                 self.backend.backend.matmul(
@@ -1164,9 +1164,9 @@ class scat_cov:
         C11=self.C11
         if self.C11 is not None:
             if self.backend.bk_is_complex(self.C01):
-                lmat   = self.backend._fft_3_orient_C[(norient,nharm)]
+                lmat   = self.backend._fft_3_orient_C[(norient,nharm,imaginary)]
             else:
-                lmat   = self.backend._fft_3_orient[(norient,nharm)]
+                lmat   = self.backend._fft_3_orient[(norient,nharm,imaginary)]
                     
             shape=list(self.C11.shape)
             C11=self.backend.bk_reshape(
@@ -2233,13 +2233,13 @@ class funct(FOC.FoCUS):
     """
     @tf.function
     """
-    def eval_comp_fast(self, image1, image2=None,mask=None,norm=None, Auto=True,Add_R45=False):
+    def eval_comp_fast(self, image1, image2=None,mask=None,norm=None, Auto=True):
 
-        res=self.eval(image1, image2=image2,mask=mask,Auto=Auto,Add_R45=Add_R45)
+        res=self.eval(image1, image2=image2,mask=mask,Auto=Auto)
         return res.S0,res.P00,res.S1,res.C01,res.C11,res.C10
 
-    def eval_fast(self, image1, image2=None,mask=None,norm=None, Auto=True,Add_R45=False):
-        s0,p0,s1,c01,c11,c10=self.eval_comp_fast(image1, image2=image2,mask=mask,Auto=Auto,Add_R45=Add_R45)
+    def eval_fast(self, image1, image2=None,mask=None,norm=None, Auto=True):
+        s0,p0,s1,c01,c11,c10=self.eval_comp_fast(image1, image2=image2,mask=mask,Auto=Auto)
         return scat_cov(s0, p0,  c01, c11, s1=s1,c10=c10,backend=self.backend)
         
         
