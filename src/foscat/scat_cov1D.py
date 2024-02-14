@@ -368,8 +368,8 @@ class scat_cov1D:
     def domult(self,x,y):
         if x.dtype==y.dtype:
             return x*y
-        if x.dtype=='complex64' or x.dtype=='complex128':
-            
+        
+        if self.backend.bk_is_complex(x):
             return self.backend.bk_complex(self.backend.bk_real(x)*y,self.backend.bk_imag(x)*y)
         else:
             return self.backend.bk_complex(self.backend.bk_real(y)*x,self.backend.bk_imag(y)*x)
@@ -377,8 +377,8 @@ class scat_cov1D:
     def dodiv(self,x,y):
         if x.dtype==y.dtype:
             return x/y
-        if x.dtype=='complex64' or x.dtype=='complex128':
-            
+        
+        if self.backend.bk_is_complex(x):
             return self.backend.bk_complex(self.backend.bk_real(x)/y,self.backend.bk_imag(x)/y)
         else:
             return self.backend.bk_complex(x/self.backend.bk_real(y),x/self.backend.bk_imag(y))
@@ -386,8 +386,8 @@ class scat_cov1D:
     def domin(self,x,y):
         if x.dtype==y.dtype:
             return x-y
-        if x.dtype=='complex64' or x.dtype=='complex128':
             
+        if self.backend.bk_is_complex(x):
             return self.backend.bk_complex(self.backend.bk_real(x)-y,self.backend.bk_imag(x)-y)
         else:
             return self.backend.bk_complex(x-self.backend.bk_real(y),x-self.backend.bk_imag(y))
@@ -395,8 +395,8 @@ class scat_cov1D:
     def doadd(self,x,y):
         if x.dtype==y.dtype:
             return x+y
-        if x.dtype=='complex64' or x.dtype=='complex128':
             
+        if self.backend.bk_is_complex(x):
             return self.backend.bk_complex(self.backend.bk_real(x)+y,self.backend.bk_imag(x)+y)
         else:
             return self.backend.bk_complex(x+self.backend.bk_real(y),x+self.backend.bk_imag(y))
@@ -1075,7 +1075,7 @@ class funct(FOC.FoCUS):
                 
                 ### P00_auto = < M1^2 >_pix
                 # Apply the mask [Nmask, Npix_j3] and average over pixels
-                if M1_square.dtype=='complex64' or M1_square.dtype=='complex128':
+                if self.backend.bk_is_complex(M1_square):
                     p00 = self.backend.bk_reduce_sum(M1_square[:, None, :]*self.backend.bk_complex(vmask[None,:, :],0*vmask[None,:, :]), axis=2)
                 else:
                     p00 = self.backend.bk_reduce_sum(M1_square[:, None, :]*vmask[None,:, :], axis=2)
@@ -1095,7 +1095,7 @@ class funct(FOC.FoCUS):
                 #### S1_auto computation
                 ### Image 1 : S1 = < M1 >_pix
                 # Apply the mask [Nmask, Npix_j3] and average over pixels
-                if M1.dtype=='complex64' or M1.dtype=='complex128':
+                if self.backend.bk_is_complex(M1):
                     s1 = self.backend.bk_reduce_sum(M1[:, None, :]*self.backend.bk_complex(vmask[None,:, :],0*vmask[None,:, :]), axis=2)
                 else:
                     s1 = self.backend.bk_reduce_sum(M1[:, None, :]*vmask[None,:, :], axis=2)
@@ -1151,7 +1151,7 @@ class funct(FOC.FoCUS):
                 #### S1_auto computation
                 ### Image 1 : S1 = < M1 >_pix
                 # Apply the mask [Nmask, Npix_j3] and average over pixels
-                if tmp.dtype=='complex64' or tmp.dtype=='complex128':
+                if self.backend.bk_is_complex(s1):
                     s1 = self.backend.bk_reduce_sum(tmp[:, None, :]*self.backend.bk_complex(vmask[None,:, :],0*vmask[None,:, :]), axis=2)
                 else:
                     s1 = self.backend.bk_reduce_sum(tmp[:, None, :]*vmask[None,:, :], axis=2)

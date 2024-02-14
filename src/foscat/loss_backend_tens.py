@@ -1,15 +1,26 @@
 import tensorflow as tf
 import numpy as np
+import sys
 
 class loss_backend:
     
-    def __init__(self,backend):
+    def __init__(self,backend,curr_gpu,mpi_rank):
         
         self.bk=backend
+        self.curr_gpu=curr_gpu
+        self.mpi_rank=mpi_rank
+
+    
+    def check_dense(self,data,datasz):
+        if isinstance(data, tf.Tensor):
+            return data
+        
+        return data.to_dense()
+        
     # ---------------------------------------------−---------
     
     @tf.function
-    def loss(self,x,batch,loss_function):
+    def loss(self,x,batch,loss_function,KEEP_TRACK):
 
         operation=loss_function.scat_operator
 
@@ -34,16 +45,16 @@ class loss_backend:
             else:
                 ndata=x.shape[0]*x.shape[1]
                 
-            if self.KEEP_TRACK is not None:
+            if KEEP_TRACK is not None:
                 l,linfo=loss_function.eval(l_x,batch,return_all=True)
             else:
                 l=loss_function.eval(l_x,batch)
                 
             g=tf.gradients(l,x)[0]
-            g=self.backend.check_dense(g,ndata)
+            g=self.check_dense(g,ndata)
             self.curr_gpu=self.curr_gpu+1   
             
-        if self.KEEP_TRACK is not None:
+        if KEEP_TRACK is not None:
             return l,g,linfo
         else:
             return l,g

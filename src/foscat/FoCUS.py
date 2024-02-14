@@ -397,6 +397,10 @@ class FoCUS:
                 
             if nouty is None:
                 nouty=nout
+                
+            if ishape[axis]==nout and ishape[axis+1]==nouty:
+                return im
+                
             npix=im.shape[axis]
             npiy=im.shape[axis+1]
             odata=1
@@ -1005,7 +1009,7 @@ class FoCUS:
 
             res=v1/vh
             if calc_var:
-                if vtmp.dtype=='complex128' or vtmp.dtype=='complex64':
+                if self.backend.bk_is_complex(vtmp):
                     res2=self.backend.bk_complex(self.backend.bk_sqrt(self.backend.bk_real(v2)/self.backend.bk_real(vh)
                                                                       -self.backend.bk_real(res)*self.backend.bk_real(res)), \
                                                  self.backend.bk_sqrt(self.backend.bk_imag(v2)/self.backend.bk_real(vh)
@@ -1026,7 +1030,7 @@ class FoCUS:
             
             res=v1/vh
             if calc_var:
-                if l_x.dtype=='complex128' or l_x.dtype=='complex64':
+                if self.backend.bk_is_complex(l_x):
                     res2=self.backend.bk_complex(self.backend.bk_sqrt((self.backend.bk_real(v2)/self.backend.bk_real(vh)
                                                                       -self.backend.bk_real(res)*self.backend.bk_real(res))/self.backend.bk_real(v2)), \
                                                  self.backend.bk_sqrt((self.backend.bk_imag(v2)/self.backend.bk_real(vh)
@@ -1090,7 +1094,7 @@ class FoCUS:
             for k in range(ishape):
                 l_ww[:,:,k,k*norient:(k+1)*norient]=ww.reshape(self.KERNELSZ,self.KERNELSZ,norient)
             
-            if l_image.dtype=='complex128' or l_image.dtype=='complex64':
+            if self.backend.bk_is_complex(l_image):
                 r=self.backend.conv2d(self.backend.bk_real(l_image),
                                       l_ww,
                                       strides=[1, 1, 1, 1],
@@ -1109,7 +1113,7 @@ class FoCUS:
             l_ww=self.backend.bk_reshape(ww,[self.KERNELSZ,self.KERNELSZ,1,norient])
 
             tmp=self.backend.bk_reshape(image,oshape)
-            if tmp.dtype=='complex128' or tmp.dtype=='complex64':
+            if self.backend.bk_is_complex(tmp):
                 r=self.backend.conv2d(self.backend.bk_real(tmp),
                                       l_ww,
                                       strides=[1, 1, 1, 1],
@@ -1151,8 +1155,8 @@ class FoCUS:
                 ndata=ndata*ishape[k]
 
             tim=self.backend.bk_reshape(self.backend.bk_cast(in_image),[ndata,npix,npiy,odata])
-            
-            if tim.dtype=='complex128' or tim.dtype=='complex64':
+
+            if self.backend.bk_is_complex(tim):
                 rr1=self.backend.conv2d(self.backend.bk_real(tim),self.ww_RealT[odata],strides=[1, 1, 1, 1],padding=self.padding)
                 ii1=self.backend.conv2d(self.backend.bk_real(tim),self.ww_ImagT[odata],strides=[1, 1, 1, 1],padding=self.padding)
                 rr2=self.backend.conv2d(self.backend.bk_imag(tim),self.ww_RealT[odata],strides=[1, 1, 1, 1],padding=self.padding)
@@ -1276,7 +1280,7 @@ class FoCUS:
 
             tim=self.backend.bk_reshape(self.backend.bk_cast(in_image),[ndata,npix,npiy,odata])
 
-            if tim.dtype=='complex128' or tim.dtype=='complex64':
+            if self.backend.bk_is_complex(tim):
                 rr=self.backend.conv2d(self.backend.bk_real(tim),self.ww_SmoothT[odata],strides=[1, 1, 1, 1],padding=self.padding)
                 ii=self.backend.conv2d(self.backend.bk_imag(tim),self.ww_SmoothT[odata],strides=[1, 1, 1, 1],padding=self.padding)
                 res=self.backend.bk_complex(rr,ii)

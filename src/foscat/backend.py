@@ -24,7 +24,11 @@ class foscat_backend:
         self.BACKEND=name
         
         if name not in ['tensorflow','torch','numpy']:
-            print('Backend %s not yet implemented')
+            print('Backend "%s" not yet implemented'%(name))
+            print(' Choose inside the next 3 available backends :')
+            print(' - tensorflow')
+            print(' - torch')
+            print(' - numpy (Impossible to do synthesis using numpy)')
             exit(0)
             
         if self.BACKEND=='tensorflow':
@@ -43,6 +47,8 @@ class foscat_backend:
         if self.BACKEND=='numpy':
             self.BACKEND=self.NUMPY
             self.backend=np
+            import scipy as scipy
+            self.scipy=scipy
             
         self.float64=self.backend.float64
         self.float32=self.backend.float32
@@ -170,15 +176,15 @@ class foscat_backend:
         if self.BACKEND==self.TORCH:
             return(self.backend.sparse_coo_tensor(indice.T,w,dense_shape))
         if self.BACKEND==self.NUMPY:
-            return np.sparse_matrix(indice,w,dense_shape=dense_shape)
-
+            return self.scipy.sparse.coo_matrix((w,(indice[:,0],indice[:,1])),shape=dense_shape)
+        
     def bk_sparse_dense_matmul(self,smat,mat):
         if self.BACKEND==self.TENSORFLOW:
             return self.backend.sparse.sparse_dense_matmul(smat,mat) 
         if self.BACKEND==self.TORCH:
             return smat.matmul(mat)
         if self.BACKEND==self.NUMPY:
-            return np.sparse.sparse_dense_matmul(smat,mat)
+            return smat.dot(mat)
 
     def conv2d(self,x,w,strides=[1, 1, 1, 1],padding='SAME'):
         if self.BACKEND==self.TENSORFLOW:
@@ -214,6 +220,8 @@ class foscat_backend:
     def bk_ones(self,shape,dtype=None):
         if dtype is None:
             dtype=self.all_type
+        if self.BACKEND==self.TORCH:
+            return self.bk_cast(np.ones(shape))
         return(self.backend.ones(shape,dtype=dtype))
     
     def bk_conv1d(self,x,w):
@@ -223,10 +231,10 @@ class foscat_backend:
             return self.backend.nn.conv1d(x,w, stride=1, padding='SAME')
         if self.BACKEND==self.NUMPY:
             return self.backend.nn.conv1d(x,w, stride=1, padding='SAME')
-        
+
     def bk_flattenR(self,x):
         if self.BACKEND==self.TENSORFLOW or self.BACKEND==self.TORCH:
-            if x.dtype=='complex32' or x.dtype=='complex64':
+            if self.bk_is_complex(x):
                 rr=self.backend.reshape(self.bk_real(x),[np.prod(np.array(list(x.shape)))])
                 ii=self.backend.reshape(self.bk_imag(x),[np.prod(np.array(list(x.shape)))])
                 return self.bk_concat([rr,ii],axis=0) 
@@ -234,7 +242,7 @@ class foscat_backend:
                 return self.backend.reshape(x,[np.prod(np.array(list(x.shape)))])
             
         if self.BACKEND==self.NUMPY:
-            if x.dtype=='complex32' or x.dtype=='complex64':
+            if self.bk_is_complex(x):
                 return np.concatenate([x.real.flatten(),x.imag.flatten()],0)
             else:
                 return x.flatten()
@@ -250,8 +258,15 @@ class foscat_backend:
     def bk_resize_image(self,x,shape):
         if self.BACKEND==self.TENSORFLOW:
             return self.bk_cast(self.backend.image.resize(x,shape, method='bilinear'))
+        
         if self.BACKEND==self.TORCH:
-            return self.bk_cast(self.backend.image.resize(x,shape, method='bilinear'))
+            print(x.shape)
+            tmp=self.backend.nn.functional.interpolate(x,
+                                                       size=shape,
+                                                       mode='bilinear',
+                                                       align_corners=False)
+            print(tmp.shape)
+            return self.bk_cast(tmp)
         if self.BACKEND==self.NUMPY:
             return self.bk_cast(self.backend.image.resize(x,shape, method='bilinear'))
         
@@ -295,18 +310,6 @@ class foscat_backend:
                 return(np.sum(data,axis))
         
     # ---------------------------------------------−---------
-    def check_dense(self,data,datasz):
-        if self.BACKEND==self.TENSORFLOW:
-            if isinstance(data, tf.Tensor):
-                return data
-        
-            idx=tf.cast(data.indices, tf.int32)
-            data=tf.math.bincount(idx,weights=data.values,
-                                  minlength=datasz)
-            return data
-        
-        return data
-        
     
     def constant(self,data):
         
@@ -357,10 +360,16 @@ class foscat_backend:
         return(self.backend.abs(data))
 
     def bk_is_complex(self,data):
+        
         if self.BACKEND==self.TENSORFLOW:
             return data.dtype==self.all_cbk_type
+        
         if self.BACKEND==self.TORCH:
-            return data.dtype==self.all_cbk_type
+            if isinstance(data,np.ndarray):
+                return data.dtype==self.all_cbk_type
+            
+            return data.dtype.is_complex
+        
         if self.BACKEND==self.NUMPY:
             return data.dtype==self.all_cbk_type
         
@@ -411,7 +420,7 @@ class foscat_backend:
         if self.BACKEND==self.TORCH:
             return(self.backend.complex(real,imag))
         if self.BACKEND==self.NUMPY:
-            return(np.complex(real,imag))
+            return real+1J*imag
 
     def bk_exp(self,data):
         
@@ -438,6 +447,10 @@ class foscat_backend:
         return(self.backend.argmax(data))
     
     def bk_reshape(self,data,shape):
+        if self.BACKEND==self.TORCH:
+            if isinstance(data,np.ndarray):
+                return data.reshape(shape)
+            
         return(self.backend.reshape(data,shape))
     
     def bk_repeat(self,data,nn,axis=0):
@@ -469,10 +482,16 @@ class foscat_backend:
 
     def bk_concat(self,data,axis=None):
                 
-        if axis is None:
-            return(self.backend.concat(data))
+        if self.BACKEND==self.TENSORFLOW or self.BACKEND==self.TORCH:
+            if axis is None:
+                return(self.backend.concat(data))
+            else:
+                return(self.backend.concat(data,axis=axis))
         else:
-            return(self.backend.concat(data,axis=axis))
+            if axis is None:
+                return np.concatenate(data,axis=0)
+            else:
+                return np.concatenate(data,axis=axis)
 
     
     def bk_conjugate(self,data):
@@ -525,7 +544,7 @@ class foscat_backend:
             else:
                 return(x)
 
-        if x.dtype=='complex128' or x.dtype=='complex64':
+        if self.bk_is_complex(x):
             out_type=self.all_cbk_type
         else:
             out_type=self.all_bk_type

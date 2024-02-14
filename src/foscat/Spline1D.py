@@ -1,6 +1,6 @@
 
 class Spline1D:
-    def __init__(self, nodes, degree):
+    def __init__(self, nodes, degree=3):
         self.degree = degree
         self.nodes = nodes
         self.norm = [0] * (self.degree + 1)
@@ -22,7 +22,7 @@ class Spline1D:
                 return 1.0
         return pow(x, self.degree)
 
-    def calc_spline1d(self, x):
+    def calculate(self, x):
         y = [0] * self.nodes
         for i in range(self.nodes):
             tmp = 0

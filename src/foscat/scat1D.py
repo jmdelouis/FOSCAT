@@ -53,7 +53,7 @@ class scat1D:
     def domult(self,x,y):
         if x.dtype==y.dtype:
             return x*y
-        if x.dtype=='complex64' or x.dtype=='complex128':
+        if self.backend.bk_is_complex(x):
             
             return self.backend.bk_complex(self.backend.bk_real(x)*y,self.backend.bk_imag(x)*y)
         else:
@@ -62,7 +62,7 @@ class scat1D:
     def dodiv(self,x,y):
         if x.dtype==y.dtype:
             return x/y
-        if x.dtype=='complex64' or x.dtype=='complex128':
+        if self.backend.bk_is_complex(x):
             
             return self.backend.bk_complex(self.backend.bk_real(x)/y,self.backend.bk_imag(x)/y)
         else:
@@ -71,7 +71,7 @@ class scat1D:
     def domin(self,x,y):
         if x.dtype==y.dtype:
             return x-y
-        if x.dtype=='complex64' or x.dtype=='complex128':
+        if self.backend.bk_is_complex(x):
             
             return self.backend.bk_complex(self.backend.bk_real(x)-y,self.backend.bk_imag(x)-y)
         else:
@@ -80,7 +80,7 @@ class scat1D:
     def doadd(self,x,y):
         if x.dtype==y.dtype:
             return x+y
-        if x.dtype=='complex64' or x.dtype=='complex128':
+        if self.backend.bk_is_complex(x):
             
             return self.backend.bk_complex(self.backend.bk_real(x)+y,self.backend.bk_imag(x)+y)
         else:
@@ -270,7 +270,7 @@ class scat1D:
 
     def l1_abs(self,x):
         y=self.get_np(x)
-        if y.dtype=='complex64' or y.dtype=='complex128':
+        if self.backend.bk_is_complex(y):
             tmp=y.real*y.real+y.imag*y.imag
             tmp=np.sign(tmp)*np.sqrt(np.fabs(tmp))
             y=tmp

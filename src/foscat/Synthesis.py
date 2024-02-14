@@ -1,4 +1,3 @@
-#import tensorflow as tf
 import numpy as np
 import time
 import sys
@@ -27,18 +26,6 @@ class Loss:
         self.batch_update=batch_update
         self.info=info_callback
         
-        if scat_operator.BACKEND=='tensorflow':
-            import  loss_backend_tens as fbk
-            self.bk=fbk.loss_backend(scat_operator)
-            
-        if scat_operator.BACKEND=='torch':
-            import  loss_backend_torch as fbk
-            self.bk=fbk.loss_backend(scat_operator)
-            
-        if scat_operator.BACKEND=='numpy':
-            print('Synthesis does not work with numpy. Please use Torch or Tensorflow')
-            exit(0)
-
     def eval(self,x,batch,return_all=False):
         if self.batch is None:
             if self.info:
@@ -80,6 +67,18 @@ class Synthesis:
         self.KEEP_TRACK=None
         self.MAXNUMLOSS=MAXNUMLOSS
     
+        if self.operation.BACKEND=='tensorflow':
+            import foscat.loss_backend_tens as fbk
+            self.bk=fbk.loss_backend(self.operation,self.curr_gpu,self.mpi_rank)
+            
+        if self.operation.BACKEND=='torch':
+            import foscat.loss_backend_torch as fbk
+            self.bk=fbk.loss_backend(self.operation,self.curr_gpu,self.mpi_rank)
+            
+        if self.operation.BACKEND=='numpy':
+            print('Synthesis does not work with numpy. Please select Torch or Tensorflow FOSCAT backend')
+            exit(0)
+
     # ---------------------------------------------−---------
     def get_gpu(self,event,delay):
 
@@ -154,7 +153,7 @@ class Synthesis:
         else:
             nstep=1
 
-        x=self.operation.backend.bk_cast(self.operation.backend.bk_reshape(in_x,self.oshape))
+        x=self.operation.backend.bk_reshape(self.operation.backend.bk_cast(in_x),self.oshape)
         
         self.l_log[self.mpi_rank*self.MAXNUMLOSS:(self.mpi_rank+1)*self.MAXNUMLOSS]=-1.0
         
@@ -167,10 +166,10 @@ class Synthesis:
                     l_batch=self.loss_class[k].batch(self.loss_class[k].batch_data,istep)
 
                 if self.KEEP_TRACK is not None:
-                    l,g,linfo=self.bk.loss(x,l_batch,self.loss_class[k])
+                    l,g,linfo=self.bk.loss(x,l_batch,self.loss_class[k],self.KEEP_TRACK)
                     self.last_info=self.KEEP_TRACK(linfo,self.mpi_rank,add=True)
                 else:
-                    l,g=self.bk.loss(x,l_batch,self.loss_class[k])
+                    l,g=self.bk.loss(x,l_batch,self.loss_class[k],self.KEEP_TRACK)
 
                 if g_tot is None:
                     g_tot=g
@@ -205,8 +204,7 @@ class Synthesis:
         if self.mpi_size==1:
             grad=g_tot
         else:
-            
-            if g_tot.dtype=='complex64' or g_tot.dtype=='complex128':
+            if self.operation.backend.bk_is_complex( g_tot):
                 grad=np.zeros(self.oshape,dtype=gtot.dtype)
 
                 self.comm.Allreduce((g_tot),(grad))
@@ -227,7 +225,7 @@ class Synthesis:
 
         g_tot=grad.flatten()
 
-        if g_tot.dtype=='complex64' or g_tot.dtype=='complex128':
+        if self.operation.backend.bk_is_complex( g_tot):
             return l_tot.astype('float64'),g_tot
         
         return l_tot.astype('float64'),g_tot.astype('float64')
@@ -275,11 +273,6 @@ class Synthesis:
         self.axis=axis
         self.in_x_nshape=in_x.shape[0]
 
-        """
-        if do_lbfgs and (in_x.dtype=='complex64' or in_x.dtype=='complex128'):
-            print('L_BFGS minimisation not yet implemented for acomplex array, use default FOSCAT minimizer or convert your problem to float32 or float64')
-            exit(0)
-        """    
         np.random.seed(self.mpi_rank*7+1234)
             
         x=in_x        

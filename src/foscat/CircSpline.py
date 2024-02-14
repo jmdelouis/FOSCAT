@@ -2,7 +2,7 @@
 import math
 
 class CircSpline:
-    def __init__(self, nodes, degree):
+    def __init__(self, nodes, degree=3):
         """
         Initialize the circular spline with the given number of nodes and degree.
         """

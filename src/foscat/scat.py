@@ -58,7 +58,8 @@ class scat:
     def domult(self,x,y):
         if x.dtype==y.dtype:
             return x*y
-        if x.dtype=='complex64' or x.dtype=='complex128':
+        
+        if self.backend.bk_is_complex(x):
             
             return self.backend.bk_complex(self.backend.bk_real(x)*y,self.backend.bk_imag(x)*y)
         else:
@@ -67,7 +68,7 @@ class scat:
     def dodiv(self,x,y):
         if x.dtype==y.dtype:
             return x/y
-        if x.dtype=='complex64' or x.dtype=='complex128':
+        if self.backend.bk_is_complex(x):
             
             return self.backend.bk_complex(self.backend.bk_real(x)/y,self.backend.bk_imag(x)/y)
         else:
@@ -76,7 +77,8 @@ class scat:
     def domin(self,x,y):
         if x.dtype==y.dtype:
             return x-y
-        if x.dtype=='complex64' or x.dtype=='complex128':
+        
+        if self.backend.bk_is_complex(x):
             
             return self.backend.bk_complex(self.backend.bk_real(x)-y,self.backend.bk_imag(x)-y)
         else:
@@ -85,7 +87,8 @@ class scat:
     def doadd(self,x,y):
         if x.dtype==y.dtype:
             return x+y
-        if x.dtype=='complex64' or x.dtype=='complex128':
+        
+        if self.backend.bk_is_complex(x):
             
             return self.backend.bk_complex(self.backend.bk_real(x)+y,self.backend.bk_imag(x)+y)
         else:
@@ -275,7 +278,7 @@ class scat:
 
     def l1_abs(self,x):
         y=self.get_np(x)
-        if y.dtype=='complex64' or y.dtype=='complex128':
+        if self.backend.bk_is_complex(y):
             tmp=y.real*y.real+y.imag*y.imag
             tmp=np.sign(tmp)*np.sqrt(np.fabs(tmp))
             y=tmp
@@ -599,7 +602,7 @@ class scat:
         if norient not in self.backend._iso_orient:
             self.backend.calc_iso_orient(norient)
         
-        if self.S2.dtype=='complex128' or self.S2.dtype=='complex64':
+        if self.backend.bk_is_complex(self.S2):
             lmat   = self.backend._iso_orient_C[norient]
             lmat_T = self.backend._iso_orient_C_T[norient]
         else:
@@ -635,7 +638,7 @@ class scat:
         if (norient,nharm) not in self.backend._fft_1_orient:
             self.backend.calc_fft_orient(norient,nharm)
             
-        if self.S1.dtype=='complex128' or self.S1.dtype=='complex64':
+        if self.backend.bk_is_complex(self.S1):
             lmat   = self.backend._fft_1_orient_C[(norient,nharm)]
         else:
             lmat   = self.backend._fft_1_orient[(norient,nharm)]
@@ -649,7 +652,7 @@ class scat:
             [self.S1.shape[0],self.S1.shape[1],1+nharm])
             
         
-        if self.S2.dtype=='complex128' or self.S2.dtype=='complex64':
+        if self.backend.bk_is_complex(self.S2):
             lmat   = self.backend._fft_2_orient_C[(norient,nharm)]
         else:
             lmat   = self.backend._fft_2_orient[(norient,nharm)]
@@ -1087,7 +1090,6 @@ class funct(FOC.FoCUS):
             if self.KERNELSZ==5:
                 # if the kernel size is bigger than 3 increase the binning before smoothing
                 if self.use_2D:
-                    print(axis,image1.shape)
                     l_image1=self.up_grade(I1,I1.shape[axis]*2,axis=axis,nouty=I1.shape[axis+1]*2)
                     vmask=self.up_grade(vmask,I1.shape[axis]*2,axis=1,nouty=I1.shape[axis+1]*2)
                 else:
@@ -1132,7 +1134,7 @@ class funct(FOC.FoCUS):
                 s02=self.masked_mean(l_image2,vmask,axis=axis)
                 
             if len(image1.shape)==1 or (len(image1.shape)==2 and self.use_2D):
-                if s0.dtype!='complex64' and s0.dtype!='complex128':
+                if self.backend.bk_is_complex(s0):
                     s0 = self.backend.bk_complex(s0,s02+s0_off)
                     if calc_var:
                         vs0 = self.backend.bk_complex(vs0,vs02)
@@ -1141,7 +1143,7 @@ class funct(FOC.FoCUS):
                     if calc_var:
                         vs0 = self.backend.bk_concat([vs0,vs02],axis=0)
             else:
-                if s0.dtype!='complex64' and s0.dtype!='complex128':
+                if self.backend.bk_is_complex(s0):
                     s0 = self.backend.bk_complex(s0,s02+s0_off)
                     if calc_var:
                         vs0 = self.backend.bk_complex(vs0,vs02)
