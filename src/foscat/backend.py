@@ -137,14 +137,14 @@ class foscat_backend:
                 tmp[:,k*2+1]=np.cos(x*(k+1))
                 tmp[:,k*2+2]=np.sin(x*(k+1))
             
-            self._fft_1_orient[(norient,nharm,imaginary)]=self.constant(self.bk_cast(tmp))
+            self._fft_1_orient[(norient,nharm,imaginary)]=self.bk_cast(self.constant(tmp))
             self._fft_1_orient_C[(norient,nharm,imaginary)]=self.bk_complex(self._fft_1_orient[(norient,nharm,imaginary)],0*self._fft_1_orient[(norient,nharm,imaginary)])
         else:
             tmp=np.zeros([norient,1+nharm])
             for k in range(nharm+1):
                 tmp[:,k]=np.cos(x*k)
             
-            self._fft_1_orient[(norient,nharm,imaginary)]=self.constant(self.bk_cast(tmp))
+            self._fft_1_orient[(norient,nharm,imaginary)]=self.bk_cast(self.constant(tmp))
             self._fft_1_orient_C[(norient,nharm,imaginary)]=self.bk_complex(self._fft_1_orient[(norient,nharm,imaginary)],0*self._fft_1_orient[(norient,nharm,imaginary)])
 
         x=np.repeat(x,norient).reshape(norient,norient)
@@ -163,7 +163,7 @@ class foscat_backend:
                     tmp[:,:,k*2+1,l*2+2]=np.cos(x*(k+1))*np.sin((x.T)*(l+1))
                     tmp[:,:,k*2+2,l*2+2]=np.sin(x*(k+1))*np.sin((x.T)*(l+1))
             
-            self._fft_2_orient[(norient,nharm,imaginary)]=self.constant(self.bk_cast(tmp.reshape(norient*norient,(1+2*nharm)*(1+2*nharm))))
+            self._fft_2_orient[(norient,nharm,imaginary)]=self.bk_cast(self.constant(tmp.reshape(norient*norient,(1+2*nharm)*(1+2*nharm))))
             self._fft_2_orient_C[(norient,nharm,imaginary)]=self.bk_complex(self._fft_2_orient[(norient,nharm,imaginary)],0*self._fft_2_orient[(norient,nharm,imaginary)])
         else:
             tmp=np.zeros([norient,norient,(1+nharm),(1+nharm)])
@@ -172,7 +172,7 @@ class foscat_backend:
                 for l in range(nharm+1):
                     tmp[:,:,k,l]=np.cos(x*k)*np.cos((x.T)*l)
         
-            self._fft_2_orient[(norient,nharm,imaginary)]=self.constant(self.bk_cast(tmp.reshape(norient*norient,(1+nharm)*(1+nharm))))
+            self._fft_2_orient[(norient,nharm,imaginary)]=self.bk_cast(self.constant(tmp.reshape(norient*norient,(1+nharm)*(1+nharm))))
             self._fft_2_orient_C[(norient,nharm,imaginary)]=self.bk_complex(self._fft_2_orient[(norient,nharm,imaginary)],0*self._fft_2_orient[(norient,nharm,imaginary)])
 
         x=np.arange(norient)/norient*2*np.pi
@@ -213,17 +213,17 @@ class foscat_backend:
                     tmp[:,:,:,0,k*2+2,l*2+2]=np.sin(yy*(k+1))*np.sin(zz*(l+1))
                     
                     for m in range(nharm):
-                        tmp[:,:,:,k*2+1,l*2+1,m*2+1]=np.cos(xx*k)*np.cos(yy*l)*np.cos(zz*m)
-                        tmp[:,:,:,k*2+1,l*2+1,m*2+2]=np.cos(xx*k)*np.cos(yy*l)*np.sin(zz*m)
-                        tmp[:,:,:,k*2+1,l*2+2,m*2+1]=np.cos(xx*k)*np.sin(yy*l)*np.cos(zz*m)
-                        tmp[:,:,:,k*2+1,l*2+2,m*2+2]=np.cos(xx*k)*np.sin(yy*l)*np.sin(zz*m)
-                        tmp[:,:,:,k*2+2,l*2+1,m*2+1]=np.sin(xx*k)*np.cos(yy*l)*np.cos(zz*m)
-                        tmp[:,:,:,k*2+2,l*2+1,m*2+2]=np.sin(xx*k)*np.cos(yy*l)*np.sin(zz*m)
-                        tmp[:,:,:,k*2+2,l*2+2,m*2+1]=np.sin(xx*k)*np.sin(yy*l)*np.cos(zz*m)
-                        tmp[:,:,:,k*2+2,l*2+2,m*2+2]=np.sin(xx*k)*np.sin(yy*l)*np.sin(zz*m)
+                        tmp[:,:,:,k*2+1,l*2+1,m*2+1]=np.cos(xx*(k+1))*np.cos(yy*(l+1))*np.cos(zz*(m+1))
+                        tmp[:,:,:,k*2+1,l*2+1,m*2+2]=np.cos(xx*(k+1))*np.cos(yy*(l+1))*np.sin(zz*(m+1))
+                        tmp[:,:,:,k*2+1,l*2+2,m*2+1]=np.cos(xx*(k+1))*np.sin(yy*(l+1))*np.cos(zz*(m+1))
+                        tmp[:,:,:,k*2+1,l*2+2,m*2+2]=np.cos(xx*(k+1))*np.sin(yy*(l+1))*np.sin(zz*(m+1))
+                        tmp[:,:,:,k*2+2,l*2+1,m*2+1]=np.sin(xx*(k+1))*np.cos(yy*(l+1))*np.cos(zz*(m+1))
+                        tmp[:,:,:,k*2+2,l*2+1,m*2+2]=np.sin(xx*(k+1))*np.cos(yy*(l+1))*np.sin(zz*(m+1))
+                        tmp[:,:,:,k*2+2,l*2+2,m*2+1]=np.sin(xx*(k+1))*np.sin(yy*(l+1))*np.cos(zz*(m+1))
+                        tmp[:,:,:,k*2+2,l*2+2,m*2+2]=np.sin(xx*(k+1))*np.sin(yy*(l+1))*np.sin(zz*(m+1))
                     
-            
-            self._fft_3_orient[(norient,nharm,imaginary)]=self.constant(self.bk_cast(tmp.reshape(norient*norient*norient,(1+nharm*2)*(1+nharm*2)*(1+nharm*2))))
+
+            self._fft_3_orient[(norient,nharm,imaginary)]=self.bk_cast(self.constant(tmp.reshape(norient*norient*norient,(1+nharm*2)*(1+nharm*2)*(1+nharm*2))))
             self._fft_3_orient_C[(norient,nharm,imaginary)]=self.bk_complex(self._fft_3_orient[(norient,nharm,imaginary)],0*self._fft_3_orient[(norient,nharm,imaginary)])
         else:
             tmp=np.zeros([norient,norient,norient,(1+nharm),(1+nharm),(1+nharm)])
@@ -233,7 +233,7 @@ class foscat_backend:
                     for m in range(nharm+1):
                         tmp[:,:,:,k,l,m]=np.cos(xx*k)*np.cos(yy*l)*np.cos(zz*m)
 
-            self._fft_3_orient[(norient,nharm,imaginary)]=self.constant(self.bk_cast(tmp.reshape(norient*norient*norient,(1+nharm)*(1+nharm)*(1+nharm))))
+            self._fft_3_orient[(norient,nharm,imaginary)]=self.bk_cast(self.constant(tmp.reshape(norient*norient*norient,(1+nharm)*(1+nharm)*(1+nharm))))
             self._fft_3_orient_C[(norient,nharm,imaginary)]=self.bk_complex(self._fft_3_orient[(norient,nharm,imaginary)],0*self._fft_3_orient[(norient,nharm,imaginary)])
         
     # ---------------------------------------------−---------

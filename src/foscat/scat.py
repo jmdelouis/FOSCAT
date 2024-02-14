@@ -635,6 +635,10 @@ class scat:
         shape=list(self.S2.shape)
         norient=self.S1.shape[2]
 
+        nout=1+nharm
+        if imaginary:
+            nout=1+nharm*2
+            
         if (norient,nharm) not in self.backend._fft_1_orient:
             self.backend.calc_fft_orient(norient,nharm,imaginary)
             
@@ -645,11 +649,11 @@ class scat:
             
         S1=self.backend.bk_reshape(
             self.backend.backend.matmul(self.backend.bk_reshape(self.S1,[self.S1.shape[0],self.S1.shape[1],norient]),lmat),
-            [self.S1.shape[0],self.S1.shape[1],1+nharm])
+            [self.S1.shape[0],self.S1.shape[1],nout])
             
         P00=self.backend.bk_reshape(
             self.backend.backend.matmul(self.backend.bk_reshape(self.P00,[self.S1.shape[0],self.S1.shape[1],norient]),lmat),
-            [self.S1.shape[0],self.S1.shape[1],1+nharm])
+            [self.S1.shape[0],self.S1.shape[1],nout])
             
         
         if self.backend.bk_is_complex(self.S2):
@@ -659,10 +663,10 @@ class scat:
         
         S2=self.backend.bk_reshape(
             self.backend.backend.matmul(self.backend.bk_reshape(self.S2,[shape[0],shape[1],norient*norient]),lmat),
-            [shape[0],shape[1],1+nharm,1+nharm])
+            [shape[0],shape[1],nout,nout])
         S2L=self.backend.bk_reshape(
             self.backend.backend.matmul(self.backend.bk_reshape(self.S2L,[shape[0],shape[1],norient*norient]),lmat),
-            [shape[0],shape[1],1+nharm,1+nharm])
+            [shape[0],shape[1],nout,nout])
 
         return scat(P00,self.S0,S1,S2,S2L,self.j1,self.j2,backend=self.backend)
 

@@ -1114,6 +1114,9 @@ class scat_cov:
         if (norient,nharm) not in self.backend._fft_1_orient:
             self.backend.calc_fft_orient(norient,nharm,imaginary)
             
+        nout=1+nharm
+        if imaginary:
+            nout=1+nharm*2
             
         S1=self.S1
         if self.S1 is not None:
@@ -1123,7 +1126,7 @@ class scat_cov:
                 lmat   = self.backend._fft_1_orient[(norient,nharm,imaginary)]
             S1=self.backend.bk_reshape(
                 self.backend.backend.matmul(self.backend.bk_reshape(self.S1,[shape[0]*shape[1]*shape[2],norient]),lmat),
-                [shape[0],shape[1],shape[2],1+nharm])
+                [shape[0],shape[1],shape[2],nout])
             
         if self.backend.bk_is_complex(self.P00):
             lmat   = self.backend._fft_1_orient_C[(norient,nharm,imaginary)]
@@ -1132,7 +1135,7 @@ class scat_cov:
             
         P00=self.backend.bk_reshape(
             self.backend.backend.matmul(self.backend.bk_reshape(self.P00,[shape[0]*shape[1]*shape[2],norient]),lmat),
-                [shape[0],shape[1],shape[2],1+nharm])
+                [shape[0],shape[1],shape[2],nout])
             
         C01=self.C01
         shape=list(self.C01.shape)
@@ -1146,7 +1149,7 @@ class scat_cov:
                 self.backend.backend.matmul(
                     self.backend.bk_reshape(self.C01,[shape[0]*shape[1]*shape[2],norient*norient]),
                     lmat),
-                [shape[0],shape[1],shape[2],1+nharm,1+nharm])
+                [shape[0],shape[1],shape[2],nout,nout])
                 
         C10=self.C10
         if self.C10 is not None:
@@ -1159,7 +1162,7 @@ class scat_cov:
                 self.backend.backend.matmul(
                     self.backend.bk_reshape(self.C10,[shape[0]*shape[1]*shape[2],norient*norient]),
                     lmat),
-                [shape[0],shape[1],shape[2],1+nharm,1+nharm])
+                [shape[0],shape[1],shape[2],nout,nout])
 
         C11=self.C11
         if self.C11 is not None:
@@ -1173,7 +1176,7 @@ class scat_cov:
                 self.backend.backend.matmul(
                     self.backend.bk_reshape(self.C11,[shape[0]*shape[1]*shape[2],norient*norient*norient]),
                     lmat),
-                [shape[0],shape[1],shape[2],1+nharm,1+nharm,1+nharm])
+                [shape[0],shape[1],shape[2],nout,nout,nout])
 
         return scat_cov(self.S0,P00, C01, C11, s1=S1, c10=C10,backend=self.backend)
     
