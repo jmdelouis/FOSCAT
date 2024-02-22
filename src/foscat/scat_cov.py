@@ -260,7 +260,9 @@ class scat_cov:
 
     def get_j_idx(self):
         shape=list(self.P00.shape)
-        if len(shape)==4:
+        if len(shape)==3:
+            nscale=shape[2]
+        elif len(shape)==4:
             nscale=shape[2]
         else:
             nscale=shape[3]
@@ -740,14 +742,23 @@ class scat_cov:
             plt.subplot(2, 2, 1)
             tmp=abs(self.get_np(self.S1))
             test=None
-            for k in range(tmp.shape[3]):
+            if len(tmp.shape)>3:
+                for k in range(tmp.shape[3]):
+                    for i1 in range(tmp.shape[0]):
+                        for i2 in range(tmp.shape[0]):
+                            if test is None:
+                                test=1
+                                plt.plot(tmp[i1,i2,:,k],color=color, label=r'%s $S_1$' % (name), lw=lw)
+                            else:
+                                plt.plot(tmp[i1,i2,:,k],color=color, lw=lw)
+            else:
                 for i1 in range(tmp.shape[0]):
                     for i2 in range(tmp.shape[0]):
                         if test is None:
                             test=1
-                            plt.plot(tmp[i1,i2,:,k],color=color, label=r'%s $S_1$' % (name), lw=lw)
+                            plt.plot(tmp[i1,i2,:],color=color, label=r'%s $S_1$' % (name), lw=lw)
                         else:
-                            plt.plot(tmp[i1,i2,:,k],color=color, lw=lw)
+                            plt.plot(tmp[i1,i2,:],color=color, lw=lw)
             plt.yscale('log')
             plt.legend()
             plt.ylabel('S1')
@@ -756,14 +767,23 @@ class scat_cov:
         test=None
         plt.subplot(2, 2, 2)
         tmp=abs(self.get_np(self.P00))
-        for k in range(tmp.shape[3]):
+        if len(tmp.shape)>3:
+            for k in range(tmp.shape[3]):
+                for i1 in range(tmp.shape[0]):
+                    for i2 in range(tmp.shape[0]):
+                        if test is None:
+                            test=1
+                            plt.plot(tmp[i1,i2,:,k],color=color, label=r'%s $P_{00}$' % (name), lw=lw)
+                        else:
+                            plt.plot(tmp[i1,i2,:,k],color=color, lw=lw)
+        else:
             for i1 in range(tmp.shape[0]):
                 for i2 in range(tmp.shape[0]):
                     if test is None:
                         test=1
-                        plt.plot(tmp[i1,i2,:,k],color=color, label=r'%s $P_{00}$' % (name), lw=lw)
+                        plt.plot(tmp[i1,i2,:],color=color, label=r'%s $P_{00}$' % (name), lw=lw)
                     else:
-                        plt.plot(tmp[i1,i2,:,k],color=color, lw=lw)
+                        plt.plot(tmp[i1,i2,:],color=color, lw=lw)
         plt.yscale('log')
         plt.ylabel('P00')
         plt.xlabel(r'$j_{1}$')
@@ -784,28 +804,49 @@ class scat_cov:
         tabnx=[]
         tab2x=[]
         tab2nx=[]
-        
-        for i0 in range(tmp.shape[0]):
-            for i1 in range(tmp.shape[1]):
-                for i2 in range(j1.max()+1):
-                    for i3 in range(tmp.shape[3]):
-                        for i4 in range(tmp.shape[4]):
-                            if j2[j1==i2].shape[0]==1:
-                                ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3,i4],'.', \
+        if len(tmp.shape)>4:
+            for i0 in range(tmp.shape[0]):
+                for i1 in range(tmp.shape[1]):
+                    for i2 in range(j1.max()+1):
+                        for i3 in range(tmp.shape[3]):
+                            for i4 in range(tmp.shape[4]):
+                                if j2[j1==i2].shape[0]==1:
+                                    ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3,i4],'.', \
+                                                 color=color, lw=lw)
+                                else:
+                                    if legend and test is None:
+                                        ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3,i4], \
+                                                 color=color, label=lname, lw=lw)
+                                        test=1
+                                    ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3,i4], \
                                              color=color, lw=lw)
+                        tabnx=tabnx+[r'%d'%(k) for k in j2[j1==i2]]
+                        tabx=tabx+[k+n for k in j2[j1==i2]]
+                        tab2x=tab2x+[(j2[j1==i2]+n).mean()]
+                        tab2nx=tab2nx+['%d'%(i2)]
+                        ax1.axvline((j2[j1==i2]+n).max()+0.5,ls=':',color='gray') 
+                        n=n+j2[j1==i2].shape[0]-1
+        else:
+            for i0 in range(tmp.shape[0]):
+                for i1 in range(tmp.shape[1]):
+                    for i2 in range(j1.max()+1):
+                        for i3 in range(tmp.shape[3]):
+                            if j2[j1==i2].shape[0]==1:
+                                ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3],'.', \
+                                         color=color, lw=lw)
                             else:
                                 if legend and test is None:
-                                    ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3,i4], \
+                                    ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3], \
                                              color=color, label=lname, lw=lw)
                                     test=1
-                                ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3,i4], \
+                                ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3], \
                                          color=color, lw=lw)
-                    tabnx=tabnx+[r'%d'%(k) for k in j2[j1==i2]]
-                    tabx=tabx+[k+n for k in j2[j1==i2]]
-                    tab2x=tab2x+[(j2[j1==i2]+n).mean()]
-                    tab2nx=tab2nx+['%d'%(i2)]
-                    ax1.axvline((j2[j1==i2]+n).max()+0.5,ls=':',color='gray') 
-                    n=n+j2[j1==i2].shape[0]-1
+                        tabnx=tabnx+[r'%d'%(k) for k in j2[j1==i2]]
+                        tabx=tabx+[k+n for k in j2[j1==i2]]
+                        tab2x=tab2x+[(j2[j1==i2]+n).mean()]
+                        tab2nx=tab2nx+['%d'%(i2)]
+                        ax1.axvline((j2[j1==i2]+n).max()+0.5,ls=':',color='gray') 
+                        n=n+j2[j1==i2].shape[0]-1
         plt.yscale('log')
         ax1.set_xlim(0,n+2)
         ax1.set_xticks(tabx)
@@ -844,31 +885,56 @@ class scat_cov:
         tabnx=[]
         tab2x=[]
         tab2nx=[]
-        for i0 in range(tmp.shape[0]):
-            for i1 in range(tmp.shape[1]):
-                for i2 in range(j1.max()+1):
-                    nprev=n
-                    for i2b in range(j2[j1==i2].max()+1):
-                        idx=np.where((j1==i2)*(j2==i2b))[0]
-                        for i3 in range(tmp.shape[3]):
-                            for i4 in range(tmp.shape[4]):
-                                for i5 in range(tmp.shape[5]):
-                                    if len(idx)==1:
-                                        ax1.plot(np.arange(len(idx))+n,tmp[i0,i1,idx,i3,i4,i5],'.', \
-                                                 color=color, lw=lw)
-                                    else:
-                                        if legend and test is None:
+        if len(tmp.shape)>4:
+            for i0 in range(tmp.shape[0]):
+                for i1 in range(tmp.shape[1]):
+                    for i2 in range(j1.max()+1):
+                        nprev=n
+                        for i2b in range(j2[j1==i2].max()+1):
+                            idx=np.where((j1==i2)*(j2==i2b))[0]
+                            for i3 in range(tmp.shape[3]):
+                                for i4 in range(tmp.shape[4]):
+                                    for i5 in range(tmp.shape[5]):
+                                        if len(idx)==1:
+                                            ax1.plot(np.arange(len(idx))+n,tmp[i0,i1,idx,i3,i4,i5],'.', \
+                                                     color=color, lw=lw)
+                                        else:
+                                            if legend and test is None:
+                                                ax1.plot(np.arange(len(idx))+n,tmp[i0,i1,idx,i3,i4,i5], \
+                                                         color=color, label=lname, lw=lw)
+                                                test=1
                                             ax1.plot(np.arange(len(idx))+n,tmp[i0,i1,idx,i3,i4,i5], \
-                                                     color=color, label=lname, lw=lw)
-                                            test=1
-                                        ax1.plot(np.arange(len(idx))+n,tmp[i0,i1,idx,i3,i4,i5], \
-                                                 color=color, lw=lw)
-                        tabnx=tabnx+[r'%d,%d'%(j2[k],j3[k]) for k in idx]
-                        tabx=tabx+[k+n for k in range(len(idx))]
-                        n=n+idx.shape[0]
-                    tab2x=tab2x+[(n+nprev-1)/2]
-                    tab2nx=tab2nx+['%d'%(i2)]
-                    ax1.axvline(n-0.5,ls=':',color='gray') 
+                                                     color=color, lw=lw)
+                            tabnx=tabnx+[r'%d,%d'%(j2[k],j3[k]) for k in idx]
+                            tabx=tabx+[k+n for k in range(len(idx))]
+                            n=n+idx.shape[0]
+                        tab2x=tab2x+[(n+nprev-1)/2]
+                        tab2nx=tab2nx+['%d'%(i2)]
+                        ax1.axvline(n-0.5,ls=':',color='gray')
+        else:
+            for i0 in range(tmp.shape[0]):
+                for i1 in range(tmp.shape[1]):
+                    for i2 in range(j1.max()+1):
+                        nprev=n
+                        for i2b in range(j2[j1==i2].max()+1):
+                            idx=np.where((j1==i2)*(j2==i2b))[0]
+                            for i3 in range(tmp.shape[3]):
+                                if len(idx)==1:
+                                    ax1.plot(np.arange(len(idx))+n,tmp[i0,i1,idx,i3],'.', \
+                                             color=color, lw=lw)
+                                else:
+                                    if legend and test is None:
+                                        ax1.plot(np.arange(len(idx))+n,tmp[i0,i1,idx,i3], \
+                                                 color=color, label=lname, lw=lw)
+                                        test=1
+                                    ax1.plot(np.arange(len(idx))+n,tmp[i0,i1,idx,i3], \
+                                             color=color, lw=lw)
+                            tabnx=tabnx+[r'%d,%d'%(j2[k],j3[k]) for k in idx]
+                            tabx=tabx+[k+n for k in range(len(idx))]
+                            n=n+idx.shape[0]
+                        tab2x=tab2x+[(n+nprev-1)/2]
+                        tab2nx=tab2nx+['%d'%(i2)]
+                        ax1.axvline(n-0.5,ls=':',color='gray')
         plt.yscale('log')
         ax1.set_ylabel(r'$C_{11}$')
         ax1.set_xticks(tabx)
@@ -1097,11 +1163,15 @@ class scat_cov:
                     self.backend.bk_reshape(self.C11,[shape[0]*shape[1]*shape[2]*norient,norient*norient]),
                     lmat),
                 [shape[0],shape[1],shape[2],norient,norient])
+            C11=self.backend.bk_reduce_mean(C11,3)
             if repeat:
                 C11=self.backend.bk_reshape(
-                    self.backend.backend.matmul(
-                        self.backend.bk_reshape(C11,[shape[0]*shape[1]*shape[2]*norient,norient]),
-                        lmat_T),
+                    self.backend.bk_repeat(
+                        self.backend.bk_reshape(C11,[shape[0]*shape[1]*shape[2],norient]),
+                        norient,axis=0),
+                    [shape[0]*shape[1]*shape[2]*norient,norient])
+                C11=self.backend.bk_reshape(
+                    self.backend.backend.matmul(C11,lmat_T),
                     [shape[0],shape[1],shape[2],norient,norient,norient])
 
         return scat_cov(self.S0,P00, C01, C11, s1=S1, c10=C10,backend=self.backend)
