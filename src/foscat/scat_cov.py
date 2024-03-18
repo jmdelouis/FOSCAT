@@ -385,9 +385,9 @@ class scat_cov:
                 if other.S1 is None:
                     s1 = None
                 else:
-                    s1 = self.S1 / other.S1
+                    s1 = self.dodiv(self.S1 , other.S1)
             else:
-                s1 = self.S1 / other
+                s1 = self.dodiv(self.S1 , other)
 
         if self.C10 is None:
             c10 = None
@@ -398,7 +398,7 @@ class scat_cov:
                 else:
                     c10 = self.dodiv(self.C10 , other.C10)
             else:
-                c10 = self.C10 / other
+                c10 = self.dodiv(self.C10 , other)
                 
         if self.C11 is None:
             c11 = None
@@ -414,7 +414,7 @@ class scat_cov:
         if isinstance(other, scat_cov):
             return scat_cov(self.dodiv(self.S0,other.S0),
                             self.dodiv(self.P00,other.P00),
-                            (self.C01 / other.C01),
+                            self.dodiv(self.C01,other.C01),
                             c11,s1=s1, c10=c10,backend=self.backend)
         else:
             return scat_cov((self.S0 / other),

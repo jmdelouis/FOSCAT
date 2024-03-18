@@ -509,16 +509,18 @@ class foscat_backend:
     def bk_is_complex(self,data):
         
         if self.BACKEND==self.TENSORFLOW:
-            return data.dtype==self.all_cbk_type
+            if isinstance(data,np.ndarray):
+                return (data.dtype=='complex64' or data.dtype=='complex128')
+            return data.dtype.is_complex
         
         if self.BACKEND==self.TORCH:
             if isinstance(data,np.ndarray):
-                return data.dtype==self.all_cbk_type
+                return (data.dtype=='complex64' or data.dtype=='complex128')
             
             return data.dtype.is_complex
         
         if self.BACKEND==self.NUMPY:
-            return data.dtype==self.all_cbk_type
+            return (data.dtype=='complex64' or data.dtype=='complex128')
         
     def bk_norm(self,data):
         if self.bk_is_complex(data):

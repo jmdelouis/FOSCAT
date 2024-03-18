@@ -45,8 +45,7 @@ class Synthesis:
                  beta1=0.9,
                  beta2=0.999,
                  epsilon=1e-7,
-                 decay_rate = 0.999,
-                 MAXNUMLOSS=10):
+                 decay_rate = 0.999):
 
         self.loss_class=loss_list
         self.number_of_loss=len(loss_list)
@@ -65,7 +64,7 @@ class Synthesis:
         self.mpi_size=self.operation.mpi_size
         self.mpi_rank=self.operation.mpi_rank
         self.KEEP_TRACK=None
-        self.MAXNUMLOSS=MAXNUMLOSS
+        self.MAXNUMLOSS=len(loss_list)
     
         if self.operation.BACKEND=='tensorflow':
             import foscat.loss_backend_tens as fbk
