@@ -1492,7 +1492,7 @@ class funct(FOC.FoCUS):
         return scat_cov(mS0, mP00, mC01, mC11, s1=mS1,c10=mC10,backend=self.backend), \
             scat_cov(sS0, sP00, sC01, sC11, s1=sS1,c10=sC10,backend=self.backend)
     
-    def eval(self, image1, image2=None, mask=None, norm=None, Auto=True, calc_var=False):
+    def eval(self, image1, image2=None, mask=None, norm=None, Auto=True, calc_var=False,cmat=None):
         """
         Calculates the scattering correlations for a batch of images. Mean are done over pixels.
         mean of modulus:
@@ -1677,6 +1677,11 @@ class funct(FOC.FoCUS):
             ####### S1 and P00
             ### Make the convolution I1 * Psi_j3
             conv1 = self.convol(I1, axis=1)  # [Nbatch, Npix_j3, Norient3]
+
+            if cmat is not None:
+                tmp2=self.backend.bk_repeat(conv1,4,axis=-1)
+                conv1=self.backend.bk_reduce_sum(self.backend.bk_reshape(cmat[j3]*tmp2,[1,cmat[j3].shape[0],4,4]),2)
+                
             ### Take the module M1 = |I1 * Psi_j3|
             M1_square = conv1*self.backend.bk_conjugate(conv1) # [Nbatch, Npix_j3, Norient3]
             M1 = self.backend.bk_L1(M1_square)  # [Nbatch, Npix_j3, Norient3]
@@ -1749,6 +1754,9 @@ class funct(FOC.FoCUS):
             else:  # Cross
                 ### Make the convolution I2 * Psi_j3
                 conv2 = self.convol(I2, axis=1)  # [Nbatch, Npix_j3, Norient3]
+                if cmat is not None:
+                    tmp2=self.backend.bk_repeat(conv2,4,axis=-1)
+                    conv2=self.backend.bk_reduce_sum(self.backend.bk_reshape(cmat[j3]*tmp2,[1,cmat[j3].shape[0],4,4]),2)
                 ### Take the module M2 = |I2 * Psi_j3|
                 M2_square = conv2*self.backend.bk_conjugate(conv2)  # [Nbatch, Npix_j3, Norient3]
                 M2 = self.backend.bk_L1(M2_square)  # [Nbatch, Npix_j3, Norient3]
