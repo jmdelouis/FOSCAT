@@ -49,6 +49,7 @@ class Synthesis:
 
         self.loss_class=loss_list
         self.number_of_loss=len(loss_list)
+        self.__iteration__=1234
         self.nlog=0
         self.m_dw, self.v_dw = 0.0, 0.0
         self.beta1 = beta1
@@ -116,6 +117,8 @@ class Synthesis:
         self.nlog=self.nlog+1
         self.itt2=0
         
+        self.operation.backend.bk_random_seed(self.seed)
+            
         if self.itt%self.EVAL_FREQUENCY==0 and self.mpi_rank==0:
             end = time.time()
             cur_loss='%10.3g ('%(self.ltot[self.ltot!=-1].mean())
@@ -131,6 +134,7 @@ class Synthesis:
                 for k in range(info_gpu.shape[0]):
                     mess=mess+'[GPU%d %.0f/%.0f MB %.0f%%]'%(k,info_gpu[k,0],info_gpu[k,1],info_gpu[k,2])
                 
+            
             print('%sItt %6d L=%s %.3fs %s'%(self.MESSAGE,self.itt,cur_loss,(end-self.start),mess))
             sys.stdout.flush()
             if self.KEEP_TRACK is not None:
@@ -140,13 +144,14 @@ class Synthesis:
             self.start = time.time()
             
         self.itt=self.itt+1
-        
+
     # ---------------------------------------------−---------
     def calc_grad(self,in_x):
         
         g_tot=None
         l_tot=0.0
 
+            
         if self.do_all_noise and self.totalsz>self.batchsz:
             nstep=self.totalsz//self.batchsz
         else:
@@ -158,6 +163,7 @@ class Synthesis:
         
         for istep in range(nstep):
             
+        
             for k in range(self.number_of_loss):
                 if self.loss_class[k].batch is None:
                     l_batch=None
@@ -271,6 +277,7 @@ class Synthesis:
         self.SHOWGPU=SHOWGPU
         self.axis=axis
         self.in_x_nshape=in_x.shape[0]
+        self.seed=1234
 
         np.random.seed(self.mpi_rank*7+1234)
             
@@ -348,6 +355,8 @@ class Synthesis:
 
         for iteration in range(NUM_STEP_BIAS):
 
+            self.seed=iteration*7+self.seed
+        
             x,l,i=opt.fmin_l_bfgs_b(self.calc_grad,
                                     x.astype('float64'),
                                     callback=self.info_back,
