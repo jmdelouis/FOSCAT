@@ -385,9 +385,9 @@ class scat_cov:
                 if other.S1 is None:
                     s1 = None
                 else:
-                    s1 = self.S1 / other.S1
+                    s1 = self.dodiv(self.S1 , other.S1)
             else:
-                s1 = self.S1 / other
+                s1 = self.dodiv(self.S1 , other)
 
         if self.C10 is None:
             c10 = None
@@ -398,7 +398,7 @@ class scat_cov:
                 else:
                     c10 = self.dodiv(self.C10 , other.C10)
             else:
-                c10 = self.C10 / other
+                c10 = self.dodiv(self.C10 , other)
                 
         if self.C11 is None:
             c11 = None
@@ -414,7 +414,7 @@ class scat_cov:
         if isinstance(other, scat_cov):
             return scat_cov(self.dodiv(self.S0,other.S0),
                             self.dodiv(self.P00,other.P00),
-                            (self.C01 / other.C01),
+                            self.dodiv(self.C01,other.C01),
                             c11,s1=s1, c10=c10,backend=self.backend)
         else:
             return scat_cov((self.S0 / other),
@@ -1491,8 +1491,100 @@ class funct(FOC.FoCUS):
             
         return scat_cov(mS0, mP00, mC01, mC11, s1=mS1,c10=mC10,backend=self.backend), \
             scat_cov(sS0, sP00, sC01, sC11, s1=sS1,c10=sC10,backend=self.backend)
+
+    # compute local direction to make the statistical analysis more efficient
+    def stat_cfft(self,im,upscale=False,smooth_scale=0):
+        tmp=im
+        if upscale:
+            l_nside=int(np.sqrt(tmp.shape[1]//12))
+            tmp=self.up_grade(tmp,l_nside*2,axis=1)
+            
+        l_nside=int(np.sqrt(tmp.shape[1]//12))
+        nscale=int(np.log(l_nside)/np.log(2))
+        cmat={}
+        cmat2={}
+        for k in range(nscale):
+            sim=self.backend.bk_abs(self.convol(tmp,axis=1))
+            cc=self.backend.bk_reduce_mean(sim[:,:,0]-sim[:,:,2],0)
+            ss=self.backend.bk_reduce_mean(sim[:,:,1]-sim[:,:,3],0)
+            for m in range(smooth_scale):
+                if cc.shape[0]>12:
+                    cc=self.ud_grade_2(self.smooth(cc))
+                    ss=self.ud_grade_2(self.smooth(ss))
+            if cc.shape[0]!=tmp.shape[0]:
+                ll_nside=int(np.sqrt(tmp.shape[1]//12))
+                cc=self.up_grade(cc,ll_nside)
+                ss=self.up_grade(ss,ll_nside)
+            phase=np.fmod(np.arctan2(ss.numpy(),cc.numpy())+2*np.pi,2*np.pi)
+            iph=(4*phase/(2*np.pi)).astype('int')
+            alpha=(4*phase/(2*np.pi)-iph)
+            mat=np.zeros([sim.shape[1],4*4])
+            lidx=np.arange(sim.shape[1])
+            for l in range(4):
+                mat[lidx,4*((l+iph)%4)+l]=1.0-alpha
+                mat[lidx,4*((l+iph+1)%4)+l]=alpha
+            
+            cmat[k]=self.backend.bk_cast(mat.astype('complex64'))
+            
+            mat2=np.zeros([k+1,sim.shape[1],4,4*4])
+            
+            for k2 in range(k+1):
+                tmp2=self.backend.bk_repeat(sim,4,axis=-1)
+                sim2=self.backend.bk_reduce_sum(self.backend.bk_reshape(mat.reshape(1,mat.shape[0],16)*tmp2,
+                                                                  [sim.shape[0],cmat[k].shape[0],4,4]),2)
+                sim2=self.backend.bk_abs(self.convol(sim2,axis=1))
+                
+                cc=self.smooth(self.backend.bk_reduce_mean(sim2[:,:,0]-sim2[:,:,2],0))
+                ss=self.smooth(self.backend.bk_reduce_mean(sim2[:,:,1]-sim2[:,:,3],0))
+                for m in range(smooth_scale):
+                    if cc.shape[0]>12:
+                        cc=self.ud_grade_2(self.smooth(cc))
+                        ss=self.ud_grade_2(self.smooth(ss))
+                if cc.shape[0]!=sim.shape[1]:
+                    ll_nside=int(np.sqrt(sim.shape[1]//12))
+                    cc=self.up_grade(cc,ll_nside)
+                    ss=self.up_grade(ss,ll_nside)
+                    
+                phase=np.fmod(np.arctan2(ss.numpy(),cc.numpy())+2*np.pi,2*np.pi)
+                """
+                for k in range(4):
+                    hp.mollview(np.fmod(phase+np.pi,2*np.pi),cmap='jet',nest=True,hold=False,sub=(2,2,1+k))
+                plt.show()
+                exit(0)
+                """
+                iph=(4*phase/(2*np.pi)).astype('int')
+                alpha=(4*phase/(2*np.pi)-iph)
+                lidx=np.arange(sim.shape[1])
+                for m in range(4):
+                    for l in range(4):
+                        mat2[k2,lidx,m,4*((l+iph[:,m])%4)+l]=1.0-alpha[:,m]
+                        mat2[k2,lidx,m,4*((l+iph[:,m]+1)%4)+l]=alpha[:,m]
+                
+            cmat2[k]=self.backend.bk_cast(mat2.astype('complex64'))
+            """
+            tmp=self.backend.bk_repeat(sim[0],4,axis=1)
+            sim2=self.backend.bk_reduce_sum(self.backend.bk_reshape(mat*tmp,[12*nside**2,4,4]),1)
+            
+            cc2=(sim2[:,0]-sim2[:,2])
+            ss2=(sim2[:,1]-sim2[:,3])
+            phase2=np.fmod(np.arctan2(ss2.numpy(),cc2.numpy())+2*np.pi,2*np.pi)
+            
+            plt.figure()
+            hp.mollview(phase,cmap='jet',nest=True,hold=False,sub=(2,2,1))
+            hp.mollview(np.fmod(phase2+np.pi,2*np.pi),cmap='jet',nest=True,hold=False,sub=(2,2,2))
+            plt.figure()
+            for k in range(4):
+                hp.mollview((sim[0,:,k]).numpy().real,cmap='jet',nest=True,hold=False,sub=(2,4,1+k),min=-10,max=10)
+                hp.mollview((sim2[:,k]).numpy().real,cmap='jet',nest=True,hold=False,sub=(2,4,5+k),min=-10,max=10)
+        
+            plt.show()
+            """
+        
+            if k<l_nside-1:
+                tmp=self.ud_grade_2(tmp,axis=1)
+        return cmat,cmat2
     
-    def eval(self, image1, image2=None, mask=None, norm=None, Auto=True, calc_var=False):
+    def eval(self, image1, image2=None, mask=None, norm=None, Auto=True, calc_var=False,cmat=None,cmat2=None):
         """
         Calculates the scattering correlations for a batch of images. Mean are done over pixels.
         mean of modulus:
@@ -1677,6 +1769,11 @@ class funct(FOC.FoCUS):
             ####### S1 and P00
             ### Make the convolution I1 * Psi_j3
             conv1 = self.convol(I1, axis=1)  # [Nbatch, Npix_j3, Norient3]
+
+            if cmat is not None:
+                tmp2=self.backend.bk_repeat(conv1,4,axis=-1)
+                conv1=self.backend.bk_reduce_sum(self.backend.bk_reshape(cmat[j3]*tmp2,[1,cmat[j3].shape[0],4,4]),2)
+                
             ### Take the module M1 = |I1 * Psi_j3|
             M1_square = conv1*self.backend.bk_conjugate(conv1) # [Nbatch, Npix_j3, Norient3]
             M1 = self.backend.bk_L1(M1_square)  # [Nbatch, Npix_j3, Norient3]
@@ -1749,6 +1846,9 @@ class funct(FOC.FoCUS):
             else:  # Cross
                 ### Make the convolution I2 * Psi_j3
                 conv2 = self.convol(I2, axis=1)  # [Nbatch, Npix_j3, Norient3]
+                if cmat is not None:
+                    tmp2=self.backend.bk_repeat(conv2,4,axis=-1)
+                    conv2=self.backend.bk_reduce_sum(self.backend.bk_reshape(cmat[j3]*tmp2,[1,cmat[j3].shape[0],4,4]),2)
                 ### Take the module M2 = |I2 * Psi_j3|
                 M2_square = conv2*self.backend.bk_conjugate(conv2)  # [Nbatch, Npix_j3, Norient3]
                 M2 = self.backend.bk_L1(M2_square)  # [Nbatch, Npix_j3, Norient3]
@@ -1852,19 +1952,19 @@ class funct(FOC.FoCUS):
                 ### C01_auto = < (I1 * Psi)_j3 x (|I1 * Psi_j2| * Psi_j3)^* >_pix
                 if not cross:
                     if calc_var:
-                        c01,vc01 = self._compute_C01(j2,
+                        c01,vc01 = self._compute_C01(j2,j3,
                                                      conv1,
                                                      vmask,
                                                      M1_dic,
                                                      M1convPsi_dic,
-                                                     calc_var=True)  # [Nbatch, Nmask, Norient3, Norient2]
+                                                     calc_var=True,cmat2=cmat2)  # [Nbatch, Nmask, Norient3, Norient2]
                     else:
-                        c01 = self._compute_C01(j2,
+                        c01 = self._compute_C01(j2,j3,
                                                 conv1,
                                                 vmask,
                                                 M1_dic,
                                                 M1convPsi_dic,
-                                                return_data=return_data)  # [Nbatch, Nmask, Norient3, Norient2]
+                                                return_data=return_data,cmat2=cmat2)  # [Nbatch, Nmask, Norient3, Norient2]
                         
                     if return_data:
                         if C01[j3] is None:
@@ -1892,31 +1992,31 @@ class funct(FOC.FoCUS):
                 ### C10_cross = < (I2 * Psi)_j3 x (|I1 * Psi_j2| * Psi_j3)^* >_pix
                 else:
                     if calc_var:
-                        c01,vc01 = self._compute_C01(j2,
+                        c01,vc01 = self._compute_C01(j2,j3,
                                                      conv1,
                                                      vmask,
                                                      M2_dic,
                                                      M2convPsi_dic,
-                                                     calc_var=True)
-                        c10,vc10 = self._compute_C01(j2,
+                                                     calc_var=True,cmat2=cmat2)
+                        c10,vc10 = self._compute_C01(j2,j3,
                                                      conv2,
                                                      vmask,
                                                      M1_dic,
                                                      M1convPsi_dic,
-                                                     calc_var=True)
+                                                     calc_var=True,cmat2=cmat2)
                     else: 
-                        c01 = self._compute_C01(j2,
+                        c01 = self._compute_C01(j2,j3,
                                                 conv1,
                                                 vmask,
                                                 M2_dic,
                                                 M2convPsi_dic,
-                                                return_data=return_data)
-                        c10 = self._compute_C01(j2,
+                                                return_data=return_data,cmat2=cmat2)
+                        c10 = self._compute_C01(j2,j3,
                                                 conv2,
                                                 vmask,
                                                 M1_dic,
                                                 M1convPsi_dic,
-                                                return_data=return_data)
+                                                return_data=return_data,cmat2=cmat2)
                     
                     if return_data:
                         if C01[j3] is None:
@@ -2077,11 +2177,12 @@ class funct(FOC.FoCUS):
         self.P2_dic = None
         return
 
-    def _compute_C01(self, j2, conv,
+    def _compute_C01(self, j2, j3,conv,
                      vmask, M_dic,
                      MconvPsi_dic,
                      calc_var=False,
-                     return_data=False):
+                     return_data=False,
+                     cmat2=None):
         """
         Compute the C01 coefficients (auto or cross)
         C01 = < (Ia * Psi)_j3 x (|Ib * Psi_j2| * Psi_j3)^* >_pix
@@ -2094,7 +2195,10 @@ class funct(FOC.FoCUS):
         ### Compute |I1 * Psi_j2| * Psi_j3 = M1_j2 * Psi_j3
         # Warning: M1_dic[j2] is already at j3 resolution [Nbatch, Npix_j3, Norient3]
         MconvPsi = self.convol(M_dic[j2], axis=1)  # [Nbatch, Npix_j3, Norient3, Norient2]
-
+        if cmat2 is not None:
+            tmp2=self.backend.bk_repeat(MconvPsi,4,axis=-1)
+            MconvPsi=self.backend.bk_reduce_sum(self.backend.bk_reshape(cmat2[j3][j2]*tmp2,[1,cmat2[j3].shape[1],4,4,4]),3)
+        
         # Store it so we can use it in C11 computation
         MconvPsi_dic[j2] = MconvPsi  # [Nbatch, Npix_j3, Norient3, Norient2]
 

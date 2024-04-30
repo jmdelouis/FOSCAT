@@ -275,6 +275,7 @@ class Synthesis:
         self.SHOWGPU=SHOWGPU
         self.axis=axis
         self.in_x_nshape=in_x.shape[0]
+        self.seed=1234
 
         np.random.seed(self.mpi_rank*7+1234)
             

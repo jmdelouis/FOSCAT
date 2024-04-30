@@ -480,6 +480,41 @@ class foscat_backend:
                 return(self.backend.mean(data,axis))
             if self.BACKEND==self.NUMPY:
                 return(np.mean(data,axis))
+            
+    def bk_reduce_min(self,data,axis=None):
+        
+        if axis is None:
+            if self.BACKEND==self.TENSORFLOW:
+                return(self.backend.reduce_min(data))
+            if self.BACKEND==self.TORCH:
+                return(self.backend.min(data))
+            if self.BACKEND==self.NUMPY:
+                return(np.min(data))
+        else:
+            if self.BACKEND==self.TENSORFLOW:
+                return(self.backend.reduce_min(data,axis=axis))
+            if self.BACKEND==self.TORCH:
+                return(self.backend.min(data,axis))
+            if self.BACKEND==self.NUMPY:
+                return(np.min(data,axis))
+            
+    def bk_random_seed(self,value):
+        
+        if self.BACKEND==self.TENSORFLOW:
+            return(self.backend.random.set_seed(value))
+        if self.BACKEND==self.TORCH:
+            return(self.backend.random.set_seed(value))
+        if self.BACKEND==self.NUMPY:
+            return(np.random.seed(value))
+        
+    def bk_random_uniform(self,shape):
+        
+        if self.BACKEND==self.TENSORFLOW:
+            return(self.backend.random.uniform(shape))
+        if self.BACKEND==self.TORCH:
+            return(self.backend.random.uniform(shape))
+        if self.BACKEND==self.NUMPY:
+            return(np.random.rand(shape))
 
     def bk_reduce_std(self,data,axis=None):
         
@@ -509,16 +544,18 @@ class foscat_backend:
     def bk_is_complex(self,data):
         
         if self.BACKEND==self.TENSORFLOW:
-            return data.dtype==self.all_cbk_type
+            if isinstance(data,np.ndarray):
+                return (data.dtype=='complex64' or data.dtype=='complex128')
+            return data.dtype.is_complex
         
         if self.BACKEND==self.TORCH:
             if isinstance(data,np.ndarray):
-                return data.dtype==self.all_cbk_type
+                return (data.dtype=='complex64' or data.dtype=='complex128')
             
             return data.dtype.is_complex
         
         if self.BACKEND==self.NUMPY:
-            return data.dtype==self.all_cbk_type
+            return (data.dtype=='complex64' or data.dtype=='complex128')
         
     def bk_norm(self,data):
         if self.bk_is_complex(data):
