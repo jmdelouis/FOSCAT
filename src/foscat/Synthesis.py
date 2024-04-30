@@ -357,11 +357,6 @@ class Synthesis:
         start_x=x.copy()
 
         for iteration in range(NUM_STEP_BIAS):
-<<<<<<< HEAD
-
-            self.seed=iteration*7+self.seed
-=======
->>>>>>> 403dcb7 (Add generative neura network)
         
             x,l,i=opt.fmin_l_bfgs_b(self.calc_grad,
                                     x.astype('float64'),
