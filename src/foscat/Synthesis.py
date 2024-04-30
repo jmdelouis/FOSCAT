@@ -116,8 +116,11 @@ class Synthesis:
             
         self.nlog=self.nlog+1
         self.itt2=0
+<<<<<<< HEAD
         
         self.operation.backend.bk_random_seed(self.seed)
+=======
+>>>>>>> 403dcb7 (Add generative neura network)
             
         if self.itt%self.EVAL_FREQUENCY==0 and self.mpi_rank==0:
             end = time.time()
@@ -354,8 +357,11 @@ class Synthesis:
         start_x=x.copy()
 
         for iteration in range(NUM_STEP_BIAS):
+<<<<<<< HEAD
 
             self.seed=iteration*7+self.seed
+=======
+>>>>>>> 403dcb7 (Add generative neura network)
         
             x,l,i=opt.fmin_l_bfgs_b(self.calc_grad,
                                     x.astype('float64'),
@@ -366,17 +372,17 @@ class Synthesis:
 
             # update bias input data
             if iteration<NUM_STEP_BIAS-1:
-                if self.mpi_rank==0:
-                    print('%s Hessian restart'%(self.MESSAGE))
+                #if self.mpi_rank==0:
+                #    print('%s Hessian restart'%(self.MESSAGE))
 
                 omap=self.xtractmap(x,axis)
 
                 for k in range(self.number_of_loss):
                     if self.loss_class[k].batch_update is not None:
                         self.loss_class[k].batch_update(self.loss_class[k].batch_data,omap)
+                    if self.loss_class[k].batch is not None:
                         l_batch=self.loss_class[k].batch(self.loss_class[k].batch_data,0,init=True)
                 #x=start_x.copy()
-                    
 
         if self.mpi_rank==0 and SHOWGPU:
             self.stop_synthesis()
