@@ -45,11 +45,11 @@ class Synthesis:
                  beta1=0.9,
                  beta2=0.999,
                  epsilon=1e-7,
-                 decay_rate = 0.999,
-                 MAXNUMLOSS=10):
+                 decay_rate = 0.999):
 
         self.loss_class=loss_list
         self.number_of_loss=len(loss_list)
+        self.__iteration__=1234
         self.nlog=0
         self.m_dw, self.v_dw = 0.0, 0.0
         self.beta1 = beta1
@@ -65,7 +65,7 @@ class Synthesis:
         self.mpi_size=self.operation.mpi_size
         self.mpi_rank=self.operation.mpi_rank
         self.KEEP_TRACK=None
-        self.MAXNUMLOSS=MAXNUMLOSS
+        self.MAXNUMLOSS=len(loss_list)
     
         if self.operation.BACKEND=='tensorflow':
             import foscat.loss_backend_tens as fbk
@@ -116,7 +116,7 @@ class Synthesis:
             
         self.nlog=self.nlog+1
         self.itt2=0
-        
+            
         if self.itt%self.EVAL_FREQUENCY==0 and self.mpi_rank==0:
             end = time.time()
             cur_loss='%10.3g ('%(self.ltot[self.ltot!=-1].mean())
@@ -132,6 +132,7 @@ class Synthesis:
                 for k in range(info_gpu.shape[0]):
                     mess=mess+'[GPU%d %.0f/%.0f MB %.0f%%]'%(k,info_gpu[k,0],info_gpu[k,1],info_gpu[k,2])
                 
+            
             print('%sItt %6d L=%s %.3fs %s'%(self.MESSAGE,self.itt,cur_loss,(end-self.start),mess))
             sys.stdout.flush()
             if self.KEEP_TRACK is not None:
@@ -141,13 +142,14 @@ class Synthesis:
             self.start = time.time()
             
         self.itt=self.itt+1
-        
+
     # ---------------------------------------------−---------
     def calc_grad(self,in_x):
         
         g_tot=None
         l_tot=0.0
 
+            
         if self.do_all_noise and self.totalsz>self.batchsz:
             nstep=self.totalsz//self.batchsz
         else:
@@ -159,6 +161,7 @@ class Synthesis:
         
         for istep in range(nstep):
             
+        
             for k in range(self.number_of_loss):
                 if self.loss_class[k].batch is None:
                     l_batch=None
@@ -348,7 +351,7 @@ class Synthesis:
         start_x=x.copy()
 
         for iteration in range(NUM_STEP_BIAS):
-
+        
             x,l,i=opt.fmin_l_bfgs_b(self.calc_grad,
                                     x.astype('float64'),
                                     callback=self.info_back,
@@ -358,17 +361,17 @@ class Synthesis:
 
             # update bias input data
             if iteration<NUM_STEP_BIAS-1:
-                if self.mpi_rank==0:
-                    print('%s Hessian restart'%(self.MESSAGE))
+                #if self.mpi_rank==0:
+                #    print('%s Hessian restart'%(self.MESSAGE))
 
                 omap=self.xtractmap(x,axis)
 
                 for k in range(self.number_of_loss):
                     if self.loss_class[k].batch_update is not None:
                         self.loss_class[k].batch_update(self.loss_class[k].batch_data,omap)
+                    if self.loss_class[k].batch is not None:
                         l_batch=self.loss_class[k].batch(self.loss_class[k].batch_data,0,init=True)
                 #x=start_x.copy()
-                    
 
         if self.mpi_rank==0 and SHOWGPU:
             self.stop_synthesis()
