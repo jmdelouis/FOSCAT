@@ -2410,13 +2410,13 @@ class funct(FOC.FoCUS):
     """
     @tf.function
     """
-    def eval_comp_fast(self, image1, image2=None,mask=None,norm=None, Auto=True):
+    def eval_comp_fast(self, image1, image2=None,mask=None,norm=None, Auto=True, cmat=None, cmat2=None):
 
-        res=self.eval(image1, image2=image2,mask=mask,Auto=Auto)
+        res=self.eval(image1, image2=image2,mask=mask,Auto=Auto,cmat=cmat,cmat2=cmat2)
         return res.S0,res.P00,res.S1,res.C01,res.C11,res.C10
 
-    def eval_fast(self, image1, image2=None,mask=None,norm=None, Auto=True):
-        s0,p0,s1,c01,c11,c10=self.eval_comp_fast(image1, image2=image2,mask=mask,Auto=Auto)
+    def eval_fast(self, image1, image2=None,mask=None,norm=None, Auto=True, cmat=None, cmat2=None):
+        s0,p0,s1,c01,c11,c10=self.eval_comp_fast(image1, image2=image2,mask=mask,Auto=Auto,cmat=cmat,cmat2=cmat2)
         return scat_cov(s0, p0,  c01, c11, s1=s1,c10=c10,backend=self.backend)
         
         
