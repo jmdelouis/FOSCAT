@@ -11,6 +11,7 @@ class GCNN:
                  nscale=1,
                  chanlist=[],
                  in_nside=1,
+                 n_chan_out=1,
                  nbatch=1,
                  SEED=1234,
                  filename=None):
@@ -27,12 +28,14 @@ class GCNN:
             self.chanlist=outlist[0]
             self.in_nside=outlist[4] 
             self.nbatch=outlist[1]
+            self.n_chan_out=outlist[8]
         
             self.x=self.scat_operator.backend.bk_cast(outlist[6])
         else:
             self.nscale=nscale
             self.nbatch=nbatch
             self.npar=nparam
+            self.n_chan_out=n_chan_out
             self.scat_operator=scat_operator
         
             if len(chanlist)!=nscale+1:
@@ -56,7 +59,9 @@ class GCNN:
                  self.in_nside, \
                  self.nscale, \
                  self.get_weights().numpy(), \
-                 self.all_type]
+                 self.all_type, \
+                 self.n_chan_out]
+        
         myout=open("%s.pkl"%(filename),"wb")
         pickle.dump(outlist,myout)
         myout.close()
@@ -66,7 +71,7 @@ class GCNN:
         for i in range(self.nscale):
             totnchan=totnchan+self.chanlist[i]*self.chanlist[i+1]
         return self.npar*12*self.in_nside**2*self.chanlist[0] \
-            +totnchan*self.KERNELSZ*self.KERNELSZ+self.chanlist[self.nscale]
+            +totnchan*self.KERNELSZ*self.KERNELSZ+self.chanlist[self.nscale]*self.n_chan_out
 
     def set_weights(self,x):
         self.x=x
@@ -93,8 +98,8 @@ class GCNN:
             im=self.scat_operator.healpix_layer_transpose(im,ww)
             im=self.scat_operator.backend.bk_relu(im)
             
-        ww=self.scat_operator.backend.bk_reshape(x[nn:],[self.chanlist[self.nscale],1])
+        ww=self.scat_operator.backend.bk_reshape(x[nn:],[self.chanlist[self.nscale],self.n_chan_out])
         im=self.scat_operator.backend.bk_matmul(im,ww)
         
-        return self.scat_operator.backend.bk_reshape(im,[im.shape[0]])
+        return im
      

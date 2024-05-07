@@ -45,7 +45,7 @@ class FoCUS:
         self.return_data=return_data
         self.silent=silent
 
-        if not silent:
+        if not self.silent:
             print('================================================')
             print('          START FOSCAT CONFIGURATION')
             print('================================================')
@@ -53,14 +53,14 @@ class FoCUS:
 
         self.TEMPLATE_PATH=TEMPLATE_PATH
         if os.path.exists(self.TEMPLATE_PATH)==False:
-            if not silent:
+            if not self.silent:
                 print('The directory %s to store temporary information for FoCUS does not exist: Try to create it'%(self.TEMPLATE_PATH))
             try:
                 os.system('mkdir -p %s'%(self.TEMPLATE_PATH))
-                if not silent:
+                if not self.silent:
                     print('The directory %s is created')
             except:
-                if not silent:
+                if not self.silent:
                     print('Impossible to create the directory %s'%(self.TEMPLATE_PATH))
                 exit(0)
                 
@@ -71,14 +71,14 @@ class FoCUS:
         self.padding=padding
             
         if OSTEP!=0:
-            if not silent:
+            if not self.silent:
                 print('OPTION option is deprecated after version 2.0.6. Please use Jmax option')
             JmaxDelta=OSTEP
         else:
             OSTEP=JmaxDelta
             
         if JmaxDelta<-1:
-            if not silent:
+            if not self.silent:
                 print('Warning : Jmax can not be smaller than -1')
             exit(0)
             
@@ -111,7 +111,7 @@ class FoCUS:
         
         self.gpupos=(gpupos+mpi_rank)%self.backend.ngpu
 
-        if not silent:
+        if not self.silent:
             print('============================================================')
             print('==                                                        ==')
             print('==                                                        ==')
@@ -221,7 +221,7 @@ class FoCUS:
 
             for i in range(1,6):
                 lout=(2**i)
-                if not silent:
+                if not self.silent:
                     print('Init Wave ',lout)
                 
                 if self.InitWave is None:
@@ -332,7 +332,7 @@ class FoCUS:
             indices=np.zeros([12*nside*nside,l_kernel,2],dtype='int')
             for k in range(12*nside*nside):
                 if k%(nside*nside)==0:
-                    if not silent:
+                    if not self.silent:
                         print('Pre-compute nside=%6d %.2f%%'%(nside,100*k/(12*nside*nside)))
         
                 rot=[po[k]/np.pi*180.0,90+(-to[k])/np.pi*180.0]
@@ -345,11 +345,11 @@ class FoCUS:
             if transpose:
                 indices[:,:,1]=indices[:,:,1]//4
                 np.save('%s/FOSCAT_%s_W%d_%d_%d_CNN_Transpose.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside),indices)
-                if not silent:
+                if not self.silent:
                     print('Write %s/FOSCAT_%s_W%d_%d_%d_CNN_Transpose.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside))
             else:
                 np.save('%s/FOSCAT_%s_W%d_%d_%d_CNNnpy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside),indices)
-                if not silent:
+                if not self.silent:
                     print('Write %s/FOSCAT_%s_W%d_%d_%d_CNN.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside))
 
                 
