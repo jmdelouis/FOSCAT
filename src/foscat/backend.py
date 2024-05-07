@@ -297,9 +297,14 @@ class foscat_backend:
         if self.BACKEND==self.TENSORFLOW:
             return self.backend.nn.conv1d(x,w, stride=[1,1,1], padding='SAME')
         if self.BACKEND==self.TORCH:
+            # Torch not yet done !!!
             return self.backend.nn.conv1d(x,w, stride=1, padding='SAME')
         if self.BACKEND==self.NUMPY:
-            return self.backend.nn.conv1d(x,w, stride=1, padding='SAME')
+            res=np.zeros([x.shape[0],x.shape[1],w.shape[1]],dtype=x.dtype)
+            for k in range(w.shape[1]):
+                for l in range(w.shape[2]):
+                    res[:,:,l]+=self.scipy.ndimage.convolve1d(x[:,:,k],w[:,k,l],axis=1)
+            return res
 
     def bk_flattenR(self,x):
         if self.BACKEND==self.TENSORFLOW or self.BACKEND==self.TORCH:
