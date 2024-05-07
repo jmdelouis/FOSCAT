@@ -1493,11 +1493,15 @@ class funct(FOC.FoCUS):
             scat_cov(sS0, sP00, sC01, sC11, s1=sS1,c10=sC10,backend=self.backend)
 
     # compute local direction to make the statistical analysis more efficient
-    def stat_cfft(self,im,upscale=False,smooth_scale=0):
+    def stat_cfft(self,im,image2=None,upscale=False,smooth_scale=0):
         tmp=im
+        if image2 is not None:
+            tmpi2=image2
         if upscale:
             l_nside=int(np.sqrt(tmp.shape[1]//12))
             tmp=self.up_grade(tmp,l_nside*2,axis=1)
+            if image2 is not None:
+                tmpi2=self.up_grade(tmpi2,l_nside*2,axis=1)
             
         l_nside=int(np.sqrt(tmp.shape[1]//12))
         nscale=int(np.log(l_nside)/np.log(2))
@@ -1505,6 +1509,11 @@ class funct(FOC.FoCUS):
         cmat2={}
         for k in range(nscale):
             sim=self.backend.bk_abs(self.convol(tmp,axis=1))
+            if image2 is not None:
+                sim=self.backend.bk_real(self.backend.bk_L1(self.convol(tmp,axis=1)*self.backend.bk_conjugate(self.convol(tmpi2,axis=1))))
+            else:
+                sim=self.backend.bk_abs(self.convol(tmp,axis=1))
+                
             cc=self.backend.bk_reduce_mean(sim[:,:,0]-sim[:,:,2],0)
             ss=self.backend.bk_reduce_mean(sim[:,:,1]-sim[:,:,3],0)
             for m in range(smooth_scale):
@@ -1582,6 +1591,8 @@ class funct(FOC.FoCUS):
         
             if k<l_nside-1:
                 tmp=self.ud_grade_2(tmp,axis=1)
+                if image2 is not None:
+                    tmpi2=self.ud_grade_2(tmpi2,axis=1)
         return cmat,cmat2
     
     def eval(self, image1, image2=None, mask=None, norm=None, Auto=True, calc_var=False,cmat=None,cmat2=None):

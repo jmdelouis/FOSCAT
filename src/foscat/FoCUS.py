@@ -27,6 +27,7 @@ class FoCUS:
                  JmaxDelta=0,
                  DODIV=False,
                  InitWave=None,
+                 silent=False,
                  mpi_size=1,
                  mpi_rank=0):
 
@@ -42,20 +43,25 @@ class FoCUS:
         self.mpi_size=mpi_size
         self.mpi_rank=mpi_rank
         self.return_data=return_data
-        
-        print('================================================')
-        print('          START FOSCAT CONFIGURATION')
-        print('================================================')
-        sys.stdout.flush()
+        self.silent=silent
+
+        if not silent:
+            print('================================================')
+            print('          START FOSCAT CONFIGURATION')
+            print('================================================')
+            sys.stdout.flush()
 
         self.TEMPLATE_PATH=TEMPLATE_PATH
         if os.path.exists(self.TEMPLATE_PATH)==False:
-            print('The directory %s to store temporary information for FoCUS does not exist: Try to create it'%(self.TEMPLATE_PATH))
+            if not silent:
+                print('The directory %s to store temporary information for FoCUS does not exist: Try to create it'%(self.TEMPLATE_PATH))
             try:
                 os.system('mkdir -p %s'%(self.TEMPLATE_PATH))
-                print('The directory %s is created')
+                if not silent:
+                    print('The directory %s is created')
             except:
-                print('Impossible to create the directory %s'%(self.TEMPLATE_PATH))
+                if not silent:
+                    print('Impossible to create the directory %s'%(self.TEMPLATE_PATH))
                 exit(0)
                 
         self.number_of_loss=0
@@ -65,13 +71,15 @@ class FoCUS:
         self.padding=padding
             
         if OSTEP!=0:
-            print('OPTION option is deprecated after version 2.0.6. Please use Jmax option')
+            if not silent:
+                print('OPTION option is deprecated after version 2.0.6. Please use Jmax option')
             JmaxDelta=OSTEP
         else:
             OSTEP=JmaxDelta
             
         if JmaxDelta<-1:
-            print('Warning : Jmax can not be smaller than -1')
+            if not silent:
+                print('Warning : Jmax can not be smaller than -1')
             exit(0)
             
         self.OSTEP=JmaxDelta
@@ -103,14 +111,15 @@ class FoCUS:
         
         self.gpupos=(gpupos+mpi_rank)%self.backend.ngpu
 
-        print('============================================================')
-        print('==                                                        ==')
-        print('==                                                        ==')
-        print('==     RUN ON GPU Rank %d : %s                          =='%(mpi_rank,self.gpulist[self.gpupos%self.ngpu]))
-        print('==                                                        ==')
-        print('==                                                        ==')
-        print('============================================================')
-        sys.stdout.flush()
+        if not silent:
+            print('============================================================')
+            print('==                                                        ==')
+            print('==                                                        ==')
+            print('==     RUN ON GPU Rank %d : %s                          =='%(mpi_rank,self.gpulist[self.gpupos%self.ngpu]))
+            print('==                                                        ==')
+            print('==                                                        ==')
+            print('============================================================')
+            sys.stdout.flush()
 
         l_NORIENT=NORIENT
         if DODIV:
@@ -212,7 +221,8 @@ class FoCUS:
 
             for i in range(1,6):
                 lout=(2**i)
-                print('Init Wave ',lout)
+                if not silent:
+                    print('Init Wave ',lout)
                 
                 if self.InitWave is None:
                     wr,wi,ws,widx=self.init_index(lout)
@@ -322,7 +332,8 @@ class FoCUS:
             indices=np.zeros([12*nside*nside,l_kernel,2],dtype='int')
             for k in range(12*nside*nside):
                 if k%(nside*nside)==0:
-                    print('Pre-compute nside=%6d %.2f%%'%(nside,100*k/(12*nside*nside)))
+                    if not silent:
+                        print('Pre-compute nside=%6d %.2f%%'%(nside,100*k/(12*nside*nside)))
         
                 rot=[po[k]/np.pi*180.0,90+(-to[k])/np.pi*180.0]
                 r=hp.Rotator(rot=rot).get_inverse()            
@@ -334,10 +345,12 @@ class FoCUS:
             if transpose:
                 indices[:,:,1]=indices[:,:,1]//4
                 np.save('%s/FOSCAT_%s_W%d_%d_%d_CNN_Transpose.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside),indices)
-                print('Write %s/FOSCAT_%s_W%d_%d_%d_CNN_Transpose.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside))
+                if not silent:
+                    print('Write %s/FOSCAT_%s_W%d_%d_%d_CNN_Transpose.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside))
             else:
                 np.save('%s/FOSCAT_%s_W%d_%d_%d_CNNnpy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside),indices)
-                print('Write %s/FOSCAT_%s_W%d_%d_%d_CNN.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside))
+                if not silent:
+                    print('Write %s/FOSCAT_%s_W%d_%d_%d_CNN.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside))
 
                 
         if transpose:
@@ -355,7 +368,8 @@ class FoCUS:
         l_kernel=self.KERNELSZ*self.KERNELSZ
             
         if im.shape[1]!=ww.shape[1]:
-            print('Weights channels should be equal to the input image channels')
+            if not self.silent:
+                print('Weights channels should be equal to the input image channels')
             return -1
         
         if self.ww_CNN_Transpose[nside] is None:
@@ -374,7 +388,8 @@ class FoCUS:
         l_kernel=self.KERNELSZ*self.KERNELSZ
             
         if im.shape[1]!=ww.shape[1]:
-            print('Weights channels should be equal to the input image channels')
+            if not self.silent:
+                print('Weights channels should be equal to the input image channels')
             return -1
         
         if self.ww_CNN[nside] is None:
@@ -421,7 +436,8 @@ class FoCUS:
         if self.use_2D:
             ishape=list(im.shape)
             if len(ishape)<axis+2:
-                print('Use of 2D scat with data that has less than 2D')
+                if not self.silent:
+                    print('Use of 2D scat with data that has less than 2D')
                 exit(0)
                 
             npix=im.shape[axis]
@@ -481,7 +497,8 @@ class FoCUS:
         if self.use_2D:
             ishape=list(im.shape)
             if len(ishape)<axis+2:
-                print('Use of 2D scat with data that has less than 2D')
+                if not self.silent:
+                    print('Use of 2D scat with data that has less than 2D')
                 exit(0)
                 
             if nouty is None:
@@ -523,7 +540,8 @@ class FoCUS:
             lout=int(np.sqrt(im.shape[axis]//12))
             
             if self.pix_interp_val[lout][nout] is None:
-                print('compute lout nout',lout,nout)
+                if not self.silent:
+                    print('compute lout nout',lout,nout)
                 th,ph=hp.pix2ang(nout,np.arange(12*nout**2,dtype='int'),nest=True)
                 p, w = hp.get_interp_weights(lout,th,ph,nest=True)
                 del th
@@ -880,7 +898,8 @@ class FoCUS:
                     
                 for k in range(12*nside*nside):
                     if k%(nside*nside)==0:
-                        print('Pre-compute nside=%6d %.2f%%'%(nside,100*k/(12*nside*nside)))
+                        if not self.silent:
+                            print('Pre-compute nside=%6d %.2f%%'%(nside,100*k/(12*nside*nside)))
                     if nside>scale*2:
                         lidx=hp.get_all_neighbours(nside//scale,th[k//(scale*scale)],ph[k//(scale*scale)],nest=True)
                         lidx=np.concatenate([lidx,np.array([(k//(scale*scale))])],0)
@@ -932,7 +951,8 @@ class FoCUS:
                 wav=w.flatten()
                 wwav=wwav.flatten()
                 
-                print('Write FOSCAT_%s_W%d_%d_%d_PIDX.npy'%(TMPFILE_VERSION,self.KERNELSZ**2,self.NORIENT,nside))
+                if not self.silent:
+                    print('Write FOSCAT_%s_W%d_%d_%d_PIDX.npy'%(TMPFILE_VERSION,self.KERNELSZ**2,self.NORIENT,nside))
                 np.save('%s/FOSCAT_%s_W%d_%d_%d_PIDX.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,self.KERNELSZ**2,self.NORIENT,nside),indice)
                 np.save('%s/FOSCAT_%s_W%d_%d_%d_WAVE.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,self.KERNELSZ**2,self.NORIENT,nside),wav)
                 np.save('%s/FOSCAT_%s_W%d_%d_%d_PIDX2.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,self.KERNELSZ**2,self.NORIENT,nside),indice2)
@@ -946,7 +966,8 @@ class FoCUS:
                         self.comp_idx_w25(nside)
                 else:
                     if self.rank==0:
-                        print('Only 3x3 and 5x5 kernel have been developped for Healpix and you ask for %dx%d'%(KERNELSZ,KERNELSZ))
+                        if not self.silent:
+                            print('Only 3x3 and 5x5 kernel have been developped for Healpix and you ask for %dx%d'%(KERNELSZ,KERNELSZ))
                         exit(0)
 
         self.barrier()  
@@ -1230,7 +1251,8 @@ class FoCUS:
             
             ishape=list(in_image.shape)
             if len(ishape)<axis+2:
-                print('Use of 2D scat with data that has less than 2D')
+                if not self.silent:
+                    print('Use of 2D scat with data that has less than 2D')
                 exit(0)
                 
             npix=ishape[axis]
@@ -1354,7 +1376,8 @@ class FoCUS:
             
             ishape=list(in_image.shape)
             if len(ishape)<axis+2:
-                print('Use of 2D scat with data that has less than 2D')
+                if not self.silent:
+                    print('Use of 2D scat with data that has less than 2D')
                 exit(0)
                 
             npix=ishape[axis]
