@@ -3,6 +3,7 @@ setup.cfg
 setup.py
 src/foscat/CircSpline.py
 src/foscat/FoCUS.py
+src/foscat/GCNN.py
 src/foscat/GetGPUinfo.py
 src/foscat/Softmax.py
 src/foscat/Spline1D.py
