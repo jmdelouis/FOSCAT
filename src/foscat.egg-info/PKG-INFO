@@ -1,6 +1,10 @@
 Metadata-Version: 2.1
 Name: foscat
+<<<<<<< HEAD
 Version: 3.0.14
+=======
+Version: 3.0.13
+>>>>>>> origin/main
 Summary: Generate synthetic Healpix or 2D data using Cross Scattering Transform
 Home-page: https://github.com/jmdelouis/FOSCAT
 Author: Jean-Marc DELOUIS
