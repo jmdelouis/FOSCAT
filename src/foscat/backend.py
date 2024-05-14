@@ -3,7 +3,7 @@ import numpy as np
 
 class foscat_backend:
     
-    def __init__(self,name,mpi_rank=0,all_type='float64',gpupos=0):
+    def __init__(self,name,mpi_rank=0,all_type='float64',gpupos=0,silent=False):
         
         self.TENSORFLOW=1
         self.TORCH=2
@@ -71,7 +71,7 @@ class foscat_backend:
         #===========================================================================
         # INIT 
         if mpi_rank==0:
-            if self.BACKEND==self.TENSORFLOW:
+            if self.BACKEND==self.TENSORFLOW and silent==False:
                 print("Num GPUs Available: ", len(self.backend.config.experimental.list_physical_devices('GPU')))
             sys.stdout.flush()
         
@@ -264,7 +264,14 @@ class foscat_backend:
         if self.BACKEND==self.TORCH:
             return x
         if self.BACKEND==self.NUMPY:
-            return x
+            res=np.zeros([x.shape[0],x.shape[1],x.shape[2],w.shape[3]],dtype=x.dtype)
+            for k in range(w.shape[2]):
+                for l in range(w.shape[3]):
+                    for j in range(res.shape[0]):
+                        tmp=self.scipy.signal.convolve2d(x[j,:,:,k],w[:,:,k,l], mode='same', boundary='fill', fillvalue=0.0)
+                        res[j,:,:,l]+=tmp
+                        del tmp
+            return res
 
     def bk_threshold(self,x,threshold,greater=True):
 
@@ -303,7 +310,7 @@ class foscat_backend:
             res=np.zeros([x.shape[0],x.shape[1],w.shape[1]],dtype=x.dtype)
             for k in range(w.shape[1]):
                 for l in range(w.shape[2]):
-                    res[:,:,l]+=self.scipy.ndimage.convolve1d(x[:,:,k],w[:,k,l],axis=1)
+                    res[:,:,l]+=self.scipy.ndimage.convolve1d(x[:,:,k],w[:,k,l],axis=1,mode='constant',cval=0.0)
             return res
 
     def bk_flattenR(self,x):

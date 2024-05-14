@@ -4,6 +4,7 @@ import os, sys
 import foscat.backend as bk
 from scipy.interpolate import griddata
 
+
 TMPFILE_VERSION='V2_6'
 
 class FoCUS:
@@ -31,6 +32,7 @@ class FoCUS:
                  mpi_size=1,
                  mpi_rank=0):
 
+        self.__version__ = '3.0.16'
         # P00 coeff for normalization for scat_cov
         self.TMPFILE_VERSION=TMPFILE_VERSION
         self.P1_dic = None
@@ -101,7 +103,8 @@ class FoCUS:
         self.backend=bk.foscat_backend(BACKEND,
                                        all_type=all_type,
                                        mpi_rank=mpi_rank,
-                                       gpupos=gpupos)
+                                       gpupos=gpupos,
+                                       silent=self.silent)
 
         self.all_bk_type=self.backend.all_bk_type
         self.all_cbk_type=self.backend.all_cbk_type
