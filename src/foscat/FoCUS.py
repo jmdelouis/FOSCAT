@@ -32,7 +32,7 @@ class FoCUS:
                  mpi_size=1,
                  mpi_rank=0):
 
-        self.__version__ = '3.0.16'
+        self.__version__ = '3.0.17'
         # P00 coeff for normalization for scat_cov
         self.TMPFILE_VERSION=TMPFILE_VERSION
         self.P1_dic = None
@@ -692,8 +692,11 @@ class FoCUS:
             ndata=ndata*ishape[k]
 
         nscale=npix//nout
-        tim=self.backend.bk_reshape(self.backend.bk_cast(im),[ndata,npix//nscale,nscale,odata])
-
+        if npix%nscale==0:
+            tim=self.backend.bk_reshape(self.backend.bk_cast(im),[ndata,npix//nscale,nscale,odata])
+        else:
+            im=self.backend.bk_reshape(self.backend.bk_cast(im),[ndata,npix,odata])
+            tim=self.backend.bk_reshape(self.backend.bk_cast(im[:,0:nscale*(npix//nscale),:]),[ndata,npix//nscale,nscale,odata])
         res = self.backend.bk_reduce_mean(tim,2)
         
         if axis==0:
