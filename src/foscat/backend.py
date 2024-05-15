@@ -38,17 +38,20 @@ class foscat_backend:
             self.BACKEND=self.TENSORFLOW
             #tf.config.threading.set_inter_op_parallelism_threads(1)
             #tf.config.threading.set_intra_op_parallelism_threads(1)
+            self.tf_function = tf.function
 
         if self.BACKEND=='torch':
             import torch
             self.BACKEND=self.TORCH
             self.backend=torch
+            self.tf_function = self.tf_loc_function
             
         if self.BACKEND=='numpy':
             self.BACKEND=self.NUMPY
             self.backend=np
             import scipy as scipy
             self.scipy=scipy
+            self.tf_function = self.tf_loc_function
             
         self.float64=self.backend.float64
         self.float32=self.backend.float32
@@ -114,7 +117,10 @@ class foscat_backend:
             except RuntimeError as e:
                 # Memory growth must be set before GPUs have been initialized
                 print(e)
-
+                
+    def tf_loc_function(self,func):
+        return func
+    
     def calc_iso_orient(self,norient):
         tmp=np.zeros([norient*norient,norient])
         for i in range(norient):

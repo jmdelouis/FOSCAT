@@ -1,9 +1,18 @@
 import foscat.FoCUS as FOC
 import numpy as np
-import tensorflow as tf
 import pickle
 import foscat.backend as bk
-  
+import sys
+
+# Vérifier si TensorFlow est importé et défini
+tf_defined = 'tensorflow' in sys.modules
+
+if tf_defined:
+    tf_function = tf.function  # Facultatif : si vous voulez utiliser TensorFlow dans ce script
+else:
+    def tf_function(func):
+        return func
+    
 def read(filename):
     thescat=scat1D(1,1,1,1,1,[0],[0])
     return thescat.read(filename)
@@ -1050,12 +1059,12 @@ class funct(FOC.FoCUS):
     def one(self):
         return scat1D(1.0,1.0,1.0,1.0,1.0,[0],[0],backend=self.backend)
 
-    @tf.function
     def eval_comp_fast(self, image1, image2=None,mask=None,Auto=True,s0_off=1E-6):
 
-        res=self.eval(image1, image2=image2,mask=mask,Auto=Auto,s0_off=s0_off)
+        res=self.eval_fast(image1, image2=image2,mask=mask,Auto=Auto,s0_off=s0_off)
         return res.P00,res.S0,res.S1,res.S2,res.S2L,res.j1,res.j2
 
+    @tf_function
     def eval_fast(self, image1, image2=None,mask=None,Auto=True,s0_off=1E-6):
         p0,s0,s1,s2,s2l,j1,j2=self.eval_comp_fast(image1, image2=image2,mask=mask,Auto=Auto,s0_off=s0_off)
         return scat1D(p0,s0,s1,s2,s2l,j1,j2,backend=self.backend)

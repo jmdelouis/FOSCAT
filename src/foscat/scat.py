@@ -1,10 +1,18 @@
 import foscat.FoCUS as FOC
 import numpy as np
-import tensorflow as tf
 import pickle
 import foscat.backend as bk
 import healpy as hp
   
+# Vérifier si TensorFlow est importé et défini
+tf_defined = 'tensorflow' in sys.modules
+
+if tf_defined:
+    tf_function = tf.function  # Facultatif : si vous voulez utiliser TensorFlow dans ce script
+else:
+    def tf_function(func):
+        return func
+    
 def read(filename):
     thescat=scat(1,1,1,1,1,[0],[0])
     return thescat.read(filename)
@@ -1392,7 +1400,7 @@ class funct(FOC.FoCUS):
     def one(self):
         return scat(1.0,1.0,1.0,1.0,1.0,[0],[0],backend=self.backend)
 
-    @tf.function
+    @tf_function
     def eval_comp_fast(self, image1, image2=None,mask=None,Auto=True,s0_off=1E-6):
 
         res=self.eval(image1, image2=image2,mask=mask,Auto=Auto,s0_off=s0_off)

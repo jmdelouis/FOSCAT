@@ -1,10 +1,18 @@
 import foscat.FoCUS as FOC
 import numpy as np
 import foscat.backend as bk
-#import tensorflow as tf
 import pickle
 import healpy as hp
 
+# Vérifier si TensorFlow est importé et défini
+tf_defined = 'tensorflow' in sys.modules
+
+if tf_defined:
+    tf_function = tf.function  # Facultatif : si vous voulez utiliser TensorFlow dans ce script
+else:
+    def tf_function(func):
+        return func
+    
 def read(filename):
     thescat = scat_cov(1, 1, 1, 1)
     return thescat.read(filename)
@@ -2418,9 +2426,8 @@ class funct(FOC.FoCUS):
                                 x.domult(sig.C11,x.C11)*x.domult(sig.C11,x.C11),
                                 backend=self.backend)
         return(self.NORIENT)
-    """
-    @tf.function
-    """
+    
+    @tf_function
     def eval_comp_fast(self, image1, image2=None,mask=None,norm=None, Auto=True,cmat=None,cmat2=None):
 
         res=self.eval(image1, image2=image2,mask=mask,Auto=Auto,cmat=cmat,cmat2=cmat2)
