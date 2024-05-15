@@ -5,7 +5,7 @@ import foscat.backend as bk
 from scipy.interpolate import griddata
 
 
-TMPFILE_VERSION='V2_6'
+TMPFILE_VERSION='V3_0'
 
 class FoCUS:
     def __init__(self,
@@ -872,7 +872,7 @@ class FoCUS:
         except:
             if self.use_2D==False:
                 if self.KERNELSZ*self.KERNELSZ>12*nside*nside:
-                    l_kernel=2*nside
+                    l_kernel=3
                     
                 aa=np.cos(np.arange(self.NORIENT)/self.NORIENT*np.pi).reshape(1,self.NORIENT)
                 bb=np.sin(np.arange(self.NORIENT)/self.NORIENT*np.pi).reshape(1,self.NORIENT)
@@ -890,14 +890,19 @@ class FoCUS:
                     lidx=np.arange(12*nside*nside)
 
                 pw=np.pi/4.0
-                pw2=1/2.0
-        
+                pw2=1/2
+                amp=1.0
+                
                 if l_kernel==5:
                     pw=np.pi/4.0
-                    pw2=1/2.0
+                    pw2=1/2.25
+                    amp=1.0/9.2038
+                    
                 elif l_kernel==3:
-                    pw=1.0
+                    pw=1.0/np.sqrt(2)
                     pw2=1.0
+                    amp=1/8.45
+                    
                 elif l_kernel==7:
                     pw=np.pi/4.0
                     pw2=1.0/3.0
@@ -920,7 +925,7 @@ class FoCUS:
                     w=np.exp(-pw2*delta[pidx]*(nside**2))
                     pidx=pidx[np.argsort(-w)[0:l_kernel**2]]
                     pidx=pidx[np.argsort(lidx[pidx])]
-                    
+
                     w=np.exp(-pw2*delta[pidx]*(nside**2))
                     iwav[k]=lidx[pidx]
                     wwav[k]=w
@@ -935,7 +940,7 @@ class FoCUS:
                     wav[k,:,:]=(np.cos(xx*aa+yy*bb)+complex(0.0,1.0)*np.sin(xx*aa+yy*bb))*np.expand_dims(w,-1)
     
                 wav=wav-np.expand_dims(np.mean(wav,1),1)
-                wav=wav/np.expand_dims(np.std(wav,1),1)
+                wav=amp*wav/np.expand_dims(np.std(wav,1),1)
                 wwav=wwav/np.expand_dims(np.sum(wwav,1),1)
                 
                 nk=l_kernel*l_kernel

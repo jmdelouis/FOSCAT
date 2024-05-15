@@ -3,6 +3,7 @@ import numpy as np
 import pickle
 import foscat.backend as bk
 import healpy as hp
+import sys
   
 # Vérifier si TensorFlow est importé et défini
 tf_defined = 'tensorflow' in sys.modules

@@ -3,6 +3,7 @@ import numpy as np
 import foscat.backend as bk
 import pickle
 import matplotlib.pyplot as plt
+import sys
 
 
 # Vérifier si TensorFlow est importé et défini
