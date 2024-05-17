@@ -8,6 +8,7 @@ import sys
 tf_defined = 'tensorflow' in sys.modules
 
 if tf_defined:
+    import tensorflow as tf
     tf_function = tf.function  # Facultatif : si vous voulez utiliser TensorFlow dans ce script
 else:
     def tf_function(func):
@@ -62,6 +63,7 @@ class scat1D:
     def domult(self,x,y):
         if x.dtype==y.dtype:
             return x*y
+        
         if self.backend.bk_is_complex(x):
             
             return self.backend.bk_complex(self.backend.bk_real(x)*y,self.backend.bk_imag(x)*y)
@@ -80,6 +82,7 @@ class scat1D:
     def domin(self,x,y):
         if x.dtype==y.dtype:
             return x-y
+        
         if self.backend.bk_is_complex(x):
             
             return self.backend.bk_complex(self.backend.bk_real(x)-y,self.backend.bk_imag(x)-y)
@@ -89,6 +92,7 @@ class scat1D:
     def doadd(self,x,y):
         if x.dtype==y.dtype:
             return x+y
+        
         if self.backend.bk_is_complex(x):
             
             return self.backend.bk_complex(self.backend.bk_real(x)+y,self.backend.bk_imag(x)+y)

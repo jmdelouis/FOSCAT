@@ -9,6 +9,7 @@ import sys
 tf_defined = 'tensorflow' in sys.modules
 
 if tf_defined:
+    import tensorflow as tf
     tf_function = tf.function  # Facultatif : si vous voulez utiliser TensorFlow dans ce script
 else:
     def tf_function(func):
@@ -576,41 +577,53 @@ class scat_cov:
                             s1=s1, c10=c10,backend=self.backend)
         
     def domult(self,x,y):
-        if x.dtype==y.dtype:
+        try:
             return x*y
-        if self.backend.bk_is_complex(x):
-            
-            return self.backend.bk_complex(self.backend.bk_real(x)*y,self.backend.bk_imag(x)*y)
-        else:
-            return self.backend.bk_complex(self.backend.bk_real(y)*x,self.backend.bk_imag(y)*x)
+        except:
+            if x.dtype==y.dtype:
+                return x*y
+            if self.backend.bk_is_complex(x):
+
+                return self.backend.bk_complex(self.backend.bk_real(x)*y,self.backend.bk_imag(x)*y)
+            else:
+                return self.backend.bk_complex(self.backend.bk_real(y)*x,self.backend.bk_imag(y)*x)
 
     def dodiv(self,x,y):
-        if x.dtype==y.dtype:
+        try:
             return x/y
-        if self.backend.bk_is_complex(x):
+        except:
+            if x.dtype==y.dtype:
+                return x/y
+            if self.backend.bk_is_complex(x):
             
-            return self.backend.bk_complex(self.backend.bk_real(x)/y,self.backend.bk_imag(x)/y)
-        else:
-            return self.backend.bk_complex(x/self.backend.bk_real(y),x/self.backend.bk_imag(y))
+                return self.backend.bk_complex(self.backend.bk_real(x)/y,self.backend.bk_imag(x)/y)
+            else:
+                return self.backend.bk_complex(x/self.backend.bk_real(y),x/self.backend.bk_imag(y))
         
     def domin(self,x,y):
-        if x.dtype==y.dtype:
+        try:
             return x-y
-        
-        if self.backend.bk_is_complex(x):
-            
-            return self.backend.bk_complex(self.backend.bk_real(x)-y,self.backend.bk_imag(x)-y)
-        else:
-            return self.backend.bk_complex(x-self.backend.bk_real(y),x-self.backend.bk_imag(y))
+        except:
+            if x.dtype==y.dtype:
+                return x-y
+
+            if self.backend.bk_is_complex(x):
+
+                return self.backend.bk_complex(self.backend.bk_real(x)-y,self.backend.bk_imag(x)-y)
+            else:
+                return self.backend.bk_complex(x-self.backend.bk_real(y),x-self.backend.bk_imag(y))
         
     def doadd(self,x,y):
-        if x.dtype==y.dtype:
+        try:
             return x+y
-        if self.backend.bk_is_complex(x):
-            
-            return self.backend.bk_complex(self.backend.bk_real(x)+y,self.backend.bk_imag(x)+y)
-        else:
-            return self.backend.bk_complex(x+self.backend.bk_real(y),x+self.backend.bk_imag(y))
+        except:
+            if x.dtype==y.dtype:
+                return x+y
+            if self.backend.bk_is_complex(x):
+
+                return self.backend.bk_complex(self.backend.bk_real(x)+y,self.backend.bk_imag(x)+y)
+            else:
+                return self.backend.bk_complex(x+self.backend.bk_real(y),x+self.backend.bk_imag(y))
                 
             
     def __mul__(self, other):
@@ -735,7 +748,7 @@ class scat_cov:
         return scat_cov(self.S0,self.backend.constant(p0),self.backend.constant(c01),
                         self.backend.constant(c11),s1=s1,c10=c10,backend=self.backend)
 
-    def plot(self, name=None, hold=True, color='blue', lw=1, legend=True):
+    def plot(self, name=None, hold=True, color='blue', lw=1, legend=True,norm=False):
 
         import matplotlib.pyplot as plt
 
@@ -754,7 +767,7 @@ class scat_cov:
             if len(tmp.shape)>3:
                 for k in range(tmp.shape[3]):
                     for i1 in range(tmp.shape[0]):
-                        for i2 in range(tmp.shape[0]):
+                        for i2 in range(tmp.shape[1]):
                             if test is None:
                                 test=1
                                 plt.plot(tmp[i1,i2,:,k],color=color, label=r'%s $S_1$' % (name), lw=lw)
@@ -762,7 +775,7 @@ class scat_cov:
                                 plt.plot(tmp[i1,i2,:,k],color=color, lw=lw)
             else:
                 for i1 in range(tmp.shape[0]):
-                    for i2 in range(tmp.shape[0]):
+                    for i2 in range(tmp.shape[1]):
                         if test is None:
                             test=1
                             plt.plot(tmp[i1,i2,:],color=color, label=r'%s $S_1$' % (name), lw=lw)
@@ -776,10 +789,11 @@ class scat_cov:
         test=None
         plt.subplot(2, 2, 2)
         tmp=abs(self.get_np(self.P00))
+        ntmp=np.sqrt(tmp)
         if len(tmp.shape)>3:
             for k in range(tmp.shape[3]):
                 for i1 in range(tmp.shape[0]):
-                    for i2 in range(tmp.shape[0]):
+                    for i2 in range(tmp.shape[1]):
                         if test is None:
                             test=1
                             plt.plot(tmp[i1,i2,:,k],color=color, label=r'%s $P_{00}$' % (name), lw=lw)
@@ -787,7 +801,7 @@ class scat_cov:
                             plt.plot(tmp[i1,i2,:,k],color=color, lw=lw)
         else:
             for i1 in range(tmp.shape[0]):
-                for i2 in range(tmp.shape[0]):
+                for i2 in range(tmp.shape[1]):
                     if test is None:
                         test=1
                         plt.plot(tmp[i1,i2,:],color=color, label=r'%s $P_{00}$' % (name), lw=lw)
@@ -819,15 +833,18 @@ class scat_cov:
                     for i2 in range(j1.max()+1):
                         for i3 in range(tmp.shape[3]):
                             for i4 in range(tmp.shape[4]):
+                                dtmp=tmp[i0,i1,j1==i2,i3,i4]
+                                if norm:
+                                    dtmp=dtmp/ntmp[i0,i1,i2,i3]
                                 if j2[j1==i2].shape[0]==1:
-                                    ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3,i4],'.', \
+                                    ax1.plot(j2[j1==i2]+n,dtmp,'.', \
                                                  color=color, lw=lw)
                                 else:
                                     if legend and test is None:
-                                        ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3,i4], \
+                                        ax1.plot(j2[j1==i2]+n,dtmp, \
                                                  color=color, label=lname, lw=lw)
                                         test=1
-                                    ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3,i4], \
+                                    ax1.plot(j2[j1==i2]+n,dtmp, \
                                              color=color, lw=lw)
                         tabnx=tabnx+[r'%d'%(k) for k in j2[j1==i2]]
                         tabx=tabx+[k+n for k in j2[j1==i2]]
@@ -840,15 +857,18 @@ class scat_cov:
                 for i1 in range(tmp.shape[1]):
                     for i2 in range(j1.max()+1):
                         for i3 in range(tmp.shape[3]):
+                            dtmp=tmp[i0,i1,j1==i2,i3]
+                            if norm:
+                                dtmp=dtmp/ntmp[i0,i1,i2]
                             if j2[j1==i2].shape[0]==1:
-                                ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3],'.', \
+                                ax1.plot(j2[j1==i2]+n,dtmp,'.', \
                                          color=color, lw=lw)
                             else:
                                 if legend and test is None:
-                                    ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3], \
+                                    ax1.plot(j2[j1==i2]+n,dtmp, \
                                              color=color, label=lname, lw=lw)
                                     test=1
-                                ax1.plot(j2[j1==i2]+n,tmp[i0,i1,j1==i2,i3], \
+                                ax1.plot(j2[j1==i2]+n,dtmp, \
                                          color=color, lw=lw)
                         tabnx=tabnx+[r'%d'%(k) for k in j2[j1==i2]]
                         tabx=tabx+[k+n for k in j2[j1==i2]]
@@ -904,15 +924,18 @@ class scat_cov:
                             for i3 in range(tmp.shape[3]):
                                 for i4 in range(tmp.shape[4]):
                                     for i5 in range(tmp.shape[5]):
+                                        dtmp=tmp[i0,i1,idx,i3,i4,i5]
+                                        if norm:
+                                            dtmp=dtmp/ntmp[i0,i1,i2,i3]
                                         if len(idx)==1:
-                                            ax1.plot(np.arange(len(idx))+n,tmp[i0,i1,idx,i3,i4,i5],'.', \
+                                            ax1.plot(np.arange(len(idx))+n,dtmp,'.', \
                                                      color=color, lw=lw)
                                         else:
                                             if legend and test is None:
-                                                ax1.plot(np.arange(len(idx))+n,tmp[i0,i1,idx,i3,i4,i5], \
+                                                ax1.plot(np.arange(len(idx))+n,dtmp, \
                                                          color=color, label=lname, lw=lw)
                                                 test=1
-                                            ax1.plot(np.arange(len(idx))+n,tmp[i0,i1,idx,i3,i4,i5], \
+                                            ax1.plot(np.arange(len(idx))+n,dtmp, \
                                                      color=color, lw=lw)
                             tabnx=tabnx+[r'%d,%d'%(j2[k],j3[k]) for k in idx]
                             tabx=tabx+[k+n for k in range(len(idx))]
@@ -928,15 +951,18 @@ class scat_cov:
                         for i2b in range(j2[j1==i2].max()+1):
                             idx=np.where((j1==i2)*(j2==i2b))[0]
                             for i3 in range(tmp.shape[3]):
+                                dtmp=tmp[i0,i1,idx,i3]
+                                if norm:
+                                    dtmp=dtmp/ntmp[i0,i1,i2]
                                 if len(idx)==1:
-                                    ax1.plot(np.arange(len(idx))+n,tmp[i0,i1,idx,i3],'.', \
+                                    ax1.plot(np.arange(len(idx))+n,dtmp,'.', \
                                              color=color, lw=lw)
                                 else:
                                     if legend and test is None:
-                                        ax1.plot(np.arange(len(idx))+n,tmp[i0,i1,idx,i3], \
+                                        ax1.plot(np.arange(len(idx))+n,dtmp, \
                                                  color=color, label=lname, lw=lw)
                                         test=1
-                                    ax1.plot(np.arange(len(idx))+n,tmp[i0,i1,idx,i3], \
+                                    ax1.plot(np.arange(len(idx))+n,dtmp, \
                                              color=color, lw=lw)
                             tabnx=tabnx+[r'%d,%d'%(j2[k],j3[k]) for k in idx]
                             tabx=tabx+[k+n for k in range(len(idx))]

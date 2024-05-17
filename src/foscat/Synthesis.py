@@ -160,8 +160,7 @@ class Synthesis:
         self.l_log[self.mpi_rank*self.MAXNUMLOSS:(self.mpi_rank+1)*self.MAXNUMLOSS]=-1.0
         
         for istep in range(nstep):
-            
-        
+                    
             for k in range(self.number_of_loss):
                 if self.loss_class[k].batch is None:
                     l_batch=None

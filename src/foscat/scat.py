@@ -9,6 +9,7 @@ import sys
 tf_defined = 'tensorflow' in sys.modules
 
 if tf_defined:
+    import tensorflow as tf
     tf_function = tf.function  # Facultatif : si vous voulez utiliser TensorFlow dans ce script
 else:
     def tf_function(func):
@@ -64,44 +65,55 @@ class scat:
                     self.j1  , \
                     self.j2  ,backend=self.backend)
 
+        
     def domult(self,x,y):
-        if x.dtype==y.dtype:
+        try:
             return x*y
-        
-        if self.backend.bk_is_complex(x):
-            
-            return self.backend.bk_complex(self.backend.bk_real(x)*y,self.backend.bk_imag(x)*y)
-        else:
-            return self.backend.bk_complex(self.backend.bk_real(y)*x,self.backend.bk_imag(y)*x)
-        
+        except:
+            if x.dtype==y.dtype:
+                return x*y
+            if self.backend.bk_is_complex(x):
+
+                return self.backend.bk_complex(self.backend.bk_real(x)*y,self.backend.bk_imag(x)*y)
+            else:
+                return self.backend.bk_complex(self.backend.bk_real(y)*x,self.backend.bk_imag(y)*x)
+
     def dodiv(self,x,y):
-        if x.dtype==y.dtype:
+        try:
             return x/y
-        if self.backend.bk_is_complex(x):
+        except:
+            if x.dtype==y.dtype:
+                return x/y
+            if self.backend.bk_is_complex(x):
             
-            return self.backend.bk_complex(self.backend.bk_real(x)/y,self.backend.bk_imag(x)/y)
-        else:
-            return self.backend.bk_complex(x/self.backend.bk_real(y),x/self.backend.bk_imag(y))
+                return self.backend.bk_complex(self.backend.bk_real(x)/y,self.backend.bk_imag(x)/y)
+            else:
+                return self.backend.bk_complex(x/self.backend.bk_real(y),x/self.backend.bk_imag(y))
         
     def domin(self,x,y):
-        if x.dtype==y.dtype:
+        try:
             return x-y
-        
-        if self.backend.bk_is_complex(x):
-            
-            return self.backend.bk_complex(self.backend.bk_real(x)-y,self.backend.bk_imag(x)-y)
-        else:
-            return self.backend.bk_complex(x-self.backend.bk_real(y),x-self.backend.bk_imag(y))
+        except:
+            if x.dtype==y.dtype:
+                return x-y
+
+            if self.backend.bk_is_complex(x):
+
+                return self.backend.bk_complex(self.backend.bk_real(x)-y,self.backend.bk_imag(x)-y)
+            else:
+                return self.backend.bk_complex(x-self.backend.bk_real(y),x-self.backend.bk_imag(y))
         
     def doadd(self,x,y):
-        if x.dtype==y.dtype:
+        try:
             return x+y
-        
-        if self.backend.bk_is_complex(x):
-            
-            return self.backend.bk_complex(self.backend.bk_real(x)+y,self.backend.bk_imag(x)+y)
-        else:
-            return self.backend.bk_complex(x+self.backend.bk_real(y),x+self.backend.bk_imag(y))
+        except:
+            if x.dtype==y.dtype:
+                return x+y
+            if self.backend.bk_is_complex(x):
+
+                return self.backend.bk_complex(self.backend.bk_real(x)+y,self.backend.bk_imag(x)+y)
+            else:
+                return self.backend.bk_complex(x+self.backend.bk_real(y),x+self.backend.bk_imag(y))
         
     def relu(self):
         
@@ -337,7 +349,7 @@ class scat:
         if len(tmp.shape)==4:
             for k in range(tmp.shape[3]):
                 for i1 in range(tmp.shape[0]):
-                    for i2 in range(tmp.shape[0]):
+                    for i2 in range(tmp.shape[1]):
                         if test is None:
                             test=1
                             plt.plot(tmp[i1,i2,:,k],color=color, label=r'%s $P_{00}$' % (name), lw=lw)
