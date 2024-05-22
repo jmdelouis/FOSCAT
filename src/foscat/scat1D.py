@@ -29,7 +29,41 @@ class scat1D:
         self.j2=j2
         self.cross=cross
         self.backend=backend
+
+    # ---------------------------------------------−---------
+    def build_flat(self,table):
+        shape=table.shape
+        ndata=1
+        for k in range(1,len(table.shape)):
+            ndata=ndata*table.shape[k]
+        return self.backend.bk_reshape(table,[table.shape[0],ndata])
         
+    # ---------------------------------------------−---------
+    def flatten(self,S2L=False):
+        if not S2L:
+            if isinstance(self.P00,np.ndarray):
+                return np.concatenate([self.build_flat(lf.S0),
+                                       self.build_flat(lf.S1),
+                                       self.build_flat(lf.P00),
+                                       self.build_flat(lf.S2)],1)
+            else:
+                return self.backend.bk_concat([self.build_flat(self.S0),
+                                               self.build_flat(self.S1),
+                                               self.build_flat(self.P00),
+                                               self.build_flat(self.S2)],1)  
+        else:
+            if isinstance(self.P00,np.ndarray):
+                return np.concatenate([self.build_flat(lf.S0),
+                                       self.build_flat(lf.S1),
+                                       self.build_flat(lf.P00),
+                                       self.build_flat(lf.S2),
+                                       self.build_flat(lf.S2L)],1)
+            else:
+                return self.backend.bk_concat([self.build_flat(self.S0),
+                                               self.build_flat(self.S1),
+                                               self.build_flat(self.P00),
+                                               self.build_flat(self.S2),
+                                               self.build_flat(self.S2L)],1)        
     def get_j_idx(self):
         return self.j1,self.j2
     
@@ -576,8 +610,6 @@ class scat1D:
             s2=self.S2.numpy()
             s2l=self.S2L.numpy()
 
-        print(s1.sum(),p0.sum(),s2.sum(),s2l.sum())
-
         if isinstance(threshold,scat1D):
             if isinstance(threshold.S1,np.ndarray):
                 s1th=threshold.S1
@@ -667,7 +699,6 @@ class scat1D:
                         s2l[:,i0]=s2l[:,i1]
                     else:
                         idx=np.where((s2[:,i2]>0)*(s2[:,i3]>0)*(s2[:,i2]<s2th[:,i2]))
-                        print(i0,i2)
                         if len(idx[0])>0:
                             s2[idx[0],i0,idx[1],idx[2]]=np.exp(3*np.log(s2[idx[0],i2,idx[1],idx[2]])-2*np.log(s2[idx[0],i3,idx[1],idx[2]]))
                         idx=np.where((s2[:,i1]>0)*(s2[:,i2]>0)*(s2[:,i1]<s2th[:,i1]))
@@ -685,7 +716,6 @@ class scat1D:
         p0[np.isnan(p0)]=0.0
         s2[np.isnan(s2)]=0.0
         s2l[np.isnan(s2l)]=0.0
-        print(s1.sum(),p0.sum(),s2.sum(),s2l.sum())
 
         return scat1D(self.backend.constant(p0),self.S0,
                     self.backend.constant(s1),
@@ -819,9 +849,14 @@ class funct(FOC.FoCUS):
     def eval(self, image1, image2=None,mask=None,Auto=True,s0_off=1E-6,Add_R45=False,axis=0):
         # Check input consistency
         if mask is not None:
-            if list(image1.shape)!=list(mask.shape)[1:]:
-                print('The mask should have the same size than the input timeline to eval Scattering')
-                exit(0)
+            if len(image1.shape)==1:
+                if image1.shape[0]!=mask.shape[1]:
+                    print('The mask should have the same size than the input timeline to eval Scattering')
+                    exit(0)
+            else:
+                if image1.shape[1]!=mask.shape[1]:
+                    print('The mask should have the same size than the input timeline to eval Scattering')
+                    exit(0)
             
         ### AUTO OR CROSS
         cross = False
@@ -834,7 +869,7 @@ class funct(FOC.FoCUS):
         # determine jmax and nside corresponding to the input map
         im_shape = image1.shape
 
-        nside=im_shape[axis]
+        nside=im_shape[len(image1.shape)-1]
         npix=nside
         
         jmax=int(np.log(nside)/np.log(2)) #-self.OSTEP
@@ -869,11 +904,19 @@ class funct(FOC.FoCUS):
             l_image1=I1
             if cross:
                 l_image2=I2
-
-        s0 = self.backend.bk_reduce_sum(l_image1*vmask,axis=axis+1)+s0_off
+        if len(image1.shape)==1:
+            s0 = self.backend.bk_reduce_sum(l_image1*vmask,axis=axis+1)
+            if cross and Auto==False:
+                s0 = self.backend.bk_concat([s0,self.backend.bk_reduce_sum(l_image2*vmask,axis=axis)])
+        else:
+            lmask=self.backend.bk_expand_dims(vmask,0)
+            lim=self.backend.bk_expand_dims(l_image1,1)
+            s0 = self.backend.bk_reduce_sum(lim*lmask,axis=axis+2)
+            if cross and Auto==False:
+                lim=self.backend.bk_expand_dims(l_image2,1)
+                s0 = self.backend.bk_concat([s0,self.backend.bk_reduce_sum(lim*lmask,axis=axis+2)])
+            
         
-        if cross and Auto==False:
-            s0 = self.backend.bk_concat([s0,self.backend.bk_reduce_sum(l_image2*vmask,axis=axis)+s0_off])
 
         s1=None
         s2=None

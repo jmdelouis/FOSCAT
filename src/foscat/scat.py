@@ -1048,7 +1048,7 @@ class funct(FOC.FoCUS):
         if mask is not None:
             if list(image1.shape)!=list(mask.shape)[1:]:
                 print('The mask should have the same size than the input image to eval Scattering')
-                print(image1.shape,mask.shape)
+                print('Image shape ',image1.shape,'Mask shape ',mask.shape)
                 exit(0)
         if self.use_2D and len(image1.shape)<2:
             print('To work with 2D scattering transform, two dimension is needed, input map has only on dimension')
@@ -1129,7 +1129,6 @@ class funct(FOC.FoCUS):
             else:
                 # if the kernel size is bigger than 3 increase the binning before smoothing
                 if self.use_2D:
-                    print(axis,image1.shape)
                     l_image1=self.up_grade(l_image1,I1.shape[axis]*4,axis=axis,nouty=I1.shape[axis+1]*4)
                     vmask=self.up_grade(vmask,I1.shape[axis]*4,axis=1,nouty=I1.shape[axis+1]*4)
                 else:

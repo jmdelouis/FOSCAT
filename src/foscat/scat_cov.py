@@ -914,6 +914,7 @@ class scat_cov:
         tabnx=[]
         tab2x=[]
         tab2nx=[]
+        ntmp=ntmp*ntmp
         if len(tmp.shape)>4:
             for i0 in range(tmp.shape[0]):
                 for i1 in range(tmp.shape[1]):

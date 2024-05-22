@@ -347,12 +347,10 @@ class foscat_backend:
             return self.bk_cast(self.backend.image.resize(x,shape, method='bilinear'))
         
         if self.BACKEND==self.TORCH:
-            print(x.shape)
             tmp=self.backend.nn.functional.interpolate(x,
                                                        size=shape,
                                                        mode='bilinear',
                                                        align_corners=False)
-            print(tmp.shape)
             return self.bk_cast(tmp)
         if self.BACKEND==self.NUMPY:
             return self.bk_cast(self.backend.image.resize(x,shape, method='bilinear'))
