@@ -90,7 +90,6 @@ class CNN:
         im=self.scat_operator.backend.bk_relu(im)
         
         for k in range(self.nscale):
-            print(im.shape)
             ww=self.scat_operator.backend.bk_reshape(x[nn:nn+self.KERNELSZ*self.KERNELSZ*self.chanlist[k]*self.chanlist[k+1]],
                                                 [self.KERNELSZ*self.KERNELSZ,self.chanlist[k],self.chanlist[k+1]])
             nn=nn+self.KERNELSZ*self.KERNELSZ*self.chanlist[k]*self.chanlist[k+1]

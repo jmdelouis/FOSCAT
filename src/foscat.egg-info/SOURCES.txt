@@ -1,6 +1,7 @@
 README.md
 setup.cfg
 setup.py
+src/foscat/CNN.py
 src/foscat/CircSpline.py
 src/foscat/FoCUS.py
 src/foscat/GCNN.py
