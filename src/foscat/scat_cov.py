@@ -835,7 +835,7 @@ class scat_cov:
                             for i4 in range(tmp.shape[4]):
                                 dtmp=tmp[i0,i1,j1==i2,i3,i4]
                                 if norm:
-                                    dtmp=dtmp/ntmp[i0,i1,i2,i3]
+                                    dtmp=dtmp/(ntmp[i0,i1,i2,i3]*ntmp[i0,i1,j2[j1==i2],i3])
                                 if j2[j1==i2].shape[0]==1:
                                     ax1.plot(j2[j1==i2]+n,dtmp,'.', \
                                                  color=color, lw=lw)
@@ -859,7 +859,7 @@ class scat_cov:
                         for i3 in range(tmp.shape[3]):
                             dtmp=tmp[i0,i1,j1==i2,i3]
                             if norm:
-                                dtmp=dtmp/ntmp[i0,i1,i2]
+                                dtmp=dtmp/(ntmp[i0,i1,i2]*ntmp[i0,i1,j2[j1==i2]])
                             if j2[j1==i2].shape[0]==1:
                                 ax1.plot(j2[j1==i2]+n,dtmp,'.', \
                                          color=color, lw=lw)
@@ -914,7 +914,7 @@ class scat_cov:
         tabnx=[]
         tab2x=[]
         tab2nx=[]
-        ntmp=ntmp*ntmp
+        ntmp=ntmp
         if len(tmp.shape)>4:
             for i0 in range(tmp.shape[0]):
                 for i1 in range(tmp.shape[1]):
@@ -927,7 +927,7 @@ class scat_cov:
                                     for i5 in range(tmp.shape[5]):
                                         dtmp=tmp[i0,i1,idx,i3,i4,i5]
                                         if norm:
-                                            dtmp=dtmp/ntmp[i0,i1,i2,i3]
+                                            dtmp=dtmp/(ntmp[i0,i1,i2,i3]*ntmp[i0,i1,i2b,i3])
                                         if len(idx)==1:
                                             ax1.plot(np.arange(len(idx))+n,dtmp,'.', \
                                                      color=color, lw=lw)
@@ -954,7 +954,7 @@ class scat_cov:
                             for i3 in range(tmp.shape[3]):
                                 dtmp=tmp[i0,i1,idx,i3]
                                 if norm:
-                                    dtmp=dtmp/ntmp[i0,i1,i2]
+                                    dtmp=dtmp/(ntmp[i0,i1,i2]*ntmp[i0,i1,i2b])
                                 if len(idx)==1:
                                     ax1.plot(np.arange(len(idx))+n,dtmp,'.', \
                                              color=color, lw=lw)
