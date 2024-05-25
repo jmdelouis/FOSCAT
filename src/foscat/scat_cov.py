@@ -34,6 +34,9 @@ class scat_cov:
         self.idx2    = None
         
     def numpy(self):
+        if self.BACKEND=='numpy':
+            return self
+        
         if self.S1 is None:
             s1 = None
         else:
@@ -688,11 +691,18 @@ class scat_cov:
             return scat_cov(self.P00,self.C01,self.C11,s1=self.S1,c10=self.C10,backend=self.backend)
             
         if self.S1 is not None:
-            s1=self.S1.numpy()
+            if self.BACKEND=='numpy':
+                s1=self.S1
+            else:
+                s1=self.S1.numpy()
         else:
             s1=self.S1
 
-        p0=self.P00.numpy()
+        if self.BACKEND=='numpy':
+            p0=self.P00
+        else:
+            p0=self.P00.numpy()
+            
         for k in range(nscale):
             if constant:
                 if self.S1 is not None:
@@ -706,10 +716,16 @@ class scat_cov:
         j1,j2=self.get_j_idx()
 
         if self.C10 is not None:
-            c10=self.C10.numpy()
+            if self.BACKEND=='numpy':
+                c10=self.C10
+            else:
+                c10=self.C10.numpy()
         else:
             c10=self.C10
-        c01=self.C01.numpy()
+        if self.BACKEND=='numpy':
+            c01=self.C01
+        else:
+            c01=self.C01.numpy()
 
         for k in range(nscale):
 
@@ -724,8 +740,12 @@ class scat_cov:
                     c10[:,:,i0]=np.exp(2*np.log(c10[:,:,i1])-np.log(c10[:,:,i2]))
                     c01[:,:,i0]=np.exp(2*np.log(c01[:,:,i1])-np.log(c01[:,:,i2]))
 
-
-        c11=self.C11.numpy()
+        
+        if self.BACKEND=='numpy':
+            c11=self.C11
+        else:
+            c11=self.C11.numpy()
+            
         j1,j2,j3=self.get_jc11_idx()
 
         for k in range(nscale):
@@ -1329,14 +1349,20 @@ class scat_cov:
         
         inscale=self.P00.shape[2]
         p00=np.zeros([self.P00.shape[0],self.P00.shape[1],nscale,self.P00.shape[3]],dtype='complex')
-        p00[:,:,noff:,:]=self.P00.numpy()
+        if self.BACKEND=='numpy':
+            p00[:,:,noff:,:]=self.P00
+        else:
+            p00[:,:,noff:,:]=self.P00.numpy()
         for i in range(self.P00.shape[0]):
             for j in range(self.P00.shape[1]):
                 for k in range(self.P00.shape[3]):
                     p00[i,j,0:noff,k]=self.add_data_from_log_slope(p00[i,j,noff:,k],noff,ds=ds)
                     
         s1=np.zeros([self.S1.shape[0],self.S1.shape[1],nscale,self.S1.shape[3]])
-        s1[:,:,noff:,:]=self.S1.numpy()
+        if self.BACKEND=='numpy':
+            s1[:,:,noff:,:]=self.S1
+        else:
+            s1[:,:,noff:,:]=self.S1.numpy()
         for i in range(self.S1.shape[0]):
             for j in range(self.S1.shape[1]):
                 for k in range(self.S1.shape[3]):
@@ -1373,8 +1399,12 @@ class scat_cov:
                     for l in range(self.C01.shape[4]):
                         for ij in range(noff+1,nscale):
                             idx=np.where(jo2==ij)[0]
-                            c01[i,j,idx[noff:],k,l]=self.C01.numpy()[i,j,j2==ij-noff,k,l]
-                            c01[i,j,idx[:noff],k,l]=self.add_data_from_slope(self.C01.numpy()[i,j,j2==ij-noff,k,l],noff,ds=ds)
+                            if self.BACKEND=='numpy':
+                                c01[i,j,idx[noff:],k,l]=self.C01[i,j,j2==ij-noff,k,l]
+                                c01[i,j,idx[:noff],k,l]=self.add_data_from_slope(self.C01[i,j,j2==ij-noff,k,l],noff,ds=ds)
+                            else:
+                                c01[i,j,idx[noff:],k,l]=self.C01.numpy()[i,j,j2==ij-noff,k,l]
+                                c01[i,j,idx[:noff],k,l]=self.add_data_from_slope(self.C01.numpy()[i,j,j2==ij-noff,k,l],noff,ds=ds)
 
                         for ij in range(nscale):
                             idx=np.where(jo1==ij)[0]
@@ -1432,8 +1462,12 @@ class scat_cov:
                             for k in range(self.C11.shape[3]):
                                 for l in range(self.C11.shape[4]):
                                     for m in range(self.C11.shape[5]):
-                                        c11[i,j,idx2[noff:],k,l,m]=self.C11.numpy()[i,j,idx,k,l,m]
-                                        c11[i,j,idx2[:noff],k,l,m]=self.add_data_from_log_slope(self.C11.numpy()[i,j,idx,k,l,m],noff,ds=ds)
+                                        if self.BACKEND=='numpy':
+                                            c11[i,j,idx2[noff:],k,l,m]=self.C11[i,j,idx,k,l,m]
+                                            c11[i,j,idx2[:noff],k,l,m]=self.add_data_from_log_slope(self.C11[i,j,idx,k,l,m],noff,ds=ds)
+                                        else:
+                                            c11[i,j,idx2[noff:],k,l,m]=self.C11.numpy()[i,j,idx,k,l,m]
+                                            c11[i,j,idx2[:noff],k,l,m]=self.add_data_from_log_slope(self.C11.numpy()[i,j,idx,k,l,m],noff,ds=ds)
 
         idx=np.where(abs(c11[0,0,:,0,0,0])==0)[0]
         for iii in idx:
@@ -1476,15 +1510,25 @@ class funct(FOC.FoCUS):
         S0=None
         for k in list_scat:
             tmp=list_scat[k]
-            nS0=np.expand_dims(tmp.S0.numpy(),0)
-            nP00=np.expand_dims(tmp.P00.numpy(),0)
-            nC01=np.expand_dims(tmp.C01.numpy(),0)
-            nC11=np.expand_dims(tmp.C11.numpy(),0)
-            if tmp.C10 is not None:
-                nC10=np.expand_dims(tmp.C10.numpy(),0)
-            if tmp.S1 is not None:
-                nS1=np.expand_dims(tmp.S1.numpy(),0)
-                
+            if self.BACKEND=='numpy':
+                nS0=np.expand_dims(tmp.S0,0)
+                nP00=np.expand_dims(tmp.P00,0)
+                nC01=np.expand_dims(tmp.C01,0)
+                nC11=np.expand_dims(tmp.C11,0)
+                if tmp.C10 is not None:
+                    nC10=np.expand_dims(tmp.C10,0)
+                if tmp.S1 is not None:
+                    nS1=np.expand_dims(tmp.S1,0)
+            else:
+                nS0=np.expand_dims(tmp.S0.numpy(),0)
+                nP00=np.expand_dims(tmp.P00.numpy(),0)
+                nC01=np.expand_dims(tmp.C01.numpy(),0)
+                nC11=np.expand_dims(tmp.C11.numpy(),0)
+                if tmp.C10 is not None:
+                    nC10=np.expand_dims(tmp.C10.numpy(),0)
+                if tmp.S1 is not None:
+                    nS1=np.expand_dims(tmp.S1.numpy(),0)
+                    
             if S0 is None:
                 S0=nS0
                 P00=nP00
@@ -1560,7 +1604,12 @@ class funct(FOC.FoCUS):
                 ll_nside=int(np.sqrt(tmp.shape[1]//12))
                 cc=self.up_grade(cc,ll_nside)
                 ss=self.up_grade(ss,ll_nside)
-            phase=np.fmod(np.arctan2(ss.numpy(),cc.numpy())+2*np.pi,2*np.pi)
+                
+            if self.BACKEND=='numpy':
+                phase=np.fmod(np.arctan2(ss,cc)+2*np.pi,2*np.pi)
+            else:
+                phase=np.fmod(np.arctan2(ss.numpy(),cc.numpy())+2*np.pi,2*np.pi)
+                
             iph=(4*phase/(2*np.pi)).astype('int')
             alpha=(4*phase/(2*np.pi)-iph)
             mat=np.zeros([sim.shape[1],4*4])
@@ -1590,7 +1639,10 @@ class funct(FOC.FoCUS):
                     cc=self.up_grade(cc,ll_nside)
                     ss=self.up_grade(ss,ll_nside)
                     
-                phase=np.fmod(np.arctan2(ss.numpy(),cc.numpy())+2*np.pi,2*np.pi)
+                if self.BACKEND=='numpy':
+                    phase=np.fmod(np.arctan2(ss,cc)+2*np.pi,2*np.pi)
+                else:
+                    phase=np.fmod(np.arctan2(ss.numpy(),cc.numpy())+2*np.pi,2*np.pi)
                 """
                 for k in range(4):
                     hp.mollview(np.fmod(phase+np.pi,2*np.pi),cmap='jet',nest=True,hold=False,sub=(2,2,1+k))
