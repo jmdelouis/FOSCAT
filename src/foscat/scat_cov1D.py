@@ -375,14 +375,15 @@ class scat_cov1D:
                             (self.C01 - other),
                             c11,
                             s1=s1, c10=c10,backend=self.backend)
-        def domult(self,x,y):
+
+    def domult(self,x,y):
         try:
             return x*y
         except:
             if x.dtype==y.dtype:
                 return x*y
             if self.backend.bk_is_complex(x):
-
+                
                 return self.backend.bk_complex(self.backend.bk_real(x)*y,self.backend.bk_imag(x)*y)
             else:
                 return self.backend.bk_complex(self.backend.bk_real(y)*x,self.backend.bk_imag(y)*x)

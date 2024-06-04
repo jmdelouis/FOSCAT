@@ -16,7 +16,7 @@ class SoftmaxClassifier:
         Nhidden (int, optional): Number of neurons in the hidden layer. Defaults to 10.
     """
 
-    def __init__(self, Nval, Nclass, Nhidden=10):
+    def __init__(self, Nval, Nclass, Nhidden=10,Nlevel=1):
         """
         Initializes the SoftmaxClassifier with a specified number of input features, classes, and hidden neurons.
         
@@ -28,11 +28,15 @@ class SoftmaxClassifier:
             Nhidden (int): Number of neurons in the hidden layer.
         """
         # Create the model
-        self.model = Sequential([
-            Dense(units=Nhidden, activation='relu', input_shape=(Nval,)),  # A hidden layer with Nhidden neurons
-            Dense(units=Nclass),  # The output layer with Nclass neurons (for Nclass classes)
-            Softmax()  # Softmax activation for classification
-        ])
+        TheModel=[Dense(units=Nhidden, activation='relu', input_shape=(Nval,))]
+        
+        for k in range(1,Nlevel):
+            TheModel=TheModel+[Dense(units=Nhidden, activation='relu', input_shape=(Nhidden,))]
+            
+        TheModel=TheModel+[Dense(units=Nclass),  # The output layer with Nclass neurons (for Nclass classes)
+                           Softmax()  # Softmax activation for classification
+        ]
+        self.model = Sequential(TheModel)
 
         # Model compilation
         self.model.compile(
