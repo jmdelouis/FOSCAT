@@ -39,31 +39,22 @@ class scat1D:
         return self.backend.bk_reshape(table,[table.shape[0],ndata])
         
     # ---------------------------------------------−---------
-    def flatten(self,S2L=False):
-        if not S2L:
-            if isinstance(self.P00,np.ndarray):
-                return np.concatenate([self.build_flat(self.S0),
-                                       self.build_flat(self.S1),
-                                       self.build_flat(self.P00),
-                                       self.build_flat(self.S2)],1)
-            else:
-                return self.backend.bk_concat([self.build_flat(self.S0),
-                                               self.build_flat(self.S1),
-                                               self.build_flat(self.P00),
-                                               self.build_flat(self.S2)],1)  
+    def flatten(self,S2L=True,P00=True):
+        tmp=[self.build_flat(self.S0),self.build_flat(self.S1)]
+        
+        if P00:
+            tmp=tmp+[self.build_flat(self.P00)]
+
+        tmp=tmp+[self.build_flat(self.S2)]
+        
+        if S2L:
+            tmp=tmp+[self.build_flat(self.S2L)]
+            
+        if isinstance(self.P00,np.ndarray):
+            return np.concatenate(tmp,1)
         else:
-            if isinstance(self.P00,np.ndarray):
-                return np.concatenate([self.build_flat(self.S0),
-                                       self.build_flat(self.S1),
-                                       self.build_flat(self.P00),
-                                       self.build_flat(self.S2),
-                                       self.build_flat(self.S2L)],1)
-            else:
-                return self.backend.bk_concat([self.build_flat(self.S0),
-                                               self.build_flat(self.S1),
-                                               self.build_flat(self.P00),
-                                               self.build_flat(self.S2),
-                                               self.build_flat(self.S2L)],1)        
+            return self.backend.bk_concat(tmp,1)
+        
     def get_j_idx(self):
         return self.j1,self.j2
     

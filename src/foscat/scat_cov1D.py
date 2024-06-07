@@ -784,6 +784,34 @@ class scat_cov1D:
     def get_norient(self):
         return self.P00.shape[3]
 
+    # ---------------------------------------------−---------
+    def build_flat(self,table):
+        shape=table.shape
+        ndata=1
+        for k in range(1,len(table.shape)):
+            ndata=ndata*table.shape[k]
+        return self.backend.bk_reshape(table,[table.shape[0],ndata])
+    
+    # ---------------------------------------------−---------
+    def flatten(self,S2L=True,P00=True):
+        tmp=[self.build_flat(self.P00)]
+        
+        if self.S1 is not None:
+            tmp=[self.build_flat(self.S1)]
+            
+        tmp=[self.build_flat(self.C01)]
+        
+        if self.C10 is not None:
+            tmp=[self.build_flat(self.C10)]
+            
+        tmp=[self.build_flat(self.C11)]
+            
+        if isinstance(self.P00,np.ndarray):
+            return np.concatenate(tmp,1)
+        else:
+            return self.backend.bk_concat(tmp,1)
+
+        
     def add_data_from_log_slope(self,y,n,ds=3):
         if len(y)<ds:
             if len(y)==1:
@@ -1027,7 +1055,7 @@ class funct(FOC.FoCUS):
         # determine jmax and nside corresponding to the input map
         im_shape = image1.shape
         
-        npix=im_shape[axis]
+        npix=im_shape[len(image1.shape)-1]
 
         J = int(np.log(npix) / np.log(2))  # Number of j scales
         Jmax = J - self.OSTEP  # Number of steps for the loop on scales
