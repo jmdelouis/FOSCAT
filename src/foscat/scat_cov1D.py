@@ -793,23 +793,42 @@ class scat_cov1D:
         return self.backend.bk_reshape(table,[table.shape[0],ndata])
     
     # ---------------------------------------------−---------
-    def flatten(self,S2L=True,P00=True):
+    def flatten(self):
         tmp=[self.build_flat(self.P00)]
         
         if self.S1 is not None:
-            tmp=[self.build_flat(self.S1)]
+            tmp=tmp+[self.build_flat(self.S1)]
             
-        tmp=[self.build_flat(self.C01)]
+        tmp=tmp+[self.build_flat(self.C01)]
         
         if self.C10 is not None:
-            tmp=[self.build_flat(self.C10)]
+            tmp=tmp+[self.build_flat(self.C10)]
             
-        tmp=[self.build_flat(self.C11)]
+        tmp=tmp+[self.build_flat(self.C11)]
             
         if isinstance(self.P00,np.ndarray):
             return np.concatenate(tmp,1)
         else:
             return self.backend.bk_concat(tmp,1)
+        
+    # ---------------------------------------------−---------
+    def flatten_name(self):
+        tmp=['P00_%d'%(k) for k in range(self.P00.shape[-1])]
+        
+        if self.S1 is not None:
+            tmp=tmp+['S1_%d'%(k) for k in range(self.S1.shape[-1])]
+            
+        j1,j2=self.get_j_idx()
+        
+        tmp=tmp+['C01_%d-%d'%(j1[k],j2[k]) for k in range(self.C01.shape[-1])]
+        
+        if self.C10 is not None:
+            tmp=tmp+['C10_%d-%d'%(j1[k],j2[k]) for k in range(self.C10.shape[-1])]
+            
+        j1,j2,j3=self.get_jc11_idx()
+        tmp=tmp+['C11_%d-%d-%d'%(j1[k],j2[k],j3[k]) for k in range(self.C11.shape[-1])]
+
+        return tmp
 
         
     def add_data_from_log_slope(self,y,n,ds=3):

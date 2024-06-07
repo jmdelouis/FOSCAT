@@ -54,6 +54,25 @@ class scat1D:
             return np.concatenate(tmp,1)
         else:
             return self.backend.bk_concat(tmp,1)
+    # ---------------------------------------------−---------
+    def flatten_name(self,S2L=True,P00=True):
+        
+        tmp=['S0']
+
+        
+        tmp=tmp+['S1_%d'%(k) for k in range(self.S1.shape[-1])]
+        
+        if P00:
+            tmp=tmp+['P00_%d'%(k) for k in range(self.P00.shape[-1])]
+
+        j1,j2=self.get_j_idx()
+        
+        tmp=tmp+['S2_%d-%d'%(j1[k],j2[k]) for k in range(self.S2.shape[-1])]
+        
+        if S2L:
+            tmp=tmp+['S2L_%d-%d'%(j1[k],j2[k]) for k in range(self.S2.shape[-1])]
+            
+        return tmp
         
     def get_j_idx(self):
         return self.j1,self.j2
