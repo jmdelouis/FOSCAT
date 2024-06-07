@@ -42,10 +42,10 @@ class scat1D:
     def flatten(self,S2L=False):
         if not S2L:
             if isinstance(self.P00,np.ndarray):
-                return np.concatenate([self.build_flat(lf.S0),
-                                       self.build_flat(lf.S1),
-                                       self.build_flat(lf.P00),
-                                       self.build_flat(lf.S2)],1)
+                return np.concatenate([self.build_flat(self.S0),
+                                       self.build_flat(self.S1),
+                                       self.build_flat(self.P00),
+                                       self.build_flat(self.S2)],1)
             else:
                 return self.backend.bk_concat([self.build_flat(self.S0),
                                                self.build_flat(self.S1),
@@ -53,11 +53,11 @@ class scat1D:
                                                self.build_flat(self.S2)],1)  
         else:
             if isinstance(self.P00,np.ndarray):
-                return np.concatenate([self.build_flat(lf.S0),
-                                       self.build_flat(lf.S1),
-                                       self.build_flat(lf.P00),
-                                       self.build_flat(lf.S2),
-                                       self.build_flat(lf.S2L)],1)
+                return np.concatenate([self.build_flat(self.S0),
+                                       self.build_flat(self.S1),
+                                       self.build_flat(self.P00),
+                                       self.build_flat(self.S2),
+                                       self.build_flat(self.S2L)],1)
             else:
                 return self.backend.bk_concat([self.build_flat(self.S0),
                                                self.build_flat(self.S1),
