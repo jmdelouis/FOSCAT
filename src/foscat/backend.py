@@ -684,9 +684,21 @@ class foscat_backend:
                 
         if self.BACKEND==self.TENSORFLOW or self.BACKEND==self.TORCH:
             if axis is None:
-                return(self.backend.concat(data))
+                if data[0].dtype==self.all_cbk_type:
+                    ndata=len(data)
+                    xr=self.backend.concat([self.bk_real(data[k]) for k in range(ndata)])
+                    xi=self.backend.concat([self.bk_imag(data[k]) for k in range(ndata)])
+                    return self.backend.complex(xr,xi)
+                else:
+                    return(self.backend.concat(data))
             else:
-                return(self.backend.concat(data,axis=axis))
+                if data[0].dtype==self.all_cbk_type:
+                    ndata=len(data)
+                    xr=self.backend.concat([self.bk_real(data[k]) for k in range(ndata)],axis=axis)
+                    xi=self.backend.concat([self.bk_imag(data[k]) for k in range(ndata)],axis=axis)
+                    return self.backend.complex(xr,xi)
+                else:
+                    return(self.backend.concat(data,axis=axis))
         else:
             if axis is None:
                 return np.concatenate(data,axis=0)

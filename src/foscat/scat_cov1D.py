@@ -794,19 +794,19 @@ class scat_cov1D:
     
     # ---------------------------------------------−---------
     def flatten(self):
-        tmp=[self.build_flat(self.P00)]
+        tmp=[self.backend.bk_real(self.build_flat(self.P00))]
         
         if self.S1 is not None:
-            tmp=tmp+[self.build_flat(self.S1)]
+            tmp=tmp+[self.backend.bk_real(self.build_flat(self.S1))]
             
-        tmp=tmp+[self.build_flat(self.C01)]
+        tmp=tmp+[self.backend.bk_real(self.build_flat(self.C01))]
         
         if self.C10 is not None:
-            tmp=tmp+[self.build_flat(self.C10)]
+            tmp=tmp+[self.backend.bk_real(self.build_flat(self.C10))]
             
-        tmp=tmp+[self.build_flat(self.C11)]
-            
-        if isinstance(self.P00,np.ndarray):
+        tmp=tmp+[self.backend.bk_real(self.build_flat(self.C11))]
+        
+        if isinstance(self.C11,np.ndarray):
             return np.concatenate(tmp,1)
         else:
             return self.backend.bk_concat(tmp,1)
