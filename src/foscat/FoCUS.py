@@ -32,7 +32,7 @@ class FoCUS:
                  mpi_size=1,
                  mpi_rank=0):
 
-        self.__version__ = '3.0.30'
+        self.__version__ = '3.0.31'
         # P00 coeff for normalization for scat_cov
         self.TMPFILE_VERSION=TMPFILE_VERSION
         self.P1_dic = None
@@ -323,7 +323,7 @@ class FoCUS:
     # ---------------------------------------------−---------
     # make the CNN working : index reporjection of the kernel on healpix
     
-    def calc_indices_convol(self,nside,kernel):
+    def calc_indices_convol(self,nside,kernel,rotation=None):
         to,po=hp.pix2ang(nside,np.arange(12*nside*nside),nest=True)
         x,y,z=hp.pix2vec(nside,np.arange(12*nside*nside),nest=True)
 
@@ -346,7 +346,10 @@ class FoCUS:
                 print('Nside=%d KenelSZ=%d %.2f%%'%(nside,kernel,k/(12*nside**2)*100))
             idx2=hp.query_disc(nside, vec[k], np.pi/nside, inclusive=True,nest=True)
             t2,p2=hp.pix2ang(nside,idx2,nest=True)
-            rot=[po[k]/np.pi*180.0,90+(-to[k])/np.pi*180.0]
+            if rotation is None:
+                rot=[po[k]/np.pi*180.0,90+(-to[k])/np.pi*180.0]
+            else:
+                rot=[po[k]/np.pi*180.0,90+(-to[k])/np.pi*180.0,rotation[k]]
             r=hp.Rotator(rot=rot)
             t2,p2=r(t2,p2)
             idx3=hp.ang2pix(nside,t2,p2,nest=True)
@@ -364,12 +367,46 @@ class FoCUS:
 
         indices=indices[0:nn]
         weights=weights[0:nn]
-        print('Nside=%d KenelSZ=%d Total Number of value=%d Ratio of the matrix %.2g%%'%(nside,
+        if k%(nside*nside)==nside*nside-1:
+            print('Nside=%d KenelSZ=%d Total Number of value=%d Ratio of the matrix %.2g%%'%(nside,
                                                                                          kernel,
                                                                                          nn,
                                                                                          100*nn/(kernel*12*nside**2*12*nside**2)))
         return indices,weights,xc,yc,zc
 
+    # ---------------------------------------------−---------
+    def calc_orientation(self,im): # im is [Ndata,12*Nside**2]
+        nside=int(np.sqrt(im.shape[1]//12))
+        l_kernel=self.KERNELSZ*self.KERNELSZ
+        norient=32
+        w=np.zeros([l_kernel,1,2*norient])
+        ca=np.cos(np.arange(norient)/norient*np.pi)
+        sa=np.sin(np.arange(norient)/norient*np.pi)
+        stat=np.zeros([12*nside**2,norient])
+        
+        if self.ww_CNN[nside] is None:
+            self.init_CNN_index(nside,transpose=False)
+                
+        y=self.Y_CNN[nside]
+        z=self.Z_CNN[nside]
+        
+        for k in range(norient):
+            w[:,0,k]=(np.exp(-0.5*nside**2*((y)**2+(z)**2))*np.cos(nside*(y*ca[k]+z*sa[k])*np.pi/2))
+            w[:,0,k+norient]=(np.exp(-0.5*nside**2*((y)**2+(z)**2))*np.sin(nside*(y*ca[k]+z*sa[k])*np.pi/2))
+            w[:,0,k]=w[:,0,k]-np.mean(w[:,0,k])
+            w[:,0,k+norient]=w[:,0,k]-np.mean(w[:,0,k+norient])
+
+        for k in range(im.shape[0]):
+            tmp=im[k].reshape(12*nside**2,1)
+            im2=self.healpix_layer(tmp,w)
+            stat=stat+im2[:,0:norient]**2+im2[:,norient:]**2
+
+        rotation=(np.argmax(stat,1)).astype('float')/32.*180.0
+        
+        indices,weights,x,y,z=self.calc_indices_convol(nside,9,rotation=rotation)
+
+        return indices,weights
+        
     def init_CNN_index(self,nside,transpose=False):
         l_kernel=int(self.KERNELSZ*self.KERNELSZ)
         try:
@@ -391,7 +428,6 @@ class FoCUS:
         self.X_CNN[nside]=xc
         self.Y_CNN[nside]=yc
         self.Z_CNN[nside]=zc
-        print(weights.min(),weights.max())
         self.ww_CNN[nside]=self.backend.bk_SparseTensor(indices,
                                                         weights,[12*nside*nside*l_kernel,
                                                                  12*nside*nside])
@@ -403,9 +439,9 @@ class FoCUS:
         if self.ww_CNN[nside] is None:
             self.init_CNN_index(nside)
         return self.X_CNN[nside],self.Y_CNN[nside],self.Z_CNN[nside]
-        
+
     # ---------------------------------------------−---------
-    def healpix_layer_transpose(self,im,ww):
+    def healpix_layer_transpose(self,im,ww,indices=None,weights=None):
         nside=int(np.sqrt(im.shape[0]//12))
         l_kernel=self.KERNELSZ*self.KERNELSZ
             
@@ -413,13 +449,13 @@ class FoCUS:
             if not self.silent:
                 print('Weights channels should be equal to the input image channels')
             return -1
-        tmp=self.healpix_layer(im,ww)
+        tmp=self.healpix_layer(im,ww,indices=indices,weights=weights)
 
         return self.up_grade(tmp,2*nside)
     
     # ---------------------------------------------−---------
     # ---------------------------------------------−---------
-    def healpix_layer(self,im,ww):
+    def healpix_layer(self,im,ww,indices=None,weights=None):
         nside=int(np.sqrt(im.shape[0]//12))
         l_kernel=self.KERNELSZ*self.KERNELSZ
             
@@ -427,12 +463,20 @@ class FoCUS:
             if not self.silent:
                 print('Weights channels should be equal to the input image channels')
             return -1
-        
-        if self.ww_CNN[nside] is None:
-            self.init_CNN_index(nside,transpose=False)
+
+        if indices is None:
+            if self.ww_CNN[nside] is None:
+                self.init_CNN_index(nside,transpose=False)
+            mat=self.ww_CNN[nside]
+        else:
+            if weights is None:
+                print('healpix_layer : If indices is not none weights should be specify')
+                return 0
             
-        tmp=self.backend.bk_sparse_dense_matmul(self.ww_CNN[nside],im)
-        print(tmp.shape)
+            mat=self.backend.bk_SparseTensor(indices,weights,[12*nside*nside*l_kernel,12*nside*nside])
+            
+        tmp=self.backend.bk_sparse_dense_matmul(mat,im)
+        
         density=self.backend.bk_reshape(tmp,[12*nside*nside,l_kernel*im.shape[1]])
         
         return self.backend.bk_matmul(density,self.backend.bk_reshape(ww,[l_kernel*im.shape[1],ww.shape[2]]))
