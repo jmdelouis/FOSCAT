@@ -32,7 +32,7 @@ class FoCUS:
                  mpi_size=1,
                  mpi_rank=0):
 
-        self.__version__ = '3.0.29'
+        self.__version__ = '3.0.30'
         # P00 coeff for normalization for scat_cov
         self.TMPFILE_VERSION=TMPFILE_VERSION
         self.P1_dic = None
@@ -140,6 +140,9 @@ class FoCUS:
         self.ww_Imag  = {} 
         self.ww_CNN_Transpose  = {}
         self.ww_CNN  = {}
+        self.X_CNN  = {}
+        self.Y_CNN  = {}
+        self.Z_CNN  = {}
         
         wwc=np.zeros([KERNELSZ**2,l_NORIENT]).astype(all_type)
         wws=np.zeros([KERNELSZ**2,l_NORIENT]).astype(all_type)
@@ -288,6 +291,9 @@ class FoCUS:
             self.remove_border[lout]=None
             self.ww_CNN_Transpose[lout]=None
             self.ww_CNN[lout]=None
+            self.X_CNN[lout]=None
+            self.Y_CNN[lout]=None
+            self.Z_CNN[lout]=None
 
         self.loss={}
 
@@ -317,72 +323,99 @@ class FoCUS:
     # ---------------------------------------------−---------
     # make the CNN working : index reporjection of the kernel on healpix
     
+    def calc_indices_convol(self,nside,kernel):
+        to,po=hp.pix2ang(nside,np.arange(12*nside*nside),nest=True)
+        x,y,z=hp.pix2vec(nside,np.arange(12*nside*nside),nest=True)
+
+        idx=np.argsort((x-1.0)**2+y**2+z**2)[0:kernel]
+        im=np.ones([12*nside**2])*-1
+        im[idx]=np.arange(len(idx))
+        xc,yc,zc=hp.pix2vec(nside,idx,nest=True)
+
+        vec=np.concatenate([np.expand_dims(x,-1),
+                            np.expand_dims(y,-1),
+                            np.expand_dims(z,-1)],1)
+
+        tc,pc=hp.pix2ang(nside,idx,nest=True)
+
+        indices=np.zeros([12*nside**2*250,2],dtype='int')
+        weights=np.zeros([12*nside**2*250])
+        nn=0
+        for k in range(0,12*nside*nside):
+            if k%(nside*nside)==nside*nside-1:
+                print('Nside=%d KenelSZ=%d %.2f%%'%(nside,kernel,k/(12*nside**2)*100))
+            idx2=hp.query_disc(nside, vec[k], np.pi/nside, inclusive=True,nest=True)
+            t2,p2=hp.pix2ang(nside,idx2,nest=True)
+            rot=[po[k]/np.pi*180.0,90+(-to[k])/np.pi*180.0]
+            r=hp.Rotator(rot=rot)
+            t2,p2=r(t2,p2)
+            idx3=hp.ang2pix(nside,t2,p2,nest=True)
+            ii,ww=hp.get_interp_weights(nside,t2,p2,nest=True)
+
+            ii=im[ii]
+
+            for l in range(4):
+                iii=np.where(ii[l]!=-1)[0]
+                if len(iii)>0:
+                    indices[nn:nn+len(iii),1]=idx2[iii]
+                    indices[nn:nn+len(iii),0]=k*kernel+ii[l,iii]
+                    weights[nn:nn+len(iii)]=ww[l,iii]
+                    nn+=len(iii)
+
+        indices=indices[0:nn]
+        weights=weights[0:nn]
+        print('Nside=%d KenelSZ=%d Total Number of value=%d Ratio of the matrix %.2g%%'%(nside,
+                                                                                         kernel,
+                                                                                         nn,
+                                                                                         100*nn/(kernel*12*nside**2*12*nside**2)))
+        return indices,weights,xc,yc,zc
+
     def init_CNN_index(self,nside,transpose=False):
         l_kernel=int(self.KERNELSZ*self.KERNELSZ)
-        weights=self.backend.bk_cast(np.ones([12*nside*nside*l_kernel],dtype='float'))
         try:
-            if transpose:
-                indices=np.load('%s/FOSCAT_%s_W%d_%d_%d_CNN_Transpose.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside))
-            else:
-                indices=np.load('%s/FOSCAT_%s_W%d_%d_%d_CNN.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside))
+            indices=np.load('%s/FOSCAT_%s_I%d_%d_%d_CNNV2.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside))
+            weights=np.load('%s/FOSCAT_%s_W%d_%d_%d_CNNV2.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside))
+            xc=np.load('%s/FOSCAT_%s_X%d_%d_%d_CNNV2.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside))
+            yc=np.load('%s/FOSCAT_%s_Y%d_%d_%d_CNNV2.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside))
+            zc=np.load('%s/FOSCAT_%s_Z%d_%d_%d_CNNV2.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside))
         except:
-            to,po=hp.pix2ang(nside,np.arange(12*nside*nside),nest=True)
-            x,y,z=hp.pix2vec(nside,np.arange(12*nside*nside),nest=True)
+            indices,weights,xc,yc,zc=self.calc_indices_convol(nside,l_kernel)
+            np.save('%s/FOSCAT_%s_I%d_%d_%d_CNNV2.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside),indices)
+            np.save('%s/FOSCAT_%s_W%d_%d_%d_CNNV2.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside),weights)
+            np.save('%s/FOSCAT_%s_X%d_%d_%d_CNNV2.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside),xc)
+            np.save('%s/FOSCAT_%s_Y%d_%d_%d_CNNV2.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside),yc)
+            np.save('%s/FOSCAT_%s_Z%d_%d_%d_CNNV2.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside),zc)
+            if not self.silent:
+                print('Write %s/FOSCAT_%s_W%d_%d_%d_CNNV2.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside))
 
-            idx=np.argsort((x-1.0)**2+y**2+z**2)[0:l_kernel]
-            tc,pc=hp.pix2ang(nside,idx,nest=True)
-            
-            indices=np.zeros([12*nside*nside,l_kernel,2],dtype='int')
-            for k in range(12*nside*nside):
-                if k%(nside*nside)==0:
-                    if not self.silent:
-                        print('Pre-compute nside=%6d %.2f%%'%(nside,100*k/(12*nside*nside)))
-        
-                rot=[po[k]/np.pi*180.0,90+(-to[k])/np.pi*180.0]
-                r=hp.Rotator(rot=rot).get_inverse()            
-                # get the coordinate
-                ty,tx=r(tc,pc)
-    
-                indices[k,:,0]=k*l_kernel+np.arange(l_kernel).astype('int')
-                indices[k,:,1]=hp.ang2pix(nside,ty,tx,nest=True)
-            if transpose:
-                indices[:,:,1]=indices[:,:,1]//4
-                np.save('%s/FOSCAT_%s_W%d_%d_%d_CNN_Transpose.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside),indices)
-                if not self.silent:
-                    print('Write %s/FOSCAT_%s_W%d_%d_%d_CNN_Transpose.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside))
-            else:
-                np.save('%s/FOSCAT_%s_W%d_%d_%d_CNNnpy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside),indices)
-                if not self.silent:
-                    print('Write %s/FOSCAT_%s_W%d_%d_%d_CNN.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside))
-
-                
-        if transpose:
-            self.ww_CNN_Transpose[nside]=self.backend.bk_SparseTensor(indices.reshape(12*nside*nside*l_kernel,2),
-                                                                      weights,[12*nside*nside*l_kernel,
-                                                                                         3*nside*nside])
-        else:
-            self.ww_CNN[nside]=self.backend.bk_SparseTensor(indices.reshape(12*nside*nside*l_kernel,2),
-                                                            weights,[12*nside*nside*l_kernel,
-                                                                     12*nside*nside])
+        self.X_CNN[nside]=xc
+        self.Y_CNN[nside]=yc
+        self.Z_CNN[nside]=zc
+        print(weights.min(),weights.max())
+        self.ww_CNN[nside]=self.backend.bk_SparseTensor(indices,
+                                                        weights,[12*nside*nside*l_kernel,
+                                                                 12*nside*nside])
             
     # ---------------------------------------------−---------
+    def healpix_layer_coord(self,im):
+        nside=int(np.sqrt(im.shape[0]//12))
+        l_kernel=self.KERNELSZ*self.KERNELSZ
+        if self.ww_CNN[nside] is None:
+            self.init_CNN_index(nside)
+        return self.X_CNN[nside],self.Y_CNN[nside],self.Z_CNN[nside]
+        
+    # ---------------------------------------------−---------
     def healpix_layer_transpose(self,im,ww):
-        nside=2*int(np.sqrt(im.shape[0]//12))
+        nside=int(np.sqrt(im.shape[0]//12))
         l_kernel=self.KERNELSZ*self.KERNELSZ
             
         if im.shape[1]!=ww.shape[1]:
             if not self.silent:
                 print('Weights channels should be equal to the input image channels')
             return -1
-        
-        if self.ww_CNN_Transpose[nside] is None:
-            self.init_CNN_index(nside,transpose=True)
-            
-        tmp=self.backend.bk_sparse_dense_matmul(self.ww_CNN_Transpose[nside],im)
-        
-        density=self.backend.bk_reshape(tmp,[12*nside*nside,l_kernel*im.shape[1]])
-        
-        return self.backend.bk_matmul(density,self.backend.bk_reshape(ww,[l_kernel*im.shape[1],ww.shape[2]]))
+        tmp=self.healpix_layer(im,ww)
+
+        return self.up_grade(tmp,2*nside)
     
     # ---------------------------------------------−---------
     # ---------------------------------------------−---------
@@ -399,6 +432,7 @@ class FoCUS:
             self.init_CNN_index(nside,transpose=False)
             
         tmp=self.backend.bk_sparse_dense_matmul(self.ww_CNN[nside],im)
+        print(tmp.shape)
         density=self.backend.bk_reshape(tmp,[12*nside*nside,l_kernel*im.shape[1]])
         
         return self.backend.bk_matmul(density,self.backend.bk_reshape(ww,[l_kernel*im.shape[1],ww.shape[2]]))
