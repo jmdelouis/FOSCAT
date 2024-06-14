@@ -1056,11 +1056,11 @@ class funct(FOC.FoCUS):
         if image2 is not None:
             if list(image1.shape)!=list(image2.shape):
                 print('The two input image should have the same size to eval Scattering Covariance')
-                exit(0)
+                return None
         if mask is not None:
             if list(image1.shape)!=list(mask.shape)[1:]:
                 print('The mask should have the same size ',mask.shape,'than the input image ',image1.shape,'to eval Scattering Covariance')
-                exit(0)
+                return None
 
         ### AUTO OR CROSS
         cross = False

@@ -1647,7 +1647,7 @@ class funct(FOC.FoCUS):
                 for k in range(4):
                     hp.mollview(np.fmod(phase+np.pi,2*np.pi),cmap='jet',nest=True,hold=False,sub=(2,2,1+k))
                 plt.show()
-                exit(0)
+                return None
                 """
                 iph=(4*phase/(2*np.pi)).astype('int')
                 alpha=(4*phase/(2*np.pi)-iph)
@@ -1720,14 +1720,14 @@ class funct(FOC.FoCUS):
         if image2 is not None:
             if list(image1.shape)!=list(image2.shape):
                 print('The two input image should have the same size to eval Scattering Covariance')
-                exit(0)
+                return None
         if mask is not None:
             if list(image1.shape)!=list(mask.shape)[1:]:
-                print('The mask should have the same size ',mask.shape,'than the input image ',image1.shape,'to eval Scattering Covariance')
-                exit(0)
+                print('The LAST COLUMN of the mask should have the same size ',mask.shape,'than the input image ',image1.shape,'to eval Scattering Covariance')
+                return None
         if self.use_2D and len(image1.shape)<2:
             print('To work with 2D scattering transform, two dimension is needed, input map has only on dimension')
-            exit(0)
+            return None
 
         ### AUTO OR CROSS
         cross = False

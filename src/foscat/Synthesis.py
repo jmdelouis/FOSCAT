@@ -77,7 +77,7 @@ class Synthesis:
             
         if self.operation.BACKEND=='numpy':
             print('Synthesis does not work with numpy. Please select Torch or Tensorflow FOSCAT backend')
-            exit(0)
+            return None
 
     # ---------------------------------------------−---------
     def get_gpu(self,event,delay):

@@ -64,7 +64,7 @@ class FoCUS:
             except:
                 if not self.silent:
                     print('Impossible to create the directory %s'%(self.TEMPLATE_PATH))
-                exit(0)
+                return None
                 
         self.number_of_loss=0
 
@@ -82,7 +82,7 @@ class FoCUS:
         if JmaxDelta<-1:
             if not self.silent:
                 print('Warning : Jmax can not be smaller than -1')
-            exit(0)
+            return None
             
         self.OSTEP=JmaxDelta
         self.use_2D=use_2D
@@ -450,7 +450,7 @@ class FoCUS:
                 print('Weights channels should be equal to the input image channels')
             return -1
         tmp=self.healpix_layer(im,ww,indices=indices,weights=weights)
-
+        
         return self.up_grade(tmp,2*nside)
     
     # ---------------------------------------------−---------
@@ -519,7 +519,7 @@ class FoCUS:
             if len(ishape)<axis+2:
                 if not self.silent:
                     print('Use of 2D scat with data that has less than 2D')
-                exit(0)
+                return None
                 
             npix=im.shape[axis]
             npiy=im.shape[axis+1]
@@ -580,7 +580,7 @@ class FoCUS:
             if len(ishape)<axis+2:
                 if not self.silent:
                     print('Use of 2D scat with data that has less than 2D')
-                exit(0)
+                return None
                 
             if nouty is None:
                 nouty=nout
@@ -1057,7 +1057,7 @@ class FoCUS:
                     if self.rank==0:
                         if not self.silent:
                             print('Only 3x3 and 5x5 kernel have been developped for Healpix and you ask for %dx%d'%(KERNELSZ,KERNELSZ))
-                        exit(0)
+                        return None
 
         self.barrier()  
         if self.use_2D:          
@@ -1342,7 +1342,7 @@ class FoCUS:
             if len(ishape)<axis+2:
                 if not self.silent:
                     print('Use of 2D scat with data that has less than 2D')
-                exit(0)
+                return None
                 
             npix=ishape[axis]
             npiy=ishape[axis+1]
@@ -1467,7 +1467,7 @@ class FoCUS:
             if len(ishape)<axis+2:
                 if not self.silent:
                     print('Use of 2D scat with data that has less than 2D')
-                exit(0)
+                return None
                 
             npix=ishape[axis]
             npiy=ishape[axis+1]

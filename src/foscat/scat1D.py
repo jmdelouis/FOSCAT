@@ -862,11 +862,11 @@ class funct(FOC.FoCUS):
             if len(image1.shape)==1:
                 if image1.shape[0]!=mask.shape[1]:
                     print('The mask should have the same size than the input timeline to eval Scattering')
-                    exit(0)
+                    return None
             else:
                 if image1.shape[1]!=mask.shape[1]:
                     print('The mask should have the same size than the input timeline to eval Scattering')
-                    exit(0)
+                    return None
             
         ### AUTO OR CROSS
         cross = False

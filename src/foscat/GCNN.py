@@ -40,7 +40,7 @@ class GCNN:
         
             if len(chanlist)!=nscale+1:
                 print('len of chanlist (here %d) should of nscale+1 (here %d)'%(len(chanlist),nscale+1))
-                exit(0)
+                return None
             
             self.chanlist=chanlist
             self.KERNELSZ= scat_operator.KERNELSZ
@@ -79,7 +79,7 @@ class GCNN:
     def get_weights(self):
         return self.x
         
-    def eval(self,param):
+    def eval(self,param,indices=None,weights=None):
 
         x=self.x
         
@@ -95,11 +95,15 @@ class GCNN:
             ww=self.scat_operator.backend.bk_reshape(x[nn:nn+self.KERNELSZ*self.KERNELSZ*self.chanlist[k]*self.chanlist[k+1]],
                                                 [self.KERNELSZ*self.KERNELSZ,self.chanlist[k],self.chanlist[k+1]])
             nn=nn+self.KERNELSZ*self.KERNELSZ*self.chanlist[k]*self.chanlist[k+1]
-            im=self.scat_operator.healpix_layer_transpose(im,ww)
+            if indices is None:
+                im=self.scat_operator.healpix_layer_transpose(im,ww)
+            else:
+                im=self.scat_operator.healpix_layer_transpose(im,ww,indices=indices[k],weights=weights[k])
             im=self.scat_operator.backend.bk_relu(im)
             
         ww=self.scat_operator.backend.bk_reshape(x[nn:],[self.chanlist[self.nscale],self.n_chan_out])
         im=self.scat_operator.backend.bk_matmul(im,ww)
         
         return im
-     
+
+        

@@ -33,4 +33,4 @@ event.set()
 
 x.join()
 print('everything done')
-exit(0)
+

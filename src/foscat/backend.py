@@ -29,7 +29,7 @@ class foscat_backend:
             print(' - tensorflow')
             print(' - torch')
             print(' - numpy (Impossible to do synthesis using numpy)')
-            exit(0)
+            return None
             
         if self.BACKEND=='tensorflow':
             import tensorflow as tf
@@ -70,7 +70,7 @@ class foscat_backend:
                 self.all_cbk_type=self.backend.complex128
             else:
                 print('ERROR INIT FOCUS ',all_type,' should be float32 or float64')
-                exit(0)
+                return None
         #===========================================================================
         # INIT 
         if mpi_rank==0:

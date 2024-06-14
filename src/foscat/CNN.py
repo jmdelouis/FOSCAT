@@ -79,7 +79,7 @@ class CNN:
     def get_weights(self):
         return self.x
         
-    def eval(self,im):
+    def eval(self,im,indices=None,weights=None):
 
         x=self.x
         ww=self.scat_operator.backend.bk_reshape(x[0:self.KERNELSZ*self.KERNELSZ*self.n_chan_in*self.chanlist[0]],
@@ -93,7 +93,10 @@ class CNN:
             ww=self.scat_operator.backend.bk_reshape(x[nn:nn+self.KERNELSZ*self.KERNELSZ*self.chanlist[k]*self.chanlist[k+1]],
                                                 [self.KERNELSZ*self.KERNELSZ,self.chanlist[k],self.chanlist[k+1]])
             nn=nn+self.KERNELSZ*self.KERNELSZ*self.chanlist[k]*self.chanlist[k+1]
-            im=self.scat_operator.healpix_layer(im,ww)
+            if indices is None:
+                im=self.scat_operator.healpix_layer(im,ww)
+            else:
+                im=self.scat_operator.healpix_layer(im,ww,indices=indices[k],weights=weights[k])
             im=self.scat_operator.backend.bk_relu(im)
             im=self.scat_operator.ud_grade_2(im,axis=0)
 
