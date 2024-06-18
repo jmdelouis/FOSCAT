@@ -79,15 +79,21 @@ class GCNN:
     def get_weights(self):
         return self.x
         
-    def eval(self,param,indices=None,weights=None):
+    def eval(self,param,indices=None,weights=None,axis=0):
 
         x=self.x
         
         ww=self.scat_operator.backend.bk_reshape(x[0:self.npar*12*self.in_nside**2*self.chanlist[0]], \
                                             [self.npar,12*self.in_nside**2*self.chanlist[0]])
-        
-        im=self.scat_operator.backend.bk_matmul(self.scat_operator.backend.bk_reshape(param,[1,self.npar]),ww)
-        im=self.scat_operator.backend.bk_reshape(im,[12*self.in_nside**2,self.chanlist[0]])
+
+        if axis==0:
+            nval=1
+        else:
+            nval=param.shape[0]
+            
+        im=self.scat_operator.backend.bk_reshape(param,[nval,self.npar])
+        im=self.scat_operator.backend.bk_matmul(im,ww)
+        im=self.scat_operator.backend.bk_reshape(im,[nval,12*self.in_nside**2,self.chanlist[0]])
         im=self.scat_operator.backend.bk_relu(im)
 
         nn=self.npar*12*self.chanlist[0]*self.in_nside**2
@@ -96,14 +102,15 @@ class GCNN:
                                                 [self.KERNELSZ*self.KERNELSZ,self.chanlist[k],self.chanlist[k+1]])
             nn=nn+self.KERNELSZ*self.KERNELSZ*self.chanlist[k]*self.chanlist[k+1]
             if indices is None:
-                im=self.scat_operator.healpix_layer_transpose(im,ww)
+                im=self.scat_operator.healpix_layer_transpose(im,ww,axis=1)
             else:
-                im=self.scat_operator.healpix_layer_transpose(im,ww,indices=indices[k],weights=weights[k])
+                im=self.scat_operator.healpix_layer_transpose(im,ww,indices=indices[k],weights=weights[k],axis=1)
             im=self.scat_operator.backend.bk_relu(im)
-            
+
         ww=self.scat_operator.backend.bk_reshape(x[nn:],[self.chanlist[self.nscale],self.n_chan_out])
         im=self.scat_operator.backend.bk_matmul(im,ww)
-        
+        if axis==0:
+            im=self.scat_operator.backend.bk_reshape(im,[im.shape[1],im.shape[2]])
         return im
 
         

@@ -253,6 +253,14 @@ class foscat_backend:
         if self.BACKEND==self.NUMPY:
             return self.scipy.sparse.coo_matrix((w,(indice[:,0],indice[:,1])),shape=dense_shape)
         
+    def bk_stack(self,list,axis=0):
+        if self.BACKEND==self.TENSORFLOW:
+            return self.backend.stack(list,axis=axis) 
+        if self.BACKEND==self.TORCH:
+            return self.backend.stack(list,axis=axis) 
+        if self.BACKEND==self.NUMPY:
+            return self.backend.stack(list,axis=axis) 
+        
     def bk_sparse_dense_matmul(self,smat,mat):
         if self.BACKEND==self.TENSORFLOW:
             return self.backend.sparse.sparse_dense_matmul(smat,mat) 

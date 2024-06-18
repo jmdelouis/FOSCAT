@@ -32,7 +32,7 @@ class FoCUS:
                  mpi_size=1,
                  mpi_rank=0):
 
-        self.__version__ = '3.0.32'
+        self.__version__ = '3.0.33'
         # P00 coeff for normalization for scat_cov
         self.TMPFILE_VERSION=TMPFILE_VERSION
         self.P1_dic = None
@@ -441,25 +441,37 @@ class FoCUS:
         return self.X_CNN[nside],self.Y_CNN[nside],self.Z_CNN[nside]
 
     # ---------------------------------------------−---------
-    def healpix_layer_transpose(self,im,ww,indices=None,weights=None):
-        nside=int(np.sqrt(im.shape[0]//12))
+    def healpix_layer_transpose(self,im,ww,indices=None,weights=None,axis=0):
+        nside=int(np.sqrt(im.shape[axis]//12))
         l_kernel=self.KERNELSZ*self.KERNELSZ
             
-        if im.shape[1]!=ww.shape[1]:
+        if im.shape[1+axis]!=ww.shape[1]:
             if not self.silent:
                 print('Weights channels should be equal to the input image channels')
             return -1
-        tmp=self.healpix_layer(im,ww,indices=indices,weights=weights)
+        if axis==1:
+            results=[]
         
-        return self.up_grade(tmp,2*nside)
+            for k in range(im.shape[0]):
+                
+                tmp=self.healpix_layer(im[k],ww,indices=indices,weights=weights,axis=0)
+                tmp=self.backend.bk_reshape(self.up_grade(tmp,2*nside),[12*4*nside**2,ww.shape[2]])
+                
+                results.append(tmp)
+            
+            return self.backend.bk_stack(results,axis=0)
+        else:
+            tmp=self.healpix_layer(im,ww,indices=indices,weights=weights,axis=axis)
+        
+            return self.up_grade(tmp,2*nside)
     
     # ---------------------------------------------−---------
     # ---------------------------------------------−---------
-    def healpix_layer(self,im,ww,indices=None,weights=None):
-        nside=int(np.sqrt(im.shape[0]//12))
+    def healpix_layer(self,im,ww,indices=None,weights=None,axis=0):
+        nside=int(np.sqrt(im.shape[axis]//12))
         l_kernel=self.KERNELSZ*self.KERNELSZ
-            
-        if im.shape[1]!=ww.shape[1]:
+
+        if im.shape[1+axis]!=ww.shape[1]:
             if not self.silent:
                 print('Weights channels should be equal to the input image channels')
             return -1
@@ -474,12 +486,27 @@ class FoCUS:
                 return 0
             
             mat=self.backend.bk_SparseTensor(indices,weights,[12*nside*nside*l_kernel,12*nside*nside])
+
+        if axis==1:
+            results=[]
+        
+            for k in range(im.shape[0]):
+                
+                tmp=self.backend.bk_sparse_dense_matmul(mat,im[k])
+                
+                density=self.backend.bk_reshape(tmp,[12*nside*nside,l_kernel*im.shape[1+axis]])
+                
+                density=self.backend.bk_matmul(density,self.backend.bk_reshape(ww,[l_kernel*im.shape[1+axis],ww.shape[2]]))
+                
+                results.append(self.backend.bk_reshape(density,[1,12*nside**2,ww.shape[2]]))
             
-        tmp=self.backend.bk_sparse_dense_matmul(mat,im)
-        
-        density=self.backend.bk_reshape(tmp,[12*nside*nside,l_kernel*im.shape[1]])
-        
-        return self.backend.bk_matmul(density,self.backend.bk_reshape(ww,[l_kernel*im.shape[1],ww.shape[2]]))
+            return self.backend.bk_stack(results,axis=0)
+        else:
+            tmp=self.backend.bk_sparse_dense_matmul(mat,im)
+            
+            density=self.backend.bk_reshape(tmp,[12*nside*nside,l_kernel*im.shape[1]])
+
+            return self.backend.bk_matmul(density,self.backend.bk_reshape(ww,[l_kernel*im.shape[1],ww.shape[2]]))
     # ---------------------------------------------−---------
     
     # ---------------------------------------------−---------
