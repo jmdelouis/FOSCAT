@@ -71,7 +71,7 @@ class GCNN:
         for i in range(self.nscale):
             totnchan=totnchan+self.chanlist[i]*self.chanlist[i+1]
         return self.npar*12*self.in_nside**2*self.chanlist[0] \
-            +totnchan*self.KERNELSZ*self.KERNELSZ+self.chanlist[self.nscale]*self.n_chan_out
+            +(totnchan+self.chanlist[i+1]*self.n_chan_out)*self.KERNELSZ*self.KERNELSZ
 
     def set_weights(self,x):
         self.x=x
@@ -107,8 +107,12 @@ class GCNN:
                 im=self.scat_operator.healpix_layer_transpose(im,ww,indices=indices[k],weights=weights[k],axis=1)
             im=self.scat_operator.backend.bk_relu(im)
 
-        ww=self.scat_operator.backend.bk_reshape(x[nn:],[self.chanlist[self.nscale],self.n_chan_out])
-        im=self.scat_operator.backend.bk_matmul(im,ww)
+        ww=self.scat_operator.backend.bk_reshape(x[nn:],[self.KERNELSZ*self.KERNELSZ,self.chanlist[self.nscale],self.n_chan_out])
+        if indices is None:
+            im=self.scat_operator.healpix_layer(im,ww,axis=1)
+        else:
+            im=self.scat_operator.healpix_layer(im,ww,indices=indices[self.nscale],weights=weights[self.nscale],axis=1)
+            
         if axis==0:
             im=self.scat_operator.backend.bk_reshape(im,[im.shape[1],im.shape[2]])
         return im
