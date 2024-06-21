@@ -14,6 +14,7 @@ class GCNN:
                  n_chan_out=1,
                  nbatch=1,
                  SEED=1234,
+                 hidden=None,
                  filename=None):
 
         if filename is not None:
@@ -29,7 +30,11 @@ class GCNN:
             self.in_nside=outlist[4] 
             self.nbatch=outlist[1]
             self.n_chan_out=outlist[8]
-        
+            if len(outlist[9])>0:
+                self.hidden=outlist[9]
+            else:
+                self.hidden=None
+                
             self.x=self.scat_operator.backend.bk_cast(outlist[6])
         else:
             self.nscale=nscale
@@ -46,21 +51,33 @@ class GCNN:
             self.KERNELSZ= scat_operator.KERNELSZ
             self.all_type= scat_operator.all_type
             self.in_nside=in_nside
+            self.hidden=hidden
 
             np.random.seed(SEED)
             self.x=scat_operator.backend.bk_cast(np.random.randn(self.get_number_of_weights())/(self.KERNELSZ*self.KERNELSZ))
 
     def save(self,filename):
+
+        if self.hidden is None:
+            tabh=[]
+        else:
+            tabh=self.hidden
+
+        www= self.get_weights()
         
+        if not isinstance(www,np.ndarray):
+            www=www.numpy()
+            
         outlist=[self.chanlist, \
                  self.nbatch, \
                  self.npar, \
                  self.KERNELSZ, \
                  self.in_nside, \
                  self.nscale, \
-                 self.get_weights().numpy(), \
+                 www, \
                  self.all_type, \
-                 self.n_chan_out]
+                 self.n_chan_out, \
+                 tabh]
         
         myout=open("%s.pkl"%(filename),"wb")
         pickle.dump(outlist,myout)
@@ -68,10 +85,19 @@ class GCNN:
     
     def get_number_of_weights(self):
         totnchan=0
+        szk=self.KERNELSZ*self.KERNELSZ
+        if self.hidden is not None:
+            totnchan=totnchan+self.hidden[0]*self.npar
+            for i in range(1,len(self.hidden)):
+                totnchan=totnchan+self.hidden[i]*self.hidden[i-1]
+            totnchan=totnchan+self.hidden[len(self.hidden)-1]*12*self.in_nside**2*self.chanlist[0]
+        else:
+            totnchan=self.npar*12*self.in_nside**2*self.chanlist[0]
+            
         for i in range(self.nscale):
-            totnchan=totnchan+self.chanlist[i]*self.chanlist[i+1]
-        return self.npar*12*self.in_nside**2*self.chanlist[0] \
-            +(totnchan+self.chanlist[i+1]*self.n_chan_out)*self.KERNELSZ*self.KERNELSZ
+            totnchan=totnchan+self.chanlist[i]*self.chanlist[i+1]*szk
+            
+        return totnchan+self.chanlist[i+1]*self.n_chan_out*szk
 
     def set_weights(self,x):
         self.x=x
@@ -83,20 +109,46 @@ class GCNN:
 
         x=self.x
         
-        ww=self.scat_operator.backend.bk_reshape(x[0:self.npar*12*self.in_nside**2*self.chanlist[0]], \
-                                            [self.npar,12*self.in_nside**2*self.chanlist[0]])
 
         if axis==0:
             nval=1
         else:
             nval=param.shape[0]
-            
+        
+        nn=0
         im=self.scat_operator.backend.bk_reshape(param,[nval,self.npar])
-        im=self.scat_operator.backend.bk_matmul(im,ww)
-        im=self.scat_operator.backend.bk_reshape(im,[nval,12*self.in_nside**2,self.chanlist[0]])
-        im=self.scat_operator.backend.bk_relu(im)
+        if self.hidden is not None:
+            ww=self.scat_operator.backend.bk_reshape(x[nn:nn+self.npar*self.hidden[0]], \
+                                                     [self.npar,self.hidden[0]])
+            im=self.scat_operator.backend.bk_matmul(im,ww)
+            im=self.scat_operator.backend.bk_relu(im)
+            nn+=self.npar*self.hidden[0]
+            
+            for i in range(1,len(self.hidden)):
+                ww=self.scat_operator.backend.bk_reshape(x[nn:nn+self.hidden[i]*self.hidden[i-1]], \
+                                                     [self.hidden[i-1],self.hidden[i]])
+                im=self.scat_operator.backend.bk_matmul(im,ww)
+                im=self.scat_operator.backend.bk_relu(im)
+                nn+=self.hidden[i]*self.hidden[i-1]
+            
+            ww=self.scat_operator.backend.bk_reshape(x[nn:nn+self.hidden[len(self.hidden)-1]*12*self.in_nside**2*self.chanlist[0]], \
+                                                     [self.hidden[len(self.hidden)-1],
+                                                      12*self.in_nside**2*self.chanlist[0]])
+            im=self.scat_operator.backend.bk_matmul(im,ww)
+            im=self.scat_operator.backend.bk_reshape(im,[nval,12*self.in_nside**2,self.chanlist[0]])
+            im=self.scat_operator.backend.bk_relu(im)
+            nn+=self.hidden[len(self.hidden)-1]*12*self.in_nside**2*self.chanlist[0]
+            
+        else:
+            ww=self.scat_operator.backend.bk_reshape(x[0:self.npar*12*self.in_nside**2*self.chanlist[0]], \
+                                                     [self.npar,12*self.in_nside**2*self.chanlist[0]])
+            im=self.scat_operator.backend.bk_matmul(im,ww)
+            im=self.scat_operator.backend.bk_reshape(im,[nval,12*self.in_nside**2,self.chanlist[0]])
+            im=self.scat_operator.backend.bk_relu(im)
 
-        nn=self.npar*12*self.chanlist[0]*self.in_nside**2
+            nn=self.npar*12*self.chanlist[0]*self.in_nside**2
+
+        
         for k in range(self.nscale):
             ww=self.scat_operator.backend.bk_reshape(x[nn:nn+self.KERNELSZ*self.KERNELSZ*self.chanlist[k]*self.chanlist[k+1]],
                                                 [self.KERNELSZ*self.KERNELSZ,self.chanlist[k],self.chanlist[k+1]])
