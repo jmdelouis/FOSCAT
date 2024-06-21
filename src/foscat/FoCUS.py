@@ -32,7 +32,7 @@ class FoCUS:
                  mpi_size=1,
                  mpi_rank=0):
 
-        self.__version__ = '3.0.33'
+        self.__version__ = '3.0.34'
         # P00 coeff for normalization for scat_cov
         self.TMPFILE_VERSION=TMPFILE_VERSION
         self.P1_dic = None
@@ -328,33 +328,44 @@ class FoCUS:
         x,y,z=hp.pix2vec(nside,np.arange(12*nside*nside),nest=True)
 
         idx=np.argsort((x-1.0)**2+y**2+z**2)[0:kernel]
+        x0,y0,z0=hp.pix2vec(nside,idx[0],nest=True)
+        t0,p0=hp.pix2ang(nside,idx[0],nest=True)
+        
+        idx=np.argsort((x-x0)**2+(y-y0)**2+(z-z0)**2)[0:kernel]
         im=np.ones([12*nside**2])*-1
         im[idx]=np.arange(len(idx))
+        
         xc,yc,zc=hp.pix2vec(nside,idx,nest=True)
+        
+        xc-=x0
+        yc-=y0
+        zc-=z0
 
         vec=np.concatenate([np.expand_dims(x,-1),
                             np.expand_dims(y,-1),
                             np.expand_dims(z,-1)],1)
 
-        tc,pc=hp.pix2ang(nside,idx,nest=True)
-
         indices=np.zeros([12*nside**2*250,2],dtype='int')
         weights=np.zeros([12*nside**2*250])
         nn=0
-        for k in range(0,12*nside*nside):
+        for k in range(12*nside*nside):
             if k%(nside*nside)==nside*nside-1:
                 print('Nside=%d KenelSZ=%d %.2f%%'%(nside,kernel,k/(12*nside**2)*100))
-            idx2=hp.query_disc(nside, vec[k], np.pi/nside, inclusive=True,nest=True)
+            if nside<4:
+                idx2=np.arange(12*nside**2)
+            else:
+                idx2=hp.query_disc(nside, vec[k], np.pi/nside, inclusive=True,nest=True)
             t2,p2=hp.pix2ang(nside,idx2,nest=True)
             if rotation is None:
-                rot=[po[k]/np.pi*180.0,90+(-to[k])/np.pi*180.0]
+                rot=[po[k]/np.pi*180.0,(t0-to[k])/np.pi*180.0]
             else:
-                rot=[po[k]/np.pi*180.0,90+(-to[k])/np.pi*180.0,rotation[k]]
+                rot=[po[k]/np.pi*180.0,(t0-to[k])/np.pi*180.0,rotation[k]]
+                
             r=hp.Rotator(rot=rot)
             t2,p2=r(t2,p2)
-            idx3=hp.ang2pix(nside,t2,p2,nest=True)
+            
             ii,ww=hp.get_interp_weights(nside,t2,p2,nest=True)
-
+            
             ii=im[ii]
 
             for l in range(4):
@@ -410,18 +421,18 @@ class FoCUS:
     def init_CNN_index(self,nside,transpose=False):
         l_kernel=int(self.KERNELSZ*self.KERNELSZ)
         try:
-            indices=np.load('%s/FOSCAT_%s_I%d_%d_%d_CNNV2.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside))
-            weights=np.load('%s/FOSCAT_%s_W%d_%d_%d_CNNV2.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside))
-            xc=np.load('%s/FOSCAT_%s_X%d_%d_%d_CNNV2.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside))
-            yc=np.load('%s/FOSCAT_%s_Y%d_%d_%d_CNNV2.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside))
-            zc=np.load('%s/FOSCAT_%s_Z%d_%d_%d_CNNV2.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside))
+            indices=np.load('%s/FOSCAT_%s_I%d_%d_%d_CNNV3.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside))
+            weights=np.load('%s/FOSCAT_%s_W%d_%d_%d_CNNV3.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside))
+            xc=np.load('%s/FOSCAT_%s_X%d_%d_%d_CNNV3.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside))
+            yc=np.load('%s/FOSCAT_%s_Y%d_%d_%d_CNNV3.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside))
+            zc=np.load('%s/FOSCAT_%s_Z%d_%d_%d_CNNV3.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside))
         except:
             indices,weights,xc,yc,zc=self.calc_indices_convol(nside,l_kernel)
-            np.save('%s/FOSCAT_%s_I%d_%d_%d_CNNV2.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside),indices)
-            np.save('%s/FOSCAT_%s_W%d_%d_%d_CNNV2.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside),weights)
-            np.save('%s/FOSCAT_%s_X%d_%d_%d_CNNV2.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside),xc)
-            np.save('%s/FOSCAT_%s_Y%d_%d_%d_CNNV2.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside),yc)
-            np.save('%s/FOSCAT_%s_Z%d_%d_%d_CNNV2.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside),zc)
+            np.save('%s/FOSCAT_%s_I%d_%d_%d_CNNV3.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside),indices)
+            np.save('%s/FOSCAT_%s_W%d_%d_%d_CNNV3.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside),weights)
+            np.save('%s/FOSCAT_%s_X%d_%d_%d_CNNV3.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside),xc)
+            np.save('%s/FOSCAT_%s_Y%d_%d_%d_CNNV3.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside),yc)
+            np.save('%s/FOSCAT_%s_Z%d_%d_%d_CNNV3.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside),zc)
             if not self.silent:
                 print('Write %s/FOSCAT_%s_W%d_%d_%d_CNNV2.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel,self.NORIENT,nside))
 
@@ -433,8 +444,8 @@ class FoCUS:
                                                                  12*nside*nside])
             
     # ---------------------------------------------−---------
-    def healpix_layer_coord(self,im):
-        nside=int(np.sqrt(im.shape[0]//12))
+    def healpix_layer_coord(self,im,axis=0):
+        nside=int(np.sqrt(im.shape[axis]//12))
         l_kernel=self.KERNELSZ*self.KERNELSZ
         if self.ww_CNN[nside] is None:
             self.init_CNN_index(nside)
@@ -486,7 +497,7 @@ class FoCUS:
                 return 0
             
             mat=self.backend.bk_SparseTensor(indices,weights,[12*nside*nside*l_kernel,12*nside*nside])
-
+            
         if axis==1:
             results=[]
         
@@ -498,14 +509,14 @@ class FoCUS:
                 
                 density=self.backend.bk_matmul(density,self.backend.bk_reshape(ww,[l_kernel*im.shape[1+axis],ww.shape[2]]))
                 
-                results.append(self.backend.bk_reshape(density,[1,12*nside**2,ww.shape[2]]))
+                results.append(self.backend.bk_reshape(density,[12*nside**2,ww.shape[2]]))
             
             return self.backend.bk_stack(results,axis=0)
         else:
             tmp=self.backend.bk_sparse_dense_matmul(mat,im)
             
             density=self.backend.bk_reshape(tmp,[12*nside*nside,l_kernel*im.shape[1]])
-
+            
             return self.backend.bk_matmul(density,self.backend.bk_reshape(ww,[l_kernel*im.shape[1],ww.shape[2]]))
     # ---------------------------------------------−---------
     
