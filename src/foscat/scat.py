@@ -1038,7 +1038,7 @@ class funct(FOC.FoCUS):
         return scat(mP00,mS0,mS1,mS2,mS2L,tmp.j1,tmp.j2,backend=self.backend), \
             scat(sP00,sS0,sS1,sS2,sS2L,tmp.j1,tmp.j2,backend=self.backend)
     
-    def eval(self, image1, image2=None,mask=None,Auto=True,s0_off=1E-6,calc_var=False):
+    def eval(self, image1, image2=None,mask=None,Auto=True,s0_off=1E-6,calc_var=False,norm=None):
         # Check input consistency
         if image2 is not None:
             if list(image1.shape)!=list(image2.shape):
@@ -1343,6 +1343,30 @@ class funct(FOC.FoCUS):
                     self.backend.bk_sqrt(self.backend.bk_abs(x.S1)),
                     self.backend.bk_sqrt(self.backend.bk_abs(x.S2)),
                     self.backend.bk_sqrt(self.backend.bk_abs(x.S2L)),x.j1,x.j2,backend=self.backend)
+
+    def reduce_distance(self, x,y, sigma=None):
+        
+        if isinstance(x, scat):
+            if sigma is None:
+                result=self.diff_data(y.S0,x.S0,is_complex=False)
+                result+=self.diff_data(y.S1,x.S1)
+                result+=self.diff_data(y.P00,x.P00)
+                result+=self.diff_data(y.S2,x.S2)
+                result+=self.diff_data(y.S2L,x.S2L)
+            else:
+                result=self.diff_data(y.S0,x.S0,is_complex=False,sigma=sigma.S0)
+                result+=self.diff_data(y.S1,x.S1,sigma=sigma.S1)
+                result+=self.diff_data(y.P00,x.P00,sigma=sigma.P00)
+                result+=self.diff_data(y.S2,x.S2,sigma=sigma.S2)
+                result+=self.diff_data(y.S2L,x.S2L,sigma=sigma.S2L)
+                
+            nval=self.backend.bk_size(x.S0)+self.backend.bk_size(x.P00)+ \
+                  self.backend.bk_size(x.S1)+self.backend.bk_size(x.S2)+self.backend.bk_size(x.S2L)
+            
+            result/=self.backend.bk_cast(nval)
+        else:
+            return self.backend.bk_reduce_sum(x)
+        return result
 
     def reduce_mean(self,x,axis=None):
         if axis is None:

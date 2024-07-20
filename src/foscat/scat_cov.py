@@ -1682,6 +1682,10 @@ class funct(FOC.FoCUS):
                 if image2 is not None:
                     tmpi2=self.ud_grade_2(tmpi2,axis=1)
         return cmat,cmat2
+
+    def div_norm(self,complex_value,float_value):
+        return self.backend.bk_complex(self.backend.bk_real(complex_value)/float_value,
+                                    self.backend.bk_imag(complex_value)/float_value)
     
     def eval(self, image1, image2=None, mask=None, norm=None, Auto=True, calc_var=False,cmat=None,cmat2=None):
         """
@@ -1931,7 +1935,7 @@ class funct(FOC.FoCUS):
                 else:
                     ### Normalize S1
                     if norm is not None:
-                        s1 /= (P1_dic[j3]) ** 0.5
+                        self.div_norm(s1,(P1_dic[j3]) ** 0.5)
                     ### We store S1 for image1  [Nbatch, Nmask, NS1, Norient3]
                     if S1 is None:
                         S1 = s1[:, :, None, :]  # Add a dimension for NS1
@@ -2024,7 +2028,7 @@ class funct(FOC.FoCUS):
                 else:
                     ### Normalize S1
                     if norm is not None:
-                        s1 /= (P1_dic[j3]) ** 0.5
+                        self.div_norm(s1,(P1_dic[j3]) ** 0.5)
                     ### We store S1 for image1  [Nbatch, Nmask, NS1, Norient3]
                     if S1 is None:
                         S1 = s1[:, :, None, :]  # Add a dimension for NS1
@@ -2072,8 +2076,8 @@ class funct(FOC.FoCUS):
                     else:
                         ### Normalize C01 with P00_j [Nbatch, Nmask, Norient_j]
                         if norm is not None:
-                            c01 /= (P1_dic[j2][:, :, None, :] *
-                                    P1_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
+                            self.div_norm(c01,(P1_dic[j2][:, :, None, :] *
+                                    P1_dic[j3][:, :, :, None]) ** 0.5)# [Nbatch, Nmask, Norient3, Norient2]
 
                         ### Store C01 as a complex [Nbatch, Nmask, NC01, Norient3, Norient2]
                         if C01 is None:
@@ -2126,10 +2130,10 @@ class funct(FOC.FoCUS):
                     else:
                         ### Normalize C01 and C10 with P00_j [Nbatch, Nmask, Norient_j]
                         if norm is not None:
-                            c01 /= (P2_dic[j2][:, :, None, :] *
-                                    P1_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
-                            c10 /= (P1_dic[j2][:, :, None, :] *
-                                    P2_dic[j3][:, :, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2]
+                            self.div_norm(c01,(P2_dic[j2][:, :, None, :] *
+                                    P1_dic[j3][:, :, :, None]) ** 0.5)# [Nbatch, Nmask, Norient3, Norient2]
+                            self.div_norm(c10,(P1_dic[j2][:, :, None, :] *
+                                    P2_dic[j3][:, :, :, None]) ** 0.5)  # [Nbatch, Nmask, Norient3, Norient2]
 
                         ### Store C01 and C10 as a complex [Nbatch, Nmask, NC01, Norient3, Norient2]
                         if C01 is None:
@@ -2172,9 +2176,8 @@ class funct(FOC.FoCUS):
                         else:
                             ### Normalize C11 with P00_j [Nbatch, Nmask, Norient_j]
                             if norm is not None:
-                                c11 /= (P1_dic[j1][:, :, None, None, :] *
-                                        P1_dic[j2][:, :, None, :,
-                                                   None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
+                                self.div_norm(c11,(P1_dic[j1][:, :, None, None, :] *
+                                        P1_dic[j2][:, :, None, :,None]) ** 0.5)  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
                             ### Store C11 as a complex [Nbatch, Nmask, NC11, Norient3, Norient2, Norient1]
                             if C11 is None:
                                 C11 = c11[:, :, None, :, :, :]  # Add a dimension for NC11
@@ -2207,8 +2210,8 @@ class funct(FOC.FoCUS):
                         else:
                             ### Normalize C11 with P00_j [Nbatch, Nmask, Norient_j]
                             if norm is not None:
-                                c11 /= (P1_dic[j1][:, :, None, None, :] *
-                                        P2_dic[j2][:, :, None, :, None]) ** 0.5  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
+                                self.div_norm(c11,(P1_dic[j1][:, :, None, None, :] *
+                                        P2_dic[j2][:, :, None, :, None]) ** 0.5)  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
                             ### Store C11 as a complex [Nbatch, Nmask, NC11, Norient3, Norient2, Norient1]
                             if C11 is None:
                                 C11 = c11[:, :, None, :, :, :]  # Add a dimension for NC11
@@ -2394,6 +2397,39 @@ class funct(FOC.FoCUS):
         else:
             return self.backend.bk_reduce_mean(x)
         return result
+    
+        
+    def reduce_distance(self, x,y, sigma=None):
+        
+        if isinstance(x, scat_cov):
+            if sigma is None:
+                result=self.diff_data(y.S0,x.S0,is_complex=False)
+                if x.S1 is not None:
+                    result+=self.diff_data(y.S1,x.S1)
+                if x.C10 is not None:
+                    result+=self.diff_data(y.C10,x.C10)
+                result+=self.diff_data(y.P00,x.P00)
+                result+=self.diff_data(y.C01,x.C01)
+                result+=self.diff_data(y.C11,x.C11)
+            else:
+                result=self.diff_data(y.S0,x.S0,is_complex=False,sigma=sigma.S0)
+                if x.S1 is not None:
+                    result+=self.diff_data(y.S1,x.S1,sigma=sigma.S1)
+                if x.C10 is not None:
+                    result+=self.diff_data(y.C10,x.C10,sigma=sigma.C10)
+                result+=self.diff_data(y.P00,x.P00,sigma=sigma.P00)
+                result+=self.diff_data(y.C01,x.C01,sigma=sigma.C01)
+                result+=self.diff_data(y.C11,x.C11,sigma=sigma.C11)
+            nval=self.backend.bk_size(x.S0)+self.backend.bk_size(x.P00)+ \
+                  self.backend.bk_size(x.C01)+self.backend.bk_size(x.C11)
+            if x.S1 is not None:
+                nval+=self.backend.bk_size(x.S1)
+            if x.C10 is not None:
+                nval+=self.backend.bk_size(x.C10)
+            result/=self.backend.bk_cast(nval)
+        else:
+            return self.backend.bk_reduce_sum(x)
+        return result
 
     def reduce_sum(self, x):
         
@@ -2412,8 +2448,7 @@ class funct(FOC.FoCUS):
         else:
             return self.backend.bk_reduce_sum(x)
         return result
-
-        
+    
     def ldiff(self,sig,x):
 
         if x.S1 is None:

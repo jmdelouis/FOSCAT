@@ -5,7 +5,7 @@ import foscat.backend as bk
 from scipy.interpolate import griddata
 
 
-TMPFILE_VERSION='V3_0'
+TMPFILE_VERSION='V4_0'
 
 class FoCUS:
     def __init__(self,
@@ -32,7 +32,7 @@ class FoCUS:
                  mpi_size=1,
                  mpi_rank=0):
 
-        self.__version__ = '3.0.36'
+        self.__version__ = '3.0.40'
         # P00 coeff for normalization for scat_cov
         self.TMPFILE_VERSION=TMPFILE_VERSION
         self.P1_dic = None
@@ -987,6 +987,98 @@ class FoCUS:
                 tmp=np.load('%s/FOSCAT_%s_W%d_%d_%d_PIDX.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,l_kernel**2,self.NORIENT,nside))
         except:
             if self.use_2D==False:
+                
+                if l_kernel==5:
+                    pw=0.5
+                    pw2=0.5
+                    threshold=2E-4
+                    
+                elif l_kernel==3:
+                    pw=1.0/np.sqrt(2)
+                    pw2=1.0
+                    threshold=1E-3
+                    
+                elif l_kernel==7:
+                    pw=0.5
+                    pw2=0.25
+                    threshold=4E-5
+                    
+                th,ph=hp.pix2ang(nside,np.arange(12*nside**2),nest=True)
+                x,y,z=hp.pix2vec(nside,np.arange(12*nside**2),nest=True)
+
+                t,p=hp.pix2ang(nside,np.arange(12*nside*nside),nest=True)
+                phi=[p[k]/np.pi*180 for k in range(12*nside*nside)]
+                thi=[t[k]/np.pi*180 for k in range(12*nside*nside)]
+
+
+                indice2=np.zeros([12*nside*nside*64,2],dtype='int')
+                indice=np.zeros([12*nside*nside*64*self.NORIENT,2],dtype='int')
+                wav=np.zeros([12*nside*nside*64*self.NORIENT],dtype='complex')
+                wwav=np.zeros([12*nside*nside*64*self.NORIENT],dtype='float')
+
+                iv=0
+                iv2=0
+                for iii in range(12*nside*nside):
+    
+                    if iii%(nside*nside)==nside*nside-1:
+                        if not self.silent:
+                            print('Pre-compute nside=%6d %.2f%%'%(nside,100*iii/(12*nside*nside)))
+        
+                    hidx=hp.query_disc(nside, [x[iii],y[iii],z[iii]], 2*np.pi/nside,nest=True)
+    
+                    R=hp.Rotator(rot=[phi[iii],-thi[iii]],eulertype='ZYZ')
+    
+                    t2,p2=R(th[hidx],ph[hidx])
+    
+                    vec2=hp.ang2vec(t2,p2)
+    
+                    x2=vec2[:,0]
+                    y2=vec2[:,1]
+                    z2=vec2[:,2]
+                    
+                    ww=np.exp(-pw2*((nside)**2)*((x2)**2+(y2)**2+(z2-1.0)**2))
+                    idx=np.where((ww**2)>threshold)[0]
+                    nval2=len(idx)
+                    indice2[iv2:iv2+nval2,0]=iii
+                    indice2[iv2:iv2+nval2,1]=hidx[idx]
+                    wwav[iv2:iv2+nval2]=ww[idx]/np.sum(ww[idx])
+                    iv2+=nval2
+    
+                    for l in range(self.NORIENT):
+        
+                        angle=l/4.*np.pi-phi[iii]/180.*np.pi*(z[hidx]>0)-(180.0-phi[iii])/180.*np.pi*(z[hidx]<0)
+                        
+                        #posi=2*(0.5-(z[hidx]<0))
+                        
+                        axes=y2*np.cos(angle)-x2*np.sin(angle)
+                        wresr=ww*np.cos(pw*axes*(nside)*np.pi)
+                        wresi=ww*np.sin(pw*axes*(nside)*np.pi)
+
+                        vnorm=(wresr*wresr+wresi*wresi)
+                        idx=np.where(vnorm>threshold)[0]
+                        
+                        nval=len(idx)
+                        indice[iv:iv+nval,0]=iii*4+l
+                        indice[iv:iv+nval,1]=hidx[idx]
+                        #print([hidx[k] for k in idx])
+                        #print(hp.query_disc(nside, [x[iii],y[iii],z[iii]], np.pi/nside,nest=True))
+                        normr=np.mean(wresr[idx])
+                        normi=np.mean(wresi[idx])
+
+                        val=wresr[idx]-normr+np.complex(0,1)*(wresi[idx]-normi)
+                        val=val/abs(val).sum()
+                        
+                        wav[iv:iv+nval]=val
+                        iv+=nval
+        
+                indice=indice[:iv,:]
+                wav=wav[:iv]
+                indice2=indice2[:iv2,:]
+                wwav=wwav[:iv2]
+                if not self.silent:
+                    print('Kernel Size ',iv/(self.NORIENT*12*nside*nside))
+                """
+                # OLD VERSION OLD VERSION OLD VERSION (3.0)
                 if self.KERNELSZ*self.KERNELSZ>12*nside*nside:
                     l_kernel=3
                     
@@ -1077,7 +1169,7 @@ class FoCUS:
                         w[:,j,i]=wav[:,i,j]
                 wav=w.flatten()
                 wwav=wwav.flatten()
-                
+                """
                 if not self.silent:
                     print('Write FOSCAT_%s_W%d_%d_%d_PIDX.npy'%(TMPFILE_VERSION,self.KERNELSZ**2,self.NORIENT,nside))
                 np.save('%s/FOSCAT_%s_W%d_%d_%d_PIDX.npy'%(self.TEMPLATE_PATH,TMPFILE_VERSION,self.KERNELSZ**2,self.NORIENT,nside),indice)
@@ -1248,10 +1340,10 @@ class FoCUS:
             res=v1/vh
             if calc_var:
                 if self.backend.bk_is_complex(vtmp):
-                    res2=self.backend.bk_complex(self.backend.bk_sqrt(self.backend.bk_real(v2)/self.backend.bk_real(vh)
-                                                                      -self.backend.bk_real(res)*self.backend.bk_real(res)), \
-                                                 self.backend.bk_sqrt(self.backend.bk_imag(v2)/self.backend.bk_real(vh)
-                                                                      -self.backend.bk_imag(res)*self.backend.bk_imag(res)))
+                    res2=self.backend.bk_sqrt((self.backend.bk_real(v2)/self.backend.bk_real(vh)
+                                            -self.backend.bk_real(res)*self.backend.bk_real(res)) + \
+                                            (self.backend.bk_imag(v2)/self.backend.bk_real(vh) \
+                                            -self.backend.bk_imag(res)*self.backend.bk_imag(res)))
                 else:
                     res2=self.backend.bk_sqrt((v2/vh-res*res)/(vh))
                 return res,res2
@@ -1269,10 +1361,10 @@ class FoCUS:
             res=v1/vh
             if calc_var:
                 if self.backend.bk_is_complex(l_x):
-                    res2=self.backend.bk_complex(self.backend.bk_sqrt((self.backend.bk_real(v2)/self.backend.bk_real(vh)
-                                                                      -self.backend.bk_real(res)*self.backend.bk_real(res))/self.backend.bk_real(v2)), \
-                                                 self.backend.bk_sqrt((self.backend.bk_imag(v2)/self.backend.bk_real(vh)
-                                                                      -self.backend.bk_imag(res)*self.backend.bk_imag(res))/self.backend.bk_real(v2)))
+                    res2=self.backend.bk_sqrt(self.backend.bk_real(v2)/self.backend.bk_real(vh)
+                                              -self.backend.bk_real(res)*self.backend.bk_real(res) + \
+                                               self.backend.bk_imag(v2)/self.backend.bk_real(vh) \
+                                                -self.backend.bk_imag(res)*self.backend.bk_imag(res))
                 else:
                     res2=self.backend.bk_sqrt((v2/vh-res*res)/(vh))
                 return res,res2
@@ -1368,7 +1460,25 @@ class FoCUS:
                                         padding=self.padding)
 
         return self.backend.bk_reshape(res,shape+[norient])
-    
+
+    def diff_data(self,x,y,is_complex=True,sigma=None):
+        if sigma is None:
+            if is_complex:
+                r=self.backend.bk_square(self.backend.bk_real(x)-self.backend.bk_real(y))
+                i=self.backend.bk_square(self.backend.bk_imag(x)-self.backend.bk_imag(y))
+                return self.backend.bk_reduce_sum(r+i)
+            else:
+                r=self.backend.bk_square(x-y)
+                return self.backend.bk_reduce_sum(r)
+        else:
+            if is_complex:
+                r=self.backend.bk_square((self.backend.bk_real(x)-self.backend.bk_real(y))/sigma)
+                i=self.backend.bk_square((self.backend.bk_imag(x)-self.backend.bk_imag(y))/sigma)
+                return self.backend.bk_reduce_sum(r+i)
+            else:
+                r=self.backend.bk_square((x-y)/sigma)
+                return self.backend.bk_reduce_sum(r)
+        
     # ---------------------------------------------−---------
     def convol(self,in_image,axis=0):
 

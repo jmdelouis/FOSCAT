@@ -349,6 +349,15 @@ class foscat_backend:
             return self.backend.reshape(x,[np.prod(np.array(list(x.shape)))])
         if self.BACKEND==self.NUMPY:
             return x.flatten()
+
+    def bk_size(self,x):
+        if self.BACKEND==self.TENSORFLOW:
+            return self.backend.size(x)
+        if self.BACKEND==self.TORCH:
+            return x.numel()
+        
+        if self.BACKEND==self.NUMPY:
+            return x.size
         
     def bk_resize_image(self,x,shape):
         if self.BACKEND==self.TENSORFLOW:
@@ -368,11 +377,14 @@ class foscat_backend:
             xr=self.bk_real(x)
             xi=self.bk_imag(x)
                 
-            r=self.backend.sign(xr)*self.backend.sqrt(self.backend.sign(xr)*xr)
-            i=self.backend.sign(xi)*self.backend.sqrt(self.backend.sign(xi)*xi)
-            return self.bk_complex(r,i)
+            r=self.backend.sign(xr)*self.backend.sqrt(xr*xr)
+            i=self.backend.sign(xi)*self.backend.sqrt(xi*xi)
+            if self.BACKEND==self.TORCH:
+                return r
+            else:
+                return self.bk_complex(r,i)
         else:
-            return self.backend.sign(x)*self.backend.sqrt(self.backend.sign(x)*x)
+            return self.backend.sign(x)*self.backend.sqrt(x*x)
         
     def bk_square_comp(self,x):
         if x.dtype==self.all_cbk_type:
@@ -580,6 +592,13 @@ class foscat_backend:
         
         if self.BACKEND==self.NUMPY:
             return (data.dtype=='complex64' or data.dtype=='complex128')
+
+    def bk_distcomp(self,data):
+        if self.bk_is_complex(data):
+            res=self.bk_square(self.bk_real(data))+self.bk_square(self.bk_imag(data))
+            return res
+        else:
+            return self.bk_square(data)
         
     def bk_norm(self,data):
         if self.bk_is_complex(data):
@@ -727,17 +746,21 @@ class foscat_backend:
         if self.BACKEND==self.TENSORFLOW:
             return self.backend.math.real(data)
         if self.BACKEND==self.TORCH:
-            return self.backend.real(data)
+            return data.real
         if self.BACKEND==self.NUMPY:
-            return self.backend.real(data)
+            return data.real
 
     def bk_imag(self,data):
         if self.BACKEND==self.TENSORFLOW:
             return self.backend.math.imag(data)
         if self.BACKEND==self.TORCH:
-            return self.backend.imag(data)
+            if data.dtype==self.all_cbk_type:
+                return data.imag
+            else:
+                return 0
+            
         if self.BACKEND==self.NUMPY:
-            return self.backend.imag(data)
+            return data.imag
         
     def bk_relu(self,x):
         if self.BACKEND==self.TENSORFLOW:
