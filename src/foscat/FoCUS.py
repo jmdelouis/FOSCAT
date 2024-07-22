@@ -32,7 +32,7 @@ class FoCUS:
                  mpi_size=1,
                  mpi_rank=0):
 
-        self.__version__ = '3.0.40'
+        self.__version__ = '3.0.42'
         # P00 coeff for normalization for scat_cov
         self.TMPFILE_VERSION=TMPFILE_VERSION
         self.P1_dic = None
@@ -1065,7 +1065,7 @@ class FoCUS:
                         normr=np.mean(wresr[idx])
                         normi=np.mean(wresi[idx])
 
-                        val=wresr[idx]-normr+np.complex(0,1)*(wresi[idx]-normi)
+                        val=wresr[idx]-normr+1J*(wresi[idx]-normi)
                         val=val/abs(val).sum()
                         
                         wav[iv:iv+nval]=val
@@ -1340,10 +1340,10 @@ class FoCUS:
             res=v1/vh
             if calc_var:
                 if self.backend.bk_is_complex(vtmp):
-                    res2=self.backend.bk_sqrt((self.backend.bk_real(v2)/self.backend.bk_real(vh)
+                    res2=self.backend.bk_sqrt(((self.backend.bk_real(v2)/self.backend.bk_real(vh)
                                             -self.backend.bk_real(res)*self.backend.bk_real(res)) + \
                                             (self.backend.bk_imag(v2)/self.backend.bk_real(vh) \
-                                            -self.backend.bk_imag(res)*self.backend.bk_imag(res)))
+                                             -self.backend.bk_imag(res)*self.backend.bk_imag(res)))/self.backend.bk_real(vh))
                 else:
                     res2=self.backend.bk_sqrt((v2/vh-res*res)/(vh))
                 return res,res2
@@ -1361,10 +1361,10 @@ class FoCUS:
             res=v1/vh
             if calc_var:
                 if self.backend.bk_is_complex(l_x):
-                    res2=self.backend.bk_sqrt(self.backend.bk_real(v2)/self.backend.bk_real(vh)
+                    res2=self.backend.bk_sqrt((self.backend.bk_real(v2)/self.backend.bk_real(vh)
                                               -self.backend.bk_real(res)*self.backend.bk_real(res) + \
                                                self.backend.bk_imag(v2)/self.backend.bk_real(vh) \
-                                                -self.backend.bk_imag(res)*self.backend.bk_imag(res))
+                                                -self.backend.bk_imag(res)*self.backend.bk_imag(res))/self.backend.bk_real(vh))
                 else:
                     res2=self.backend.bk_sqrt((v2/vh-res*res)/(vh))
                 return res,res2

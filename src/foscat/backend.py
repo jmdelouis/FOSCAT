@@ -292,7 +292,9 @@ class foscat_backend:
         if self.BACKEND==self.TENSORFLOW:
             return(self.backend.cast(x>threshold,x.dtype)*x)
         if self.BACKEND==self.TORCH:
-            return(self.backend.cast(x>threshold,x.dtype)*x)
+            x.to(x.dtype)
+            return (x>threshold)*x
+            #return(self.backend.cast(x>threshold,x.dtype)*x)
         if self.BACKEND==self.NUMPY:
             return (x>threshold)*x
 
@@ -787,6 +789,12 @@ class foscat_backend:
             else:
                 return(x)
 
+        if isinstance(x,np.int32) or isinstance(x,np.int64) or isinstance(x,int):
+            if self.all_bk_type=='float64':
+                return(np.float64(x))
+            else:
+                return(np.float32(x))
+            
         if self.bk_is_complex(x):
             out_type=self.all_cbk_type
         else:
