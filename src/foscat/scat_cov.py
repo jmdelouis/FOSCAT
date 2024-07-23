@@ -1836,12 +1836,12 @@ class funct(FOC.FoCUS):
                 if not cross:
                     s0,vs0 = self.masked_mean(I1,vmask,axis=1,calc_var=True)
                 else:
-                    s0,vs0 = (self.masked_mean(I1,vmask,axis=1,calc_var=True)+self.masked_mean(I2,vmask,axis=1,calc_var=True))/2
+                    s0,vs0 = self.masked_mean(I1-I2,vmask,axis=1,calc_var=True)
             else:
                 if not cross:
                     s0 = self.masked_mean(I1,vmask,axis=1)
                 else:
-                    s0 = (self.masked_mean(I1,vmask,axis=1)+self.masked_mean(I2,vmask,axis=1))/2
+                    s0 = self.masked_mean(I1-I2,vmask,axis=1)
             
 
         #### COMPUTE S1, P00, C01 and C11
