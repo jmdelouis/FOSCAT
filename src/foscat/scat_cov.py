@@ -68,63 +68,31 @@ class scat_cov:
                         self.backend.constant(self.C01),
                         self.backend.constant(self.C11),
                         s1=s1, c10=c10,backend=self.backend)
-
+    
+    def conv2complex(self,val):
+        if val.dtype=='complex64' or val.dtype=='complex128' :
+            return val
+        else:
+            return self.backend.bk_complex(val,0*val)
+        return val
     # ---------------------------------------------−---------
     def flatten(self):
-        if isinstance(self.P00,np.ndarray):
-            if self.S1 is None:
-                if self.C10 is None:
-                    return np.concatenate([self.S0.flatten(),
-                                           self.P00.flatten(),
-                                           self.C01.flatten(),
-                                           self.C11.flatten()],0)
-                else:
-                    return np.concatenate([self.S0.flatten(),
-                                           self.P00.flatten(),
-                                           self.C01.flatten(),
-                                           self.C10.flatten(),
-                                           self.C11.flatten()],0)
-            else:
-                if self.C10 is None:
-                    return np.concatenate([self.S0.flatten(),
-                                           self.S1.flatten(),
-                                           self.P00.flatten(),
-                                           self.C01.flatten(),
-                                           self.C11.flatten()],0)
-                else:
-                    return np.concatenate([self.S0.flatten(),
-                                           self.S1.flatten(),
-                                           self.P00.flatten(),
-                                           self.C01.flatten(),
-                                           self.C10.flatten(),
-                                           self.C11.flatten()],0)
-        else:
-            if self.S1 is None:
-                if self.C10 is None:
-                    return self.backend.bk_concat([self.backend.bk_flattenR(self.S0),
-                                                   self.backend.bk_flattenR(self.P00),
-                                                   self.backend.bk_flattenR(self.C01),
-                                                   self.backend.bk_flattenR(self.C11)],0)
-                else:
-                    return self.backend.bk_concat([self.backend.bk_flattenR(self.S0),
-                                                   self.backend.bk_flattenR(self.P00),
-                                                   self.backend.bk_flattenR(self.C01),
-                                                   self.backend.bk_flattenR(self.C10),
-                                                   self.backend.bk_flattenR(self.C11)],0)
-            else:
-                if self.C10 is None:
-                    return self.backend.bk_concat([self.backend.bk_flattenR(self.S0),
-                                                   self.backend.bk_flattenR(self.S1),
-                                                   self.backend.bk_flattenR(self.P00),
-                                                   self.backend.bk_flattenR(self.C01),
-                                                   self.backend.bk_flattenR(self.C11)],0)
-                else:
-                    return self.backend.bk_concat([self.backend.bk_flattenR(self.S0),
-                                                   self.backend.bk_flattenR(self.S1),
-                                                   self.backend.bk_flattenR(self.P00),
-                                                   self.backend.bk_flattenR(self.C01),
-                                                   self.backend.bk_flattenR(self.C10),
-                                                   self.backend.bk_flattenR(self.C11)],0)
+        tmp=[self.conv2complex(self.backend.bk_reshape(self.S0[0],[self.S0.shape[1]]))]
+        if self.S1 is not None:
+            tmp=tmp+[self.conv2complex(self.backend.bk_reshape(self.S1[0],
+                                        [self.S1.shape[1]*self.S1.shape[2]*self.S1.shape[3]]))]
+        tmp=tmp+[self.conv2complex(self.backend.bk_reshape(self.P00[0],
+                                        [self.S1.shape[1]*self.S1.shape[2]*self.S1.shape[3]])),
+                 self.conv2complex(self.backend.bk_reshape(self.C01[0],
+                                        [self.C01.shape[1]*self.C01.shape[2]*self.C01.shape[3]*self.C01.shape[4]]))]
+        if self.C10 is not None:
+            tmp=tmp+[self.conv2complex(self.backend.bk_reshape(self.C10[0],
+                                        [self.C01.shape[1]*self.C01.shape[2]*self.C01.shape[3]*self.C01.shape[4]]))]
+        
+        tmp=tmp+[self.conv2complex(self.backend.bk_reshape(self.C11[0],
+                                        [self.C11.shape[1]*self.C11.shape[2]*self.C11.shape[3]*self.C11.shape[4]*self.C11.shape[5]]))]
+        
+        return self.backend.bk_concat(tmp,0)
 
     # ---------------------------------------------−---------
     def flattenMask(self):
@@ -780,32 +748,6 @@ class scat_cov:
         if hold:
             plt.figure(figsize=(16, 8))
 
-        if self.S1 is not None:
-            plt.subplot(2, 2, 1)
-            tmp=abs(self.get_np(self.S1))
-            test=None
-            if len(tmp.shape)>3:
-                for k in range(tmp.shape[3]):
-                    for i1 in range(tmp.shape[0]):
-                        for i2 in range(tmp.shape[1]):
-                            if test is None:
-                                test=1
-                                plt.plot(tmp[i1,i2,:,k],color=color, label=r'%s $S_1$' % (name), lw=lw)
-                            else:
-                                plt.plot(tmp[i1,i2,:,k],color=color, lw=lw)
-            else:
-                for i1 in range(tmp.shape[0]):
-                    for i2 in range(tmp.shape[1]):
-                        if test is None:
-                            test=1
-                            plt.plot(tmp[i1,i2,:],color=color, label=r'%s $S_1$' % (name), lw=lw)
-                        else:
-                            plt.plot(tmp[i1,i2,:],color=color, lw=lw)
-            plt.yscale('log')
-            plt.legend()
-            plt.ylabel('S1')
-            plt.xlabel(r'$j_{1}$')
-
         test=None
         plt.subplot(2, 2, 2)
         tmp=abs(self.get_np(self.P00))
@@ -831,17 +773,62 @@ class scat_cov:
         plt.ylabel('P00')
         plt.xlabel(r'$j_{1}$')
         plt.legend()
+        
+        if self.S1 is not None:
+            plt.subplot(2, 2, 1)
+            tmp=abs(self.get_np(self.S1))
+            test=None
+            if len(tmp.shape)>3:
+                for k in range(tmp.shape[3]):
+                    for i1 in range(tmp.shape[0]):
+                        for i2 in range(tmp.shape[1]):
+                            if test is None:
+                                test=1
+                                if norm:
+                                    plt.plot(tmp[i1,i2,:,k,]/ntmp[i1,i2,:,k],color=color, label=r'%s norm. $S_1$' % (name), lw=lw)
+                                else:
+                                    plt.plot(tmp[i1,i2,:,k],color=color, label=r'%s $S_1$' % (name), lw=lw)
+                            else:
+                                if norm:
+                                    plt.plot(tmp[i1,i2,:,k]/ntmp[i1,i2,:,k],color=color, lw=lw)
+                                else:
+                                    plt.plot(tmp[i1,i2,:,k],color=color, lw=lw)
+            else:
+                for i1 in range(tmp.shape[0]):
+                    for i2 in range(tmp.shape[1]):
+                        if test is None:
+                            test=1
+                            plt.plot(tmp[i1,i2,:],color=color, label=r'%s $S_1$' % (name), lw=lw)
+                        else:
+                            plt.plot(tmp[i1,i2,:],color=color, lw=lw)
+            plt.yscale('log')
+            plt.legend()
+            if norm:
+                plt.ylabel(r'$\frac{S_1}{\sqrt{P_{00}}}$')
+            else:
+                plt.ylabel('$S_1$')
+            plt.xlabel(r'$j_{1}$')
 
         ax1=plt.subplot(2, 2, 3)
         ax2 = ax1.twiny()
         n=0
         tmp=abs(self.get_np(self.C01))
-        lname=r'%s $C_{01}$' % (name)
-        ax1.set_ylabel(r'$C_{01}$')
+        if norm:
+            lname=r'%s norm. $C_{01}$' % (name)
+            ax1.set_ylabel(r'$\frac{C_{01}}{\sqrt{P_{00,j_1}P_{00,j_2}}}$')
+        else:
+            lname=r'%s $C_{01}$' % (name)
+            ax1.set_ylabel(r'$C_{01}$')
+        
         if self.C10 is not None:
             tmp=abs(self.get_np(self.C01))
-            lname=r'%s $C_{10}$' % (name)
-            ax1.set_ylabel(r'$C_{10}$')
+            if norm:
+                lname=r'%s norm. $C_{10}$' % (name)
+                ax1.set_ylabel(r'$\frac{C_{10}}{\sqrt{P_{00,j_1}P_{00,j_2}}}$')
+            else:
+                lname=r'%s $C_{10}$' % (name)
+                ax1.set_ylabel(r'$C_{10}$')
+                
         test=None
         tabx=[]
         tabnx=[]
@@ -992,7 +979,11 @@ class scat_cov:
                         tab2nx=tab2nx+['%d'%(i2)]
                         ax1.axvline(n-0.5,ls=':',color='gray')
         plt.yscale('log')
-        ax1.set_ylabel(r'$C_{11}$')
+        if norm:
+            ax1.set_ylabel(r'$\frac{C_{11}}{\sqrt{P_{00,j_1}P_{00,j_2}}}$')
+        else:
+            ax1.set_ylabel(r'$C_{11}$')
+            
         ax1.set_xticks(tabx)
         ax1.set_xticklabels(tabnx,fontsize=6)
         ax1.set_xlabel(r"$j_{2},j_{3}$",fontsize=6)
