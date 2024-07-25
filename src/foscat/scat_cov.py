@@ -77,22 +77,22 @@ class scat_cov:
         return val
     # ---------------------------------------------−---------
     def flatten(self):
-        tmp=[self.conv2complex(self.backend.bk_reshape(self.S0[0],[self.S0.shape[1]]))]
+        tmp=[self.conv2complex(self.backend.bk_reshape(self.S0,[self.S1.shape[0],self.S0.shape[1]]))]
         if self.S1 is not None:
-            tmp=tmp+[self.conv2complex(self.backend.bk_reshape(self.S1[0],
-                                        [self.S1.shape[1]*self.S1.shape[2]*self.S1.shape[3]]))]
-        tmp=tmp+[self.conv2complex(self.backend.bk_reshape(self.P00[0],
-                                        [self.S1.shape[1]*self.S1.shape[2]*self.S1.shape[3]])),
-                 self.conv2complex(self.backend.bk_reshape(self.C01[0],
-                                        [self.C01.shape[1]*self.C01.shape[2]*self.C01.shape[3]*self.C01.shape[4]]))]
+            tmp=tmp+[self.conv2complex(self.backend.bk_reshape(self.S1,
+                                        [self.S1.shape[0],self.S1.shape[1]*self.S1.shape[2]*self.S1.shape[3]]))]
+        tmp=tmp+[self.conv2complex(self.backend.bk_reshape(self.P00,
+                                        [self.S1.shape[0],self.S1.shape[1]*self.S1.shape[2]*self.S1.shape[3]])),
+                 self.conv2complex(self.backend.bk_reshape(self.C01,
+                                        [self.C01.shape[0],self.C01.shape[1]*self.C01.shape[2]*self.C01.shape[3]*self.C01.shape[4]]))]
         if self.C10 is not None:
-            tmp=tmp+[self.conv2complex(self.backend.bk_reshape(self.C10[0],
-                                        [self.C01.shape[1]*self.C01.shape[2]*self.C01.shape[3]*self.C01.shape[4]]))]
+            tmp=tmp+[self.conv2complex(self.backend.bk_reshape(self.C10,
+                                        [self.C01.shape[0],self.C01.shape[1]*self.C01.shape[2]*self.C01.shape[3]*self.C01.shape[4]]))]
         
-        tmp=tmp+[self.conv2complex(self.backend.bk_reshape(self.C11[0],
-                                        [self.C11.shape[1]*self.C11.shape[2]*self.C11.shape[3]*self.C11.shape[4]*self.C11.shape[5]]))]
+        tmp=tmp+[self.conv2complex(self.backend.bk_reshape(self.C11,
+                                        [self.C01.shape[0],self.C11.shape[1]*self.C11.shape[2]*self.C11.shape[3]*self.C11.shape[4]*self.C11.shape[5]]))]
         
-        return self.backend.bk_concat(tmp,0)
+        return self.backend.bk_concat(tmp,1)
 
     # ---------------------------------------------−---------
     def flattenMask(self):
