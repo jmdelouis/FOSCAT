@@ -379,14 +379,14 @@ class foscat_backend:
             xr=self.bk_real(x)
             xi=self.bk_imag(x)
                 
-            r=self.backend.sign(xr)*self.backend.sqrt(xr*xr)
-            i=self.backend.sign(xi)*self.backend.sqrt(xi*xi)
+            r=self.backend.sign(xr)*self.backend.sqrt(self.backend.sign(xr)*xr)
+            i=self.backend.sign(xi)*self.backend.sqrt(self.backend.sign(xi)*xi)
             if self.BACKEND==self.TORCH:
                 return r
             else:
                 return self.bk_complex(r,i)
         else:
-            return self.backend.sign(x)*self.backend.sqrt(x*x)
+            return self.backend.sign(x)*self.backend.sqrt(self.backend.sign(x)*x)
         
     def bk_square_comp(self,x):
         if x.dtype==self.all_cbk_type:
