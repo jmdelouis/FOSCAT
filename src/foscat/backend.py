@@ -271,9 +271,16 @@ class foscat_backend:
 
     def conv2d(self,x,w,strides=[1, 1, 1, 1],padding='SAME'):
         if self.BACKEND==self.TENSORFLOW:
-                return self.backend.nn.conv2d(x,w,
-                                               strides=strides,
-                                               padding=padding)
+            kx=w.shape[0]
+            ky=w.shape[1]
+            paddings = self.backend.constant([[0,0],
+                                              [kx//2,kx//2],
+                                              [ky//2,ky//2],
+                                              [0,0]])
+            tmp=self.backend.pad(x, paddings, "SYMMETRIC")
+            return self.backend.nn.conv2d(tmp,w,
+                                          strides=strides,
+                                          padding="VALID")
         # to be written!!!
         if self.BACKEND==self.TORCH:
             return x
