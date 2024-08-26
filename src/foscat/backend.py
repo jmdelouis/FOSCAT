@@ -289,9 +289,32 @@ class foscat_backend:
             for k in range(w.shape[2]):
                 for l in range(w.shape[3]):
                     for j in range(res.shape[0]):
-                        tmp=self.scipy.signal.convolve2d(x[j,:,:,k],w[:,:,k,l], mode='same', boundary='fill', fillvalue=0.0)
+                        tmp=self.scipy.signal.convolve2d(x[j,:,:,k],w[:,:,k,l], mode='same', boundary='symm')
                         res[j,:,:,l]+=tmp
                         del tmp
+            return res
+    
+    def conv1d(self,x,w,strides=[1, 1, 1],padding='SAME'):
+        if self.BACKEND==self.TENSORFLOW:
+            kx=w.shape[0]
+            paddings = self.backend.constant([[0,0],
+                                              [kx//2,kx//2],
+                                              [0,0]])
+            tmp=self.backend.pad(x, paddings, "SYMMETRIC")
+            
+            return self.backend.nn.conv1d(tmp,w,
+                                          stride=strides,
+                                          padding="VALID")
+        # to be written!!!
+        if self.BACKEND==self.TORCH:
+            return x
+        if self.BACKEND==self.NUMPY:
+            res=np.zeros([x.shape[0],x.shape[1],w.shape[2]],dtype=x.dtype)
+            for k in range(w.shape[2]):
+                for j in range(res.shape[0]):
+                    tmp=self.scipy.signal.convolve1d(x[j,:,k],w[:,k,l], mode='same', boundary='symm')
+                    res[j,:,:,l]+=tmp
+                    del tmp
             return res
 
     def bk_threshold(self,x,threshold,greater=True):

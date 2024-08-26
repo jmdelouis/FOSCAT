@@ -859,6 +859,30 @@ class scat_cov:
                         tab2nx=tab2nx+['%d'%(i2)]
                         ax1.axvline((j2[j1==i2]+n).max()+0.5,ls=':',color='gray') 
                         n=n+j2[j1==i2].shape[0]-1
+        elif len(tmp.shape)==3:
+            for i0 in range(tmp.shape[0]):
+                for i1 in range(tmp.shape[1]):
+                    for i2 in range(j1.max()+1):
+                        dtmp=tmp[i0,i1,j1==i2]
+                        if norm:
+                            dtmp=dtmp/(ntmp[i0,i1,i2]*ntmp[i0,i1,j2[j1==i2]])
+                        if j2[j1==i2].shape[0]==1:
+                            ax1.plot(j2[j1==i2]+n,dtmp,'.', \
+                                     color=color, lw=lw)
+                        else:
+                            if legend and test is None:
+                                ax1.plot(j2[j1==i2]+n,dtmp, \
+                                         color=color, label=lname, lw=lw)
+                                test=1
+                            ax1.plot(j2[j1==i2]+n,dtmp, \
+                                     color=color, lw=lw)
+                        tabnx=tabnx+[r'%d'%(k) for k in j2[j1==i2]]
+                        tabx=tabx+[k+n for k in j2[j1==i2]]
+                        tab2x=tab2x+[(j2[j1==i2]+n).mean()]
+                        tab2nx=tab2nx+['%d'%(i2)]
+                        ax1.axvline((j2[j1==i2]+n).max()+0.5,ls=':',color='gray') 
+                        n=n+j2[j1==i2].shape[0]-1
+            
         else:
             for i0 in range(tmp.shape[0]):
                 for i1 in range(tmp.shape[1]):
@@ -945,6 +969,32 @@ class scat_cov:
                                                 test=1
                                             ax1.plot(np.arange(len(idx))+n,dtmp, \
                                                      color=color, lw=lw)
+                            tabnx=tabnx+[r'%d,%d'%(j2[k],j3[k]) for k in idx]
+                            tabx=tabx+[k+n for k in range(len(idx))]
+                            n=n+idx.shape[0]
+                        tab2x=tab2x+[(n+nprev-1)/2]
+                        tab2nx=tab2nx+['%d'%(i2)]
+                        ax1.axvline(n-0.5,ls=':',color='gray')
+        elif len(tmp.shape)==3:
+            for i0 in range(tmp.shape[0]):
+                for i1 in range(tmp.shape[1]):
+                    for i2 in range(j1.max()+1):
+                        nprev=n
+                        for i2b in range(j2[j1==i2].max()+1):
+                            idx=np.where((j1==i2)*(j2==i2b))[0]
+                            dtmp=tmp[i0,i1,idx]
+                            if norm:
+                                dtmp=dtmp/(ntmp[i0,i1,i2]*ntmp[i0,i1,i2b])
+                            if len(idx)==1:
+                                ax1.plot(np.arange(len(idx))+n,dtmp,'.', \
+                                         color=color, lw=lw)
+                            else:
+                                if legend and test is None:
+                                    ax1.plot(np.arange(len(idx))+n,dtmp, \
+                                             color=color, label=lname, lw=lw)
+                                    test=1
+                                ax1.plot(np.arange(len(idx))+n,dtmp, \
+                                         color=color, lw=lw)
                             tabnx=tabnx+[r'%d,%d'%(j2[k],j3[k]) for k in idx]
                             tabx=tabx+[k+n for k in range(len(idx))]
                             n=n+idx.shape[0]
@@ -1495,6 +1545,8 @@ class funct(FOC.FoCUS):
     def fill(self,im,nullval=hp.UNSEEN):
         if self.use_2D:
             return self.fill_2d(im,nullval=nullval)
+        if self.use_1D:
+            return self.fill_1d(im,nullval=nullval)
         return self.fill_healpy(im,nullval=nullval)
 
     def moments(self,list_scat):
@@ -1748,6 +1800,15 @@ class funct(FOC.FoCUS):
                 x1=im_shape[1]
                 x2=im_shape[2]
             J = int(np.log(nside-self.KERNELSZ) / np.log(2))  # Number of j scales
+        elif self.use_1D:
+            if len(image1.shape)==2:
+                npix = int(im_shape[1])  # Number of pixels
+            else:
+                npix = int(im_shape[0])  # Number of pixels
+                
+            nside=int(npix)
+            
+            J = int(np.log(nside) / np.log(2))  # Number of j scales
         else:
             if len(image1.shape)==2:
                 npix = int(im_shape[1])  # Number of pixels
@@ -1785,6 +1846,11 @@ class funct(FOC.FoCUS):
                 I1=self.up_grade(I1,I1.shape[axis]*2,axis=axis,nouty=I1.shape[axis+1]*2)
                 if cross:
                     I2=self.up_grade(I2,I2.shape[axis]*2,axis=axis,nouty=I2.shape[axis+1]*2)
+            elif self.use_1D:
+                vmask=self.up_grade(vmask,I1.shape[axis]*2,axis=1)
+                I1=self.up_grade(I1,I1.shape[axis]*2,axis=axis)
+                if cross:
+                    I2=self.up_grade(I2,I2.shape[axis]*2,axis=axis)
             else:
                 I1 = self.up_grade(I1, nside * 2, axis=axis)
                 vmask = self.up_grade(vmask, nside * 2, axis=1)
@@ -1798,6 +1864,11 @@ class funct(FOC.FoCUS):
                     I1=self.up_grade(I1,I1.shape[axis]*2,axis=axis,nouty=I1.shape[axis+1]*2)
                     if cross:
                         I2=self.up_grade(I2,I2.shape[axis]*2,axis=axis,nouty=I2.shape[axis+1]*2)
+                elif self.use_1D:
+                    vmask=self.up_grade(vmask,I1.shape[axis]*4,axis=1)
+                    I1=self.up_grade(I1,I1.shape[axis]*4,axis=axis)
+                    if cross:
+                        I2=self.up_grade(I2,I2.shape[axis]*4,axis=axis)
                 else:
                     I1 = self.up_grade(I1, nside * 4, axis=axis)
                     vmask = self.up_grade(vmask, nside * 4, axis=1)
@@ -1811,6 +1882,14 @@ class funct(FOC.FoCUS):
         # Coefficients
         S1, P00, C01, C11, C10 = None, None, None, None, None
 
+        off_P0=-2
+        off_C01=-3
+        off_C11=-4
+        if self.use_1D:
+            off_P0=-1
+            off_C01=-1
+            off_C11=-1
+            
         # Dictionaries for C01 computation
         M1_dic = {}  # M stands for Module M1 = |I1 * Psi|
         if cross:
@@ -1842,7 +1921,6 @@ class funct(FOC.FoCUS):
                     s0 = self.masked_mean(I1,vmask,axis=1)
                 else:
                     s0 = self.masked_mean(I1-I2,vmask,axis=1)
-            
 
         #### COMPUTE S1, P00, C01 and C11
         nside_j3 = nside  # NSIDE start (nside_j3 = nside / 2^j3)
@@ -1887,6 +1965,7 @@ class funct(FOC.FoCUS):
                     else:
                         p00 = self.masked_mean(M1_square, vmask, axis=1,rank=j3)
                 
+        
                 if cond_init_P1_dic:
                     # We fill P1_dic with P00 for normalisation of C01 and C11
                     P1_dic[j3] = p00  # [Nbatch, Nmask, Norient3]
@@ -1900,13 +1979,13 @@ class funct(FOC.FoCUS):
                     if norm == 'auto':  # Normalize P00
                         p00 /= P1_dic[j3]
                     if P00 is None:
-                        P00 = p00[:, :, None, :]  # Add a dimension for NP00
+                        P00 = self.backend.bk_expand_dims(p00,off_P0)  # Add a dimension for NP00
                         if calc_var:
-                            VP00 = vp00[:, :, None, :]  # Add a dimension for NP00
+                            VP00 = self.backend.bk_expand_dims(vp00,off_P0)  # Add a dimension for NP00
                     else:
-                        P00 = self.backend.bk_concat([P00, p00[:, :, None, :]], axis=2)
+                        P00 = self.backend.bk_concat([P00, self.backend.bk_expand_dims(p00,off_P0)], axis=2)
                         if calc_var:
-                            VP00 = self.backend.bk_concat([VP00, vp00[:, :, None, :]], axis=2)
+                            VP00 = self.backend.bk_concat([VP00, self.backend.bk_expand_dims(vp00,off_P0)], axis=2)
 
                 #### S1_auto computation
                 ### Image 1 : S1 = < M1 >_pix
@@ -1929,13 +2008,13 @@ class funct(FOC.FoCUS):
                         self.div_norm(s1,(P1_dic[j3]) ** 0.5)
                     ### We store S1 for image1  [Nbatch, Nmask, NS1, Norient3]
                     if S1 is None:
-                        S1 = s1[:, :, None, :]  # Add a dimension for NS1
+                        S1 = self.backend.bk_expand_dims(s1,off_P0)  # Add a dimension for NS1
                         if calc_var:
-                            VS1 = vs1[:, :, None, :]  # Add a dimension for NS1
+                            VS1 = self.backend.bk_expand_dims(vs1,off_P0)  # Add a dimension for NS1
                     else:
-                        S1 = self.backend.bk_concat([S1, s1[:, :, None, :]], axis=2)
+                        S1 = self.backend.bk_concat([S1,self.backend.bk_expand_dims(s1,off_P0)], axis=2)
                         if calc_var:
-                            VS1 = self.backend.bk_concat([VS1, vs1[:, :, None, :]], axis=2)
+                            VS1 = self.backend.bk_concat([VS1, self.backend.bk_expand_dims(vs1,off_P0)], axis=2)
 
             else:  # Cross
                 ### Make the convolution I2 * Psi_j3
@@ -1994,13 +2073,13 @@ class funct(FOC.FoCUS):
                         p00=self.backend.bk_real(p00)
 
                     if P00 is None:
-                        P00 = p00[:,:,None,:]  # Add a dimension for NP00
+                        P00 = self.backend.bk_expand_dims(p00,off_P0)  # Add a dimension for NP00
                         if calc_var:
-                            VP00 = vp00[:,:,None,:]  # Add a dimension for NP00
+                            VP00 = self.backend.bk_expand_dims(vp00,off_P0)  # Add a dimension for NP00
                     else:
-                        P00 = self.backend.bk_concat([P00, p00[:,:,None,:]], axis=2)
+                        P00 = self.backend.bk_concat([P00, self.backend.bk_expand_dims(p00,off_P0)], axis=2)
                         if calc_var:
-                            VP00 = self.backend.bk_concat([VP00, vp00[:,:,None,:]], axis=2)
+                            VP00 = self.backend.bk_concat([VP00, self.backend.bk_expand_dims(vp00,off_P0)], axis=2)
                     
                 #### S1_auto computation
                 ### Image 1 : S1 = < M1 >_pix
@@ -2022,14 +2101,15 @@ class funct(FOC.FoCUS):
                         self.div_norm(s1,(P1_dic[j3]) ** 0.5)
                     ### We store S1 for image1  [Nbatch, Nmask, NS1, Norient3]
                     if S1 is None:
-                        S1 = s1[:, :, None, :]  # Add a dimension for NS1
+                        S1 = self.backend.bk_expand_dims(s1,off_P0)  # Add a dimension for NS1
                         if calc_var:
-                            VS1 = vs1[:, :, None, :]  # Add a dimension for NS1
+                            VS1 = self.backend.bk_expand_dims(vs1,off_P0)  # Add a dimension for NS1
                     else:
-                        S1 = self.backend.bk_concat([S1, s1[:, :, None, :]], axis=2)
+                        S1 = self.backend.bk_concat([S1, self.backend.bk_expand_dims(s1,off_P0)], axis=2)
                         if calc_var:
-                            VS1 = self.backend.bk_concat([VS1, vs1[:, :, None, :]], axis=2)
-                        
+                            VS1 = self.backend.bk_concat([VS1,
+                                                          self.backend.bk_expand_dims(vs1,off_P0)], axis=2)
+
             # Initialize dictionaries for |I1*Psi_j| * Psi_j3
             M1convPsi_dic = {}
             if cross:
@@ -2067,19 +2147,19 @@ class funct(FOC.FoCUS):
                     else:
                         ### Normalize C01 with P00_j [Nbatch, Nmask, Norient_j]
                         if norm is not None:
-                            self.div_norm(c01,(P1_dic[j2][:, :, None, :] *
-                                    P1_dic[j3][:, :, :, None]) ** 0.5)# [Nbatch, Nmask, Norient3, Norient2]
+                            self.div_norm(c01,(self.backend.bk_expand_dims(P1_dic[j2],off_P0) *
+                                               self.backend.bk_expand_dims(P1_dic[j3],-1)) ** 0.5)# [Nbatch, Nmask, Norient3, Norient2]
 
                         ### Store C01 as a complex [Nbatch, Nmask, NC01, Norient3, Norient2]
                         if C01 is None:
-                            C01 = c01[:,:,None,:,:]  # Add a dimension for NC01
+                            C01 = self.backend.bk_expand_dims(c01,off_C01) # Add a dimension for NC01
                             if calc_var:
-                                VC01 = vc01[:,:,None,:,:]  # Add a dimension for NC01
+                                VC01 =self.backend.bk_expand_dims(vc01,off_C01)  # Add a dimension for NC01
                         else:
-                            C01 = self.backend.bk_concat([C01, c01[:, :, None, :, :]],
+                            C01 = self.backend.bk_concat([C01, self.backend.bk_expand_dims(c01,off_C01)],
                                                      axis=2)  # Add a dimension for NC01
                             if calc_var:
-                                VC01 = self.backend.bk_concat([VC01, vc01[:, :, None, :, :]],
+                                VC01 = self.backend.bk_concat([VC01, self.backend.bk_expand_dims(vc01,off_C01)],
                                                               axis=2)  # Add a dimension for NC01
 
                 ### C01_cross = < (I1 * Psi)_j3 x (|I2 * Psi_j2| * Psi_j3)^* >_pix
@@ -2121,28 +2201,28 @@ class funct(FOC.FoCUS):
                     else:
                         ### Normalize C01 and C10 with P00_j [Nbatch, Nmask, Norient_j]
                         if norm is not None:
-                            self.div_norm(c01,(P2_dic[j2][:, :, None, :] *
-                                    P1_dic[j3][:, :, :, None]) ** 0.5)# [Nbatch, Nmask, Norient3, Norient2]
-                            self.div_norm(c10,(P1_dic[j2][:, :, None, :] *
-                                    P2_dic[j3][:, :, :, None]) ** 0.5)  # [Nbatch, Nmask, Norient3, Norient2]
+                            self.div_norm(c01,(self.backend.bk_expand_dims(P2_dic[j2],off_P0) *
+                                               self.backend.bk_expand_dims(P1_dic[j3],-1)) ** 0.5)# [Nbatch, Nmask, Norient3, Norient2]
+                            self.div_norm(c10,(self.backend.bk_expand_dims(P1_dic[j2],off_P0) *
+                                               self.backend.bk_expand_dims(P2_dic[j3],-1)) ** 0.5)  # [Nbatch, Nmask, Norient3, Norient2]
 
                         ### Store C01 and C10 as a complex [Nbatch, Nmask, NC01, Norient3, Norient2]
                         if C01 is None:
-                            C01 = c01[:, :, None, :, :] # Add a dimension for NC01
+                            C01 = self.backend.bk_expand_dims(c01,off_C01) # Add a dimension for NC01
                             if calc_var:
-                                VC01 = vc01[:, :, None, :, :] # Add a dimension for NC01
+                                VC01 = vself.backend.bk_expand_dims(vc01,off_C01) # Add a dimension for NC01
                         else:
-                            C01 = self.backend.bk_concat([C01,c01[:, :, None, :, :]],axis=2)  # Add a dimension for NC01
+                            C01 = self.backend.bk_concat([C01, self.backend.bk_expand_dims(c01,off_C01)],axis=2)  # Add a dimension for NC01
                             if calc_var:
-                                VC01 = self.backend.bk_concat([VC01,vc01[:, :, None, :, :]],axis=2)  # Add a dimension for NC01
+                                VC01 =self.backend.bk_concat([VC01, self.backend.bk_expand_dims(vc01,off_C01)],axis=2)  # Add a dimension for NC01
                         if C10 is None:
-                            C10 = c10[:, :, None, :, :]  # Add a dimension for NC01
+                            C10 = self.backend.bk_expand_dims(c10,off_C01) # Add a dimension for NC01
                             if calc_var:
-                                VC10 = vc10[:, :, None, :, :]  # Add a dimension for NC01
+                                VC10 = self.backend.bk_expand_dims(vc10,off_C01) # Add a dimension for NC01
                         else:
-                            C10 = self.backend.bk_concat([C10,c10[:, :, None, :, :]], axis=2)  # Add a dimension for NC01
+                            C10 = self.backend.bk_concat([C10, self.backend.bk_expand_dims(c10,off_C01)], axis=2)  # Add a dimension for NC01
                             if calc_var:
-                                VC10 = self.backend.bk_concat([VC10,vc10[:, :, None, :, :]], axis=2)  # Add a dimension for NC01
+                                VC10 = self.backend.bk_concat([VC10, self.backend.bk_expand_dims(vc10,off_C01)], axis=2)  # Add a dimension for NC01
                         
 
                 ##### C11
@@ -2167,18 +2247,18 @@ class funct(FOC.FoCUS):
                         else:
                             ### Normalize C11 with P00_j [Nbatch, Nmask, Norient_j]
                             if norm is not None:
-                                self.div_norm(c11,(P1_dic[j1][:, :, None, None, :] *
-                                        P1_dic[j2][:, :, None, :,None]) ** 0.5)  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
+                                self.div_norm(c11,(self.backend.bk_expand_dims(self.backend.bk_expand_dims(P1_dic[j1],off_P0),off_P0) *
+                                                   self.backend.bk_expand_dims(self.backend.bk_expand_dims(P1_dic[j2],off_P0),-1)) ** 0.5)  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
                             ### Store C11 as a complex [Nbatch, Nmask, NC11, Norient3, Norient2, Norient1]
                             if C11 is None:
-                                C11 = c11[:, :, None, :, :, :]  # Add a dimension for NC11
+                                C11 = self.backend.bk_expand_dims(c11,off_C11)  # Add a dimension for NC11
                                 if calc_var:
-                                    VC11 = vc11[:, :, None, :, :, :]  # Add a dimension for NC11
+                                    VC11 = self.backend.bk_expand_dims(vc11,off_C11)  # Add a dimension for NC11
                             else:
-                                C11 = self.backend.bk_concat([C11,c11[:, :, None, :, :, :]],
+                                C11 = self.backend.bk_concat([C11,self.backend.bk_expand_dims(c11,off_C11)],
                                                      axis=2)  # Add a dimension for NC11
                                 if calc_var:
-                                    VC11 = self.backend.bk_concat([VC11,vc11[:, :, None, :, :, :]],
+                                    VC11 = self.backend.bk_concat([VC11,self.backend.bk_expand_dims(vc11,off_C11)],
                                                              axis=2)  # Add a dimension for NC11
 
                         ### C11_cross = <(|I1 * psi1| * psi3)(|I2 * psi2| * psi3)^*>
@@ -2201,18 +2281,18 @@ class funct(FOC.FoCUS):
                         else:
                             ### Normalize C11 with P00_j [Nbatch, Nmask, Norient_j]
                             if norm is not None:
-                                self.div_norm(c11,(P1_dic[j1][:, :, None, None, :] *
-                                        P2_dic[j2][:, :, None, :, None]) ** 0.5)  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
+                                self.div_norm(c11,(self.backend.bk_expand_dims(self.backend.bk_expand_dims(P1_dic[j1],off_P0),off_P0) *
+                                                   self.backend.bk_expand_dims(self.backend.bk_expand_dims(P2_dic[j2],off_P0),-1)) ** 0.5)  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
                             ### Store C11 as a complex [Nbatch, Nmask, NC11, Norient3, Norient2, Norient1]
                             if C11 is None:
-                                C11 = c11[:, :, None, :, :, :]  # Add a dimension for NC11
+                                C11 = self.backend.bk_expand_dims(c11,off_C11)  # Add a dimension for NC11
                                 if calc_var:
-                                    VC11 = vc11[:, :, None, :, :, :]  # Add a dimension for NC11
+                                    VC11 = self.backend.bk_expand_dims(vc11,off_C11) # Add a dimension for NC11
                             else:
-                                C11 = self.backend.bk_concat([C11,c11[:, :, None, :, :, :]],
+                                C11 = self.backend.bk_concat([C11,self.backend.bk_expand_dims(c11,off_C11)],
                                                      axis=2)  # Add a dimension for NC11
                                 if calc_var:
-                                    VC11 = self.backend.bk_concat([VC11,vc11[:, :, None, :, :, :]],
+                                    VC11 = self.backend.bk_concat([VC11,self.backend.bk_expand_dims(vc11,off_C11)],
                                                                  axis=2)  # Add a dimension for NC11
             
             ###### Reshape for next iteration on j3
@@ -2298,7 +2378,10 @@ class funct(FOC.FoCUS):
         ### Compute the product (I2 * Psi)_j3 x (M1_j2 * Psi_j3)^*
         # z_1 x z_2^* = (a1a2 + b1b2) + i(b1a2 - a1b2)
         # cconv, sconv are [Nbatch, Npix_j3, Norient3]
-        c01 = self.backend.bk_expand_dims(conv, -1) * self.backend.bk_conjugate(MconvPsi)   # [Nbatch, Npix_j3, Norient3, Norient2]
+        if self.use_1D:
+            c01 = conv * self.backend.bk_conjugate(MconvPsi) 
+        else:
+            c01 = self.backend.bk_expand_dims(conv, -1) * self.backend.bk_conjugate(MconvPsi)   # [Nbatch, Npix_j3, Norient3, Norient2]
 
         ### Apply the mask [Nmask, Npix_j3] and sum over pixels
         if return_data:
@@ -2327,7 +2410,10 @@ class funct(FOC.FoCUS):
 
         ### Compute the product (|I1 * Psi_j1| * Psi_j3)(|I2 * Psi_j2| * Psi_j3)
         # z_1 x z_2^* = (a1a2 + b1b2) + i(b1a2 - a1b2)
-        c11 = self.backend.bk_expand_dims(M1, -2) * self.backend.bk_conjugate(self.backend.bk_expand_dims(M2, -1))  # [Nbatch, Npix_j3, Norient3, Norient2, Norient1]
+        if self.use_1D:
+            c11 = M1 * self.backend.bk_conjugate(M2) 
+        else:
+            c11 = self.backend.bk_expand_dims(M1, -2) * self.backend.bk_conjugate(self.backend.bk_expand_dims(M2, -1))  # [Nbatch, Npix_j3, Norient3, Norient2, Norient1]
 
         ### Apply the mask and sum over pixels
         if return_data:
