@@ -33,7 +33,7 @@ class FoCUS:
                  mpi_size=1,
                  mpi_rank=0):
 
-        self.__version__ = '3.1.0'
+        self.__version__ = '3.1.1'
         # P00 coeff for normalization for scat_cov
         self.TMPFILE_VERSION=TMPFILE_VERSION
         self.P1_dic = None
@@ -251,11 +251,17 @@ class FoCUS:
             if KERNELSZ==5:
                 xx=np.arange(5)-2
                 w=np.exp(-0.25*(xx)**2)
-                c=np.cos((xx)*np.pi/2)
-                s=np.sin((xx)*np.pi/2)
-                
-                self.ww_RealT[1]=self.backend.constant(np.array(w*c).reshape(xx.shape[0],1,1))
-                self.ww_ImagT[1]=self.backend.constant(np.array(w*s).reshape(xx.shape[0],1,1))
+                c=w*np.cos((xx)*np.pi/2)
+                s=w*np.sin((xx)*np.pi/2)
+
+                w=w/np.sum(w)
+                c=c-np.mean(c)
+                s=s-np.mean(s)
+                r=np.sum(np.sqrt(c*c+s*s))
+                c=c/r
+                s=s/r
+                self.ww_RealT[1]=self.backend.constant(np.array(c).reshape(xx.shape[0],1,1))
+                self.ww_ImagT[1]=self.backend.constant(np.array(s).reshape(xx.shape[0],1,1))
                 self.ww_SmoothT[1] = self.backend.constant(np.array(w).reshape(xx.shape[0],1,1))
             
         else:

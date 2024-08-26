@@ -18,6 +18,7 @@ src/foscat/scat.py
 src/foscat/scat1D.py
 src/foscat/scat2D.py
 src/foscat/scat_cov.py
+src/foscat/scat_cov1D.old.py
 src/foscat/scat_cov1D.py
 src/foscat/scat_cov2D.py
 src/foscat/scat_cov_map.py
