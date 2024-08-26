@@ -22,7 +22,7 @@ def read(filename):
 testwarn=0
 
 class scat_cov:
-    def __init__(self, s0, p00, c01, c11, s1=None, c10=None,backend=None):
+    def __init__(self, s0, p00, c01, c11, s1=None, c10=None,backend=None,use_1D=False):
         self.S0     = s0
         self.P00     = p00
         self.C01     = c01
@@ -32,6 +32,7 @@ class scat_cov:
         self.backend = backend
         self.idx1    = None
         self.idx2    = None
+        self.use_1D  = use_1D
         
     def numpy(self):
         if self.BACKEND=='numpy':
@@ -50,7 +51,9 @@ class scat_cov:
                         (self.P00.numpy()),
                         (self.C01.numpy()),
                         (self.C11.numpy()),
-                        s1=s1, c10=c10,backend=self.backend)
+                        s1=s1, c10=c10,
+                        backend=self.backend,
+                        use_1D=self.use_1D)
         
     def constant(self):
         
@@ -67,7 +70,8 @@ class scat_cov:
                         self.backend.constant(self.P00),
                         self.backend.constant(self.C01),
                         self.backend.constant(self.C11),
-                        s1=s1, c10=c10,backend=self.backend)
+                        s1=s1, c10=c10,backend=self.backend,
+                        use_1D=self.use_1D)
     
     def conv2complex(self,val):
         if val.dtype=='complex64' or val.dtype=='complex128' :
@@ -78,20 +82,37 @@ class scat_cov:
     # ---------------------------------------------−---------
     def flatten(self):
         tmp=[self.conv2complex(self.backend.bk_reshape(self.S0,[self.S1.shape[0],self.S0.shape[1]]))]
+        if self.use_1D:
+            if self.S1 is not None:
+                tmp=tmp+[self.conv2complex(self.backend.bk_reshape(self.S1,
+                                            [self.S1.shape[0],self.S1.shape[1]*self.S1.shape[2]]))]
+            tmp=tmp+[self.conv2complex(self.backend.bk_reshape(self.P00,
+                                            [self.S1.shape[0],self.S1.shape[1]*self.S1.shape[2]])),
+                     self.conv2complex(self.backend.bk_reshape(self.C01,
+                                            [self.C01.shape[0],self.C01.shape[1]*self.C01.shape[2]]))]
+            if self.C10 is not None:
+                tmp=tmp+[self.conv2complex(self.backend.bk_reshape(self.C10,
+                                            [self.C01.shape[0],self.C01.shape[1]*self.C01.shape[2]]))]
+
+            tmp=tmp+[self.conv2complex(self.backend.bk_reshape(self.C11,
+                                            [self.C01.shape[0],self.C11.shape[1]*self.C11.shape[2]]))]
+
+            return self.backend.bk_concat(tmp,1)
+        
         if self.S1 is not None:
             tmp=tmp+[self.conv2complex(self.backend.bk_reshape(self.S1,
-                                        [self.S1.shape[0],self.S1.shape[1]*self.S1.shape[2]*self.S1.shape[3]]))]
+                                                               [self.S1.shape[0],self.S1.shape[1]*self.S1.shape[2]*self.S1.shape[3]]))]
         tmp=tmp+[self.conv2complex(self.backend.bk_reshape(self.P00,
-                                        [self.S1.shape[0],self.S1.shape[1]*self.S1.shape[2]*self.S1.shape[3]])),
+                                                           [self.S1.shape[0],self.S1.shape[1]*self.S1.shape[2]*self.S1.shape[3]])),
                  self.conv2complex(self.backend.bk_reshape(self.C01,
-                                        [self.C01.shape[0],self.C01.shape[1]*self.C01.shape[2]*self.C01.shape[3]*self.C01.shape[4]]))]
+                                                           [self.C01.shape[0],self.C01.shape[1]*self.C01.shape[2]*self.C01.shape[3]*self.C01.shape[4]]))]
         if self.C10 is not None:
             tmp=tmp+[self.conv2complex(self.backend.bk_reshape(self.C10,
-                                        [self.C01.shape[0],self.C01.shape[1]*self.C01.shape[2]*self.C01.shape[3]*self.C01.shape[4]]))]
-        
+                                                               [self.C01.shape[0],self.C01.shape[1]*self.C01.shape[2]*self.C01.shape[3]*self.C01.shape[4]]))]
+
         tmp=tmp+[self.conv2complex(self.backend.bk_reshape(self.C11,
-                                        [self.C01.shape[0],self.C11.shape[1]*self.C11.shape[2]*self.C11.shape[3]*self.C11.shape[4]*self.C11.shape[5]]))]
-        
+                                                           [self.C01.shape[0],self.C11.shape[1]*self.C11.shape[2]*self.C11.shape[3]*self.C11.shape[4]*self.C11.shape[5]]))]
+
         return self.backend.bk_concat(tmp,1)
 
     # ---------------------------------------------−---------
@@ -319,12 +340,16 @@ class scat_cov:
             return scat_cov(self.doadd(self.S0,other.S0),
                             self.doadd(self.P00,other.P00),
                             (self.C01 + other.C01),
-                            c11,s1=s1, c10=c10,backend=self.backend)
+                            c11,s1=s1, c10=c10,
+                            backend=self.backend,
+                            use_1D=self.use_1D)
         else:
             return scat_cov((self.S0 + other),
                             (self.P00 + other),
                             (self.C01 + other),
-                            c11,s1=s1, c10=c10,backend=self.backend)
+                            c11,s1=s1, c10=c10,
+                            backend=self.backend,
+                            use_1D=self.use_1D)
 
     
     def relu(self):
@@ -350,7 +375,8 @@ class scat_cov:
                         c11,
                         s1=s1, 
                         c10=c10,
-                        backend=self.backend)
+                        backend=self.backend,
+                        use_1D=self.use_1D)
 
     def __radd__(self, other):
         return self.__add__(other)
@@ -396,12 +422,14 @@ class scat_cov:
             return scat_cov(self.dodiv(self.S0,other.S0),
                             self.dodiv(self.P00,other.P00),
                             self.dodiv(self.C01,other.C01),
-                            c11,s1=s1, c10=c10,backend=self.backend)
+                            c11,s1=s1, c10=c10,backend=self.backend,
+                        use_1D=self.use_1D)
         else:
             return scat_cov((self.S0 / other),
                             (self.P00 / other),
                             (self.C01 / other),
-                            c11,s1=s1, c10=c10,backend=self.backend)
+                            c11,s1=s1, c10=c10,backend=self.backend,
+                        use_1D=self.use_1D)
 
     def __rtruediv__(self, other):
         assert isinstance(other, float)  or isinstance(other, np.float32) or isinstance(other, int) or \
@@ -438,13 +466,15 @@ class scat_cov:
             return scat_cov(self.dodiv(other.S0,self.S0),
                             self.dodiv(other.P00,self.P00),
                             (other.C01 / self.C01),
-                            c11,s1=s1, c10=c10,backend=self.backend)
+                            c11,s1=s1, c10=c10,backend=self.backend,
+                        use_1D=self.use_1D)
         else:
             return scat_cov((other/self.S0 ),
                             (other/self.P00 ),
                             (other/self.C01 ),
                             (other/self.C11 ),
-                            s1=s1, c10=c10,backend=self.backend)
+                            s1=s1, c10=c10,backend=self.backend,
+                        use_1D=self.use_1D)
 
     def __rsub__(self, other):
 
@@ -489,13 +519,15 @@ class scat_cov:
                             self.domin(other.P00,self.P00),
                             (other.C01 - self.C01),
                             c11,s1=s1, c10=c10,
-                            backend=self.backend)
+                            backend=self.backend,
+                        use_1D=self.use_1D)
         else:
             return scat_cov((other-self.S0),
                             (other-self.P00),
                             (other-self.C01),
                             c11,s1=s1, c10=c10,
-                            backend=self.backend)
+                            backend=self.backend,
+                        use_1D=self.use_1D)
         
     def __sub__(self, other):
         assert isinstance(other, float)  or isinstance(other, np.float32) or isinstance(other, int) or \
@@ -539,13 +571,15 @@ class scat_cov:
                             self.domin(self.P00,other.P00),
                             (self.C01 - other.C01),
                             c11,
-                            s1=s1, c10=c10,backend=self.backend)
+                            s1=s1, c10=c10,backend=self.backend,
+                        use_1D=self.use_1D)
         else:
             return scat_cov((self.S0 - other),
                             (self.P00 - other),
                             (self.C01 - other),
                             c11,
-                            s1=s1, c10=c10,backend=self.backend)
+                            s1=s1, c10=c10,backend=self.backend,
+                        use_1D=self.use_1D)
         
     def domult(self,x,y):
         try:
@@ -639,13 +673,15 @@ class scat_cov:
                             self.domult(self.P00,other.P00),
                             self.domult(self.C01,other.C01),
                             c11,
-                            s1=s1, c10=c10,backend=self.backend)
+                            s1=s1, c10=c10,backend=self.backend,
+                        use_1D=self.use_1D)
         else:
             return scat_cov((self.S0 * other),
                             (self.P00 * other),
                             (self.C01 * other),
                             c11,
-                            s1=s1, c10=c10,backend=self.backend)
+                            s1=s1, c10=c10,backend=self.backend,
+                        use_1D=self.use_1D)
 
     
     def __rmul__(self, other):
@@ -734,7 +770,8 @@ class scat_cov:
             c10=self.backend.constant(c10)
 
         return scat_cov(self.S0,self.backend.constant(p0),self.backend.constant(c01),
-                        self.backend.constant(c11),s1=s1,c10=c10,backend=self.backend)
+                        self.backend.constant(c11),s1=s1,c10=c10,backend=self.backend,
+                        use_1D=self.use_1D)
 
     def plot(self, name=None, hold=True, color='blue', lw=1, legend=True,norm=False):
 
@@ -1087,7 +1124,8 @@ class scat_cov:
         outlist=pickle.load(open("%s.pkl"%(filename),"rb"))
 
         return scat_cov(outlist[0],outlist[5], outlist[3], outlist[4], \
-                        s1=outlist[1], c10=outlist[2],backend=self.backend)
+                        s1=outlist[1], c10=outlist[2],backend=self.backend,
+                        use_1D=self.use_1D)
 
     def std(self):
         if self.S1 is not None:  # Auto
@@ -1147,7 +1185,8 @@ class scat_cov:
         c01=self.backend.bk_sqrt(self.C01)
         c11=self.backend.bk_sqrt(self.C11)
         
-        return scat_cov(s0,p00, c01, c11, s1=s1, c10=c10,backend=self.backend)
+        return scat_cov(s0,p00, c01, c11, s1=s1, c10=c10,backend=self.backend,
+                        use_1D=self.use_1D)
     
     def L1(self):
 
@@ -1164,7 +1203,8 @@ class scat_cov:
         c01=self.backend.bk_L1(self.C01)
         c11=self.backend.bk_L1(self.C11)
         
-        return scat_cov(s0,p00, c01, c11, s1=s1, c10=c10,backend=self.backend)
+        return scat_cov(s0,p00, c01, c11, s1=s1, c10=c10,backend=self.backend,
+                        use_1D=self.use_1D)
 
     
     def square_comp(self):
@@ -1182,7 +1222,8 @@ class scat_cov:
         c01=self.backend.bk_square_comp(self.C01)
         c11=self.backend.bk_square_comp(self.C11)
         
-        return scat_cov(s0,p00, c01, c11, s1=s1, c10=c10,backend=self.backend)
+        return scat_cov(s0,p00, c01, c11, s1=s1, c10=c10,backend=self.backend,
+                        use_1D=self.use_1D)
     
     def iso_mean(self,repeat=False):
         shape=list(self.P00.shape)
@@ -1271,7 +1312,8 @@ class scat_cov:
                     self.backend.backend.matmul(C11,lmat_T),
                     [shape[0],shape[1],shape[2],norient,norient,norient])
 
-        return scat_cov(self.S0,P00, C01, C11, s1=S1, c10=C10,backend=self.backend)
+        return scat_cov(self.S0,P00, C01, C11, s1=S1, c10=C10,backend=self.backend,
+                        use_1D=self.use_1D)
 
 
     def fft_ang(self,nharm=1,imaginary=False):
@@ -1345,7 +1387,8 @@ class scat_cov:
                     lmat),
                 [shape[0],shape[1],shape[2],nout,nout,nout])
 
-        return scat_cov(self.S0,P00, C01, C11, s1=S1, c10=C10,backend=self.backend)
+        return scat_cov(self.S0,P00, C01, C11, s1=S1, c10=C10,backend=self.backend,
+                        use_1D=self.use_1D)
     
     def iso_std(self,repeat=False):
 
@@ -1386,7 +1429,8 @@ class scat_cov:
                             (self.C01),
                             (self.C11),
                             s1=self.S1,
-                            c10=self.C10,backend=self.backend)
+                            c10=self.C10,backend=self.backend,
+                        use_1D=self.use_1D)
         
         inscale=self.P00.shape[2]
         p00=np.zeros([self.P00.shape[0],self.P00.shape[1],nscale,self.P00.shape[3]],dtype='complex')
@@ -1538,7 +1582,8 @@ class scat_cov:
                          (p00),
                          (c01),
                          (c11),
-                        s1=(s1),backend=self.backend)
+                        s1=(s1),backend=self.backend,
+                        use_1D=self.use_1D)
 
 class funct(FOC.FoCUS):
 
@@ -1612,8 +1657,10 @@ class funct(FOC.FoCUS):
             sS1=None
             mS1=None
             
-        return scat_cov(mS0, mP00, mC01, mC11, s1=mS1,c10=mC10,backend=self.backend), \
-            scat_cov(sS0, sP00, sC01, sC11, s1=sS1,c10=sC10,backend=self.backend)
+        return scat_cov(mS0, mP00, mC01, mC11, s1=mS1,c10=mC10,backend=self.backend,
+                        use_1D=self.use_1D), \
+            scat_cov(sS0, sP00, sC01, sC11, s1=sS1,c10=sC10,backend=self.backend,
+                        use_1D=self.use_1D)
 
     # compute local direction to make the statistical analysis more efficient
     def stat_cfft(self,im,image2=None,upscale=False,smooth_scale=0):
@@ -2334,16 +2381,22 @@ class funct(FOC.FoCUS):
 
         if calc_var:
             if not cross:
-                return scat_cov(s0,P00, C01, C11, s1=S1,backend=self.backend), \
-                    scat_cov(vs0,VP00, VC01, VC11, s1=VS1,backend=self.backend)
+                return scat_cov(s0,P00, C01, C11, s1=S1,backend=self.backend,
+                        use_1D=self.use_1D), \
+                    scat_cov(vs0,VP00, VC01, VC11, s1=VS1,backend=self.backend,
+                        use_1D=self.use_1D)
             else:
-                return scat_cov(s0,P00, C01, C11, s1=S1,c10=C10,backend=self.backend), \
-                    scat_cov(vs0,VP00, VC01, VC11, s1=VS1,c10=VC10,backend=self.backend)
+                return scat_cov(s0,P00, C01, C11, s1=S1,c10=C10,backend=self.backend,
+                        use_1D=self.use_1D), \
+                    scat_cov(vs0,VP00, VC01, VC11, s1=VS1,c10=VC10,backend=self.backend,
+                        use_1D=self.use_1D)
         else:
             if not cross:
-                return scat_cov(s0,P00, C01, C11, s1=S1,backend=self.backend)
+                return scat_cov(s0,P00, C01, C11, s1=S1,backend=self.backend,
+                        use_1D=self.use_1D)
             else:
-                return scat_cov(s0,P00, C01, C11, s1=S1,c10=C10,backend=self.backend)
+                return scat_cov(s0,P00, C01, C11, s1=S1,c10=C10,backend=self.backend,
+                        use_1D=self.use_1D)
 
     def clean_norm(self):
         self.P1_dic = None
@@ -2432,13 +2485,15 @@ class funct(FOC.FoCUS):
                 return scat_cov(self.backend.bk_square(self.backend.bk_abs(x.S0)),
                                 self.backend.bk_square(self.backend.bk_abs(x.P00)),
                                 self.backend.bk_square(self.backend.bk_abs(x.C01)),
-                                self.backend.bk_square(self.backend.bk_abs(x.C11)),backend=self.backend)
+                                self.backend.bk_square(self.backend.bk_abs(x.C11)),backend=self.backend,
+                        use_1D=self.use_1D)
             else:
                 return scat_cov(self.backend.bk_square(self.backend.bk_abs(x.S0)),
                                 self.backend.bk_square(self.backend.bk_abs(x.P00)),
                                 self.backend.bk_square(self.backend.bk_abs(x.C01)),
                                 self.backend.bk_square(self.backend.bk_abs(x.C11)),
-                                s1=self.backend.bk_square(self.backend.bk_abs(x.S1)),backend=self.backend)
+                                s1=self.backend.bk_square(self.backend.bk_abs(x.S1)),backend=self.backend,
+                        use_1D=self.use_1D)
         else:
             return self.backend.bk_abs(self.backend.bk_square(x))
 
@@ -2448,13 +2503,15 @@ class funct(FOC.FoCUS):
                 return scat_cov(self.backend.bk_sqrt(self.backend.bk_abs(x.S0)),
                                 self.backend.bk_sqrt(self.backend.bk_abs(x.P00)),
                                 self.backend.bk_sqrt(self.backend.bk_abs(x.C01)),
-                                self.backend.bk_sqrt(self.backend.bk_abs(x.C11)),backend=self.backend)
+                                self.backend.bk_sqrt(self.backend.bk_abs(x.C11)),backend=self.backend,
+                        use_1D=self.use_1D)
             else:
                 return scat_cov(self.backend.bk_sqrt(self.backend.bk_abs(x.S0)),
                                 self.backend.bk_sqrt(self.backend.bk_abs(x.P00)),
                                 self.backend.bk_sqrt(self.backend.bk_abs(x.C01)),
                                 self.backend.bk_sqrt(self.backend.bk_abs(x.C11)),
-                                s1=self.backend.bk_sqrt(self.backend.bk_abs(x.S1)),backend=self.backend)
+                                s1=self.backend.bk_sqrt(self.backend.bk_abs(x.S1)),backend=self.backend,
+                        use_1D=self.use_1D)
         else:
             return self.backend.bk_abs(self.backend.bk_sqrt(x))
 
@@ -2535,13 +2592,15 @@ class funct(FOC.FoCUS):
                                 x.domult(sig.C01,x.C01)*x.domult(sig.C01,x.C01),
                                 x.domult(sig.C11,x.C11)*x.domult(sig.C11,x.C11),
                                 C10=x.domult(sig.C10,x.C10)*x.domult(sig.C10,x.C10),
-                                backend=self.backend)
+                                backend=self.backend,
+                        use_1D=self.use_1D)
             else:
                 return scat_cov(x.domult(sig.S0,x.S0)*x.domult(sig.S0,x.S0),
                                 x.domult(sig.P00,x.P00)*x.domult(sig.P00,x.P00),
                                 x.domult(sig.C01,x.C01)*x.domult(sig.C01,x.C01),
                                 x.domult(sig.C11,x.C11)*x.domult(sig.C11,x.C11),
-                                backend=self.backend)
+                                backend=self.backend,
+                        use_1D=self.use_1D)
         else:
             if x.C10 is None:
                 return scat_cov(x.domult(sig.S0,x.S0)*x.domult(sig.S0,x.S0),
@@ -2550,14 +2609,16 @@ class funct(FOC.FoCUS):
                                 x.domult(sig.C11,x.C11)*x.domult(sig.C11,x.C11),
                                 S1=x.domult(sig.S1,x.S1)*x.domult(sig.S1,x.S1),
                                 C10=x.domult(sig.C10,x.C10)*x.domult(sig.C10,x.C10),
-                                backend=self.backend)
+                                backend=self.backend,
+                        use_1D=self.use_1D)
             else:
                 return scat_cov(x.domult(sig.S0,x.S0)*x.domult(sig.S0,x.S0),
                                 x.domult(sig.P00,x.P00)*x.domult(sig.P00,x.P00),
                                 x.domult(sig.C01,x.C01)*x.domult(sig.C01,x.C01),
                                 x.domult(sig.C11,x.C11)*x.domult(sig.C11,x.C11),
                                 S1=x.domult(sig.S1,x.S1)*x.domult(sig.S1,x.S1),
-                                backend=self.backend)
+                                backend=self.backend,
+                        use_1D=self.use_1D)
 
     
     def log(self, x):
@@ -2595,13 +2656,15 @@ class funct(FOC.FoCUS):
                                 x.domult(sig.C01,x.C01)*x.domult(sig.C01,x.C01),
                                 x.domult(sig.C11,x.C11)*x.domult(sig.C11,x.C11),
                                 C10=x.domult(sig.C10,x.C10)*x.domult(sig.C10,x.C10),
-                                backend=self.backend)
+                                backend=self.backend,
+                        use_1D=self.use_1D)
             else:
                 return scat_cov(x.domult(sig.S0,x.S0)*x.domult(sig.S0,x.S0),
                                 x.domult(sig.P00,x.P00)*x.domult(sig.P00,x.P00),
                                 x.domult(sig.C01,x.C01)*x.domult(sig.C01,x.C01),
                                 x.domult(sig.C11,x.C11)*x.domult(sig.C11,x.C11),
-                                backend=self.backend)
+                                backend=self.backend,
+                        use_1D=self.use_1D)
         else:
             if res.C10 is None:
                 return scat_cov(x.domult(sig.S0,x.S0)*x.domult(sig.S0,x.S0),
@@ -2616,7 +2679,8 @@ class funct(FOC.FoCUS):
                                 x.domult(sig.S1,x.S1)*x.domult(sig.S1,x.S1),
                                 x.domult(sig.C01,x.C01)*x.domult(sig.C01,x.C01),
                                 x.domult(sig.C11,x.C11)*x.domult(sig.C11,x.C11),
-                                backend=self.backend)
+                                backend=self.backend,
+                        use_1D=self.use_1D)
         return(self.NORIENT)
     
     @tf_function
@@ -2627,6 +2691,7 @@ class funct(FOC.FoCUS):
 
     def eval_fast(self, image1, image2=None,mask=None,norm=None, Auto=True,cmat=None,cmat2=None):
         s0,p0,s1,c01,c11,c10=self.eval_comp_fast(image1, image2=image2,mask=mask,Auto=Auto,cmat=cmat,cmat2=cmat2)
-        return scat_cov(s0, p0,  c01, c11, s1=s1,c10=c10,backend=self.backend)
+        return scat_cov(s0, p0,  c01, c11, s1=s1,c10=c10,backend=self.backend,
+                        use_1D=self.use_1D)
         
         
