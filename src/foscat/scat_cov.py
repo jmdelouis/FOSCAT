@@ -2257,7 +2257,7 @@ class funct(FOC.FoCUS):
                         if C01 is None:
                             C01 = self.backend.bk_expand_dims(c01,off_C01) # Add a dimension for NC01
                             if calc_var:
-                                VC01 = vself.backend.bk_expand_dims(vc01,off_C01) # Add a dimension for NC01
+                                VC01 = self.backend.bk_expand_dims(vc01,off_C01) # Add a dimension for NC01
                         else:
                             C01 = self.backend.bk_concat([C01, self.backend.bk_expand_dims(c01,off_C01)],axis=2)  # Add a dimension for NC01
                             if calc_var:

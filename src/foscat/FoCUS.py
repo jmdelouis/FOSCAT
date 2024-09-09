@@ -33,7 +33,7 @@ class FoCUS:
                  mpi_size=1,
                  mpi_rank=0):
 
-        self.__version__ = '3.1.2'
+        self.__version__ = '3.1.3'
         # P00 coeff for normalization for scat_cov
         self.TMPFILE_VERSION=TMPFILE_VERSION
         self.P1_dic = None
@@ -1627,7 +1627,7 @@ class FoCUS:
 
     def diff_data(self,x,y,is_complex=True,sigma=None):
         if sigma is None:
-            if is_complex:
+            if self.backend.bk_is_complex(x):
                 r=self.backend.bk_square(self.backend.bk_real(x)-self.backend.bk_real(y))
                 i=self.backend.bk_square(self.backend.bk_imag(x)-self.backend.bk_imag(y))
                 return self.backend.bk_reduce_sum(r+i)
@@ -1635,7 +1635,7 @@ class FoCUS:
                 r=self.backend.bk_square(x-y)
                 return self.backend.bk_reduce_sum(r)
         else:
-            if is_complex:
+            if self.backend.bk_is_complex(x):
                 r=self.backend.bk_square((self.backend.bk_real(x)-self.backend.bk_real(y))/sigma)
                 i=self.backend.bk_square((self.backend.bk_imag(x)-self.backend.bk_imag(y))/sigma)
                 return self.backend.bk_reduce_sum(r+i)
