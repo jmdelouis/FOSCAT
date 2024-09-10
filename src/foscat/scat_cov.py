@@ -1961,8 +1961,7 @@ class funct(FOC.FoCUS):
             if not cross:
                 s0,l_vs0 = self.masked_mean(I1,vmask,axis=1,calc_var=True)
             else:
-                s0,l_vs0 = self.masked_mean(I1-I2,vmask,axis=1,calc_var=True)
-                
+                s0,l_vs0 = self.masked_mean(self.backend.bk_L1(I1*I2),vmask,axis=1,calc_var=True)
             vs0=self.backend.bk_concat([l_vs0,l_vs0],1)
             s0=self.backend.bk_concat([s0,l_vs0],1)
 
