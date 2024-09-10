@@ -1958,16 +1958,13 @@ class funct(FOC.FoCUS):
         if return_data:
             s0=I1
         else:
-            if calc_var:
-                if not cross:
-                    s0,vs0 = self.masked_mean(I1,vmask,axis=1,calc_var=True)
-                else:
-                    s0,vs0 = self.masked_mean(I1-I2,vmask,axis=1,calc_var=True)
+            if not cross:
+                s0,l_vs0 = self.masked_mean(I1,vmask,axis=1,calc_var=True)
             else:
-                if not cross:
-                    s0 = self.masked_mean(I1,vmask,axis=1)
-                else:
-                    s0 = self.masked_mean(I1-I2,vmask,axis=1)
+                s0,l_vs0 = self.masked_mean(I1-I2,vmask,axis=1,calc_var=True)
+                
+            vs0=self.backend.bk_concat([l_vs0,l_vs0],1)
+            s0=self.backend.bk_concat([s0,l_vs0],1)
 
         #### COMPUTE S1, P00, C01 and C11
         nside_j3 = nside  # NSIDE start (nside_j3 = nside / 2^j3)
