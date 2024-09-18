@@ -2011,7 +2011,7 @@ class funct(FOC.FoCUS):
         
                 if cond_init_P1_dic:
                     # We fill P1_dic with P00 for normalisation of C01 and C11
-                    P1_dic[j3] = p00  # [Nbatch, Nmask, Norient3]
+                    P1_dic[j3] = self.backend.bk_real(p00)  # [Nbatch, Nmask, Norient3]
 
                 # We store P00_auto to return it [Nbatch, Nmask, NP00, Norient3]
                 if return_data:
@@ -2086,8 +2086,8 @@ class funct(FOC.FoCUS):
                             p1 = self.masked_mean(M1_square, vmask, axis=1,rank=j3)  # [Nbatch, Nmask, Norient3]
                             p2 = self.masked_mean(M2_square, vmask, axis=1,rank=j3)  # [Nbatch, Nmask, Norient3]
                     # We fill P1_dic with P00 for normalisation of C01 and C11
-                    P1_dic[j3] = p1  # [Nbatch, Nmask, Norient3]
-                    P2_dic[j3] = p2  # [Nbatch, Nmask, Norient3]
+                    P1_dic[j3] = self.backend.bk_real(p1)  # [Nbatch, Nmask, Norient3]
+                    P2_dic[j3] = self.backend.bk_real(p2)  # [Nbatch, Nmask, Norient3]
 
                 ### P00_cross = < (I1 * Psi_j3) (I2 * Psi_j3)^* >_pix
                 # z_1 x z_2^* = (a1a2 + b1b2) + i(b1a2 - a1b2)
