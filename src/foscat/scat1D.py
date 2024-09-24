@@ -800,7 +800,7 @@ class scat1D:
     # ---------------------------------------------−---------
     def cleanval(self, x):
         x = x.numpy()
-        x[np.isfinite(x) == False] = np.median(x[np.isfinite(x)])
+        x[~np.isfinite(x)] = np.median(x[np.isfinite(x)])
         return x
 
     def filter_inf(self):
@@ -1265,7 +1265,7 @@ class funct(FOC.FoCUS):
                 l_image2 = I2
         if len(image1.shape) == 1:
             s0 = self.backend.bk_reduce_sum(l_image1 * vmask, axis=axis + 1)
-            if cross and Auto == False:
+            if cross and not Auto:
                 s0 = self.backend.bk_concat(
                     [s0, self.backend.bk_reduce_sum(l_image2 * vmask, axis=axis)]
                 )
@@ -1273,7 +1273,7 @@ class funct(FOC.FoCUS):
             lmask = self.backend.bk_expand_dims(vmask, 0)
             lim = self.backend.bk_expand_dims(l_image1, 1)
             s0 = self.backend.bk_reduce_sum(lim * lmask, axis=axis + 2)
-            if cross and Auto == False:
+            if cross and not Auto:
                 lim = self.backend.bk_expand_dims(l_image2, 1)
                 s0 = self.backend.bk_concat(
                     [s0, self.backend.bk_reduce_sum(lim * lmask, axis=axis + 2)]

@@ -20,12 +20,12 @@ class scat_cov_map(scat.funct):
 class funct(scat.funct):
     def __init__(self, *args, **kwargs):
         # Impose que use_2D=True pour la classe scat
-        super(funct, self).__init__(use_2D=True, return_data=True, *args, **kwargs)
+        super().__init__(use_2D=True, return_data=True, *args, **kwargs)
 
     def eval(
         self, image1, image2=None, mask=None, norm=None, Auto=True, calc_var=False
     ):
-        r = super(funct, self).eval(
+        r = super().eval(
             image1, image2=image2, mask=mask, norm=norm, Auto=Auto, calc_var=calc_var
         )
         return scat_cov_map(
@@ -36,12 +36,12 @@ class funct(scat.funct):
         self, scat, method, no_order_1=False, no_order_2=False, no_order_3=False
     ):
         for j in scat.P00:
-            if no_order_1 == False:
+            if not no_order_1:
                 scat.P00[j] = method(scat.P00[j])
                 if scat.S1 is not None:
                     scat.S1[j] = method(scat.S1[j])
 
-            if no_order_2 == False:
+            if not no_order_2:
                 for n1 in scat.C01[j]:
                     scat.C01[j][n1] = method(scat.C01[j][n1])
 
@@ -49,7 +49,7 @@ class funct(scat.funct):
                     for n1 in scat.C10[j]:
                         scat.C10[j][n1] = method(scat.C10[j][n1])
 
-            if no_order_3 == False:
+            if not no_order_3:
                 for n1 in scat.C11[j]:
                     for n2 in scat.C11[j][n1]:
                         scat.C11[j][n1][n2] = method(scat.C11[j][n1][n2])

@@ -60,7 +60,7 @@ class FoCUS:
             sys.stdout.flush()
 
         self.TEMPLATE_PATH = TEMPLATE_PATH
-        if os.path.exists(self.TEMPLATE_PATH) == False:
+        if not os.path.exists(self.TEMPLATE_PATH):
             if not self.silent:
                 print(
                     "The directory %s to store temporary information for FoCUS does not exist: Try to create it"
@@ -265,7 +265,7 @@ class FoCUS:
                 self.ww_Real[lout] = wr
                 self.ww_Imag[lout] = wi
                 self.w_smooth[lout] = ws
-        elif self.use_1D == True:
+        elif self.use_1D:
             self.w_smooth = slope * (w_smooth / w_smooth.sum()).astype(self.all_type)
             self.ww_RealT = {}
             self.ww_ImagT = {}
@@ -1353,7 +1353,7 @@ class FoCUS:
                     )
                 )
         except:
-            if self.use_2D == False:
+            if not self.use_2D:
 
                 if l_kernel == 5:
                     pw = 0.5
@@ -2218,7 +2218,7 @@ class FoCUS:
                     )
 
             return self.backend.bk_reshape(res, [nout, nouty])
-        elif self.use_1D == True:
+        elif self.use_1D:
             ishape = list(in_image.shape)
             if len(ishape) < axis + 1:
                 if not self.silent:

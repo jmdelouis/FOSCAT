@@ -970,7 +970,7 @@ class scat:
     # ---------------------------------------------−---------
     def cleanval(self, x):
         x = x.numpy()
-        x[np.isfinite(x) == False] = np.median(x[np.isfinite(x)])
+        x[~np.isfinite(x)] = np.median(x[np.isfinite(x)])
         return x
 
     def filter_inf(self):
@@ -1637,7 +1637,7 @@ class funct(FOC.FoCUS):
         else:
             s0 = self.masked_mean(l_image1, vmask, axis=axis) + s0_off
 
-        if cross and Auto == False:
+        if cross and not Auto:
             if calc_var:
                 s02, vs02 = self.masked_mean(l_image2, vmask, axis=axis, calc_var=True)
             else:

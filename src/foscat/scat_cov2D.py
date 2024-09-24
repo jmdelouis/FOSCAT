@@ -15,4 +15,4 @@ class scat_cov2D:
 class funct(scat.funct):
     def __init__(self, *args, **kwargs):
         # Impose que use_2D=True pour la classe scat
-        super(funct, self).__init__(use_2D=True, *args, **kwargs)
+        super().__init__(use_2D=True, *args, **kwargs)

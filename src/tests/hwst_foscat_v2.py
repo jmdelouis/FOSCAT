@@ -259,7 +259,7 @@ def loss_fct1(x, scat, args):
 
     b = scat.eval(x, image2=x, mask=mask, Auto=True)
 
-    if p00 == True:
+    if p00:
         l_val = scat.bk_reduce_sum(
             scat.bk_abs(isig.P00 * scat.bk_square(scat.bk_abs(ref.P00 - b.P00)))
         )
@@ -278,7 +278,7 @@ def loss_fct2(x, scat, args):
     p00 = args[4]
 
     b = scat.eval(TT, image2=x, mask=mask, Auto=False)
-    if p00 == True:
+    if p00:
         l_val = scat.bk_reduce_sum(
             scat.bk_abs(isig.P00 * scat.bk_square(scat.bk_abs(ref.P00 - b.P00)))
         )
@@ -301,7 +301,7 @@ def loss_fct3(x, scat, args):
 
     a = scat.eval(im, image2=x, mask=mask, Auto=True) - bias
 
-    if p00 == True:
+    if p00:
         l_val = scat.bk_reduce_sum(
             scat.bk_abs(isig.P00 * scat.bk_square(scat.bk_abs(ref.P00 - a.P00)))
         )

@@ -78,7 +78,7 @@ class foscat_backend:
         # ===========================================================================
         # INIT
         if mpi_rank == 0:
-            if self.BACKEND == self.TENSORFLOW and silent == False:
+            if self.BACKEND == self.TENSORFLOW and not silent:
                 print(
                     "Num GPUs Available: ",
                     len(self.backend.config.experimental.list_physical_devices("GPU")),
