@@ -1,5 +1,7 @@
 # foscat
 
+[![Read the Docs](https://readthedocs.org/projects/foscat-documentation/badge/?version=stable)](https://foscat-documentation.readthedocs.io/en/stable)
+
 A python package dedicated to image component separation based on scattering transform analysis designed for high performance computing.
 
 ## the concept
@@ -7,6 +9,8 @@ A python package dedicated to image component separation based on scattering tra
 The foscat genesis has been built to synthesise data (2D or Healpix) using Cross Scattering Transform. For a detailed method description please refer to https://arxiv.org/abs/2207.12527. This algorithm could be effectively usable for component separation (e.g. denoising).
 
 A demo package for this process can be found at https://github.com/jmdelouis/FOSCAT_DEMO.
+
+Complete doc can be found at https://foscat-documentation.readthedocs.io/en/latest/index.html.
 
 
 ## usage
