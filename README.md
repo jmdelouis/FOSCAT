@@ -4,7 +4,10 @@ A python package dedicated to image component separation based on scattering tra
 
 ## the concept
 
-The foscat genesis has been built to synthesise data (2D or Healpix) using Cross Scattering Transform. For detailled method description please refer to https://arxiv.org/abs/2207.12527. This algorithm could be effectively usable for component separation (e.g. denoising).
+The foscat genesis has been built to synthesise data (2D or Healpix) using Cross Scattering Transform. For a detailed method description please refer to https://arxiv.org/abs/2207.12527. This algorithm could be effectively usable for component separation (e.g. denoising).
+
+A demo package for this process can be found at https://github.com/jmdelouis/FOSCAT_DEMO.
+
 
 ## usage
 
