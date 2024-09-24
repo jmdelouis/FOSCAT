@@ -8,7 +8,7 @@ The foscat genesis has been built to synthesise data (2D or Healpix) using Cross
 
 #startup
 
-To generate test files run the follosing lines in python:
+To generate test files run the following lines in python:
 
 >python
 
@@ -34,7 +34,7 @@ to plot results
 
 >python testHplot.py
 
-Note: If mpi is availble you can run testHealpix_mpi.py that uses 3 nodes to do the same computation than tesHealpix.py
+Note: If mpi is available you can run testHealpix_mpi.py that uses 3 nodes to do the same computation than tesHealpix.py
 
 >mpirun -np 3 testHealpix_mpi.py
 
