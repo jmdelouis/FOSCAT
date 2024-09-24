@@ -4,65 +4,71 @@ import matplotlib.pyplot as plt
 import healpy as hp
 import foscat.FoCUS as FOC
 
-#=================================================================================
+# =================================================================================
 # DEFINE A PATH FOR scratch data
 # The data are storred using a default nside to minimize the needed storage
-#=================================================================================
-scratch_path = '../data'
-outname='TEST_EE'
-nout=64
-#=================================================================================
-# Function to reduce the data used in the FoCUS algorithm 
-#=================================================================================
-def dodown(a,nout):
-    nin=int(np.sqrt(a.shape[0]//12))
-    if nin==nout:
-        return(a)
-    return(np.mean(a.reshape(12*nout*nout,(nin//nout)**2),1))
-#=================================================================================
+# =================================================================================
+scratch_path = "../data"
+outname = "TEST_EE"
+nout = 64
+
+
+# =================================================================================
+# Function to reduce the data used in the FoCUS algorithm
+# =================================================================================
+def dodown(a, nout):
+    nin = int(np.sqrt(a.shape[0] // 12))
+    if nin == nout:
+        return a
+    return np.mean(a.reshape(12 * nout * nout, (nin // nout) ** 2), 1)
+
+
+# =================================================================================
 # Get data
-#=================================================================================
-im=dodown(np.load('Venus_256.npy'),nout)
+# =================================================================================
+im = dodown(np.load("Venus_256.npy"), nout)
 
 
-#=================================================================================
+# =================================================================================
 # INITIALIZE FoCUS class
-#=================================================================================
+# =================================================================================
 
-fc=FOC.FoCUS(NORIENT=4,   # define the number of wavelet orientation
-             KERNELSZ=5,  # define the kernel size (here 3x3)
-             healpix=True, # use the healpix pixelisation
-             OSTEP=0,     # get very large scale (nside=1)
-             nside=nout,     # get very large scale (nside=1)
-             LAMBDA=1.0,
-             TEMPLATE_PATH=scratch_path)
+fc = FOC.FoCUS(
+    NORIENT=4,  # define the number of wavelet orientation
+    KERNELSZ=5,  # define the kernel size (here 3x3)
+    healpix=True,  # use the healpix pixelisation
+    OSTEP=0,  # get very large scale (nside=1)
+    nside=nout,  # get very large scale (nside=1)
+    LAMBDA=1.0,
+    TEMPLATE_PATH=scratch_path,
+)
 
 
-#=================================================================================
+# =================================================================================
 # COMPUTE THE WAVELET TRANSFORM OF THE REFERENCE MAP
-#=================================================================================
+# =================================================================================
 
-s1,p0,c01,c11=fc.get_scat_cov_coeffs(im)
-p0_C,c01_C,c11_C=fc.get_scat_cov_coeffs(im,image2=im)
+s1, p0, c01, c11 = fc.get_scat_cov_coeffs(im)
+p0_C, c01_C, c11_C = fc.get_scat_cov_coeffs(im, image2=im)
 
 plt.figure()
-plt.subplot(2,2,1)
+plt.subplot(2, 2, 1)
 plt.plot(s1.numpy().flatten())
-plt.subplot(2,2,2)
+plt.subplot(2, 2, 2)
 plt.plot(p0.numpy().flatten())
-plt.subplot(2,2,3)
+plt.subplot(2, 2, 3)
 plt.plot(c01.numpy().flatten())
-plt.subplot(2,2,4)
+plt.subplot(2, 2, 4)
 plt.plot(c11.numpy().flatten())
 
 plt.figure()
-plt.subplot(2,2,1)
+plt.subplot(2, 2, 1)
 plt.plot(s1.numpy().flatten())
-plt.subplot(2,2,2)
+plt.subplot(2, 2, 2)
 plt.plot(p0_C.numpy().flatten())
-plt.subplot(2,2,3)
+plt.subplot(2, 2, 3)
 plt.plot(c01_C.numpy().flatten())
-plt.subplot(2,2,4)
+plt.subplot(2, 2, 4)
 plt.plot(c11_C.numpy().flatten())
 
 plt.show()
