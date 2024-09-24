@@ -6,37 +6,48 @@ A python package dedicated to image component separation based on scattering tra
 
 The foscat genesis has been built to synthesise data (2D or Healpix) using Cross Scattering Transform. For detailled method description please refer to https://arxiv.org/abs/2207.12527. This algorithm could be effectively usable for component separation (e.g. denoising).
 
-#startup
+## usage
+
 
 To generate test files run the following lines in python:
 
->python
+```pycon
+>>> import foscat.build_demo as dem
 
->> import foscat.build_demo as dem
+>>> dem.genDemo()
 
->> dem.genDemo()
+>>> quit()
+```
 
->> quit()
+run 2D test
 
-##run 2D test
-
->python test2D.py
-
-to plot results
-
->python test2Dplot.py
-
-##run Healpix test
-
->python testHealpix.py
+```sh
+python test2D.py
+```
 
 to plot results
 
->python testHplot.py
+```sh
+python test2Dplot.py
+```
+
+run Healpix test
+
+```sh
+python testHealpix.py
+```
+
+to plot results
+
+```sh
+python testHplot.py
+```
 
 Note: If mpi is available you can run testHealpix_mpi.py that uses 3 nodes to do the same computation than tesHealpix.py
 
->mpirun -np 3 testHealpix_mpi.py
+```sh
+mpirun -np 3 testHealpix_mpi.py
+```
 
 ## Authors and acknowledgment
 
