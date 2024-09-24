@@ -1,6 +1,6 @@
 # foscat
 
-[![Read the Docs](https://readthedocs.org/projects/foscat-documentation/badge/?version=stable)](https://foscat-documentation.readthedocs.io/en/stable)
+[![Read the Docs](https://readthedocs.org/projects/foscat-documentation/badge/?version=latest)](https://foscat-documentation.readthedocs.io/en/latest)
 
 A python package dedicated to image component separation based on scattering transform analysis designed for high performance computing.
 
