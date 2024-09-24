@@ -190,20 +190,18 @@ for itt in range(10000):
         for i in range(ngrad):
             var2 += ((r2[i] - rr2[i]).std()) ** 2
         print(itt, np.sqrt(var1), np.sqrt(var2))
-        """
-        plt.figure()
-        plt.subplot(1,2,1)
-        plt.plot(rr1n.flatten(),color='yellow',lw=8)
-        plt.plot(r1.flatten(),color='black')
-        plt.plot(rr1.flatten(),color='blue')
-        plt.yscale('log')
-        plt.subplot(1,2,2)
-        plt.plot(rr2n.flatten(),color='yellow',lw=8)
-        plt.plot(r2.flatten(),color='black')
-        plt.plot(rr2.flatten(),color='blue')
-        plt.yscale('log')
-        plt.show()
-        """
+        # plt.figure()
+        # plt.subplot(1,2,1)
+        # plt.plot(rr1n.flatten(),color='yellow',lw=8)
+        # plt.plot(r1.flatten(),color='black')
+        # plt.plot(rr1.flatten(),color='blue')
+        # plt.yscale('log')
+        # plt.subplot(1,2,2)
+        # plt.plot(rr2n.flatten(),color='yellow',lw=8)
+        # plt.plot(r2.flatten(),color='black')
+        # plt.plot(rr2.flatten(),color='blue')
+        # plt.yscale('log')
+        # plt.show()
 imap = fc.get_map()
 plt.figure(figsize=(16, 8))
 plt.subplot(1, 2, 1)
@@ -261,11 +259,9 @@ for i in range(4):
 
 exit(0)
 plt.figure(figsize=(16, 6))
-"""
-plt.subplot(2,1,1)
-plt.plot(gr1[0][0],color='blue',lw=8)
-plt.plot(gc1[0][0,:,:,1].flatten(),color='red')
-"""
+# plt.subplot(2,1,1)
+# plt.plot(gr1[0][0],color='blue',lw=8)
+# plt.plot(gc1[0][0,:,:,1].flatten(),color='red')
 for i in range(4):
     plt.subplot(2, 4, 1 + i)
     plt.imshow(gr22[i][0][0].reshape(64, 64), cmap="jet")
@@ -284,13 +280,11 @@ imm = imap.reshape(1, 64, 64, 1)
 or1, or2 = fc.calc_stat(imm, imm, avg_ang=avg_ang)
 imm[0, 10, 10, 0] += 1e-6
 rr1, rr2 = fc.calc_stat(imm, imm, avg_ang=avg_ang)
-"""
-plt.figure()
-for i in range(len(gg)):
-    for k in range(4):
-        plt.subplot(5,4,1+4*i+k)
-        plt.imshow(gg[i][0,:,:,k],cmap='jet')
-"""
+# plt.figure()
+# for i in range(len(gg)):
+#     for k in range(4):
+#         plt.subplot(5,4,1+4*i+k)
+#         plt.imshow(gg[i][0,:,:,k],cmap='jet')
 gg2 = fc.sess.run(fc.grd1, feed_dict=feed_dict)
 gg3 = fc.sess.run(fc.grd2, feed_dict=feed_dict)
 
@@ -318,23 +312,21 @@ exit(0)
 a = np.zeros([20])
 b = np.zeros([20])
 c = np.zeros([20])
-"""
-plt.figure()
-for i in range(len(gg2)):
-    plt.subplot(5,4,1+i)
-    plt.imshow(gg2[i][0][0].reshape(64,64),cmap='jet')
-    print((rr1[0,0,0,i]-or1[0,0,0,i])*1E6,gg[i//4][0,10//(2**(i//4)),10//(2**(i//4)),i%4],gg2[i][0][0][10+10*64])
-    a[i]=(rr1[0,0,0,i]-or1[0,0,0,i])*1E6
-    b[i]=gg[i//4][0,10//(2**(i//4)),10//(2**(i//4)),i%4]
-    c[i]=gg2[i][0][0][10+10*64]
+# plt.figure()
+# for i in range(len(gg2)):
+#     plt.subplot(5,4,1+i)
+#     plt.imshow(gg2[i][0][0].reshape(64,64),cmap='jet')
+#     print((rr1[0,0,0,i]-or1[0,0,0,i])*1E6,gg[i//4][0,10//(2**(i//4)),10//(2**(i//4)),i%4],gg2[i][0][0][10+10*64])
+#     a[i]=(rr1[0,0,0,i]-or1[0,0,0,i])*1E6
+#     b[i]=gg[i//4][0,10//(2**(i//4)),10//(2**(i//4)),i%4]
+#     c[i]=gg2[i][0][0][10+10*64]
 
-plt.figure()
-plt.plot(abs(b),color='red',lw=6)
-plt.plot(abs(c),color='orange',lw=4)
-plt.plot(abs(a),color='blue')
-plt.yscale('log')
-plt.show()
-"""
+# plt.figure()
+# plt.plot(abs(b),color='red',lw=6)
+# plt.plot(abs(c),color='orange',lw=4)
+# plt.plot(abs(a),color='blue')
+# plt.yscale('log')
+# plt.show()
 
 xidx = {}
 yidx = {}
@@ -352,9 +344,7 @@ for itt in range(1000):
 
     diff = np.zeros([1, 64, 64, 1])
     # diff2=np.zeros([1,64,64,1])
-    """
-    plt.figure(figsize=(16,8))
-    """
+    # plt.figure(figsize=(16,8))
     for i in range(5):
         tmp = np.sum(
             (
@@ -366,36 +356,34 @@ for itt in range(1000):
             2,
         )
         diff[0, :, :, 0] += (tmp[xidx[i], yidx[i]].reshape(64, 64)) / 64
-        """
-        if i//4==0:
-            tmp=(gg[i//4][0,:,:,i%4]/(64*64)).reshape(1,64,64,1)
-        else:
-            rtmp=(gg[i//4][0,:,:,i%4]/(64*64)).reshape(64//(2**(i//4)),64//(2**(i//4)))
+        # if i//4==0:
+        #     tmp=(gg[i//4][0,:,:,i%4]/(64*64)).reshape(1,64,64,1)
+        # else:
+        #     rtmp=(gg[i//4][0,:,:,i%4]/(64*64)).reshape(64//(2**(i//4)),64//(2**(i//4)))
 
-            tmp=np.zeros([64,64])
-            xidx=np.arange(((64//(2**(i//4)))**2),dtype='int')//(64//(2**(i//4)))
-            yidx=np.arange(((64//(2**(i//4)))**2),dtype='int')%(64//(2**(i//4)))
-            for k in range(2**(i//4)):
-                for l in range(2**(i//4)):
-                    tmp[k+xidx*(2**(i//4)),l+yidx*(2**(i//4))]=rtmp[xidx,yidx]
+        #     tmp=np.zeros([64,64])
+        #     xidx=np.arange(((64//(2**(i//4)))**2),dtype='int')//(64//(2**(i//4)))
+        #     yidx=np.arange(((64//(2**(i//4)))**2),dtype='int')%(64//(2**(i//4)))
+        #     for k in range(2**(i//4)):
+        #         for l in range(2**(i//4)):
+        #             tmp[k+xidx*(2**(i//4)),l+yidx*(2**(i//4))]=rtmp[xidx,yidx]
 
-        #diff+=((rr1[0,0,0,i]-r1[0,0,0,i])*gg2[i][0][0]/(64*64*64)).reshape(1,64,64,1)
-        diff+=((rr1[0,0,0,i]-r1[0,0,0,i])*tmp/64.0).reshape(1,64,64,1)
-        """
-        """
-        imm=imap.reshape(1,64,64,1)+((rr1[0,0,0,i]-r1[0,0,0,i])*gg2[i][0][0]/(16*64*64)).reshape(1,64,64,1)
-        r1d,r2d=fc.calc_stat(imm,imm,avg_ang=avg_ang)
+        # #diff+=((rr1[0,0,0,i]-r1[0,0,0,i])*gg2[i][0][0]/(64*64*64)).reshape(1,64,64,1)
+        # diff+=((rr1[0,0,0,i]-r1[0,0,0,i])*tmp/64.0).reshape(1,64,64,1)
 
-        imm=imap.reshape(1,64,64,1)+((rr1[0,0,0,i]-r1[0,0,0,i])*tmp/16).reshape(1,64,64,1)
-        r1d2,r2d2=fc.calc_stat(imm,imm,avg_ang=avg_ang)
+        # ---
+        # imm=imap.reshape(1,64,64,1)+((rr1[0,0,0,i]-r1[0,0,0,i])*gg2[i][0][0]/(16*64*64)).reshape(1,64,64,1)
+        # r1d,r2d=fc.calc_stat(imm,imm,avg_ang=avg_ang)
 
-        plt.subplot(5,4,1+i)
-        plt.plot(r1.flatten(),color='black')
-        plt.plot(rr1.flatten(),color='blue')
-        plt.plot(r1d.flatten(),color='orange')
-        plt.plot(r1d2.flatten(),color='gray')
-        plt.yscale('log')
-        """
+        # imm=imap.reshape(1,64,64,1)+((rr1[0,0,0,i]-r1[0,0,0,i])*tmp/16).reshape(1,64,64,1)
+        # r1d2,r2d2=fc.calc_stat(imm,imm,avg_ang=avg_ang)
+
+        # plt.subplot(5,4,1+i)
+        # plt.plot(r1.flatten(),color='black')
+        # plt.plot(rr1.flatten(),color='blue')
+        # plt.plot(r1d.flatten(),color='orange')
+        # plt.plot(r1d2.flatten(),color='gray')
+        # plt.yscale('log')
 
     # imm=imap.reshape(1,64,64,1)+diff/2
     # r1d,r2d=fc.calc_stat(imm,imm,avg_ang=avg_ang)
@@ -407,18 +395,16 @@ for itt in range(1000):
     fc.set_value(par - (diff).flatten(), 0)
     if itt % 100 == 0:
         print(itt, (r1 - rr1).std())
-    """
-    plt.figure()
-    plt.plot(rr1n.flatten(),color='yellow',lw=8)
-    plt.plot(r1.flatten(),color='black')
-    plt.plot(rr1.flatten(),color='blue')
-    plt.plot(r1d.flatten(),color='orange',lw=4)
-    plt.plot(r1d2.flatten(),color='gray')
-    plt.yscale('log')
+    # plt.figure()
+    # plt.plot(rr1n.flatten(),color='yellow',lw=8)
+    # plt.plot(r1.flatten(),color='black')
+    # plt.plot(rr1.flatten(),color='blue')
+    # plt.plot(r1d.flatten(),color='orange',lw=4)
+    # plt.plot(r1d2.flatten(),color='gray')
+    # plt.yscale('log')
 
 
-    plt.show()
-    """
+    # plt.show()
 
 plt.figure(figsize=(16, 8))
 plt.subplot(1, 2, 1)
@@ -429,12 +415,10 @@ plt.show()
 exit(0)
 for itt in range(10):
     gg2 = fc.sess.run(fc.grd1, feed_dict=feed_dict)
-    """
-    plt.figure()
-    for i in range(len(gg2)):
-        plt.subplot(5,4,1+i)
-        plt.imshow(gg2[i][0][0].reshape(64,64),cmap='jet')
-    """
+    # plt.figure()
+    # for i in range(len(gg2)):
+    #     plt.subplot(5,4,1+i)
+    #     plt.imshow(gg2[i][0][0].reshape(64,64),cmap='jet')
     imap = fc.get_map()
 
     imm = imap.reshape(1, 64, 64, 1)

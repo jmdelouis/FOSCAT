@@ -72,56 +72,54 @@ plt.subplot(2, 2, 4)
 plt.plot(c11_C.numpy().flatten())
 
 plt.show()
-"""
-np.save('in_cov_s1.npy', s1)
-np.save('in_cov_p0.npy', p0)
-np.save('in_cov_c01.npy',c01)
-np.save('in_cov_c11.npy',c11)
+# np.save('in_cov_s1.npy', s1)
+# np.save('in_cov_p0.npy', p0)
+# np.save('in_cov_c01.npy',c01)
+# np.save('in_cov_c11.npy',c11)
 
 
-#=================================================================================
-# Initialize the map to be synthesised
-#=================================================================================
+# #=================================================================================
+# # Initialize the map to be synthesised
+# #=================================================================================
 
-x=fc.init_variable(np.random.randn(12*nout*nout))
+# x=fc.init_variable(np.random.randn(12*nout*nout))
 
-r1,r0,r01,r11=fc.wst_cov(x,axis=0)
+# r1,r0,r01,r11=fc.wst_cov(x,axis=0)
 
-np.save('st_cov_s1.npy', r1)
-np.save('st_cov_p0.npy', r0)
-np.save('st_cov_c01.npy', r01)
-np.save('st_cov_c11.npy', r11)
+# np.save('st_cov_s1.npy', r1)
+# np.save('st_cov_p0.npy', r0)
+# np.save('st_cov_c01.npy', r01)
+# np.save('st_cov_c11.npy', r11)
 
-#=================================================================================
-# ADD THE LOSS CONSTRAIN
-#=================================================================================
-fc.add_loss_wst_cov(s1,p0,c01,c11,axis=0)
+# #=================================================================================
+# # ADD THE LOSS CONSTRAIN
+# #=================================================================================
+# fc.add_loss_wst_cov(s1,p0,c01,c11,axis=0)
 
-#=================================================================================
-# DO THE SYNTHESIS
-#=================================================================================
-omap=fc.learnv2(DECAY_RATE=0.9996,
-                NUM_EPOCHS = 10000,
-                LEARNING_RATE = 0.3)
+# #=================================================================================
+# # DO THE SYNTHESIS
+# #=================================================================================
+# omap=fc.learnv2(DECAY_RATE=0.9996,
+#                 NUM_EPOCHS = 10000,
+#                 LEARNING_RATE = 0.3)
 
-#=================================================================================
-# STORE IT
-#=================================================================================
-os1,op0,oc01,oc11=fc.wst_cov(omap)
+# #=================================================================================
+# # STORE IT
+# #=================================================================================
+# os1,op0,oc01,oc11=fc.wst_cov(omap)
 
-#================================================================================
-# store results
-#================================================================================
+# #================================================================================
+# # store results
+# #================================================================================
 
-np.save('out_cov_s1.npy', os1)
-np.save('out_cov_p0.npy', op0)
-np.save('out_cov_c01.npy', oc01)
-np.save('out_cov_c11.npy', oc11)
+# np.save('out_cov_s1.npy', os1)
+# np.save('out_cov_p0.npy', op0)
+# np.save('out_cov_c01.npy', oc01)
+# np.save('out_cov_c11.npy', oc11)
 
-np.save('in_cov_map.npy',im)
-np.save('out_cov_map.npy',omap)
-np.save('out_cov_log.npy',fc.get_log())
+# np.save('in_cov_map.npy',im)
+# np.save('out_cov_map.npy',omap)
+# np.save('out_cov_log.npy',fc.get_log())
 
-print('Computation Done')
-sys.stdout.flush()
-"""
+# print('Computation Done')
+# sys.stdout.flush()
