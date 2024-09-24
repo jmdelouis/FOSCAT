@@ -1,3 +1,22 @@
+# editor files
+*~
+\#*\#
+
+# python bytecode
 *.py[co]
-/dist/*
-*.egg-info/
+__pycache__/
+
+# install artifacts
+/build
+/dist
+*.egg-info
+
+# tools
+.ipynb_checkpoints/
+.hypothesis/
+.pytest_cache
+.coverage
+.coverage.*
+.cache
+/docs/_build/
+.prettier_cache
