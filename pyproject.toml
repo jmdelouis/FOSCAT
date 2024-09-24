@@ -33,6 +33,7 @@ classifiers = [
 [project.urls]
 Repository = "https://github.com/jmdelouis/FOSCAT.git"
 Issues = "https://github.com/jmdelouis/FOSCAT/issues"
+Documentation = "https://foscat-documentation.readthedocs.io/en/latest/index.html"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
