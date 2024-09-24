@@ -19,6 +19,10 @@ ignore = [
     "E741", # ambiguous variable name
     "E722", # bare except
     "UP031", # percent-based string interpolation
+    "F401", # unused imports
+    "F811", # redefinition of unused name
+    "F821", # undefined name
+    "F841", # unused local variable
 ]
 select = [
     "F",  # Pyflakes
