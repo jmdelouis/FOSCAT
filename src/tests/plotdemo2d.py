@@ -1,8 +1,10 @@
-import numpy as np
-import os, sys
+import getopt
+import os
+import sys
+
 import healpy as hp
 import matplotlib.pyplot as plt
-import getopt
+import numpy as np
 
 
 def usage():

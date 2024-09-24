@@ -1,6 +1,9 @@
-import numpy as np
-import os, sys
+import os
+import sys
+
 import matplotlib.pyplot as plt
+import numpy as np
+
 import foscat.FoCUS as FOC
 
 
@@ -402,7 +405,6 @@ for itt in range(1000):
     # plt.plot(r1d.flatten(),color='orange',lw=4)
     # plt.plot(r1d2.flatten(),color='gray')
     # plt.yscale('log')
-
 
     # plt.show()
 

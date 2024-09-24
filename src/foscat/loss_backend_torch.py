@@ -1,7 +1,8 @@
+import sys
+
+import numpy as np
 import torch
 from torch.autograd import grad
-import numpy as np
-import sys
 
 
 class loss_backend:

@@ -1,9 +1,11 @@
-import numpy as np
+import os
+import sys
+
 import healpy as hp
-import os, sys
-import foscat.backend as bk
+import numpy as np
 from scipy.interpolate import griddata
 
+import foscat.backend as bk
 
 TMPFILE_VERSION = "V4_0"
 

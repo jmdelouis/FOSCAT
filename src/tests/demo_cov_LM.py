@@ -1,7 +1,10 @@
-import numpy as np
-import os, sys
-import matplotlib.pyplot as plt
+import os
+import sys
+
 import healpy as hp
+import matplotlib.pyplot as plt
+import numpy as np
+
 import foscat.FoCUS as FOC
 
 # =================================================================================

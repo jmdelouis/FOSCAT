@@ -1,4 +1,3 @@
-import foscat.scat_cov as scat
 import healpy as hp
 
 import foscat.scat_cov as scat

@@ -1,5 +1,7 @@
-import numpy as np
 import pickle
+
+import numpy as np
+
 import foscat.scat_cov as sc
 
 

@@ -1,7 +1,8 @@
-import numpy as np
-import matplotlib.pyplot as plt
-import healpy as hp
 import sys
+
+import healpy as hp
+import matplotlib.pyplot as plt
+import numpy as np
 
 if len(sys.argv) < 4:
     print("\nhwst_foscat usage:\n")

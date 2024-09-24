@@ -1,11 +1,13 @@
-import numpy as np
-import matplotlib.pyplot as plt
-import foscat.Synthesis as synthe
-
 # =============================================================================
 # create directory to store all test
 # =============================================================================
-import os, sys
+import os
+import sys
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+import foscat.Synthesis as synthe
 
 try:
     os.system("rm -rf UNITARY")

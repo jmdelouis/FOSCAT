@@ -1,7 +1,7 @@
-import tensorflow as tf
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Softmax
 import numpy as np
+import tensorflow as tf
+from tensorflow.keras.layers import Dense, Softmax
+from tensorflow.keras.models import Sequential
 
 
 class SoftmaxClassifier:

@@ -1,6 +1,7 @@
-import tensorflow as tf
-import numpy as np
 import sys
+
+import numpy as np
+import tensorflow as tf
 
 
 class loss_backend:

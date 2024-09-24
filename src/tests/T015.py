@@ -1,6 +1,6 @@
-import Softmax as SFT
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
+import Softmax as SFT
 
 sft = SFT.SoftmaxClassifier(5, 10)
 

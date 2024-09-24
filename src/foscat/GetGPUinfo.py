@@ -1,10 +1,9 @@
 import os
 import threading
 import time
-import numpy as np
+from threading import Event, Thread
 
-from threading import Thread
-from threading import Event
+import numpy as np
 
 event = Event()
 

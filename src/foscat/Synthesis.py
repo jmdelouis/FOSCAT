@@ -1,12 +1,12 @@
-import numpy as np
-import time
-import sys
 import os
+import sys
+import time
 from datetime import datetime
-from packaging import version
-from threading import Thread
-from threading import Event
+from threading import Event, Thread
+
+import numpy as np
 import scipy.optimize as opt
+from packaging import version
 
 
 class Loss:

@@ -1,9 +1,11 @@
-import foscat.FoCUS as FOC
-import numpy as np
-import foscat.backend as bk
 import pickle
-import healpy as hp
 import sys
+
+import healpy as hp
+import numpy as np
+
+import foscat.backend as bk
+import foscat.FoCUS as FOC
 
 # Vérifier si TensorFlow est importé et défini
 tf_defined = "tensorflow" in sys.modules
