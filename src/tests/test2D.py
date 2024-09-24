@@ -378,17 +378,17 @@ for itt in range(1000):
             for k in range(2**(i//4)):
                 for l in range(2**(i//4)):
                     tmp[k+xidx*(2**(i//4)),l+yidx*(2**(i//4))]=rtmp[xidx,yidx]
-    
+
         #diff+=((rr1[0,0,0,i]-r1[0,0,0,i])*gg2[i][0][0]/(64*64*64)).reshape(1,64,64,1)
         diff+=((rr1[0,0,0,i]-r1[0,0,0,i])*tmp/64.0).reshape(1,64,64,1)
         """
         """
         imm=imap.reshape(1,64,64,1)+((rr1[0,0,0,i]-r1[0,0,0,i])*gg2[i][0][0]/(16*64*64)).reshape(1,64,64,1)
         r1d,r2d=fc.calc_stat(imm,imm,avg_ang=avg_ang)
-        
+
         imm=imap.reshape(1,64,64,1)+((rr1[0,0,0,i]-r1[0,0,0,i])*tmp/16).reshape(1,64,64,1)
         r1d2,r2d2=fc.calc_stat(imm,imm,avg_ang=avg_ang)
-        
+
         plt.subplot(5,4,1+i)
         plt.plot(r1.flatten(),color='black')
         plt.plot(rr1.flatten(),color='blue')
@@ -415,7 +415,7 @@ for itt in range(1000):
     plt.plot(r1d.flatten(),color='orange',lw=4)
     plt.plot(r1d2.flatten(),color='gray')
     plt.yscale('log')
-    
+
 
     plt.show()
     """

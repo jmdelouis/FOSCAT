@@ -2384,11 +2384,11 @@ class funct(FOC.FoCUS):
             """
             tmp=self.backend.bk_repeat(sim[0],4,axis=1)
             sim2=self.backend.bk_reduce_sum(self.backend.bk_reshape(mat*tmp,[12*nside**2,4,4]),1)
-            
+
             cc2=(sim2[:,0]-sim2[:,2])
             ss2=(sim2[:,1]-sim2[:,3])
             phase2=np.fmod(np.arctan2(ss2.numpy(),cc2.numpy())+2*np.pi,2*np.pi)
-            
+
             plt.figure()
             hp.mollview(phase,cmap='jet',nest=True,hold=False,sub=(2,2,1))
             hp.mollview(np.fmod(phase2+np.pi,2*np.pi),cmap='jet',nest=True,hold=False,sub=(2,2,2))
@@ -2396,7 +2396,7 @@ class funct(FOC.FoCUS):
             for k in range(4):
                 hp.mollview((sim[0,:,k]).numpy().real,cmap='jet',nest=True,hold=False,sub=(2,4,1+k),min=-10,max=10)
                 hp.mollview((sim2[:,k]).numpy().real,cmap='jet',nest=True,hold=False,sub=(2,4,5+k),min=-10,max=10)
-        
+
             plt.show()
             """
 

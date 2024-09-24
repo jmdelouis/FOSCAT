@@ -1462,7 +1462,7 @@ class FoCUS:
                 # OLD VERSION OLD VERSION OLD VERSION (3.0)
                 if self.KERNELSZ*self.KERNELSZ>12*nside*nside:
                     l_kernel=3
-                    
+
                 aa=np.cos(np.arange(self.NORIENT)/self.NORIENT*np.pi).reshape(1,self.NORIENT)
                 bb=np.sin(np.arange(self.NORIENT)/self.NORIENT*np.pi).reshape(1,self.NORIENT)
                 x,y,z=hp.pix2vec(nside,np.arange(12*nside*nside),nest=True)
@@ -1481,21 +1481,21 @@ class FoCUS:
                 pw=np.pi/4.0
                 pw2=1/2
                 amp=1.0
-                
+
                 if l_kernel==5:
                     pw=np.pi/4.0
                     pw2=1/2.25
                     amp=1.0/9.2038
-                    
+
                 elif l_kernel==3:
                     pw=1.0/np.sqrt(2)
                     pw2=1.0
                     amp=1/8.45
-                    
+
                 elif l_kernel==7:
                     pw=np.pi/4.0
                     pw2=1.0/3.0
-                    
+
                 for k in range(12*nside*nside):
                     if k%(nside*nside)==0:
                         if not self.silent:
@@ -1505,12 +1505,12 @@ class FoCUS:
                         lidx=np.concatenate([lidx,np.array([(k//(scale*scale))])],0)
                         lidx=np.repeat(lidx*(scale*scale),(scale*scale))+ \
                               np.tile(np.arange((scale*scale)),lidx.shape[0])
-        
+
                     delta=(x[lidx]-x[k])**2+(y[lidx]-y[k])**2+(z[lidx]-z[k])**2
                     pidx=np.where(delta<(10)/(nside**2))[0]
                     if len(pidx)<l_kernel**2:
                         pidx=np.arange(delta.shape[0])
-                    
+
                     w=np.exp(-pw2*delta[pidx]*(nside**2))
                     pidx=pidx[np.argsort(-w)[0:l_kernel**2]]
                     pidx=pidx[np.argsort(lidx[pidx])]
@@ -1522,16 +1522,16 @@ class FoCUS:
                     r=hp.Rotator(rot=rot)
                     ty,tx=r(to[iwav[k]],po[iwav[k]])
                     ty=ty-np.pi/2
-                        
+
                     xx=np.expand_dims(pw*nside*np.pi*tx/np.cos(ty),-1)
                     yy=np.expand_dims(pw*nside*np.pi*ty,-1)
-                    
+
                     wav[k,:,:]=(np.cos(xx*aa+yy*bb)+complex(0.0,1.0)*np.sin(xx*aa+yy*bb))*np.expand_dims(w,-1)
-    
+
                 wav=wav-np.expand_dims(np.mean(wav,1),1)
                 wav=amp*wav/np.expand_dims(np.std(wav,1),1)
                 wwav=wwav/np.expand_dims(np.sum(wwav,1),1)
-                
+
                 nk=l_kernel*l_kernel
                 indice=np.zeros([12*nside*nside*nk*self.NORIENT,2],dtype='int')
                 lidx=np.arange(self.NORIENT)
@@ -1543,7 +1543,7 @@ class FoCUS:
                 for i in range(12*nside*nside):
                     indice2[i*nk:i*nk+nk,0]=i
                     indice2[i*nk:i*nk+nk,1]=iwav[i]
-                
+
                 w=np.zeros([12*nside*nside,wav.shape[2],wav.shape[1]],dtype='complex')
                 for i in range(wav.shape[1]):
                     for j in range(wav.shape[2]):
