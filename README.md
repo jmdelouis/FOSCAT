@@ -10,11 +10,7 @@ The foscat genesis has been built to synthesise data (2D or Healpix) using Cross
 
 A demo package for this process can be found at https://github.com/jmdelouis/FOSCAT_DEMO.
 
-Complete doc can be found at https://foscat-documentation.readthedocs.io/en/latest/index.html.
-
-
 ## usage
-
 
 To generate test files run the following lines in python:
 
@@ -55,6 +51,9 @@ Note: If mpi is available you can run testHealpix_mpi.py that uses 3 nodes to do
 ```sh
 mpirun -np 3 testHealpix_mpi.py
 ```
+
+For more information, see the [documentation](https://foscat-documentation.readthedocs.io/en/latest/index.html).
+
 
 ## Authors and acknowledgment
 
