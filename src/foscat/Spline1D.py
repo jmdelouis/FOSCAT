@@ -1,11 +1,14 @@
-
 class Spline1D:
     def __init__(self, nodes, degree=3):
         self.degree = degree
         self.nodes = nodes
         self.norm = [0] * (self.degree + 1)
         for i in range(self.degree + 1):
-            self.norm[i] = pow(-1, i) * (self.degree + 1) / (self._fact_spline(self.degree + 1 - i) * self._fact_spline(i))
+            self.norm[i] = (
+                pow(-1, i)
+                * (self.degree + 1)
+                / (self._fact_spline(self.degree + 1 - i) * self._fact_spline(i))
+            )
 
     def _fact_spline(self, x):
         if x <= 1:
@@ -32,11 +35,12 @@ class Spline1D:
             if x > 1.0:
                 tx = (self.nodes - 1) - i
             for j in range(self.degree + 1):
-                tmp += self.norm[j] * self.yplus_spline1d(tx - j + (self.degree + 1) / 2)
+                tmp += self.norm[j] * self.yplus_spline1d(
+                    tx - j + (self.degree + 1) / 2
+                )
             if tmp < 0:
                 tmp = 0.0
             y[i] += tmp
         total = sum(y)
         y = [yi / total for yi in y]
         return y
-

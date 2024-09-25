@@ -10,8 +10,8 @@ Maintainer-email: theo.foulquier@ifremer.fr
 License: MIT
 Keywords: Scattering transform,Component separation,denoising
 
-Utilize the Cross Scattering Transform (described in https://arxiv.org/abs/2207.12527) to synthesize Healpix or 2D data that is suitable for component separation purposes, such as denoising. 
- A demo package for this process can be found at https://github.com/jmdelouis/FOSCAT_DEMO. 
- Complete doc can be found at https://foscat-documentation.readthedocs.io/en/latest/index.html. 
+Utilize the Cross Scattering Transform (described in https://arxiv.org/abs/2207.12527) to synthesize Healpix or 2D data that is suitable for component separation purposes, such as denoising.
+ A demo package for this process can be found at https://github.com/jmdelouis/FOSCAT_DEMO.
+ Complete doc can be found at https://foscat-documentation.readthedocs.io/en/latest/index.html.
 
- List of developers : J.-M. Delouis, T. Foulquier, L. Mousset, T. Odaka, F. Paul, E. Allys 
+ List of developers : J.-M. Delouis, T. Foulquier, L. Mousset, T. Odaka, F. Paul, E. Allys
