@@ -1,0 +1,44 @@
+[project]
+name = "foscat"
+version = "3.1.6"
+description = "Generate synthetic Healpix or 2D data using Cross Scattering Transform"
+readme = "README.md"
+license = {text = "BSD-3-Clause"}
+authors = [
+  {name = "Jean-Marc DELOUIS", email = "jean.marc.delouis@ifremer.fr"},
+]
+maintainers = [
+  {name = "Theo Foulquier", email = "theo.foulquier@ifremer.fr"},
+]
+dependencies = [
+  "imageio",
+  "imagecodecs",
+  "matplotlib",
+  "numpy",
+  "tensorflow",
+  "healpy",
+]
+requires-python = ">= 3.9"
+keywords = ["scattering transform", "component separation", "denoising"]
+classifiers = [
+  "Intended Audience :: Science/Research",
+  "License :: OSI approved :: MIT",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+]
+
+[project.urls]
+Repository = "https://github.com/jmdelouis/FOSCAT.git"
+Issues = "https://github.com/jmdelouis/FOSCAT/issues"
+Documentation = "https://foscat-documentation.readthedocs.io/en/latest/index.html"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+packages = ["foscat"]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
