@@ -188,18 +188,18 @@ class foscat_backend:
                 tmp[:, :, k * 2 + 2, 0] = np.sin(x * (k + 1))
                 tmp[:, :, 0, k * 2 + 1] = np.cos((x.T) * (k + 1))
                 tmp[:, :, 0, k * 2 + 2] = np.sin((x.T) * (k + 1))
-                for l in range(nharm):
-                    tmp[:, :, k * 2 + 1, l * 2 + 1] = np.cos(x * (k + 1)) * np.cos(
-                        (x.T) * (l + 1)
+                for l_orient in range(nharm):
+                    tmp[:, :, k * 2 + 1, l_orient * 2 + 1] = np.cos(x * (k + 1)) * np.cos(
+                        (x.T) * (l_orient + 1)
                     )
-                    tmp[:, :, k * 2 + 2, l * 2 + 1] = np.sin(x * (k + 1)) * np.cos(
-                        (x.T) * (l + 1)
+                    tmp[:, :, k * 2 + 2, l_orient * 2 + 1] = np.sin(x * (k + 1)) * np.cos(
+                        (x.T) * (l_orient + 1)
                     )
-                    tmp[:, :, k * 2 + 1, l * 2 + 2] = np.cos(x * (k + 1)) * np.sin(
-                        (x.T) * (l + 1)
+                    tmp[:, :, k * 2 + 1, l_orient * 2 + 2] = np.cos(x * (k + 1)) * np.sin(
+                        (x.T) * (l_orient + 1)
                     )
-                    tmp[:, :, k * 2 + 2, l * 2 + 2] = np.sin(x * (k + 1)) * np.sin(
-                        (x.T) * (l + 1)
+                    tmp[:, :, k * 2 + 2, l_orient * 2 + 2] = np.sin(x * (k + 1)) * np.sin(
+                        (x.T) * (l_orient + 1)
                     )
 
             self._fft_2_orient[(norient, nharm, imaginary)] = self.bk_cast(
@@ -215,8 +215,8 @@ class foscat_backend:
             tmp = np.zeros([norient, norient, (1 + nharm), (1 + nharm)])
 
             for k in range(nharm + 1):
-                for l in range(nharm + 1):
-                    tmp[:, :, k, l] = np.cos(x * k) * np.cos((x.T) * l)
+                for l_orient in range(nharm + 1):
+                    tmp[:, :, k, l_orient] = np.cos(x * k) * np.cos((x.T) * l_orient)
 
             self._fft_2_orient[(norient, nharm, imaginary)] = self.bk_cast(
                 self.constant(tmp.reshape(norient * norient, (1 + nharm) * (1 + nharm)))
@@ -256,85 +256,85 @@ class foscat_backend:
                 tmp[:, :, :, k * 2 + 2, 0, 0] = np.sin(xx * (k + 1))
                 tmp[:, :, :, 0, k * 2 + 2, 0] = np.sin(yy * (k + 1))
                 tmp[:, :, :, 0, 0, k * 2 + 2] = np.sin(zz * (k + 1))
-                for l in range(nharm):
-                    tmp[:, :, :, k * 2 + 1, l * 2 + 1, 0] = np.cos(
+                for l_orient in range(nharm):
+                    tmp[:, :, :, k * 2 + 1, l_orient * 2 + 1, 0] = np.cos(
                         xx * (k + 1)
-                    ) * np.cos(yy * (l + 1))
-                    tmp[:, :, :, k * 2 + 1, l * 2 + 2, 0] = np.cos(
+                    ) * np.cos(yy * (l_orient + 1))
+                    tmp[:, :, :, k * 2 + 1, l_orient * 2 + 2, 0] = np.cos(
                         xx * (k + 1)
-                    ) * np.sin(yy * (l + 1))
-                    tmp[:, :, :, k * 2 + 2, l * 2 + 1, 0] = np.sin(
+                    ) * np.sin(yy * (l_orient + 1))
+                    tmp[:, :, :, k * 2 + 2, l_orient * 2 + 1, 0] = np.sin(
                         xx * (k + 1)
-                    ) * np.cos(yy * (l + 1))
-                    tmp[:, :, :, k * 2 + 2, l * 2 + 2, 0] = np.sin(
+                    ) * np.cos(yy * (l_orient + 1))
+                    tmp[:, :, :, k * 2 + 2, l_orient * 2 + 2, 0] = np.sin(
                         xx * (k + 1)
-                    ) * np.sin(yy * (l + 1))
+                    ) * np.sin(yy * (l_orient + 1))
 
-                    tmp[:, :, :, k * 2 + 1, 0, l * 2 + 1] = np.cos(
+                    tmp[:, :, :, k * 2 + 1, 0, l_orient * 2 + 1] = np.cos(
                         xx * (k + 1)
-                    ) * np.cos(zz * (l + 1))
-                    tmp[:, :, :, k * 2 + 1, 0, l * 2 + 2] = np.cos(
+                    ) * np.cos(zz * (l_orient + 1))
+                    tmp[:, :, :, k * 2 + 1, 0, l_orient * 2 + 2] = np.cos(
                         xx * (k + 1)
-                    ) * np.sin(zz * (l + 1))
-                    tmp[:, :, :, k * 2 + 2, 0, l * 2 + 1] = np.sin(
+                    ) * np.sin(zz * (l_orient + 1))
+                    tmp[:, :, :, k * 2 + 2, 0, l_orient * 2 + 1] = np.sin(
                         xx * (k + 1)
-                    ) * np.cos(zz * (l + 1))
-                    tmp[:, :, :, k * 2 + 2, 0, l * 2 + 2] = np.sin(
+                    ) * np.cos(zz * (l_orient + 1))
+                    tmp[:, :, :, k * 2 + 2, 0, l_orient * 2 + 2] = np.sin(
                         xx * (k + 1)
-                    ) * np.sin(zz * (l + 1))
+                    ) * np.sin(zz * (l_orient + 1))
 
-                    tmp[:, :, :, 0, k * 2 + 1, l * 2 + 1] = np.cos(
+                    tmp[:, :, :, 0, k * 2 + 1, l_orient * 2 + 1] = np.cos(
                         yy * (k + 1)
-                    ) * np.cos(zz * (l + 1))
-                    tmp[:, :, :, 0, k * 2 + 1, l * 2 + 2] = np.cos(
+                    ) * np.cos(zz * (l_orient + 1))
+                    tmp[:, :, :, 0, k * 2 + 1, l_orient * 2 + 2] = np.cos(
                         yy * (k + 1)
-                    ) * np.sin(zz * (l + 1))
-                    tmp[:, :, :, 0, k * 2 + 2, l * 2 + 1] = np.sin(
+                    ) * np.sin(zz * (l_orient + 1))
+                    tmp[:, :, :, 0, k * 2 + 2, l_orient * 2 + 1] = np.sin(
                         yy * (k + 1)
-                    ) * np.cos(zz * (l + 1))
-                    tmp[:, :, :, 0, k * 2 + 2, l * 2 + 2] = np.sin(
+                    ) * np.cos(zz * (l_orient + 1))
+                    tmp[:, :, :, 0, k * 2 + 2, l_orient * 2 + 2] = np.sin(
                         yy * (k + 1)
-                    ) * np.sin(zz * (l + 1))
+                    ) * np.sin(zz * (l_orient + 1))
 
                     for m in range(nharm):
-                        tmp[:, :, :, k * 2 + 1, l * 2 + 1, m * 2 + 1] = (
+                        tmp[:, :, :, k * 2 + 1, l_orient * 2 + 1, m * 2 + 1] = (
                             np.cos(xx * (k + 1))
-                            * np.cos(yy * (l + 1))
+                            * np.cos(yy * (l_orient + 1))
                             * np.cos(zz * (m + 1))
                         )
-                        tmp[:, :, :, k * 2 + 1, l * 2 + 1, m * 2 + 2] = (
+                        tmp[:, :, :, k * 2 + 1, l_orient * 2 + 1, m * 2 + 2] = (
                             np.cos(xx * (k + 1))
-                            * np.cos(yy * (l + 1))
+                            * np.cos(yy * (l_orient + 1))
                             * np.sin(zz * (m + 1))
                         )
-                        tmp[:, :, :, k * 2 + 1, l * 2 + 2, m * 2 + 1] = (
+                        tmp[:, :, :, k * 2 + 1, l_orient * 2 + 2, m * 2 + 1] = (
                             np.cos(xx * (k + 1))
-                            * np.sin(yy * (l + 1))
+                            * np.sin(yy * (l_orient + 1))
                             * np.cos(zz * (m + 1))
                         )
-                        tmp[:, :, :, k * 2 + 1, l * 2 + 2, m * 2 + 2] = (
+                        tmp[:, :, :, k * 2 + 1, l_orient * 2 + 2, m * 2 + 2] = (
                             np.cos(xx * (k + 1))
-                            * np.sin(yy * (l + 1))
+                            * np.sin(yy * (l_orient + 1))
                             * np.sin(zz * (m + 1))
                         )
-                        tmp[:, :, :, k * 2 + 2, l * 2 + 1, m * 2 + 1] = (
+                        tmp[:, :, :, k * 2 + 2, l_orient * 2 + 1, m * 2 + 1] = (
                             np.sin(xx * (k + 1))
-                            * np.cos(yy * (l + 1))
+                            * np.cos(yy * (l_orient + 1))
                             * np.cos(zz * (m + 1))
                         )
-                        tmp[:, :, :, k * 2 + 2, l * 2 + 1, m * 2 + 2] = (
+                        tmp[:, :, :, k * 2 + 2, l_orient * 2 + 1, m * 2 + 2] = (
                             np.sin(xx * (k + 1))
-                            * np.cos(yy * (l + 1))
+                            * np.cos(yy * (l_orient + 1))
                             * np.sin(zz * (m + 1))
                         )
-                        tmp[:, :, :, k * 2 + 2, l * 2 + 2, m * 2 + 1] = (
+                        tmp[:, :, :, k * 2 + 2, l_orient * 2 + 2, m * 2 + 1] = (
                             np.sin(xx * (k + 1))
-                            * np.sin(yy * (l + 1))
+                            * np.sin(yy * (l_orient + 1))
                             * np.cos(zz * (m + 1))
                         )
-                        tmp[:, :, :, k * 2 + 2, l * 2 + 2, m * 2 + 2] = (
+                        tmp[:, :, :, k * 2 + 2, l_orient * 2 + 2, m * 2 + 2] = (
                             np.sin(xx * (k + 1))
-                            * np.sin(yy * (l + 1))
+                            * np.sin(yy * (l_orient + 1))
                             * np.sin(zz * (m + 1))
                         )
 
@@ -356,10 +356,10 @@ class foscat_backend:
             )
 
             for k in range(nharm + 1):
-                for l in range(nharm + 1):
+                for l_orient in range(nharm + 1):
                     for m in range(nharm + 1):
-                        tmp[:, :, :, k, l, m] = (
-                            np.cos(xx * k) * np.cos(yy * l) * np.cos(zz * m)
+                        tmp[:, :, :, k, l_orient, m] = (
+                            np.cos(xx * k) * np.cos(yy * l_orient) * np.cos(zz * m)
                         )
 
             self._fft_3_orient[(norient, nharm, imaginary)] = self.bk_cast(
@@ -421,12 +421,12 @@ class foscat_backend:
                 [x.shape[0], x.shape[1], x.shape[2], w.shape[3]], dtype=x.dtype
             )
             for k in range(w.shape[2]):
-                for l in range(w.shape[3]):
+                for l_orient in range(w.shape[3]):
                     for j in range(res.shape[0]):
                         tmp = self.scipy.signal.convolve2d(
-                            x[j, :, :, k], w[:, :, k, l], mode="same", boundary="symm"
+                            x[j, :, :, k], w[:, :, k, l_orient], mode="same", boundary="symm"
                         )
-                        res[j, :, :, l] += tmp
+                        res[j, :, :, l_orient] += tmp
                         del tmp
             return res
 
@@ -445,9 +445,9 @@ class foscat_backend:
             for k in range(w.shape[2]):
                 for j in range(res.shape[0]):
                     tmp = self.scipy.signal.convolve1d(
-                        x[j, :, k], w[:, k, l], mode="same", boundary="symm"
+                        x[j, :, k], w[:, k], mode="same", boundary="symm"
                     )
-                    res[j, :, :, l] += tmp
+                    res[j, :, :] += tmp
                     del tmp
             return res
 
@@ -489,9 +489,9 @@ class foscat_backend:
         if self.BACKEND == self.NUMPY:
             res = np.zeros([x.shape[0], x.shape[1], w.shape[1]], dtype=x.dtype)
             for k in range(w.shape[1]):
-                for l in range(w.shape[2]):
-                    res[:, :, l] += self.scipy.ndimage.convolve1d(
-                        x[:, :, k], w[:, k, l], axis=1, mode="constant", cval=0.0
+                for l_orient in range(w.shape[2]):
+                    res[:, :, l_orient] += self.scipy.ndimage.convolve1d(
+                        x[:, :, k], w[:, k, l_orient], axis=1, mode="constant", cval=0.0
                     )
             return res
 
@@ -606,10 +606,8 @@ class foscat_backend:
 
         if self.bk_is_complex(x):
             lmat = self._iso_orient_C[norient]
-            lmat_T = self._iso_orient_C_T[norient]
         else:
             lmat = self._iso_orient[norient]
-            lmat_T = self._iso_orient_T[norient]
 
         oshape = shape[0]
         for k in range(1, len(shape) - 2):
@@ -731,21 +729,25 @@ class foscat_backend:
             return np.random.rand(shape)
 
     def bk_reduce_std(self, data, axis=None):
-
         if axis is None:
             if self.BACKEND == self.TENSORFLOW:
-                return self.backend.math.reduce_std(data)
+                r=self.backend.math.reduce_std(data)
             if self.BACKEND == self.TORCH:
-                return self.backend.std(data)
+                r=self.backend.std(data)
             if self.BACKEND == self.NUMPY:
-                return np.std(data)
+                r=np.std(data)
+            return self.bk_complex(r,0*r)
         else:
             if self.BACKEND == self.TENSORFLOW:
-                return self.backend.math.reduce_std(data, axis=axis)
+                r=self.backend.math.reduce_std(data, axis=axis)
             if self.BACKEND == self.TORCH:
-                return self.backend.std(data, axis)
+                r=self.backend.std(data, axis)
             if self.BACKEND == self.NUMPY:
-                return np.std(data, axis)
+                r=np.std(data, axis)
+        if self.bk_is_complex(data):
+            return self.bk_complex(r,0*r)
+        else:
+            return r
 
     def bk_sqrt(self, data):
 

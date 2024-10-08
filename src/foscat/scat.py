@@ -141,19 +141,6 @@ class scat:
                     x + self.backend.bk_real(y), x + self.backend.bk_imag(y)
                 )
 
-    def relu(self):
-
-        return scat(
-            self.backend.bk_relu(self.P00),
-            self.backend.bk_relu(self.S0),
-            self.backend.bk_relu(self.S1),
-            self.backend.bk_relu(self.S2),
-            self.backend.bk_relu(self.S2L),
-            self.j1,
-            self.j2,
-            backend=self.backend,
-        )
-
     def __add__(self, other):
         assert (
             isinstance(other, float)
@@ -1093,11 +1080,11 @@ class scat:
             s2l[:,i0]=np.exp(2*np.log(s2l[:,i1])-np.log(s2l[:,i2]))
             """
 
-            for l in range(nscale - k):
-                i0 = np.where((j1 == nscale - 1 - k - l) * (j2 == nscale - 1 - k))[0]
-                i1 = np.where((j1 == nscale - 1 - k - l) * (j2 == nscale - k))[0]
-                i2 = np.where((j1 == nscale - 1 - k - l) * (j2 == nscale + 1 - k))[0]
-                i3 = np.where((j1 == nscale - 1 - k - l) * (j2 == nscale + 2 - k))[0]
+            for l_scale in range(nscale - k):
+                i0 = np.where((j1 == nscale - 1 - k - l_scale) * (j2 == nscale - 1 - k))[0]
+                i1 = np.where((j1 == nscale - 1 - k - l_scale) * (j2 == nscale - k))[0]
+                i2 = np.where((j1 == nscale - 1 - k - l_scale) * (j2 == nscale + 1 - k))[0]
+                i3 = np.where((j1 == nscale - 1 - k - l_scale) * (j2 == nscale + 2 - k))[0]
 
                 if constant:
                     s2[:, i0] = s2[:, i1]
@@ -1145,18 +1132,18 @@ class scat:
 
         if extend:
             for k in range(nscale):
-                for l in range(1, nscale):
+                for l_scale in range(1, nscale):
                     i0 = np.where(
-                        (j1 == 2 * nscale - 1 - k) * (j2 == 2 * nscale - 1 - k - l)
+                        (j1 == 2 * nscale - 1 - k) * (j2 == 2 * nscale - 1 - k - l_scale)
                     )[0]
                     i1 = np.where(
-                        (j1 == 2 * nscale - 1 - k) * (j2 == 2 * nscale - k - l)
+                        (j1 == 2 * nscale - 1 - k) * (j2 == 2 * nscale - k - l_scale)
                     )[0]
                     i2 = np.where(
-                        (j1 == 2 * nscale - 1 - k) * (j2 == 2 * nscale + 1 - k - l)
+                        (j1 == 2 * nscale - 1 - k) * (j2 == 2 * nscale + 1 - k - l_scale)
                     )[0]
                     i3 = np.where(
-                        (j1 == 2 * nscale - 1 - k) * (j2 == 2 * nscale + 2 - k - l)
+                        (j1 == 2 * nscale - 1 - k) * (j2 == 2 * nscale + 2 - k - l_scale)
                     )[0]
                     if constant:
                         s2[:, i0] = s2[:, i1]
@@ -1391,28 +1378,28 @@ class scat:
             ]
         )
         oi1, oi2 = self.findidx(so2)
-        for l in range(s2.shape[0]):
+        for l_batch in range(s2.shape[0]):
             for k in range(self.findn(s2.shape[1])):
                 for i in range(s2.shape[2]):
                     for j in range(s2.shape[3]):
                         tmp = self.model(
-                            s2[l, i2 == k, i, j],
+                            s2[l_batch, i2 == k, i, j],
                             dx=4,
                             dell=1,
                             add=add,
                             weigth=np.array([1, 2, 2, 2]),
                         )
                         tmp[np.isnan(tmp)] = 0.0
-                        so2[l, oi2 == k + add, i, j] = tmp
+                        so2[l_batch, oi2 == k + add, i, j] = tmp
 
-        for l in range(s2.shape[0]):
+        for l_batch in range(s2.shape[0]):
             for k in range(add + 1, -1, -1):
                 lidx = np.where(oi2 - oi1 == k)[0]
                 lidx2 = np.where(oi2 - oi1 == k + 1)[0]
                 for i in range(s2.shape[2]):
                     for j in range(s2.shape[3]):
-                        so2[l, lidx[0 : add + 2 - k], i, j] = so2[
-                            l, lidx2[0 : add + 2 - k], i, j
+                        so2[l_batch, lidx[0 : add + 2 - k], i, j] = so2[
+                            l_batch, lidx2[0 : add + 2 - k], i, j
                         ]
 
         return so2
@@ -1518,9 +1505,6 @@ class funct(FOC.FoCUS):
         cross = False
         if image2 is not None:
             cross = True
-            all_cross = not Auto
-        else:
-            all_cross = False
 
         # Check if image1 is [Npix] or [Nbatch,Npix]
         axis = 1
@@ -1531,13 +1515,9 @@ class funct(FOC.FoCUS):
             if len(image1.shape) == 2:
                 nside = np.min([im_shape[0], im_shape[1]])
                 npix = im_shape[0] * im_shape[1]  # Number of pixels
-                x1 = im_shape[0]
-                x2 = im_shape[1]
             else:
                 nside = np.min([im_shape[1], im_shape[2]])
                 npix = im_shape[1] * im_shape[2]  # Number of pixels
-                x1 = im_shape[1]
-                x2 = im_shape[2]
             jmax = int(np.log(nside - self.KERNELSZ) / np.log(2))  # Number of j scales
         else:
             if len(image1.shape) == 2:
@@ -1668,10 +1648,7 @@ class funct(FOC.FoCUS):
         p00 = None
         s2j1 = None
         s2j2 = None
-
         l2_image = None
-        l2_image_imag = None
-
         for j1 in range(jmax):
             if j1 < jmax - self.OSTEP:  # stop to add scales
                 # Convol image along the axis defined by 'axis' using the wavelet defined at

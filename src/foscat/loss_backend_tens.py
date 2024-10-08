@@ -1,6 +1,5 @@
 import sys
 
-import numpy as np
 import tensorflow as tf
 
 
@@ -57,15 +56,15 @@ class loss_backend:
                 ndata = x.shape[0] * x.shape[1]
 
             if KEEP_TRACK is not None:
-                l, linfo = loss_function.eval(l_x, batch, return_all=True)
+                l_loss, linfo = loss_function.eval(l_x, batch, return_all=True)
             else:
-                l = loss_function.eval(l_x, batch)
+                l_loss = loss_function.eval(l_x, batch)
 
-            g = tf.gradients(l, x)[0]
+            g = tf.gradients(l_loss, x)[0]
             g = self.check_dense(g, ndata)
             self.curr_gpu = self.curr_gpu + 1
 
         if KEEP_TRACK is not None:
-            return l, g, linfo
+            return l_loss, g, linfo
         else:
-            return l, g
+            return l_loss, g

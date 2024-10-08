@@ -1,5 +1,4 @@
-import numpy as np
-import tensorflow as tf
+#import tensorflow as tf
 from tensorflow.keras.layers import Dense, Softmax
 from tensorflow.keras.models import Sequential
 

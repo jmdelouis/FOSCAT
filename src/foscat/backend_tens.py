@@ -1,4 +1,5 @@
-import numpy as np
+import sys
+
 import tensorflow as tf
 
 
@@ -47,15 +48,15 @@ class foscat_backend_tens:
                 ndata = x.shape[0] * x.shape[1]
 
             if self.KEEP_TRACK is not None:
-                l, linfo = loss_function.eval(l_x, batch, return_all=True)
+                l_loss, linfo = loss_function.eval(l_x, batch, return_all=True)
             else:
-                l = loss_function.eval(l_x, batch)
+                l_loss = loss_function.eval(l_x, batch)
 
-            g = tf.gradients(l, x)[0]
+            g = tf.gradients(l_loss, x)[0]
             g = self.backend.check_dense(g, ndata)
             self.curr_gpu = self.curr_gpu + 1
 
         if self.KEEP_TRACK is not None:
-            return l, g, linfo
+            return l_loss, g, linfo
         else:
-            return l, g
+            return l_loss, g

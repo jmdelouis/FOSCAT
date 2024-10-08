@@ -449,12 +449,12 @@ class FoCUS:
 
             ii = im[ii]
 
-            for l in range(4):
-                iii = np.where(ii[l] != -1)[0]
+            for l_rotation in range(4):
+                iii = np.where(ii[l_rotation] != -1)[0]
                 if len(iii) > 0:
                     indices[nn : nn + len(iii), 1] = idx2[iii]
-                    indices[nn : nn + len(iii), 0] = k * kernel + ii[l, iii]
-                    weights[nn : nn + len(iii)] = ww[l, iii]
+                    indices[nn : nn + len(iii), 0] = k * kernel + ii[l_rotation, iii]
+                    weights[nn : nn + len(iii)] = ww[l_rotation, iii]
                     nn += len(iii)
 
         indices = indices[0:nn]
@@ -582,7 +582,6 @@ class FoCUS:
     # ---------------------------------------------−---------
     def healpix_layer_coord(self, im, axis=0):
         nside = int(np.sqrt(im.shape[axis] // 12))
-        l_kernel = self.KERNELSZ * self.KERNELSZ
         if self.ww_CNN[nside] is None:
             self.init_CNN_index(nside)
         return self.X_CNN[nside], self.Y_CNN[nside], self.Z_CNN[nside]
@@ -590,7 +589,6 @@ class FoCUS:
     # ---------------------------------------------−---------
     def healpix_layer_transpose(self, im, ww, indices=None, weights=None, axis=0):
         nside = int(np.sqrt(im.shape[axis] // 12))
-        l_kernel = self.KERNELSZ * self.KERNELSZ
 
         if im.shape[1 + axis] != ww.shape[1]:
             if not self.silent:
@@ -1423,10 +1421,10 @@ class FoCUS:
                     wwav[iv2 : iv2 + nval2] = ww[idx] / np.sum(ww[idx])
                     iv2 += nval2
 
-                    for l in range(self.NORIENT):
+                    for l_rotation in range(self.NORIENT):
 
                         angle = (
-                            l / 4.0 * np.pi
+                            l_rotation / 4.0 * np.pi
                             - phi[iii] / 180.0 * np.pi * (z[hidx] > 0)
                             - (180.0 - phi[iii]) / 180.0 * np.pi * (z[hidx] < 0)
                         )
@@ -1441,7 +1439,7 @@ class FoCUS:
                         idx = np.where(vnorm > threshold)[0]
 
                         nval = len(idx)
-                        indice[iv : iv + nval, 0] = iii * 4 + l
+                        indice[iv : iv + nval, 0] = iii * 4 + l_rotation
                         indice[iv : iv + nval, 1] = hidx[idx]
                         # print([hidx[k] for k in idx])
                         # print(hp.query_disc(nside, [x[iii],y[iii],z[iii]], np.pi/nside,nest=True))
@@ -1614,7 +1612,7 @@ class FoCUS:
                         if not self.silent:
                             print(
                                 "Only 3x3 and 5x5 kernel have been developped for Healpix and you ask for %dx%d"
-                                % (KERNELSZ, KERNELSZ)
+                                % (self.KERNELSZ, self.KERNELSZ)
                             )
                         return None
 
@@ -1700,28 +1698,6 @@ class FoCUS:
                 return tmp
 
         return wr, wi, ws, tmp
-
-    # ---------------------------------------------−---------
-    # Compute x [....,a,....] to [....,a*a,....]
-    # NOT YET TESTED OR IMPLEMENTED
-    def auto_cross_2(x, axis=0):
-        shape = np.array(x.shape)
-        if axis == 0:
-            y1 = self.reshape(x, [shape[0], 1, np.cumprod(shape[1:])])
-            y2 = self.reshape(x, [1, shape[0], np.cumprod(shape[1:])])
-            oshape = np.concat([shape[0], shape[0], shape[1:]])
-            return self.reshape(y1 * y2, oshape)
-
-    # ---------------------------------------------−---------
-    # Compute x [....,a,....,b,....] to [....,b*b,....,a*a,....]
-    # NOT YET TESTED OR IMPLEMENTED
-    def auto_cross_2(x, axis1=0, axis2=1):
-        shape = np.array(x.shape)
-        if axis == 0:
-            y1 = self.reshape(x, [shape[0], 1, np.cumprod(shape[1:])])
-            y2 = self.reshape(x, [1, shape[0], np.cumprod(shape[1:])])
-            oshape = np.concat([shape[0], shape[0], shape[1:]])
-            return self.reshape(y1 * y2, oshape)
 
     # ---------------------------------------------−---------
     # convert swap axes tensor x [....,a,....,b,....] to [....,b,....,a,....]
@@ -2217,7 +2193,7 @@ class FoCUS:
                         + ishape[axis + 2 :],
                     )
 
-            return self.backend.bk_reshape(res, [nout, nouty])
+            return self.backend.bk_reshape(res, in_image.shape+[self.NORIENT])
         elif self.use_1D:
             ishape = list(in_image.shape)
             if len(ishape) < axis + 1:
@@ -2289,7 +2265,7 @@ class FoCUS:
                         res, ishape[0:axis] + [res.shape[1]] + ishape[axis + 1 :]
                     )
 
-            return self.backend.bk_reshape(res, [nout, nouty])
+            return self.backend.bk_reshape(res, in_image.shape+[self.NORIENT])
 
         else:
             nside = int(np.sqrt(image.shape[axis] // 12))
@@ -2531,7 +2507,7 @@ class FoCUS:
                         + ishape[axis + 2 :],
                     )
 
-            return self.backend.bk_reshape(res, [nout, nouty])
+            return self.backend.bk_reshape(res, in_image.shape)
         elif self.use_1D:
 
             ishape = list(in_image.shape)
@@ -2588,7 +2564,7 @@ class FoCUS:
                         res, ishape[0:axis] + [res.shape[1]] + ishape[axis + 1 :]
                     )
 
-            return self.backend.bk_reshape(res, [nout, nouty])
+            return self.backend.bk_reshape(res, in_image.shape)
 
         else:
             nside = int(np.sqrt(image.shape[axis] // 12))

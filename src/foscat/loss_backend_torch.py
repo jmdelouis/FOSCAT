@@ -1,8 +1,4 @@
-import sys
-
-import numpy as np
 import torch
-from torch.autograd import grad
 
 
 class loss_backend:
@@ -29,27 +25,17 @@ class loss_backend:
 
         operation = loss_function.scat_operator
 
-        nx = 1
-        if len(x.shape) > 1:
-            nx = x.shape[0]
-
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         if torch.cuda.is_available():
             with torch.cuda.device((operation.gpupos + self.curr_gpu) % operation.ngpu):
 
                 l_x = x.clone().detach().requires_grad_(True)
 
-                if nx == 1:
-                    ndata = x.shape[0]
-                else:
-                    ndata = x.shape[0] * x.shape[1]
-
                 if KEEP_TRACK is not None:
-                    l, linfo = loss_function.eval(l_x, batch, return_all=True)
+                    l_loss, linfo = loss_function.eval(l_x, batch, return_all=True)
                 else:
-                    l = loss_function.eval(l_x, batch)
+                    l_loss = loss_function.eval(l_x, batch)
 
-                l.backward()
+                l_loss.backward()
 
                 g = l_x.grad
 
@@ -57,28 +43,17 @@ class loss_backend:
         else:
             l_x = x.clone().detach().requires_grad_(True)
 
-            if nx == 1:
-                ndata = x.shape[0]
-            else:
-                ndata = x.shape[0] * x.shape[1]
 
             if KEEP_TRACK is not None:
-                l, linfo = loss_function.eval(l_x, batch, return_all=True)
+                l_loss, linfo = loss_function.eval(l_x, batch, return_all=True)
             else:
-                """
-                sx=operation.eval(l_x)
-                tmp=(sx.C01-1.0)
+                l_loss = loss_function.eval(l_x, batch)
 
-                l=operation.backend.bk_reduce_sum(tmp*tmp) #loss_function.eval(l_x,batch)
-                """
-
-                l = loss_function.eval(l_x, batch)
-
-            l.backward()
+            l_loss.backward()
 
             g = l_x.grad
 
         if KEEP_TRACK is not None:
-            return l.detach(), g, linfo
+            return l_loss.detach(), g, linfo
         else:
-            return l.detach(), g
+            return l_loss.detach(), g
