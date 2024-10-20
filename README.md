@@ -57,8 +57,6 @@ git clone https://github.com/jmdelouis/FOSCAT_DEMO.git
 
 ```
 
-
-
 # Spherical data example
 
 ## compute a synthetic image
@@ -90,21 +88,27 @@ python demo.py -n=8 [-c|--cov][-s|--steps=3000][-S=1234|--seed=1234][-k|--k5x5][
 
 The following script generates a series of plots that showcase different aspects of the synthesis process using the *demo.py* script.
 
+> python test2D.py
+
 ```
 python plotdemo.py -n=32 -c
 ```
 
 # 2D field demo
 
+> python test2Dplot.py
+
 # compute a synthetic turbulent field
 
 The python scripts *demo2D.py* included in this package demonstrate how to use the foscat library to generate a 2D synthetic fields that have patterns with the same statistical properties as a specified 2D image. In this particular case, the input field is a sea surface temperature extracted from a north atlantic ocean simulation.
+
+> python testHealpix.py
 
 ```
 python demo2d.py -n=32 -k -c
 ```
 
-# plot the result
+> python testHplot.py
 
 The following script generates a series of plots that showcase different aspects of the synthesis process using the *demo2D.py* script.
 ```
@@ -112,14 +116,16 @@ python plotdemo2d.py -n=32 -c
 ```
 For more information, see the [documentation](https://foscat-documentation.readthedocs.io/en/latest/index.html).
 
+> mpirun -np 3 testHealpix_mpi.py
 
 ## Authors and acknowledgment
 
-Authors: J.-M. Delouis, T. Foulquier, L. Mousset, T. Odaka, F. Paul, E. Allys
+Authors: J.-M. Delouis, T. Foulquier, J. Mangin, L. Mousset, T. Odaka, F. Paul, E. Allys
 
 This work is part of the R & T Deepsee project supported by CNES. The authors acknowledge the heritage of the Planck-HFI consortium regarding data, software, knowledge. This work has been supported by the Programme National de Télédétection Spatiale (PNTS, http://programmes.insu.cnrs.fr/pnts/), grant n◦ PNTS-2020-08
 
 ## License
+
 BSD 3-Clause License
 
 Copyright (c) 2022, the Foscat developers All rights reserved.
@@ -133,4 +139,5 @@ Redistributions in binary form must reproduce the above copyright notice, this l
 Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
 
 ## Project status
+
 It is a scientific driven development. We are open to any contributing development.
