@@ -1,5 +1,5 @@
-
 import math
+
 
 class CircSpline:
     def __init__(self, nodes, degree=3):
@@ -14,7 +14,11 @@ class CircSpline:
         """
         Compute normalization factor for the ith element.
         """
-        return pow(-1, i) * (self.degree + 1) / (math.factorial(self.degree + 1 - i) * math.factorial(i))
+        return (
+            pow(-1, i)
+            * (self.degree + 1)
+            / (math.factorial(self.degree + 1 - i) * math.factorial(i))
+        )
 
     def yplus(self, x):
         """
@@ -48,4 +52,3 @@ class CircSpline:
                 tmp = 0.0
             y[self.nodes - 1 - i] += tmp
         return y
-

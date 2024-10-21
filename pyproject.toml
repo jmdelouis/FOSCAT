@@ -1,6 +1,6 @@
 [project]
 name = "foscat"
-version = "3.1.6"
+version = "3.2.0"
 description = "Generate synthetic Healpix or 2D data using Cross Scattering Transform"
 readme = "README.md"
 license = {text = "BSD-3-Clause"}
@@ -42,3 +42,49 @@ packages = ["foscat"]
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+target-version = "py39"
+builtins = ["ellipsis"]
+exclude = [
+    ".git",
+    ".eggs",
+    "build",
+    "dist",
+    "__pycache__",
+]
+line-length = 100
+
+[tool.ruff.lint]
+ignore = [
+    "E402", # E402: module level import not at top of file
+    "E501", # E501: line too long - let black worry about that
+    "E731", # E731: do not assign a lambda expression, use a def
+    # ignore for now, fix in a later PR
+    #"E741", # ambiguous variable name
+    "E722", # bare except
+    "UP031", # percent-based string interpolation
+    #"F401", # unused imports
+    #"F811", # redefinition of unused name
+    #"F821", # undefined name
+    #"F841", # unused local variable
+]
+select = [
+    "F",  # Pyflakes
+    "E",  # Pycodestyle
+    "I",  # isort
+    "UP", # Pyupgrade
+    "TID", # flake8-tidy-imports
+    "W",
+]
+extend-safe-fixes = [
+    "TID252", # absolute imports
+]
+fixable = ["I", "TID252"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["foscat"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+# Disallow all relative imports.
+ban-relative-imports = "all"
