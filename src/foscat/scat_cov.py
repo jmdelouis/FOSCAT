@@ -3375,7 +3375,7 @@ class funct(FOC.FoCUS):
             tmp2 = self.backend.bk_repeat(MconvPsi, 4, axis=-1)
             MconvPsi = self.backend.bk_reduce_sum(
                 self.backend.bk_reshape(
-                    cmat2[j3][j2] * tmp2, [1, cmat2[j3].shape[1], 4, 4, 4]
+                    cmat2[j3][j2] * tmp2, [tmp2.shape[0], cmat2[j3].shape[1], 4, 4, 4]
                 ),
                 3,
             )
