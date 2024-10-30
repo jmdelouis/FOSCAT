@@ -3520,6 +3520,20 @@ class funct(FOC.FoCUS):
             return self.backend.bk_reduce_mean(x)
         return result
 
+    def reduce_mean_batch(self, x):
+        if isinstance(x, scat_cov):
+            result = scat_cov()
+            # Assuming the batch dimension is the first dimension
+            result.S0 = self.backend.bk_reduce_mean(x.S0, axis=0)
+            result.P00 = self.backend.bk_reduce_mean(x.P00, axis=0)
+            if x.S1 is not None:
+                result.S1 = self.backend.bk_reduce_mean(x.S1, axis=0)
+            result.C01 = self.backend.bk_reduce_mean(x.C01, axis=0)
+            result.C11 = self.backend.bk_reduce_mean(x.C11, axis=0)
+            return result
+        else:
+            return self.backend.bk_reduce_mean(x, axis=0)
+    
     def reduce_distance(self, x, y, sigma=None):
 
         if isinstance(x, scat_cov):
