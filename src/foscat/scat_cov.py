@@ -2694,7 +2694,7 @@ class funct(FOC.FoCUS):
                 tmp2 = self.backend.bk_repeat(conv1, 4, axis=-1)
                 conv1 = self.backend.bk_reduce_sum(
                     self.backend.bk_reshape(
-                        cmat[j3] * tmp2, [1, cmat[j3].shape[0], 4, 4]
+                        cmat[j3] * tmp2, [tmp2.shape[0], cmat[j3].shape[0], 4, 4]
                     ),
                     2,
                 )
@@ -2800,7 +2800,7 @@ class funct(FOC.FoCUS):
                     tmp2 = self.backend.bk_repeat(conv2, 4, axis=-1)
                     conv2 = self.backend.bk_reduce_sum(
                         self.backend.bk_reshape(
-                            cmat[j3] * tmp2, [1, cmat[j3].shape[0], 4, 4]
+                            cmat[j3] * tmp2, [tmp2.shape[0], cmat[j3].shape[0], 4, 4]
                         ),
                         2,
                     )
