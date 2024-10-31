@@ -1,30 +1,6 @@
 import xarray as xr
-import numpy as np
-from dataclasses import dataclass, field
-import foscat.scat_cov as sc
-
 
 backends = ["tensorflow", "torch", "numpy"]
-
-
-@dataclass
-class Parameters:
-    n_orientations: int
-    kernel_size: int
-    jmax_delta: float
-    dtype: str | np.dtype = "float64"
-    backend: str = "tensorflow"
-
-    cache: sc.funct | None = field(default=None, init=False, repr=False)
-
-    def __post_init__(self):
-        self.cache = sc.func(
-            NORIENT=self.n_orientations,
-            KERNELSZ=self.kernel_size,
-            JmaxDelta=self.jmax_delta,
-            all_type=self.dtype,
-            BACKEND=self.backend,
-        )
 
 
 def _scat_cov_to_xarray(obj, batch_dim="batches"):
