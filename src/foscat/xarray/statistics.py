@@ -1,6 +1,6 @@
 import xarray as xr
 
-backends = ["tensorflow", "torch", "numpy"]
+backends = {1: "tensorflow", 2: "torch", 3: "numpy"}
 
 
 def _scat_cov_to_xarray(obj, batch_dim="batches"):
