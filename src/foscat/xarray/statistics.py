@@ -1,5 +1,7 @@
 import xarray as xr
 
+import foscat.scat_cov as sc
+
 backends = {1: "tensorflow", 2: "torch", 3: "numpy"}
 
 
@@ -32,6 +34,34 @@ def _scat_cov_to_xarray(obj, batch_dim="batches"):
         coords={"types": types},
         attrs={"foscat_backend": backends[obj.backend.BACKEND], "use_1d": obj.use_1D},
     )
+
+
+def _xarray_to_scat_cov(ds):
+    # TODO: use groupby for this instead?
+    stats_ = {
+        key: var.variable
+        for key, var in ds.data_vars.items()
+        if not key.startswith("var_")
+    }
+    vars_ = {
+        key: var.variable for key, var in ds.data_vars.items() if key.startswith("var_")
+    }
+
+    kwarg_names = {
+        "use_1d": "use_1D",
+        "foscat_backend": "backend",
+    }
+    kwargs = {kwarg_names.get(key, key): value for key, value in ds.attrs.items()}
+
+    stats_kwargs = {key.lower(): var.data for key, var in stats_.items()}
+    stats = sc.scat_cov(**stats_kwargs, **kwargs)
+
+    var_kwargs = {key.lower(): var.data for key, var in vars_.items()}
+    if var_kwargs:
+        variances = sc.scat_cov(**var_kwargs, **kwargs)
+        return stats, variances
+    else:
+        return stats
 
 
 def reference_statistics(
