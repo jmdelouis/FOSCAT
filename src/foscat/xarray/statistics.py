@@ -30,7 +30,7 @@ def _scat_cov_to_xarray(obj, batch_dim="batches"):
             if values is not None
         },
         coords={"types": types},
-        attrs={"foscat_backend": backends[obj.backend.BACKEND]},
+        attrs={"foscat_backend": backends[obj.backend.BACKEND], "use_1d": obj.use_1D},
     )
 
 
