@@ -189,18 +189,18 @@ class foscat_backend:
                 tmp[:, :, 0, k * 2 + 1] = np.cos((x.T) * (k + 1))
                 tmp[:, :, 0, k * 2 + 2] = np.sin((x.T) * (k + 1))
                 for l_orient in range(nharm):
-                    tmp[:, :, k * 2 + 1, l_orient * 2 + 1] = np.cos(x * (k + 1)) * np.cos(
-                        (x.T) * (l_orient + 1)
-                    )
-                    tmp[:, :, k * 2 + 2, l_orient * 2 + 1] = np.sin(x * (k + 1)) * np.cos(
-                        (x.T) * (l_orient + 1)
-                    )
-                    tmp[:, :, k * 2 + 1, l_orient * 2 + 2] = np.cos(x * (k + 1)) * np.sin(
-                        (x.T) * (l_orient + 1)
-                    )
-                    tmp[:, :, k * 2 + 2, l_orient * 2 + 2] = np.sin(x * (k + 1)) * np.sin(
-                        (x.T) * (l_orient + 1)
-                    )
+                    tmp[:, :, k * 2 + 1, l_orient * 2 + 1] = np.cos(
+                        x * (k + 1)
+                    ) * np.cos((x.T) * (l_orient + 1))
+                    tmp[:, :, k * 2 + 2, l_orient * 2 + 1] = np.sin(
+                        x * (k + 1)
+                    ) * np.cos((x.T) * (l_orient + 1))
+                    tmp[:, :, k * 2 + 1, l_orient * 2 + 2] = np.cos(
+                        x * (k + 1)
+                    ) * np.sin((x.T) * (l_orient + 1))
+                    tmp[:, :, k * 2 + 2, l_orient * 2 + 2] = np.sin(
+                        x * (k + 1)
+                    ) * np.sin((x.T) * (l_orient + 1))
 
             self._fft_2_orient[(norient, nharm, imaginary)] = self.bk_cast(
                 self.constant(
@@ -424,7 +424,10 @@ class foscat_backend:
                 for l_orient in range(w.shape[3]):
                     for j in range(res.shape[0]):
                         tmp = self.scipy.signal.convolve2d(
-                            x[j, :, :, k], w[:, :, k, l_orient], mode="same", boundary="symm"
+                            x[j, :, :, k],
+                            w[:, :, k, l_orient],
+                            mode="same",
+                            boundary="symm",
                         )
                         res[j, :, :, l_orient] += tmp
                         del tmp
@@ -549,13 +552,13 @@ class foscat_backend:
             xi = self.bk_imag(x)
 
             r = self.backend.sign(xr) * self.backend.sqrt(self.backend.sign(xr) * xr)
-            #return r
+            # return r
             i = self.backend.sign(xi) * self.backend.sqrt(self.backend.sign(xi) * xi)
-            
-            if self.BACKEND==self.TORCH:
+
+            if self.BACKEND == self.TORCH:
                 return r
             else:
-                return self.bk_complex(r,i)
+                return self.bk_complex(r, i)
         else:
             return self.backend.sign(x) * self.backend.sqrt(self.backend.sign(x) * x)
 
@@ -730,21 +733,21 @@ class foscat_backend:
     def bk_reduce_std(self, data, axis=None):
         if axis is None:
             if self.BACKEND == self.TENSORFLOW:
-                r=self.backend.math.reduce_std(data)
+                r = self.backend.math.reduce_std(data)
             if self.BACKEND == self.TORCH:
-                r=self.backend.std(data)
+                r = self.backend.std(data)
             if self.BACKEND == self.NUMPY:
-                r=np.std(data)
-            return self.bk_complex(r,0*r)
+                r = np.std(data)
+            return self.bk_complex(r, 0 * r)
         else:
             if self.BACKEND == self.TENSORFLOW:
-                r=self.backend.math.reduce_std(data, axis=axis)
+                r = self.backend.math.reduce_std(data, axis=axis)
             if self.BACKEND == self.TORCH:
-                r=self.backend.std(data, axis)
+                r = self.backend.std(data, axis)
             if self.BACKEND == self.NUMPY:
-                r=np.std(data, axis)
+                r = np.std(data, axis)
         if self.bk_is_complex(data):
-            return self.bk_complex(r,0*r)
+            return self.bk_complex(r, 0 * r)
         else:
             return r
 

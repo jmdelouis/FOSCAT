@@ -1081,10 +1081,16 @@ class scat:
             """
 
             for l_scale in range(nscale - k):
-                i0 = np.where((j1 == nscale - 1 - k - l_scale) * (j2 == nscale - 1 - k))[0]
+                i0 = np.where(
+                    (j1 == nscale - 1 - k - l_scale) * (j2 == nscale - 1 - k)
+                )[0]
                 i1 = np.where((j1 == nscale - 1 - k - l_scale) * (j2 == nscale - k))[0]
-                i2 = np.where((j1 == nscale - 1 - k - l_scale) * (j2 == nscale + 1 - k))[0]
-                i3 = np.where((j1 == nscale - 1 - k - l_scale) * (j2 == nscale + 2 - k))[0]
+                i2 = np.where(
+                    (j1 == nscale - 1 - k - l_scale) * (j2 == nscale + 1 - k)
+                )[0]
+                i3 = np.where(
+                    (j1 == nscale - 1 - k - l_scale) * (j2 == nscale + 2 - k)
+                )[0]
 
                 if constant:
                     s2[:, i0] = s2[:, i1]
@@ -1134,16 +1140,19 @@ class scat:
             for k in range(nscale):
                 for l_scale in range(1, nscale):
                     i0 = np.where(
-                        (j1 == 2 * nscale - 1 - k) * (j2 == 2 * nscale - 1 - k - l_scale)
+                        (j1 == 2 * nscale - 1 - k)
+                        * (j2 == 2 * nscale - 1 - k - l_scale)
                     )[0]
                     i1 = np.where(
                         (j1 == 2 * nscale - 1 - k) * (j2 == 2 * nscale - k - l_scale)
                     )[0]
                     i2 = np.where(
-                        (j1 == 2 * nscale - 1 - k) * (j2 == 2 * nscale + 1 - k - l_scale)
+                        (j1 == 2 * nscale - 1 - k)
+                        * (j2 == 2 * nscale + 1 - k - l_scale)
                     )[0]
                     i3 = np.where(
-                        (j1 == 2 * nscale - 1 - k) * (j2 == 2 * nscale + 2 - k - l_scale)
+                        (j1 == 2 * nscale - 1 - k)
+                        * (j2 == 2 * nscale + 2 - k - l_scale)
                     )[0]
                     if constant:
                         s2[:, i0] = s2[:, i1]

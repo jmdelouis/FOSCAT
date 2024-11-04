@@ -2193,7 +2193,7 @@ class FoCUS:
                         + ishape[axis + 2 :],
                     )
 
-            return self.backend.bk_reshape(res, in_image.shape+[self.NORIENT])
+            return self.backend.bk_reshape(res, in_image.shape + [self.NORIENT])
         elif self.use_1D:
             ishape = list(in_image.shape)
             if len(ishape) < axis + 1:
@@ -2265,7 +2265,7 @@ class FoCUS:
                         res, ishape[0:axis] + [res.shape[1]] + ishape[axis + 1 :]
                     )
 
-            return self.backend.bk_reshape(res, in_image.shape+[self.NORIENT])
+            return self.backend.bk_reshape(res, in_image.shape + [self.NORIENT])
 
         else:
             nside = int(np.sqrt(image.shape[axis] // 12))
