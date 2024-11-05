@@ -7,6 +7,23 @@ import foscat.scat_cov as sc
 
 @dataclass
 class Parameters:
+    """
+    parameters for the scattering covariance transform
+
+    Parameters
+    ----------
+    n_orientations : int
+        The number of orientations of the kernel
+    kernel_size : int
+        The size of the kernel in cells / pixels
+    jmax_delta : float
+        <description of jmax and the delta>
+    dtype : str or numpy.dtype, default: "float64"
+        The dtype to use for the transform.
+    backend : {"numpy", "torch", "tensorflow"}, default: "tensorflow"
+        The compute backend.
+    """
+
     n_orientations: int
     kernel_size: int
     jmax_delta: float
