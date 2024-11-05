@@ -43,7 +43,6 @@ class loss_backend:
         else:
             l_x = x.clone().detach().requires_grad_(True)
 
-
             if KEEP_TRACK is not None:
                 l_loss, linfo = loss_function.eval(l_x, batch, return_all=True)
             else:
