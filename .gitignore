@@ -12,6 +12,7 @@ __pycache__/
 *.egg-info
 
 # tools
+.virtual_documents/
 .ipynb_checkpoints/
 .hypothesis/
 .pytest_cache
@@ -20,3 +21,6 @@ __pycache__/
 .cache
 /docs/_build/
 .prettier_cache
+
+# cached data files
+*.npy
