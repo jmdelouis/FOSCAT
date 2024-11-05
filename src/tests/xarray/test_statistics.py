@@ -21,6 +21,32 @@ class Backend:
         self.BACKEND = inverted_backends[self.name]
 
 
+class FakeParameters:
+    def __init__(self, cache):
+        self.cache = cache
+
+
+class _Parameters:
+    def __init__(self, backend):
+        self.backend = Backend(backend)
+
+    def eval(self, data1, data2=None, *, calc_var=False, **kwargs):
+        ref = sc.scat_cov(
+            s0=np.zeros(shape=(3, 2)),
+            p00=np.zeros(shape=(3, 1, 5, 4)),
+            c01=np.zeros(shape=(3, 1, 3, 4, 4)),
+            c10=None,
+            c11=np.zeros(shape=(3, 1, 7, 4, 4, 4)),
+            s1=np.zeros(shape=(3, 1, 5, 4)),
+            backend=self.backend,
+        )
+
+        if calc_var:
+            return ref, ref
+        else:
+            return ref
+
+
 def scat_cov():
     backends = st.builds(Backend, st.sampled_from(list(statistics.backends.values())))
 
@@ -111,30 +137,6 @@ def test_scat_cov_to_xarray(batch_dim, scat_cov):
 @pytest.mark.parametrize("variances", [True, False])
 @pytest.mark.parametrize("backend", ["numpy", "torch", "tensorflow"])
 def test_reference_statistics(variances, backend):
-    class FakeParameters:
-        def __init__(self, cache):
-            self.cache = cache
-
-    class _Parameters:
-        def __init__(self, backend):
-            self.backend = Backend(backend)
-
-        def eval(self, data, calc_var, **kwargs):
-            ref = sc.scat_cov(
-                s0=np.zeros(shape=(3, 2)),
-                p00=np.zeros(shape=(3, 1, 5, 4)),
-                c01=np.zeros(shape=(3, 1, 3, 4, 4)),
-                c10=None,
-                c11=np.zeros(shape=(3, 1, 7, 4, 4, 4)),
-                s1=np.zeros(shape=(3, 1, 5, 4)),
-                backend=self.backend,
-            )
-
-            if calc_var:
-                return ref, ref
-            else:
-                return ref
-
     params = FakeParameters(cache=_Parameters(backend))
     arr = xr.DataArray(
         [[0, 0], [1, 1], [2, 2]],
