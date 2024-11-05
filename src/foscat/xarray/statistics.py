@@ -167,8 +167,29 @@ def cross_statistics(
     variances=False,
     mask=None,
     norm=None,
-    cmat=None,
 ):
+    """
+    cross statistics between two images
+
+    Parameters
+    ----------
+    arr1, arr2 : xarray.DataArray
+        Input images. Must align exactly. For now, only 1D healpix is supported. Every
+        dimension other than the spatial dimension (see ``spatial_dim``) will be stacked.
+    parameters : Parameters
+        The parameters for the scattering covariance transform.
+    spatial_dim : str, default: "cells"
+        The spatial dimension.
+    variances : bool, default: False
+        Whether to compute the variances of the statistic values.
+    mask : xarray.DataArray, optional
+        Mask out certain regions. Not implemented yet.
+    norm : {"auto", "self"} or None, default: None
+        Normalization method:
+        - None: no normalization
+        - "auto": normalize by the reference P00
+        - "self": normalize by the current P00
+    """
     # make sure the indexes align exactly (i.e. the arrays only differ by their values)
     xr.align(arr1, arr2, join="exact", copy=False)
     if spatial_dim not in arr1.dims:
@@ -178,9 +199,8 @@ def cross_statistics(
 
     kwargs = {
         "calc_var": variances,
-        "mask": mask,
+        # "mask": mask,
         "norm": norm,
-        "cmat": cmat,
     }
 
     # will always stack equally
