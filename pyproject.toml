@@ -61,13 +61,8 @@ ignore = [
   "E501", # E501: line too long - let black worry about that
   "E731", # E731: do not assign a lambda expression, use a def
   # ignore for now, fix in a later PR
-  #"E741", # ambiguous variable name
   "E722",  # bare except
   "UP031", # percent-based string interpolation
-  #"F401", # unused imports
-  #"F811", # redefinition of unused name
-  #"F821", # undefined name
-  #"F841", # unused local variable
 ]
 select = [
   "F",   # Pyflakes
