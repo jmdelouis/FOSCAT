@@ -1,13 +1,14 @@
-import xarray as xr
 from dataclasses import dataclass, field
-import pytest
 
-from hypothesis import given
-import hypothesis.strategies as st
 import hypothesis.extra.numpy as npst
+import hypothesis.strategies as st
+import pytest
+import xarray as xr
+from hypothesis import given
 
-from foscat.xarray import statistics
 import foscat.scat_cov as sc
+from foscat.xarray import statistics
+
 
 @dataclass
 class Backend:
@@ -15,11 +16,12 @@ class Backend:
     BACKEND: int = field(init=False)
 
     def __post_init__(self):
-        self.BACKEND = statistics.backends.index(self.name)
+        inverted_backends = {value: key for key, value in statistics.backends.items()}
+        self.BACKEND = inverted_backends[self.name]
 
 
 def scat_cov():
-    backends = st.builds(Backend, st.sampled_from(statistics.backends))
+    backends = st.builds(Backend, st.sampled_from(list(statistics.backends.values())))
 
     batch_size = st.integers(min_value=1, max_value=5)
     type_size = st.just(2)
@@ -30,7 +32,8 @@ def scat_cov():
     st.shared(masks_size, key="scales1")
 
     S0 = npst.arrays(
-        dtype=st.just("float64"), shape=st.tuples(st.shared(batch_size, key="batches"), type_size)
+        dtype=st.just("float64"),
+        shape=st.tuples(st.shared(batch_size, key="batches"), type_size),
     )
     S1 = npst.arrays(
         dtype=st.just("float64"),
@@ -38,7 +41,7 @@ def scat_cov():
             st.shared(batch_size, key="batches"),
             st.shared(masks_size, key="masks"),
             st.shared(scales_size, key="scales1"),
-            st.shared(orientations_size, key="orientations")
+            st.shared(orientations_size, key="orientations"),
         ),
     )
     P00 = npst.arrays(
@@ -47,7 +50,7 @@ def scat_cov():
             st.shared(batch_size, key="batches"),
             st.shared(masks_size, key="masks"),
             st.shared(scales_size, key="scales1"),
-            st.shared(orientations_size, key="orientations")
+            st.shared(orientations_size, key="orientations"),
         ),
     )
     C01 = npst.arrays(
@@ -57,7 +60,7 @@ def scat_cov():
             st.shared(masks_size, key="masks"),
             st.shared(scales_size, key="scales2"),
             st.shared(orientations_size, key="orientations"),
-            st.shared(orientations_size, key="orientations")
+            st.shared(orientations_size, key="orientations"),
         ),
     )
     C10 = npst.arrays(
