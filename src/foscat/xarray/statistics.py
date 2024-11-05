@@ -85,8 +85,29 @@ def reference_statistics(
     variances=False,
     mask=None,
     norm=None,
-    cmat=None,
 ):
+    """
+    reference statistics for a single image
+
+    Parameters
+    ----------
+    arr : xarray.DataArray
+        Input image. For now, only 1D healpix is supported. Every dimension other than
+        the spatial dimension (see ``spatial_dim``) will be stacked.
+    parameters : Parameters
+        The parameters for the scattering covariance transform.
+    spatial_dim : str, default: "cells"
+        The spatial dimension.
+    variances : bool, default: False
+        Whether to compute the variances of the statistic values.
+    mask : xarray.DataArray, optional
+        Mask out certain regions. Not implemented yet.
+    norm : {"auto", "self"} or None, default: None
+        Normalization method:
+        - None: no normalization
+        - "auto": normalize by the reference P00
+        - "self": normalize by the current P00
+    """
     if spatial_dim not in arr.dims:
         raise ValueError(
             f"cannot find the spatial dim '{spatial_dim}' in the data dimensions"
@@ -95,9 +116,8 @@ def reference_statistics(
     # what does `cmat` stand for? Correlation matrix? And is `auto` important in the autocorrelation (this function)?
     kwargs = {
         "calc_var": variances,
-        "mask": mask,
+        # "mask": mask,
         "norm": norm,
-        "cmat": cmat,
     }
 
     arr_, other_dims, batch_dim = stack_other_dims(arr, spatial_dim, "batches")
