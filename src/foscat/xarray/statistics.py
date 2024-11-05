@@ -78,8 +78,20 @@ def stack_other_dims(arr, spatial_dim, batch_dim):
 
 
 def reference_statistics(
-    arr, parameters, variances=False, mask=None, norm=None, cmat=None
+    arr,
+    parameters,
+    *,
+    spatial_dim="cells",
+    variances=False,
+    mask=None,
+    norm=None,
+    cmat=None,
 ):
+    if spatial_dim not in arr.dims:
+        raise ValueError(
+            f"cannot find the spatial dim '{spatial_dim}' in the data dimensions"
+        )
+
     # what does `cmat` stand for? Correlation matrix? And is `auto` important in the autocorrelation (this function)?
     kwargs = {
         "calc_var": variances,
@@ -88,18 +100,9 @@ def reference_statistics(
         "cmat": cmat,
     }
 
-    other_dims = [dim for dim in arr.dims if dim != "cells"]
-    if not other_dims:
-        arr_ = arr
-        batch_dim = "batches"
-    elif len(other_dims) == 1:
-        arr_ = arr
-        (batch_dim,) = other_dims
-    else:
-        batch_dim = "stacked"
-        arr_ = arr.stack({batch_dim: other_dims})
+    arr_, other_dims, batch_dim = stack_other_dims(arr, spatial_dim, "batches")
 
-    data = arr_.transpose(..., "cells").data
+    data = arr_.transpose(..., spatial_dim).data
     result = parameters.cache.eval(data, **kwargs)
     if result is None:
         raise ValueError(
