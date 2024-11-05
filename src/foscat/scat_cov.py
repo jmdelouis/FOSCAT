@@ -6,7 +6,7 @@ import numpy as np
 
 import foscat as foscat
 
-#import foscat.backend as bk
+# import foscat.backend as bk
 import foscat.FoCUS as FOC
 
 # Vérifier si TensorFlow est importé et défini
@@ -1032,9 +1032,13 @@ class scat_cov:
         for k in range(nscale):
 
             for l_orient in range(nscale - k):
-                i0 = np.where((j1 == nscale - 1 - k - l_orient) * (j2 == nscale - 1 - k))[0]
+                i0 = np.where(
+                    (j1 == nscale - 1 - k - l_orient) * (j2 == nscale - 1 - k)
+                )[0]
                 i1 = np.where((j1 == nscale - 1 - k - l_orient) * (j2 == nscale - k))[0]
-                i2 = np.where((j1 == nscale - 1 - k - l_orient) * (j2 == nscale + 1 - k))[0]
+                i2 = np.where(
+                    (j1 == nscale - 1 - k - l_orient) * (j2 == nscale + 1 - k)
+                )[0]
                 if constant:
                     c10[:, :, i0] = c10[:, :, i1]
                     c01[:, :, i0] = c01[:, :, i1]
@@ -2033,24 +2037,34 @@ class scat_cov:
                                 c01[i, j, idx[noff:], k, l_orient] = self.C01[
                                     i, j, j2 == ij - noff, k, l_orient
                                 ]
-                                c01[i, j, idx[:noff], k, l_orient] = self.add_data_from_slope(
-                                    self.C01[i, j, j2 == ij - noff, k, l_orient], noff, ds=ds
+                                c01[i, j, idx[:noff], k, l_orient] = (
+                                    self.add_data_from_slope(
+                                        self.C01[i, j, j2 == ij - noff, k, l_orient],
+                                        noff,
+                                        ds=ds,
+                                    )
                                 )
                             else:
                                 c01[i, j, idx[noff:], k, l_orient] = self.C01.numpy()[
                                     i, j, j2 == ij - noff, k, l_orient
                                 ]
-                                c01[i, j, idx[:noff], k, l_orient] = self.add_data_from_slope(
-                                    self.C01.numpy()[i, j, j2 == ij - noff, k, l_orient],
-                                    noff,
-                                    ds=ds,
+                                c01[i, j, idx[:noff], k, l_orient] = (
+                                    self.add_data_from_slope(
+                                        self.C01.numpy()[
+                                            i, j, j2 == ij - noff, k, l_orient
+                                        ],
+                                        noff,
+                                        ds=ds,
+                                    )
                                 )
 
                         for ij in range(nscale):
                             idx = np.where(jo1 == ij)[0]
                             if idx.shape[0] > noff:
-                                c01[i, j, idx[:noff], k, l_orient] = self.add_data_from_slope(
-                                    c01[i, j, idx[noff:], k, l_orient], noff, ds=ds
+                                c01[i, j, idx[:noff], k, l_orient] = (
+                                    self.add_data_from_slope(
+                                        c01[i, j, idx[noff:], k, l_orient], noff, ds=ds
+                                    )
                                 )
                             else:
                                 c01[i, j, idx, k, l_orient] = np.mean(
@@ -2114,9 +2128,9 @@ class scat_cov:
                                 for l_orient in range(self.C11.shape[4]):
                                     for m in range(self.C11.shape[5]):
                                         if self.BACKEND == "numpy":
-                                            c11[i, j, idx2[noff:], k, l_orient, m] = self.C11[
-                                                i, j, idx, k, l_orient, m
-                                            ]
+                                            c11[i, j, idx2[noff:], k, l_orient, m] = (
+                                                self.C11[i, j, idx, k, l_orient, m]
+                                            )
                                             c11[i, j, idx2[:noff], k, l_orient, m] = (
                                                 self.add_data_from_log_slope(
                                                     self.C11[i, j, idx, k, l_orient, m],
@@ -2125,9 +2139,11 @@ class scat_cov:
                                                 )
                                             )
                                         else:
-                                            c11[i, j, idx2[noff:], k, l_orient, m] = (
-                                                self.C11.numpy()[i, j, idx, k, l_orient, m]
-                                            )
+                                            c11[
+                                                i, j, idx2[noff:], k, l_orient, m
+                                            ] = self.C11.numpy()[
+                                                i, j, idx, k, l_orient, m
+                                            ]
                                             c11[i, j, idx2[:noff], k, l_orient, m] = (
                                                 self.add_data_from_log_slope(
                                                     self.C11.numpy()[
@@ -2152,9 +2168,13 @@ class scat_cov:
                         for k in range(self.C11.shape[3]):
                             for l_orient in range(self.C11.shape[4]):
                                 for m in range(self.C11.shape[5]):
-                                    c11[i, j, iii, k, l_orient, m] = self.add_data_from_slope(
-                                        c11[i, j, [iii1, iii2], k, l_orient, m], 1, ds=2
-                                    )[0]
+                                    c11[i, j, iii, k, l_orient, m] = (
+                                        self.add_data_from_slope(
+                                            c11[i, j, [iii1, iii2], k, l_orient, m],
+                                            1,
+                                            ds=2,
+                                        )[0]
+                                    )
 
         idx = np.where(abs(c11[0, 0, :, 0, 0, 0]) == 0)[0]
         for iii in idx:
@@ -2170,9 +2190,13 @@ class scat_cov:
                         for k in range(self.C11.shape[3]):
                             for l_orient in range(self.C11.shape[4]):
                                 for m in range(self.C11.shape[5]):
-                                    c11[i, j, iii, k, l_orient, m] = self.add_data_from_slope(
-                                        c11[i, j, [iii1, iii2], k, l_orient, m], 1, ds=2
-                                    )[0]
+                                    c11[i, j, iii, k, l_orient, m] = (
+                                        self.add_data_from_slope(
+                                            c11[i, j, [iii1, iii2], k, l_orient, m],
+                                            1,
+                                            ds=2,
+                                        )[0]
+                                    )
 
         return scat_cov(
             self.S0,
@@ -2195,25 +2219,49 @@ class funct(FOC.FoCUS):
         return self.fill_healpy(im, nullval=nullval)
 
     def moments(self, list_scat):
-        if isinstance(list_scat,foscat.scat_cov.scat_cov):
-            mS0  = self.backend.bk_expand_dims(self.backend.bk_reduce_mean(list_scat.S0,0),0)
-            mP00 = self.backend.bk_expand_dims(self.backend.bk_reduce_mean(list_scat.P00,0),0)
-            mC01 = self.backend.bk_expand_dims(self.backend.bk_reduce_mean(list_scat.C01,0),0)
-            mC11 = self.backend.bk_expand_dims(self.backend.bk_reduce_mean(list_scat.C11,0),0)
-            sS0  = self.backend.bk_expand_dims(self.backend.bk_reduce_std(list_scat.S0,0),0)
-            sP00 = self.backend.bk_expand_dims(self.backend.bk_reduce_std(list_scat.P00,0),0)
-            sC01 = self.backend.bk_expand_dims(self.backend.bk_reduce_std(list_scat.C01,0),0)
-            sC11 = self.backend.bk_expand_dims(self.backend.bk_reduce_std(list_scat.C11,0),0)
+        if isinstance(list_scat, foscat.scat_cov.scat_cov):
+            mS0 = self.backend.bk_expand_dims(
+                self.backend.bk_reduce_mean(list_scat.S0, 0), 0
+            )
+            mP00 = self.backend.bk_expand_dims(
+                self.backend.bk_reduce_mean(list_scat.P00, 0), 0
+            )
+            mC01 = self.backend.bk_expand_dims(
+                self.backend.bk_reduce_mean(list_scat.C01, 0), 0
+            )
+            mC11 = self.backend.bk_expand_dims(
+                self.backend.bk_reduce_mean(list_scat.C11, 0), 0
+            )
+            sS0 = self.backend.bk_expand_dims(
+                self.backend.bk_reduce_std(list_scat.S0, 0), 0
+            )
+            sP00 = self.backend.bk_expand_dims(
+                self.backend.bk_reduce_std(list_scat.P00, 0), 0
+            )
+            sC01 = self.backend.bk_expand_dims(
+                self.backend.bk_reduce_std(list_scat.C01, 0), 0
+            )
+            sC11 = self.backend.bk_expand_dims(
+                self.backend.bk_reduce_std(list_scat.C11, 0), 0
+            )
 
             if list_scat.S1 is not None:
-                mS1 = self.backend.bk_expand_dims(self.backend.bk_reduce_mean(list_scat.S1,0),0)
-                sS1 = self.backend.bk_expand_dims(self.backend.bk_reduce_std(list_scat.S1,0),0)
+                mS1 = self.backend.bk_expand_dims(
+                    self.backend.bk_reduce_mean(list_scat.S1, 0), 0
+                )
+                sS1 = self.backend.bk_expand_dims(
+                    self.backend.bk_reduce_std(list_scat.S1, 0), 0
+                )
             else:
                 mS1 = None
                 sS1 = None
             if list_scat.C10 is not None:
-                mC10 = self.backend.bk_expand_dims(self.backend.bk_reduce_mean(list_scat.C10,0),0)
-                sC10 = self.backend.bk_expand_dims(self.backend.bk_reduce_std(list_scat.C10,0),0)
+                mC10 = self.backend.bk_expand_dims(
+                    self.backend.bk_reduce_mean(list_scat.C10, 0), 0
+                )
+                sC10 = self.backend.bk_expand_dims(
+                    self.backend.bk_reduce_std(list_scat.C10, 0), 0
+                )
             else:
                 mC10 = None
                 sC10 = None
@@ -2400,12 +2448,12 @@ class funct(FOC.FoCUS):
                 lidx = np.arange(sim.shape[1])
                 for m in range(4):
                     for l_orient in range(4):
-                        mat2[k2, lidx, m, 4 * ((l_orient + iph[:, m]) % 4) + l_orient] = (
-                            1.0 - alpha[:, m]
-                        )
-                        mat2[k2, lidx, m, 4 * ((l_orient + iph[:, m] + 1) % 4) + l_orient] = alpha[
-                            :, m
-                        ]
+                        mat2[
+                            k2, lidx, m, 4 * ((l_orient + iph[:, m]) % 4) + l_orient
+                        ] = (1.0 - alpha[:, m])
+                        mat2[
+                            k2, lidx, m, 4 * ((l_orient + iph[:, m] + 1) % 4) + l_orient
+                        ] = alpha[:, m]
 
             cmat2[k] = self.backend.bk_cast(mat2.astype("complex64"))
             """
@@ -3646,56 +3694,56 @@ class funct(FOC.FoCUS):
 
         return result
 
-#    # ---------------------------------------------−---------
-#    def std(self, list_of_sc):
-#        n = len(list_of_sc)
-#        res = list_of_sc[0]
-#        res2 = list_of_sc[0] * list_of_sc[0]
-#        for k in range(1, n):
-#            res = res + list_of_sc[k]
-#            res2 = res2 + list_of_sc[k] * list_of_sc[k]
-#
-#        if res.S1 is None:
-#            if res.C10 is not None:
-#                return scat_cov(
-#                    res.domult(sig.S0, res.S0) * res.domult(sig.S0, res.S0),
-#                    res.domult(sig.P00, res.P00) * res.domult(sig.P00, res.P00),
-#                    res.domult(sig.C01, res.C01) * res.domult(sig.C01, res.C01),
-#                    res.domult(sig.C11, res.C11) * res.domult(sig.C11, res.C11),
-#                    C10=res.domult(sig.C10, res.C10) * res.domult(sig.C10, res.C10),
-#                    backend=self.backend,
-#                    use_1D=self.use_1D,
-#                )
-#            else:
-#                return scat_cov(
-#                    res.domult(sig.S0, res.S0) * res.domult(sig.S0, res.S0),
-#                    res.domult(sig.P00, res.P00) * res.domult(sig.P00, res.P00),
-#                    res.domult(sig.C01, res.C01) * res.domult(sig.C01, res.C01),
-#                    res.domult(sig.C11, res.C11) * res.domult(sig.C11, res.C11),
-#                    backend=self.backend,
-#                    use_1D=self.use_1D,
-#                )
-#        else:
-#            if res.C10 is None:
-#                return scat_cov(
-#                    res.domult(sig.S0, res.S0) * res.domult(sig.S0, res.S0),
-#                    res.domult(sig.P00, res.P00) * res.domult(sig.P00, res.P00),
-#                    res.domult(sig.C01, res.C01) * res.domult(sig.C01, res.C01),
-#                    res.domult(sig.C11, res.C11) * res.domult(sig.C11, res.C11),
-#                    S1=res.domult(sig.S1, res.S1) * res.domult(sig.S1, res.S1),
-#                    C10=res.domult(sig.C10, res.C10) * res.domult(sig.C10, res.C10),
-#                    backend=self.backend,
-#                )
-#            else:
-#                return scat_cov(
-#                    res.domult(sig.P00, res.P00) * res.domult(sig.P00, res.P00),
-#                    res.domult(sig.S1, res.S1) * res.domult(sig.S1, res.S1),
-#                    res.domult(sig.C01, res.C01) * res.domult(sig.C01, res.C01),
-#                    res.domult(sig.C11, res.C11) * res.domult(sig.C11, res.C11),
-#                    backend=self.backend,
-#                    use_1D=self.use_1D,
-#                )
-#        return self.NORIENT
+    #    # ---------------------------------------------−---------
+    #    def std(self, list_of_sc):
+    #        n = len(list_of_sc)
+    #        res = list_of_sc[0]
+    #        res2 = list_of_sc[0] * list_of_sc[0]
+    #        for k in range(1, n):
+    #            res = res + list_of_sc[k]
+    #            res2 = res2 + list_of_sc[k] * list_of_sc[k]
+    #
+    #        if res.S1 is None:
+    #            if res.C10 is not None:
+    #                return scat_cov(
+    #                    res.domult(sig.S0, res.S0) * res.domult(sig.S0, res.S0),
+    #                    res.domult(sig.P00, res.P00) * res.domult(sig.P00, res.P00),
+    #                    res.domult(sig.C01, res.C01) * res.domult(sig.C01, res.C01),
+    #                    res.domult(sig.C11, res.C11) * res.domult(sig.C11, res.C11),
+    #                    C10=res.domult(sig.C10, res.C10) * res.domult(sig.C10, res.C10),
+    #                    backend=self.backend,
+    #                    use_1D=self.use_1D,
+    #                )
+    #            else:
+    #                return scat_cov(
+    #                    res.domult(sig.S0, res.S0) * res.domult(sig.S0, res.S0),
+    #                    res.domult(sig.P00, res.P00) * res.domult(sig.P00, res.P00),
+    #                    res.domult(sig.C01, res.C01) * res.domult(sig.C01, res.C01),
+    #                    res.domult(sig.C11, res.C11) * res.domult(sig.C11, res.C11),
+    #                    backend=self.backend,
+    #                    use_1D=self.use_1D,
+    #                )
+    #        else:
+    #            if res.C10 is None:
+    #                return scat_cov(
+    #                    res.domult(sig.S0, res.S0) * res.domult(sig.S0, res.S0),
+    #                    res.domult(sig.P00, res.P00) * res.domult(sig.P00, res.P00),
+    #                    res.domult(sig.C01, res.C01) * res.domult(sig.C01, res.C01),
+    #                    res.domult(sig.C11, res.C11) * res.domult(sig.C11, res.C11),
+    #                    S1=res.domult(sig.S1, res.S1) * res.domult(sig.S1, res.S1),
+    #                    C10=res.domult(sig.C10, res.C10) * res.domult(sig.C10, res.C10),
+    #                    backend=self.backend,
+    #                )
+    #            else:
+    #                return scat_cov(
+    #                    res.domult(sig.P00, res.P00) * res.domult(sig.P00, res.P00),
+    #                    res.domult(sig.S1, res.S1) * res.domult(sig.S1, res.S1),
+    #                    res.domult(sig.C01, res.C01) * res.domult(sig.C01, res.C01),
+    #                    res.domult(sig.C11, res.C11) * res.domult(sig.C11, res.C11),
+    #                    backend=self.backend,
+    #                    use_1D=self.use_1D,
+    #                )
+    #        return self.NORIENT
 
     @tf_function
     def eval_comp_fast(

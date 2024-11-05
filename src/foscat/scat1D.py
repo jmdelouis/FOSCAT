@@ -907,10 +907,16 @@ class scat1D:
             """
 
             for l_orient in range(nscale - k):
-                i0 = np.where((j1 == nscale - 1 - k - l_orient) * (j2 == nscale - 1 - k))[0]
+                i0 = np.where(
+                    (j1 == nscale - 1 - k - l_orient) * (j2 == nscale - 1 - k)
+                )[0]
                 i1 = np.where((j1 == nscale - 1 - k - l_orient) * (j2 == nscale - k))[0]
-                i2 = np.where((j1 == nscale - 1 - k - l_orient) * (j2 == nscale + 1 - k))[0]
-                i3 = np.where((j1 == nscale - 1 - k - l_orient) * (j2 == nscale + 2 - k))[0]
+                i2 = np.where(
+                    (j1 == nscale - 1 - k - l_orient) * (j2 == nscale + 1 - k)
+                )[0]
+                i3 = np.where(
+                    (j1 == nscale - 1 - k - l_orient) * (j2 == nscale + 2 - k)
+                )[0]
 
                 if constant:
                     s2[:, i0] = s2[:, i1]
@@ -960,16 +966,19 @@ class scat1D:
             for k in range(nscale):
                 for l_orient in range(1, nscale):
                     i0 = np.where(
-                        (j1 == 2 * nscale - 1 - k) * (j2 == 2 * nscale - 1 - k - l_orient)
+                        (j1 == 2 * nscale - 1 - k)
+                        * (j2 == 2 * nscale - 1 - k - l_orient)
                     )[0]
                     i1 = np.where(
                         (j1 == 2 * nscale - 1 - k) * (j2 == 2 * nscale - k - l_orient)
                     )[0]
                     i2 = np.where(
-                        (j1 == 2 * nscale - 1 - k) * (j2 == 2 * nscale + 1 - k - l_orient)
+                        (j1 == 2 * nscale - 1 - k)
+                        * (j2 == 2 * nscale + 1 - k - l_orient)
                     )[0]
                     i3 = np.where(
-                        (j1 == 2 * nscale - 1 - k) * (j2 == 2 * nscale + 2 - k - l_orient)
+                        (j1 == 2 * nscale - 1 - k)
+                        * (j2 == 2 * nscale + 2 - k - l_orient)
                     )[0]
                     if constant:
                         s2[:, i0] = s2[:, i1]
