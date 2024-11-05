@@ -179,3 +179,53 @@ def test_reference_statistics(variances, backend):
         attrs={"foscat_backend": backend, "use_1d": False},
     )
     xr.testing.assert_equal(actual, expected)
+
+
+@pytest.mark.parametrize("variances", [True, False])
+@pytest.mark.parametrize("backend", ["numpy", "torch", "tensorflow"])
+def test_cross_statistics(variances, backend):
+    params = FakeParameters(cache=_Parameters(backend))
+    arr1 = xr.DataArray(
+        np.zeros(shape=(3, 2)),
+        dims=("time", "cells"),
+        coords={"cell_ids": ("cells", [0, 1]), "time": [-1, 0, 1]},
+    )
+    arr2 = xr.ones_like(arr1)
+
+    actual = statistics.cross_statistics(
+        arr1, arr2, parameters=params, variances=variances
+    )
+    data_vars = {
+        "S0": (["time", "type"], np.zeros(shape=(3, 2))),
+        "P00": (
+            ["time", "masks", "scales1", "orientations_1"],
+            np.zeros(shape=(3, 1, 5, 4)),
+        ),
+        "C01": (
+            ["time", "masks", "scales2", "orientations_1", "orientations_2"],
+            np.zeros(shape=(3, 1, 3, 4, 4)),
+        ),
+        "C11": (
+            [
+                "time",
+                "masks",
+                "scales3",
+                "orientations_1",
+                "orientations_2",
+                "orientations_3",
+            ],
+            np.zeros(shape=(3, 1, 7, 4, 4, 4)),
+        ),
+        "S1": (
+            ["time", "masks", "scales1", "orientations_1"],
+            np.zeros(shape=(3, 1, 5, 4)),
+        ),
+    }
+    variance_vars = {f"var_{n}": v for n, v in data_vars.items()} if variances else {}
+
+    expected = xr.Dataset(
+        data_vars=data_vars | variance_vars,
+        coords={"time": [-1, 0, 1], "types": ("type", ["mean", "variance"])},
+        attrs={"foscat_backend": backend, "use_1d": False},
+    )
+    xr.testing.assert_equal(actual, expected)

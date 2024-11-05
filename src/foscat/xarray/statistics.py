@@ -64,6 +64,19 @@ def _xarray_to_scat_cov(ds):
         return stats
 
 
+def stack_other_dims(arr, spatial_dim, batch_dim):
+    other_dims = [dim for dim in arr.dims if dim != spatial_dim]
+    if not other_dims:
+        arr_ = arr
+    elif len(other_dims) == 1:
+        arr_ = arr
+        (batch_dim,) = other_dims
+    else:
+        arr_ = arr.stack({batch_dim: other_dims})
+
+    return arr_, other_dims, batch_dim
+
+
 def reference_statistics(
     arr, parameters, variances=False, mask=None, norm=None, cmat=None
 ):
@@ -103,6 +116,81 @@ def reference_statistics(
         for name, coord in arr_.coords.items()
         if set(coord.dims).intersection(other_dims)
     }
+
+    stats = _scat_cov_to_xarray(ref, batch_dim=batch_dim).assign_coords(coords)
+
+    if sref is not None:
+        variances = _scat_cov_to_xarray(sref, batch_dim=batch_dim)
+        stats = stats.merge(
+            variances.rename_vars(
+                {name: f"var_{name}" for name in variances.data_vars.keys()}
+            )
+        )
+
+    if not other_dims:
+        return stats.squeeze(batch_dim)
+    elif len(other_dims) == 1:
+        return stats
+    else:
+        return stats.unstack(batch_dim)
+
+
+def cross_statistics(
+    arr1,
+    arr2,
+    *,
+    parameters,
+    spatial_dim="cells",
+    variances=False,
+    mask=None,
+    norm=None,
+    cmat=None,
+):
+    # make sure the indexes align exactly (i.e. the arrays only differ by their values)
+    xr.align(arr1, arr2, join="exact", copy=False)
+    if spatial_dim not in arr1.dims:
+        raise ValueError(
+            f"cannot find the spatial dim '{spatial_dim}' in the data dimensions"
+        )
+
+    kwargs = {
+        "calc_var": variances,
+        "mask": mask,
+        "norm": norm,
+        "cmat": cmat,
+    }
+
+    # will always stack equally
+    arr1_, other_dims, batch_dim = stack_other_dims(
+        arr1, spatial_dim=spatial_dim, batch_dim="batches"
+    )
+    arr2_, _, _ = stack_other_dims(arr2, spatial_dim=spatial_dim, batch_dim="batches")
+
+    data1 = arr1_.transpose(..., spatial_dim).data
+    data2 = arr1_.transpose(..., spatial_dim).data
+
+    result = parameters.cache.eval(data1, data2, **kwargs)
+    if result is None:
+        raise ValueError(
+            "something failed, check the logs"
+        )  # TODO: change the foscat code to raise errors
+
+    if variances:
+        ref, sref = result
+    else:
+        ref, sref = result, None
+
+    coords1 = {
+        name: coord
+        for name, coord in arr1_.coords.items()
+        if set(coord.dims).intersection(other_dims)
+    }
+    coords2 = {
+        name: coord
+        for name, coord in arr2_.coords.items()
+        if set(coord.dims).intersection(other_dims)
+    }
+    coords = coords1 | coords2
 
     stats = _scat_cov_to_xarray(ref, batch_dim=batch_dim).assign_coords(coords)
 
