@@ -17,7 +17,10 @@ class Parameters:
     kernel_size : int
         The size of the kernel in cells / pixels
     jmax_delta : float
-        <description of jmax and the delta>
+        Typically, the scattering covariance coefficients are calculated over N scales, 
+        starting from the smallest scale (j=0) up to the largest scale (j_{\text{max}}=\log_2(\text{nside})). 
+        Adjusting this parameter eliminates the coefficients at the largest scale 
+        where j_{\text{max}}=\log_2(\text{nside})-j_{\text{max\_delta}}.
     dtype : str or numpy.dtype, default: "float64"
         The dtype to use for the transform.
     backend : {"numpy", "torch", "tensorflow"}, default: "tensorflow"
