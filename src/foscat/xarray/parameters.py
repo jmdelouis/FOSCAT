@@ -21,10 +21,10 @@ class Parameters:
         starting with the data level (``level``, which is defined as ``log2(nside)``) in
         decreasing order. This means that the levels for which coefficients are computed
         are in the range
-        
+
         .. math::
             [level - relative_level, level]
-        
+
         If ``relative_level`` is None, compute all levels until ``level=0``.
     dtype : str or numpy.dtype, default: "float64"
         The dtype to use for the transform.
