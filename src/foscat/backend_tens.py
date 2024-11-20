@@ -24,9 +24,10 @@ class foscat_backend_tens:
             operation.gpulist[(operation.gpupos + self.curr_gpu) % operation.ngpu]
         ):
             print(
-                "%s Run [PROC=%04d] on GPU %s"
+                "%s Run %d [PROC=%04d] on GPU %s"
                 % (
                     loss_function.name,
+                    loss_function.id_loss,
                     self.mpi_rank,
                     operation.gpulist[
                         (operation.gpupos + self.curr_gpu) % operation.ngpu
