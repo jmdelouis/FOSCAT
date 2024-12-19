@@ -2,14 +2,14 @@ import foscat.scat_cov as scat
 
 
 class scat_cov_map(scat.funct):
-    def __init__(self, P00, S0, C01, C11, S1=None, C10=None, backend=None):
+    def __init__(self, S2, S0, S3, S4, S1=None, S3P=None, backend=None):
 
-        self.P00 = P00
+        self.S2 = S2
         self.S0 = S0
         self.S1 = S1
-        self.C01 = C01
-        self.C10 = C10
-        self.C11 = C11
+        self.S3 = S3
+        self.S3P = S3P
+        self.S4 = S4
         self.backend = backend
         self.bk_type = "SCAT_COV_MAP2D"
 
@@ -29,30 +29,30 @@ class funct(scat.funct):
             image1, image2=image2, mask=mask, norm=norm, Auto=Auto, calc_var=calc_var
         )
         return scat_cov_map(
-            r.P00, r.S0, r.C01, r.C11, S1=r.S1, C10=r.C10, backend=r.backend
+            r.S2, r.S0, r.S3, r.S4, S1=r.S1, S3P=r.S3P, backend=r.backend
         )
 
     def scat_coeffs_apply(
         self, scat, method, no_order_1=False, no_order_2=False, no_order_3=False
     ):
-        for j in scat.P00:
+        for j in scat.S2:
             if not no_order_1:
-                scat.P00[j] = method(scat.P00[j])
+                scat.S2[j] = method(scat.S2[j])
                 if scat.S1 is not None:
                     scat.S1[j] = method(scat.S1[j])
 
             if not no_order_2:
-                for n1 in scat.C01[j]:
-                    scat.C01[j][n1] = method(scat.C01[j][n1])
+                for n1 in scat.S3[j]:
+                    scat.S3[j][n1] = method(scat.S3[j][n1])
 
-                if scat.C10 is not None:
-                    for n1 in scat.C10[j]:
-                        scat.C10[j][n1] = method(scat.C10[j][n1])
+                if scat.S3P is not None:
+                    for n1 in scat.S3P[j]:
+                        scat.S3P[j][n1] = method(scat.S3P[j][n1])
 
             if not no_order_3:
-                for n1 in scat.C11[j]:
-                    for n2 in scat.C11[j][n1]:
-                        scat.C11[j][n1][n2] = method(scat.C11[j][n1][n2])
+                for n1 in scat.S4[j]:
+                    for n2 in scat.S4[j][n1]:
+                        scat.S4[j][n1][n2] = method(scat.S4[j][n1][n2])
 
     def scat_ud_grade_2(
         self, scat, no_order_1=False, no_order_2=False, no_order_3=False
