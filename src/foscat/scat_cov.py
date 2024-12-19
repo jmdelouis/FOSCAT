@@ -3573,11 +3573,11 @@ class funct(FOC.FoCUS):
             result = scat_cov()
             # Assuming the batch dimension is the first dimension
             result.S0 = self.backend.bk_reduce_mean(x.S0, axis=0)
-            result.P00 = self.backend.bk_reduce_mean(x.P00, axis=0)
+            result.S2 = self.backend.bk_reduce_mean(x.S2, axis=0)
             if x.S1 is not None:
                 result.S1 = self.backend.bk_reduce_mean(x.S1, axis=0)
-            result.C01 = self.backend.bk_reduce_mean(x.C01, axis=0)
-            result.C11 = self.backend.bk_reduce_mean(x.C11, axis=0)
+            result.S3 = self.backend.bk_reduce_mean(x.S3, axis=0)
+            result.S4 = self.backend.bk_reduce_mean(x.S4, axis=0)
             return result
         else:
             return self.backend.bk_reduce_mean(x, axis=0)
