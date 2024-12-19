@@ -1,0 +1,14 @@
+channels:
+  - conda-forge
+dependencies:
+  - imageio
+  - imagecodecs
+  - matplotlib
+  - numpy
+  - tensorflow
+  - healpy
+  - xarray
+  - pytest
+  - pytest-cov
+  - pytest-xdist
+  - hypothesis

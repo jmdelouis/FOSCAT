@@ -18,7 +18,7 @@ class Loss:
         batch=None,
         batch_data=None,
         batch_update=None,
-        info_callback=False
+        info_callback=False,
     ):
 
         self.loss_function = function
@@ -119,7 +119,7 @@ class Synthesis:
                         "nvidia-smi | awk '$2==\"N/A\"{print substr($9,1,length($9)-3),substr($11,1,length($11)-3),substr($13,1,length($13)-1)}' > smi_tmp.txt"
                     )
                 except:
-                    print('No nvidia GPU: Impossible to trace')
+                    print("No nvidia GPU: Impossible to trace")
                     self.nogpu = 1
 
     def stop_synthesis(self):
@@ -213,7 +213,9 @@ class Synthesis:
                     )
                     self.last_info = self.KEEP_TRACK(linfo, self.mpi_rank, add=True)
                 else:
-                    l_loss, g = self.bk.loss(x, l_batch, self.loss_class[k], self.KEEP_TRACK)
+                    l_loss, g = self.bk.loss(
+                        x, l_batch, self.loss_class[k], self.KEEP_TRACK
+                    )
 
                 if g_tot is None:
                     g_tot = g
@@ -223,7 +225,9 @@ class Synthesis:
                 l_tot = l_tot + l_loss.numpy()
 
                 if self.l_log[self.mpi_rank * self.MAXNUMLOSS + k] == -1:
-                    self.l_log[self.mpi_rank * self.MAXNUMLOSS + k] = l_loss.numpy() / nstep
+                    self.l_log[self.mpi_rank * self.MAXNUMLOSS + k] = (
+                        l_loss.numpy() / nstep
+                    )
                 else:
                     self.l_log[self.mpi_rank * self.MAXNUMLOSS + k] = (
                         self.l_log[self.mpi_rank * self.MAXNUMLOSS + k]
@@ -356,7 +360,7 @@ class Synthesis:
             except:
                 print("Error: unable to start thread for GPU survey")
 
-        #start = time.time()
+        # start = time.time()
 
         if self.mpi_size > 1:
             num_loss = np.zeros([1], dtype="int32")
@@ -395,7 +399,7 @@ class Synthesis:
 
         self.noise_idx = None
 
-        #for k in range(self.number_of_loss):
+        # for k in range(self.number_of_loss):
         #    if self.loss_class[k].batch is not None:
         #        l_batch = self.loss_class[k].batch(
         #            self.loss_class[k].batch_data, 0, init=True
@@ -407,7 +411,7 @@ class Synthesis:
 
         maxitt = NUM_EPOCHS
 
-#        start_x = x.copy()
+        #        start_x = x.copy()
 
         for iteration in range(NUM_STEP_BIAS):
 
@@ -432,7 +436,7 @@ class Synthesis:
                         self.loss_class[k].batch_update(
                             self.loss_class[k].batch_data, omap
                         )
-                    #if self.loss_class[k].batch is not None:
+                    # if self.loss_class[k].batch is not None:
                     #    l_batch = self.loss_class[k].batch(
                     #        self.loss_class[k].batch_data, 0, init=True
                     #    )
