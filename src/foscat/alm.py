@@ -3,10 +3,13 @@ import numpy as np
 
 class alm():
 
-    def __init__(self,backend=None,lmax=24,limit_range=1E7):
+    def __init__(self,backend=None,lmax=24,nside=None,limit_range=1E7):
         self._logtab={}
-        self.lmax=0
-        for k in range(1,2*lmax+1):
+        if nside is not None:
+            self.lmax=3*nside
+        else:
+            self.lmax=lmax
+        for k in range(1,2*self.lmax+1):
             self._logtab[k]=np.log(k) 
         self._limit_range=1/limit_range
         self._log_limit_range=np.log(limit_range)
@@ -52,7 +55,7 @@ class alm():
         ratio[0,0]= self.double_factorial_log(2*m - 1)-0.5*np.sum(self.log(1+np.arange(2*m)))
     
         if m == lmax:
-            return result*np.exp(ratio)*np.sqrt((2*(np.arange(lmax-m+1)-m))/(4*np.pi)).reshape(lmax+1-m,1)
+            return result*np.exp(ratio)*np.sqrt(4*np.pi*(2*(np.arange(lmax-m+1)+m)+1)).reshape(lmax+1-m,1)
     
         # Étape 2 : Calcul de P_{l+1, m}(x)
         result[1] = x * (2*m + 1) * result[0]
@@ -68,7 +71,7 @@ class alm():
                 result[l-m]*=self._limit_range
                 ratio[l-m-1,0]+=self._log_limit_range
                 ratio[l-m,0]+=self._log_limit_range
-        
+                
         return result*np.exp(ratio)*(np.sqrt(4*np.pi*(2*(np.arange(lmax-m+1)+m)+1))).reshape(lmax+1-m,1)
     
     def comp_tf(self,im,ph):
