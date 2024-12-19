@@ -96,12 +96,18 @@ class alm():
             ii+=1
         return self.backend.bk_reshape(self.backend.bk_concat(ft_im,axis=0),[4*nside-1,3*nside])
 
-    def anafast(self,im,map2=None):
+    def anafast(self,im,map2=None,nest=True):
         nside=int(np.sqrt(im.shape[0]//12))
         th,ph=hp.pix2ang(nside,np.arange(12*nside*nside))
-        ft_im=self.comp_tf(self.backend.bk_complex(im,0*im),ph)
-        if map2 is not None:
-            ft_im2=self.comp_tf(self.backend.bk_complex(map2,0*im),ph)
+        if nest:
+            idx=hp.ring2nest(nside,np.arange(12*nside**2))
+            ft_im=self.comp_tf(self.backend.bk_complex(im[idx],0*im),ph)
+            if map2 is not None:
+                ft_im2=self.comp_tf(self.backend.bk_complex(map2[idx],0*im),ph)
+        else:
+            ft_im=self.comp_tf(self.backend.bk_complex(im,0*im),ph)
+            if map2 is not None:
+                ft_im2=self.comp_tf(self.backend.bk_complex(map2,0*im),ph)
             
         co_th=np.cos(np.unique(th))
 

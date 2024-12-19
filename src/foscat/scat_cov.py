@@ -1496,7 +1496,7 @@ class scat_cov:
                         ax1.axvline(n - 0.5, ls=":", color="gray")
         plt.yscale("log")
         if norm:
-            ax1.set_ylabel(r"$\frac{S_4}{\sqrt{P_{00,j_1}P_{00,j_2}}}$")
+            ax1.set_ylabel(r"$\frac{S_4}{\sqrt{S_{2,j_1}S_{2,j_2}}}$")
         else:
             ax1.set_ylabel(r"$S_4$")
 
