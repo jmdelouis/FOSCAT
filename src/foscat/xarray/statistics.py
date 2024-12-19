@@ -7,14 +7,14 @@ backends = {1: "tensorflow", 2: "torch", 3: "numpy"}
 
 def _scat_cov_to_xarray(obj, batch_dim="batches"):
     types = xr.Variable("type", ["mean", "variance"])
-    names = ["S0", "P00", "C01", "C11", "S1", "C10"]
+    names = ["S0", "S2", "S3", "S4", "S1", "S3P"]
     dims = {
         "S0": [batch_dim, "type"],
         "S1": [batch_dim, "masks", "scales1", "orientations_1"],
-        "P00": [batch_dim, "masks", "scales1", "orientations_1"],
-        "C01": [batch_dim, "masks", "scales2", "orientations_1", "orientations_2"],
-        "C10": [batch_dim, "masks", "scales2", "orientations_1", "orientations_2"],
-        "C11": [
+        "S2": [batch_dim, "masks", "scales1", "orientations_1"],
+        "S3": [batch_dim, "masks", "scales2", "orientations_1", "orientations_2"],
+        "S3P": [batch_dim, "masks", "scales2", "orientations_1", "orientations_2"],
+        "S4": [
             batch_dim,
             "masks",
             "scales3",
@@ -105,8 +105,8 @@ def reference_statistics(
     norm : {"auto", "self"} or None, default: None
         Normalization method:
         - None: no normalization
-        - "auto": normalize by the reference P00
-        - "self": normalize by the current P00
+        - "auto": normalize by the reference S2
+        - "self": normalize by the current S2
     """
     if spatial_dim not in arr.dims:
         raise ValueError(
@@ -187,8 +187,8 @@ def cross_statistics(
     norm : {"auto", "self"} or None, default: None
         Normalization method:
         - None: no normalization
-        - "auto": normalize by the reference P00
-        - "self": normalize by the current P00
+        - "auto": normalize by the reference S2
+        - "self": normalize by the current S2
     """
     # make sure the indexes align exactly (i.e. the arrays only differ by their values)
     xr.align(arr1, arr2, join="exact", copy=False)
