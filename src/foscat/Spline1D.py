@@ -11,97 +11,82 @@ class Spline1D:
         """
         self.degree = degree
         self.nodes = nodes
-        self.norm = np.array([
-            pow(-1, i) * (self.degree + 1) /
-            (self._fact_spline(self.degree + 1 - i) * self._fact_spline(i))
-            for i in range(self.degree + 1)
-        ])
-
-    def _fact_spline(self, x):
-        """
-        Computes the factorial of x.
-
-        Parameters:
-        - x (int): Input value.
-
-        Returns:
-        - int: The factorial of x.
-        """
-        if x <= 1:
-            return 1
-        return x * self._fact_spline(x - 1)
-
-    def yplus_spline1d(self, x):
-        """
-        Computes the spline function for positive x values.
-
-        Parameters:
-        - x (np.ndarray or float): Input value(s).
-
-        Returns:
-        - np.ndarray or float: Spline function value(s).
-        """
-        if self.degree == 0:
-            return np.where(x == 0.0, 0.5, 1.0)
-        return np.maximum(0, x) ** self.degree
-
-    def calculate(self, x):
-        """
-        Computes the spline weights for a single x value.
-
-        Parameters:
-        - x (float): Input x value in the range [0, 1].
-
-        Returns:
-        - np.ndarray: Array of spline weights for each node.
-        """
-        y = [0] * self.nodes
-        for i in range(self.nodes):
-            tmp = 0
-            tx = (self.nodes - 1) * x - i
-            if x < 0:
-                tx = -i
-            if x > 1.0:
-                tx = (self.nodes - 1) - i
-            for j in range(self.degree + 1):
-                tmp += self.norm[j] * self.yplus_spline1d(
-                    tx - j + (self.degree + 1) / 2
-                )
-            if tmp < 0:
-                tmp = 0.0
-            y[i] += tmp
-        total = sum(y)
-        y = [yi / total for yi in y]
-        return y
-
-    def eval(self, x_array):
-        """
-        Evaluates the spline weights for an array of x values in a vectorized manner.
-
-        Parameters:
-        - x_array (np.ndarray): Array of x values in the range [0, 1].
-
-        Returns:
-        - tuple: (indices, weights)
-            - indices (np.ndarray): 2D array where each row contains indices of non-zero weights for each x in x_array.
-            - weights (np.ndarray): 2D array where each row contains the non-zero weights for each x in x_array.
-        """
-        y = np.zeros([self.nodes]+list(x_array.shape))
         
-        for i in range(self.nodes):
-            tmp = 0
-            tx = (self.nodes - 1) * x_array - i
-            tx[x_array<0]=-i
-            tx[x_array>1.0]=(self.nodes - 1) - i
-            
-            for j in range(self.degree + 1):
-                tmp += self.norm[j] * self.yplus_spline1d(
-                    tx - j + (self.degree + 1) / 2
-                )
-            tmp[tmp<0.0] = 0.0
-            y[i] += tmp
-        nshape=x_array.shape[0]
-        for k in range(1,len(x_array.shape)):
-            nshape*=x.shape[k]
-        total = sum(y.reshape(self.nodes,nshape),1)
-        return y/total
+        
+    def cubic_spline_function(self,x):
+        """
+        Evaluate the cubic spline basis function.
+    
+        Args:
+            x (float or array): Input value(s) to evaluate the spline basis function.
+    
+        Returns:
+            float or array: Result of the cubic spline basis function.
+        """
+        return -2 * x**3 + 3 * x**2
+
+
+    def eval(self,x):
+        """
+        Compute a 3rd-degree cubic spline with 4-point support.
+    
+        Args:
+            x (float or array): Input value(s) to compute the spline.
+
+        Returns:
+            indices (array): Indices of the spline support points.
+            coefficients (array): Normalized spline coefficients.
+        """
+        N=self.nodes
+        
+        if isinstance(x, float):
+            # Single scalar input
+            base_idx = int(x * (N-1))
+            indices = np.zeros([4], dtype="int")
+            coefficients = np.zeros([4])
+        else:
+            # Array input
+            base_idx = (x * (N-1)).astype("int")
+            indices = np.zeros([4, x.shape[0]], dtype="int")
+            coefficients = np.zeros([4, x.shape[0]])
+
+        # Compute the fractional part of the input
+        fractional_part = x * (N-1) - base_idx
+
+        # Compute spline coefficients for 4 support points
+        coefficients[3] = self.cubic_spline_function(fractional_part / 2) / 2
+        coefficients[2] = self.cubic_spline_function(0.5 + fractional_part / 2) / 2
+        coefficients[1] = self.cubic_spline_function(1 - fractional_part / 2) / 2
+        coefficients[0] = self.cubic_spline_function(0.5 - fractional_part / 2) / 2
+
+        # Assign indices for the support points
+        indices[3] = base_idx + 3
+        indices[2] = base_idx + 2
+        indices[1] = base_idx + 1
+        indices[0] = base_idx
+
+        # Handle boundary conditions
+        if isinstance(x, float):
+            if indices[0] == 0:
+                indices[0] = 1
+            if indices[1] == 0:
+                indices[1] = 1
+            if indices[2] == N + 1:
+                indices[2] = N
+            if indices[3] == N + 1:
+                indices[3] = N
+            if indices[3] == N + 2:
+                indices[3] = N
+        else:
+            indices[0, indices[0] == 0] = 1
+            indices[1, indices[1] == 0] = 1
+            indices[2, indices[2] >= N + 1] = N
+            indices[3, indices[3] >= N + 1] = N
+
+        # Adjust indices to start from 0
+        indices = indices - 1
+        # Square coefficients and normalize
+        coefficients = coefficients * coefficients
+        coefficients /= np.sum(coefficients, axis=0)
+
+        return indices, coefficients
