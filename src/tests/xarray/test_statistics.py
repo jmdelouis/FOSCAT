@@ -33,10 +33,10 @@ class _Parameters:
     def eval(self, data1, data2=None, *, calc_var=False, **kwargs):
         ref = sc.scat_cov(
             s0=np.zeros(shape=(3, 2)),
-            p00=np.zeros(shape=(3, 1, 5, 4)),
-            c01=np.zeros(shape=(3, 1, 3, 4, 4)),
-            c10=None,
-            c11=np.zeros(shape=(3, 1, 7, 4, 4, 4)),
+            s2=np.zeros(shape=(3, 1, 5, 4)),
+            s3=np.zeros(shape=(3, 1, 3, 4, 4)),
+            s3p=None,
+            s4=np.zeros(shape=(3, 1, 7, 4, 4, 4)),
             s1=np.zeros(shape=(3, 1, 5, 4)),
             backend=self.backend,
         )
@@ -71,7 +71,7 @@ def scat_cov():
             st.shared(orientations_size, key="orientations"),
         ),
     )
-    P00 = npst.arrays(
+    S2 = npst.arrays(
         dtype=st.just("float64"),
         shape=st.tuples(
             st.shared(batch_size, key="batches"),
@@ -80,7 +80,7 @@ def scat_cov():
             st.shared(orientations_size, key="orientations"),
         ),
     )
-    C01 = npst.arrays(
+    S3 = npst.arrays(
         dtype=st.just("complex128"),
         shape=st.tuples(
             st.shared(batch_size, key="batches"),
@@ -90,7 +90,7 @@ def scat_cov():
             st.shared(orientations_size, key="orientations"),
         ),
     )
-    C10 = npst.arrays(
+    S3P = npst.arrays(
         dtype=st.just("complex128"),
         shape=st.tuples(
             st.shared(batch_size, key="batches"),
@@ -100,7 +100,7 @@ def scat_cov():
             st.shared(orientations_size, key="orientations"),
         ),
     )
-    C11 = npst.arrays(
+    S4 = npst.arrays(
         dtype=st.just("complex128"),
         shape=st.tuples(
             st.shared(batch_size, key="batches"),
@@ -115,10 +115,10 @@ def scat_cov():
     return st.builds(
         sc.scat_cov,
         s0=S0,
-        p00=P00,
-        c01=C01,
-        c10=C10 | st.just(None),
-        c11=C11,
+        s2=S2,
+        s3=S3,
+        s3p=S3P | st.just(None),
+        s4=S4,
         s1=S1,
         backend=backends,
     )
@@ -147,15 +147,15 @@ def test_reference_statistics(variances, backend):
     actual = statistics.reference_statistics(arr, params, variances=variances)
     data_vars = {
         "S0": (["time", "type"], np.zeros(shape=(3, 2))),
-        "P00": (
+        "S2": (
             ["time", "masks", "scales1", "orientations_1"],
             np.zeros(shape=(3, 1, 5, 4)),
         ),
-        "C01": (
+        "S3": (
             ["time", "masks", "scales2", "orientations_1", "orientations_2"],
             np.zeros(shape=(3, 1, 3, 4, 4)),
         ),
-        "C11": (
+        "S4": (
             [
                 "time",
                 "masks",
@@ -197,15 +197,15 @@ def test_cross_statistics(variances, backend):
     )
     data_vars = {
         "S0": (["time", "type"], np.zeros(shape=(3, 2))),
-        "P00": (
+        "S2": (
             ["time", "masks", "scales1", "orientations_1"],
             np.zeros(shape=(3, 1, 5, 4)),
         ),
-        "C01": (
+        "S3": (
             ["time", "masks", "scales2", "orientations_1", "orientations_2"],
             np.zeros(shape=(3, 1, 3, 4, 4)),
         ),
-        "C11": (
+        "S4": (
             [
                 "time",
                 "masks",
