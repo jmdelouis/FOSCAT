@@ -925,6 +925,22 @@ class foscat_backend:
             else:
                 return np.concatenate(data, axis=axis)
 
+    def bk_zeros(self, shape,dtype=None):
+        if self.BACKEND == self.TENSORFLOW:
+            return self.backend.zeros(shape,dtype=dtype)
+        if self.BACKEND == self.TORCH:
+            return self.backend.zeros(shape,dtype=dtype)
+        if self.BACKEND == self.NUMPY:
+            return np.zeros(shape,dtype=dtype)
+        
+    def bk_fft(self, data):
+        if self.BACKEND == self.TENSORFLOW:
+            return self.backend.signal.fft(data)
+        if self.BACKEND == self.TORCH:
+            return self.backend.fft(data)
+        if self.BACKEND == self.NUMPY:
+            return self.backend.fft.fft(data)
+        
     def bk_conjugate(self, data):
 
         if self.BACKEND == self.TENSORFLOW:
