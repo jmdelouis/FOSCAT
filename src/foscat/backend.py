@@ -932,6 +932,14 @@ class foscat_backend:
             return self.backend.zeros(shape,dtype=dtype)
         if self.BACKEND == self.NUMPY:
             return np.zeros(shape,dtype=dtype)
+
+    def bk_gather(self, data,idx):
+        if self.BACKEND == self.TENSORFLOW:
+            return self.backend.gather(data,idx)
+        if self.BACKEND == self.TORCH:
+            return data[idx]
+        if self.BACKEND == self.NUMPY:
+            return data[idx]
         
     def bk_fft(self, data):
         if self.BACKEND == self.TENSORFLOW:

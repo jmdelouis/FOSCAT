@@ -101,9 +101,9 @@ class alm():
         th,ph=hp.pix2ang(nside,np.arange(12*nside*nside))
         if nest:
             idx=hp.ring2nest(nside,np.arange(12*nside**2))
-            ft_im=self.comp_tf(self.backend.bk_complex(im[idx],0*im),ph)
+            ft_im=self.comp_tf(self.backend.bk_complex(self.backend.bk_gather(im,idx),0*im),ph)
             if map2 is not None:
-                ft_im2=self.comp_tf(self.backend.bk_complex(map2[idx],0*im),ph)
+                ft_im2=self.comp_tf(self.backend.bk_complex(self.backend.bk_gather(map2,idx),0*im),ph)
         else:
             ft_im=self.comp_tf(self.backend.bk_complex(im,0*im),ph)
             if map2 is not None:
