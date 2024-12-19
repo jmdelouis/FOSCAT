@@ -132,7 +132,7 @@ For more information, see the [documentation](https://foscat-documentation.readt
 
 ## Authors and acknowledgment
 
-Authors: J.-M. Delouis, T. Foulquier, J. Mangin, L. Mousset, T. Odaka, F. Paul, E. Allys
+Authors: J.-M. Delouis, P. Campeti, T. Foulquier, J. Mangin, L. Mousset, T. Odaka, F. Paul, E. Allys
 
 This work is part of the R & T Deepsee project supported by CNES. The authors acknowledge the heritage of the Planck-HFI consortium regarding data, software, knowledge. This work has been supported by the Programme National de Télédétection Spatiale (PNTS, http://programmes.insu.cnrs.fr/pnts/), grant n◦ PNTS-2020-08
 
