@@ -17,6 +17,7 @@ dependencies = [
   "numpy",
   "tensorflow",
   "healpy",
+  "spherical",
 ]
 requires-python = ">= 3.9"
 keywords = ["scattering transform", "component separation", "denoising"]
