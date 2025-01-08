@@ -296,9 +296,17 @@ class alm():
                 l_U=self.backend.bk_gather(im[2],idx)
                 ft_im_Pp=self.comp_tf(self.backend.bk_complex(l_Q,l_U),ph)
                 ft_im_Pm=self.comp_tf(self.backend.bk_complex(l_Q,-l_U),ph)
+                if map2 is not None:
+                    l_Q=self.backend.bk_gather(map2[1],idx)
+                    l_U=self.backend.bk_gather(map2[2],idx)
+                    ft_im2_Pp=self.comp_tf(self.backend.bk_complex(l_Q,l_U),ph)
+                    ft_im2_Pm=self.comp_tf(self.backend.bk_complex(l_Q,-l_U),ph)
             else:
                 ft_im_Pp=self.comp_tf(self.backend.bk_complex(im[1],im[2]),ph)
                 ft_im_Pm=self.comp_tf(self.backend.bk_complex(im[1],-im[2]),ph)
+                if map2 is not None:
+                    ft_im2_Pp=self.comp_tf(self.backend.bk_complex(map2[1],map2[2]),ph)
+                    ft_im2_Pm=self.comp_tf(self.backend.bk_complex(map2[1],-map2[2]),ph)
 
         for m in range(lmax+1):
 
@@ -325,8 +333,8 @@ class alm():
                     tmpp2=self.backend.bk_reduce_sum(plmp*ft_im2_Pp[:,m],1)
                     tmpm2=self.backend.bk_reduce_sum(plmm*ft_im2_Pm[:,m],1)
                 
-                    almE2=-(tmpp+tmpm)/2.0
-                    almB2=(tmpp-tmpm)/(2J)
+                    almE2=-(tmpp2+tmpm2)/2.0
+                    almB2=(tmpp2-tmpm2)/(2J)
                 else:
                     almE2=almE
                     almB2=almB
@@ -337,10 +345,12 @@ class alm():
                 tmpTE=self.backend.bk_real((tmp*self.backend.bk_conjugate(almE2)))
                 tmpTB=-self.backend.bk_real((tmp*self.backend.bk_conjugate(almB2)))
                 tmpEB=-self.backend.bk_real((almE*self.backend.bk_conjugate(almB2)))
+                
                 if map2 is not None:
                     tmpTE=(tmpTE+self.backend.bk_real((tmp2*self.backend.bk_conjugate(almE))))/2
                     tmpTB=(tmpTB-self.backend.bk_real((tmp2*self.backend.bk_conjugate(almB))))/2
                     tmpEB=(tmpEB-self.backend.bk_real((almE2*self.backend.bk_conjugate(almB))))/2
+                
 
                 if m==0:
                     l_cl=self.backend.bk_concat([tmpTT,tmpEE,tmpBB,tmpTE,tmpEB,tmpTB],0)
