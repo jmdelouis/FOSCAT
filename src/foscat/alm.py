@@ -5,15 +5,23 @@ class alm():
 
     def __init__(self,backend=None,lmax=24,
                  nside=None,limit_range=1E10):
+        
+        if backend is None:
+            import foscat.scat_cov as sc
+            self.sc=sc.funct()
+            self.backend=self.sc.backend
+        else:
+            self.backend=backend.backend
+            
         self._logtab={}
         self.lth={}
+        self.lph={}
+        self.matrix_shift_ph={}
         if nside is not None:
+            self.ring_th(nside)
+            self.ring_ph(nside)
+            self.shift_ph(nside)
             self.lmax=3*nside
-            th,ph=hp.pix2ang(nside,np.arange(12*nside*nside))
-
-            lth=np.unique(th)
-            
-            self.lth[nside]=lth
         else:
             self.lmax=lmax
 
@@ -23,26 +31,62 @@ class alm():
         self._limit_range=1/limit_range
         self._log_limit_range=np.log(limit_range)
         
-        if backend is None:
-            import foscat.scat_cov as sc
-            self.sc=sc.funct()
-            self.backend=self.sc.backend
-        else:
-            self.backend=backend.backend
 
         self.Yp={}
         self.Ym={}
 
     def ring_th(self,nside):
         if nside not in self.lth:
-            th,ph=hp.pix2ang(nside,np.arange(12*nside*nside))
-
-            lth=np.unique(th)
-        
-            self.lth[nside]=lth
+            n=0
+            ith=[]
+            for k in range(nside-1):
+                N=4*(k+1)
+                ith.append(n)
+                n+=N
+                
+            for k in range(2*nside+1):
+                N=4*nside
+                ith.append(n)
+                n+=N
+            for k in range(nside-1):
+                N=4*(nside-1-k)
+                ith.append(n)
+                n+=N
+                
+            th,ph=hp.pix2ang(nside,ith)
+            
+            self.lth[nside]=th
         return self.lth[nside]
+    
+    def ring_ph(self,nside):
+        if nside not in self.lph:
+            n=0
+            iph=[]
+            for k in range(nside-1):
+                N=4*(k+1)
+                iph.append(n)
+                n+=N
+                
+            for k in range(2*nside+1):
+                N=4*nside
+                iph.append(n)
+                n+=N
+            for k in range(nside-1):
+                N=4*(nside-1-k)
+                iph.append(n)
+                n+=N
+                
+            th,ph=hp.pix2ang(nside,iph)
+            
+            self.lph[nside]=ph
         
-
+    def shift_ph(self,nside):
+        
+        if nside not in self.matrix_shift_ph:
+            self.ring_ph(nside)
+            x=(-1J*np.arange(3*nside)).reshape(1,3*nside)
+            self.matrix_shift_ph[nside]=self.backend.bk_cast(self.backend.bk_exp(x*self.lph[nside].reshape(4*nside-1,1)))
+            
     def init_Ys(self,s,nside):
 
         if (s,nside) not in self.Yp:
@@ -194,44 +238,70 @@ class alm():
         ylm_moins = alpha_moins*ylm[1:] + beta_moins*ylm[:-1]
                 
         return ylm_plus,ylm_moins
+
+    def rfft2fft(self,val,axis=0):
+        r=self.backend.bk_rfft(val)
+        if axis==0:
+            r_inv=self.backend.bk_reverse(self.backend.bk_conjugate(r[1:-1]),axis=axis)
+        else:
+            r_inv=self.backend.bk_reverse(self.backend.bk_conjugate(r[:,1:-1]),axis=axis)
+        return self.backend.bk_concat([r,r_inv],axis=axis)
     
-    def comp_tf(self,im,ph):
+    def comp_tf(self,im,realfft=False):
+        
         nside=int(np.sqrt(im.shape[0]//12))
+        
+        self.shift_ph(nside)
+        
         n=0
         ii=0
         ft_im=[]
+            
         for k in range(nside-1):
             N=4*(k+1)
             l_n=N
             if l_n>3*nside:
                 l_n=3*nside
-            tmp=self.backend.bk_fft(im[n:n+N])[0:l_n]
-            ft_im.append(tmp*np.exp(-1J*np.arange(l_n)*ph[n]))
-            ft_im.append(self.backend.bk_zeros((3*nside-l_n),dtype=self.backend.all_cbk_type))
-            # if N<3*nside fill the tf with rotational values to mimic alm_tools.F90 of healpix (Minor effect)
-            #for m in range(l_n,3*nside,l_n):
-            #    ft_im.append(tmp[0:np.min([3*nside-m,l_n])])
+            if realfft:
+                tmp=self.rfft2fft(im[n:n+N])[0:l_n]
+            else:
+                tmp=self.backend.bk_fft(im[n:n+N])[0:l_n]
+                
+            ft_im.append(tmp)
+            if l_n!=3*nside:
+                ft_im.append(self.backend.bk_zeros((3*nside-l_n),dtype=self.backend.all_cbk_type))
             n+=N
             ii+=1
-        for k in range(2*nside+1):
-            N=4*nside
-            ft_im.append(self.backend.bk_fft(im[n:n+N])[:3*nside]*np.exp(-1J*np.arange(3*nside)*ph[n]))
-            n+=N
-            ii+=1
+            
+        result=self.backend.bk_reshape(self.backend.bk_concat(ft_im,axis=0),[nside-1,3*nside])
+
+        N=4*nside*(2*nside+1)    
+        v=self.backend.bk_reshape(im[n:n+N],[2*nside+1,4*nside])
+        if realfft:
+            v_fft=self.rfft2fft(v,axis=1)[:,:3*nside]
+        else:
+            v_fft=self.backend.bk_fft(v)[:,:3*nside]
+        n+=N
+        ii+=2*nside+1
+        result=self.backend.bk_concat([result,v_fft],axis=0)
+        
+        ft_im=[]
         for k in range(nside-1):
             N=4*(nside-1-k)
             l_n=N
             if l_n>3*nside:
                 l_n=3*nside
-            tmp=self.backend.bk_fft(im[n:n+N])[0:l_n]
-            ft_im.append(tmp*np.exp(-1J*np.arange(l_n)*ph[n]))
+            if realfft:
+                tmp=self.rfft2fft(im[n:n+N])[0:l_n]
+            else:
+                tmp=self.backend.bk_fft(im[n:n+N])[0:l_n]
+                
+            ft_im.append(tmp)
             ft_im.append(self.backend.bk_zeros((3*nside-l_n),dtype=self.backend.all_cbk_type))
-            # if N<3*nside fill the tf with rotational values to mimic alm_tools.F90 of healpix (Minor effect)
-            #for m in range(l_n,3*nside,l_n):
-            #    ft_im.append(tmp[0:np.min([3*nside-m,l_n])])
             n+=N
             ii+=1
-        return self.backend.bk_reshape(self.backend.bk_concat(ft_im,axis=0),[4*nside-1,3*nside])
+        lastresult=self.backend.bk_reshape(self.backend.bk_concat(ft_im,axis=0),[nside-1,3*nside])
+        return self.backend.bk_concat([result,lastresult],axis=0)*self.matrix_shift_ph[nside]
 
     def anafast(self,im,map2=None,nest=False,spin=2):
         
@@ -253,37 +323,39 @@ class alm():
         ordered as TT, EE, BB, TE, EB.TBanafast function computes L1 and L2 norm powerspctra.
 
         """
+        i_im=self.backend.bk_cast(im)
+        if map2 is not None:
+            i_map2=self.backend.bk_cast(map2)
+            
         doT=True
-        if len(im.shape)==1: # nopol
-            nside=int(np.sqrt(im.shape[0]//12))
+        if len(i_im.shape)==1: # nopol
+            nside=int(np.sqrt(i_im.shape[0]//12))
         else:
-            if im.shape[0]==2:
+            if i_im.shape[0]==2:
                 doT=False
                 
-            nside=int(np.sqrt(im.shape[1]//12))
-            
-        th,ph=hp.pix2ang(nside,np.arange(12*nside*nside))
+            nside=int(np.sqrt(i_im.shape[1]//12))
         
         if doT: # nopol
+            if len(i_im.shape)==2: # pol
+                l_im=i_im[0]
+                if map2 is not None:
+                    l_map2=i_map2[0]
+            else:
+                l_im=i_im
+                if map2 is not None:
+                    l_map2=i_map2
+                    
             if nest:
                 idx=hp.ring2nest(nside,np.arange(12*nside**2))
-                if len(im.shape)==1: # nopol
-                    ft_im=self.comp_tf(self.backend.bk_complex(self.backend.bk_gather(im,idx),0*im),ph)
+                if len(i_im.shape)==1: # nopol
+                    ft_im=self.comp_tf(self.backend.bk_gather(l_im,idx),realfft=True)
                     if map2 is not None:
-                        ft_im2=self.comp_tf(self.backend.bk_complex(self.backend.bk_gather(map2,idx),0*im),ph)
-                else:
-                    ft_im=self.comp_tf(self.backend.bk_complex(self.backend.bk_gather(im[0],idx),0*im[0]),ph)
-                    if map2 is not None:
-                        ft_im2=self.comp_tf(self.backend.bk_complex(self.backend.bk_gather(map2[0],idx),0*im[0]),ph)
+                        ft_im2=self.comp_tf(self.backend.bk_gather(l_map2,idx),realfft=True)
             else:
-                if len(im.shape)==1: # nopol
-                    ft_im=self.comp_tf(self.backend.bk_complex(im,0*im),ph)
-                    if map2 is not None:
-                        ft_im2=self.comp_tf(self.backend.bk_complex(map2,0*im),ph)
-                else:
-                    ft_im=self.comp_tf(self.backend.bk_complex(im[0],0*im[0]),ph)
-                    if map2 is not None:
-                        ft_im2=self.comp_tf(self.backend.bk_complex(map2[0],0*im[0]),ph)
+                ft_im=self.comp_tf(l_im,realfft=True)
+                if map2 is not None:
+                    ft_im2=self.comp_tf(l_map2,realfft=True)
                     
         lth=self.ring_th(nside)
 
@@ -294,27 +366,27 @@ class alm():
         cl2=None
         cl2_L1=None
         
-        if len(im.shape)==2: # nopol
+        if len(i_im.shape)==2: # nopol
         
             self.init_Ys(spin,nside)
             
             if nest:
                 idx=hp.ring2nest(nside,np.arange(12*nside**2))
-                l_Q=self.backend.bk_gather(im[int(doT)],idx)
-                l_U=self.backend.bk_gather(im[1+int(doT)],idx)
-                ft_im_Pp=self.comp_tf(self.backend.bk_complex(l_Q,l_U),ph)
-                ft_im_Pm=self.comp_tf(self.backend.bk_complex(l_Q,-l_U),ph)
+                l_Q=self.backend.bk_gather(i_im[int(doT)],idx)
+                l_U=self.backend.bk_gather(i_im[1+int(doT)],idx)
+                ft_im_Pp=self.comp_tf(self.backend.bk_complex(l_Q,l_U))
+                ft_im_Pm=self.comp_tf(self.backend.bk_complex(l_Q,-l_U))
                 if map2 is not None:
-                    l_Q=self.backend.bk_gather(map2[int(doT)],idx)
-                    l_U=self.backend.bk_gather(map2[1+int(doT)],idx)
-                    ft_im2_Pp=self.comp_tf(self.backend.bk_complex(l_Q,l_U),ph)
-                    ft_im2_Pm=self.comp_tf(self.backend.bk_complex(l_Q,-l_U),ph)
+                    l_Q=self.backend.bk_gather(i_map2[int(doT)],idx)
+                    l_U=self.backend.bk_gather(i_map2[1+int(doT)],idx)
+                    ft_im2_Pp=self.comp_tf(self.backend.bk_complex(l_Q,l_U))
+                    ft_im2_Pm=self.comp_tf(self.backend.bk_complex(l_Q,-l_U))
             else:
-                ft_im_Pp=self.comp_tf(self.backend.bk_complex(im[int(doT)],im[1+int(doT)]),ph)
-                ft_im_Pm=self.comp_tf(self.backend.bk_complex(im[int(doT)],-im[1+int(doT)]),ph)
+                ft_im_Pp=self.comp_tf(self.backend.bk_complex(i_im[int(doT)],i_im[1+int(doT)]))
+                ft_im_Pm=self.comp_tf(self.backend.bk_complex(i_im[int(doT)],-i_im[1+int(doT)]))
                 if map2 is not None:
-                    ft_im2_Pp=self.comp_tf(self.backend.bk_complex(map2[int(doT)],map2[1+int(doT)]),ph)
-                    ft_im2_Pm=self.comp_tf(self.backend.bk_complex(map2[int(doT)],-map2[1+int(doT)]),ph)
+                    ft_im2_Pp=self.comp_tf(self.backend.bk_complex(i_map2[int(doT)],i_map2[1+int(doT)]))
+                    ft_im2_Pm=self.comp_tf(self.backend.bk_complex(i_map2[int(doT)],-i_map2[1+int(doT)]))
 
         for m in range(lmax+1):
 
@@ -328,7 +400,7 @@ class alm():
                 else:
                     tmp2=tmp
                 
-            if len(im.shape)==2: # pol
+            if len(i_im.shape)==2: # pol
                 plmp=self.Yp[spin,nside][m]
                 plmm=self.Ym[spin,nside][m]
             
@@ -403,7 +475,7 @@ class alm():
                 cl2+=2*l_cl
                 cl2_l1+=2*self.backend.bk_L1(l_cl)
                 
-        if len(im.shape)==1: # nopol
+        if len(i_im.shape)==1: # nopol
             cl2=cl2/(2*np.arange(cl2.shape[0])+1)
             cl2_l1=cl2_l1/(2*np.arange(cl2.shape[0])+1)
         else:
@@ -413,14 +485,16 @@ class alm():
 
     def map2alm(self,im,nest=False):
         nside=int(np.sqrt(im.shape[0]//12))
-        th,ph=hp.pix2ang(nside,np.arange(12*nside*nside))
+        
         if nest:
             idx=hp.ring2nest(nside,np.arange(12*nside**2))
-            ft_im=self.comp_tf(self.backend.bk_complex(self.backend.bk_gather(im,idx),0*im),ph)
+            ft_im=self.comp_tf(self.backend.bk_cast(self.backend.bk_gather(im,idx)),realfft=True)
         else:
-            ft_im=self.comp_tf(self.backend.bk_complex(im,0*im),ph)
+            ft_im=self.comp_tf(self.backend.bk_cast(im),realfft=True)
             
-        co_th=np.cos(self.ring_th(nside))
+        lth=self.ring_th(nside)
+
+        co_th=np.cos(lth)
 
         lmax=3*nside-1
     
@@ -441,24 +515,21 @@ class alm():
         if spin==0:
             return self.map2alm(im_Q,nest=nest),self.map2alm(im_U,nest=nest)
 
-        
         nside=int(np.sqrt(im_Q.shape[0]//12))
-        th,ph=hp.pix2ang(nside,np.arange(12*nside*nside))
+
+        lth=self.ring_th(nside)
         
-        self.init_Ys(spin,nside)
+        co_th=np.cos(lth)
         
         if nest:
             idx=hp.ring2nest(nside,np.arange(12*nside**2))
             l_Q=self.backend.bk_gather(im_Q,idx)
             l_U=self.backend.bk_gather(im_U,idx)
-            ft_im_1=self.comp_tf(self.backend.bk_complex(l_Q,l_U),ph)
-            ft_im_2=self.comp_tf(self.backend.bk_complex(l_Q,-l_U),ph)
+            ft_im_1=self.comp_tf(self.backend.bk_complex(l_Q,l_U))
+            ft_im_2=self.comp_tf(self.backend.bk_complex(l_Q,-l_U))
         else:
-            ft_im_1=self.comp_tf(self.backend.bk_complex(im_Q,im_U),ph)
-            ft_im_2=self.comp_tf(self.backend.bk_complex(im_Q,-im_U),ph)
-
-        #co_th=np.cos(self.ring_th[nside])
-        #si_th=np.sin(self.ring_th[nside])
+            ft_im_1=self.comp_tf(self.backend.bk_complex(im_Q,im_U))
+            ft_im_2=self.comp_tf(self.backend.bk_complex(im_Q,-im_U))
 
         lmax=3*nside-1
     

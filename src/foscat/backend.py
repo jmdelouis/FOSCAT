@@ -952,6 +952,14 @@ class foscat_backend:
         if self.BACKEND == self.NUMPY:
             return data[idx]
         
+    def bk_reverse(self, data,axis=0):
+        if self.BACKEND == self.TENSORFLOW:
+            return self.backend.reverse(data,axis=[axis])
+        if self.BACKEND == self.TORCH:
+            return self.backend.reverse(data,axis=axis)
+        if self.BACKEND == self.NUMPY:
+            return np.reverse(data,axis=axis)
+        
     def bk_fft(self, data):
         if self.BACKEND == self.TENSORFLOW:
             return self.backend.signal.fft(data)
@@ -960,6 +968,13 @@ class foscat_backend:
         if self.BACKEND == self.NUMPY:
             return self.backend.fft.fft(data)
         
+    def bk_rfft(self, data):
+        if self.BACKEND == self.TENSORFLOW:
+            return self.backend.signal.rfft(data)
+        if self.BACKEND == self.TORCH:
+            return self.backend.rfft(data)
+        if self.BACKEND == self.NUMPY:
+            return self.backend.fft.rfft(data)
     def bk_conjugate(self, data):
 
         if self.BACKEND == self.TENSORFLOW:
