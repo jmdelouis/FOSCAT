@@ -3598,6 +3598,35 @@ class funct(FOC.FoCUS):
         else:
             return self.backend.bk_reduce_mean(x, axis=0)
     
+    def reduce_sum_batch(self, x):
+        
+        if isinstance(x, scat_cov):
+            
+            sS0=self.backend.bk_reduce_sum(x.S0, axis=0)
+            sS2=self.backend.bk_reduce_sum(x.S2, axis=0)
+            sS3=self.backend.bk_reduce_sum(x.S3, axis=0)
+            sS4=self.backend.bk_reduce_sum(x.S4, axis=0)
+            sS1=None
+            sS3P=None
+            if x.S1 is not None:
+                sS1 = self.backend.bk_reduce_sum(x.S1, axis=0)
+            if x.S3P is not None:
+                sS3P = self.backend.bk_reduce_sum(x.S3P, axis=0)
+                
+            result = scat_cov(
+                sS0,
+                sS2,
+                sS3,
+                sS4,
+                s1=sS1,
+                s3p=sS3P,
+                backend=self.backend,
+                use_1D=self.use_1D,
+            )
+            return result
+        else:
+            return self.backend.bk_reduce_mean(x, axis=0)
+    
     def reduce_distance(self, x, y, sigma=None):
 
         if isinstance(x, scat_cov):
