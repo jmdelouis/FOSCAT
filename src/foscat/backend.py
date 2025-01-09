@@ -591,6 +591,17 @@ class foscat_backend:
                 return np.sum(data, axis)
 
     # ---------------------------------------------−---------
+    # return a tensor size
+    
+    def bk_size(self, data):
+        if self.BACKEND == self.TENSORFLOW:
+            return self.backend.size(data)
+        if self.BACKEND == self.TORCH:
+            return data.numel()
+        if self.BACKEND == self.NUMPY:
+            return data.size
+        
+    # ---------------------------------------------−---------
 
     def iso_mean(self, x, use_2D=False):
         shape = list(x.shape)

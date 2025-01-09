@@ -3548,25 +3548,25 @@ class funct(FOC.FoCUS):
             return self.backend.bk_abs(self.backend.bk_sqrt(x))
 
     def reduce_mean(self, x):
+        result=0
+        N=1
         if isinstance(x, scat_cov):
-            if x.S1 is None:
-                result = (
-                    self.backend.bk_reduce_mean(self.backend.bk_abs(x.S0))
-                    + self.backend.bk_reduce_mean(self.backend.bk_abs(x.S2))
-                    + self.backend.bk_reduce_mean(self.backend.bk_abs(x.S3))
-                    + self.backend.bk_reduce_mean(self.backend.bk_abs(x.S4))
-                ) / 3
-            else:
-                result = (
-                    self.backend.bk_reduce_mean(self.backend.bk_abs(x.S0))
-                    + self.backend.bk_reduce_mean(self.backend.bk_abs(x.S2))
-                    + self.backend.bk_reduce_mean(self.backend.bk_abs(x.S1))
-                    + self.backend.bk_reduce_mean(self.backend.bk_abs(x.S3))
-                    + self.backend.bk_reduce_mean(self.backend.bk_abs(x.S4))
-                ) / 4
-        else:
-            return self.backend.bk_reduce_mean(x)
-        return result
+            result = self.backend.bk_reduce_sum(self.backend.bk_abs(x.S0)) + \
+                     self.backend.bk_reduce_sum(self.backend.bk_abs(x.S2)) + \
+                     self.backend.bk_reduce_sum(self.backend.bk_abs(x.S3)) + \
+                     self.backend.bk_reduce_sum(self.backend.bk_abs(x.S4))
+                
+            N = self.backend.bk_size(x.S0)+self.backend.bk_size(x.S2)+ \
+                self.backend.bk_size(x.S3)+self.backend.bk_size(x.S4)
+                
+            if x.S1 is not None:
+                result = result+self.backend.bk_reduce_sum(self.backend.bk_abs(x.S1))
+                N = N + self.backend.bk_size(x.S1)
+            if x.S3P is not None:
+                result = result+self.backend.bk_reduce_sum(self.backend.bk_abs(x.S1))
+                N = N + self.backend.bk_size(x.S3P)
+                
+        return result/N
 
     def reduce_mean_batch(self, x):
         if isinstance(x, scat_cov):
@@ -3576,6 +3576,8 @@ class funct(FOC.FoCUS):
             result.S2 = self.backend.bk_reduce_mean(x.S2, axis=0)
             if x.S1 is not None:
                 result.S1 = self.backend.bk_reduce_mean(x.S1, axis=0)
+            if x.S3P is not None:
+                result.S1 = self.backend.bk_reduce_mean(x.S3P, axis=0)
             result.S3 = self.backend.bk_reduce_mean(x.S3, axis=0)
             result.S4 = self.backend.bk_reduce_mean(x.S4, axis=0)
             return result
