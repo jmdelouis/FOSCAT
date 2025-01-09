@@ -300,13 +300,13 @@ class alm():
             
             if nest:
                 idx=hp.ring2nest(nside,np.arange(12*nside**2))
-                l_Q=self.backend.bk_gather(im[1],idx)
-                l_U=self.backend.bk_gather(im[2],idx)
+                l_Q=self.backend.bk_gather(im[int(doT)],idx)
+                l_U=self.backend.bk_gather(im[1+int(doT)],idx)
                 ft_im_Pp=self.comp_tf(self.backend.bk_complex(l_Q,l_U),ph)
                 ft_im_Pm=self.comp_tf(self.backend.bk_complex(l_Q,-l_U),ph)
                 if map2 is not None:
-                    l_Q=self.backend.bk_gather(map2[1],idx)
-                    l_U=self.backend.bk_gather(map2[2],idx)
+                    l_Q=self.backend.bk_gather(map2[int(doT)],idx)
+                    l_U=self.backend.bk_gather(map2[1+int(doT)],idx)
                     ft_im2_Pp=self.comp_tf(self.backend.bk_complex(l_Q,l_U),ph)
                     ft_im2_Pm=self.comp_tf(self.backend.bk_complex(l_Q,-l_U),ph)
             else:
