@@ -3548,8 +3548,7 @@ class funct(FOC.FoCUS):
             return self.backend.bk_abs(self.backend.bk_sqrt(x))
 
     def reduce_mean(self, x):
-        result=0
-        N=1
+        
         if isinstance(x, scat_cov):
             result = self.backend.bk_reduce_sum(self.backend.bk_abs(x.S0)) + \
                      self.backend.bk_reduce_sum(self.backend.bk_abs(x.S2)) + \
@@ -3565,8 +3564,10 @@ class funct(FOC.FoCUS):
             if x.S3P is not None:
                 result = result+self.backend.bk_reduce_sum(self.backend.bk_abs(x.S1))
                 N = N + self.backend.bk_size(x.S3P)
+            return result/self.backend.bk_cast(N)
+        else:
+            return self.backend.bk_reduce_mean(x, axis=0)
                 
-        return result/N
 
     def reduce_mean_batch(self, x):
         if isinstance(x, scat_cov):
