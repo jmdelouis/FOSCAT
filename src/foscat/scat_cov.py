@@ -3562,7 +3562,7 @@ class funct(FOC.FoCUS):
                 result = result+self.backend.bk_reduce_sum(self.backend.bk_abs(x.S1))
                 N = N + self.backend.bk_size(x.S1)
             if x.S3P is not None:
-                result = result+self.backend.bk_reduce_sum(self.backend.bk_abs(x.S1))
+                result = result+self.backend.bk_reduce_sum(self.backend.bk_abs(x.S3P))
                 N = N + self.backend.bk_size(x.S3P)
             return result/self.backend.bk_cast(N)
         else:
@@ -3570,17 +3570,28 @@ class funct(FOC.FoCUS):
                 
 
     def reduce_mean_batch(self, x):
+        
         if isinstance(x, scat_cov):
-            result = scat_cov()
-            # Assuming the batch dimension is the first dimension
-            result.S0 = self.backend.bk_reduce_mean(x.S0, axis=0)
-            result.S2 = self.backend.bk_reduce_mean(x.S2, axis=0)
+            
+            sS0=self.backend.bk_reduce_mean(x.S0, axis=0)
+            sS2=self.backend.bk_reduce_mean(x.S2, axis=0)
+            sS3=self.backend.bk_reduce_mean(x.S3, axis=0)
+            sS4=self.backend.bk_reduce_mean(x.S4, axis=0)
             if x.S1 is not None:
-                result.S1 = self.backend.bk_reduce_mean(x.S1, axis=0)
+                sS1 = self.backend.bk_reduce_mean(x.S1, axis=0)
             if x.S3P is not None:
-                result.S1 = self.backend.bk_reduce_mean(x.S3P, axis=0)
-            result.S3 = self.backend.bk_reduce_mean(x.S3, axis=0)
-            result.S4 = self.backend.bk_reduce_mean(x.S4, axis=0)
+                sS3P = self.backend.bk_reduce_mean(x.S3P, axis=0)
+                
+            result = scat_cov(
+                sS0,
+                sS2,
+                sS3,
+                sS4,
+                s1=sS1,
+                s3p=sS3P,
+                backend=self.backend,
+                use_1D=self.use_1D,
+            )
             return result
         else:
             return self.backend.bk_reduce_mean(x, axis=0)
