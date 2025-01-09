@@ -3577,6 +3577,8 @@ class funct(FOC.FoCUS):
             sS2=self.backend.bk_reduce_mean(x.S2, axis=0)
             sS3=self.backend.bk_reduce_mean(x.S3, axis=0)
             sS4=self.backend.bk_reduce_mean(x.S4, axis=0)
+            sS1=None
+            sS3P=None
             if x.S1 is not None:
                 sS1 = self.backend.bk_reduce_mean(x.S1, axis=0)
             if x.S3P is not None:
