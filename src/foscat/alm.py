@@ -254,24 +254,25 @@ class alm():
         self.shift_ph(nside)
         
         n=0
-        ii=0
         ft_im=[]
             
         for k in range(nside-1):
             N=4*(k+1)
-            l_n=N
-            if l_n>3*nside:
-                l_n=3*nside
+            
             if realfft:
-                tmp=self.rfft2fft(im[n:n+N])[0:l_n]
+                tmp=self.rfft2fft(im[n:n+N])
             else:
-                tmp=self.backend.bk_fft(im[n:n+N])[0:l_n]
+                tmp=self.backend.bk_fft(im[n:n+N])
+
+            l_n=tmp.shape[0]
+            
+            if l_n<3*nside:
+                repeat_n=3*nside//l_n+1
+                tmp=self.backend.bk_concat([tmp for k in range(repeat_n)],axis=0)
                 
-            ft_im.append(tmp)
-            if l_n!=3*nside:
-                ft_im.append(self.backend.bk_zeros((3*nside-l_n),dtype=self.backend.all_cbk_type))
+            ft_im.append(tmp[0:3*nside])
+            
             n+=N
-            ii+=1
             
         result=self.backend.bk_reshape(self.backend.bk_concat(ft_im,axis=0),[nside-1,3*nside])
 
@@ -281,25 +282,29 @@ class alm():
             v_fft=self.rfft2fft(v,axis=1)[:,:3*nside]
         else:
             v_fft=self.backend.bk_fft(v)[:,:3*nside]
+            
         n+=N
-        ii+=2*nside+1
+        
         result=self.backend.bk_concat([result,v_fft],axis=0)
         
         ft_im=[]
         for k in range(nside-1):
             N=4*(nside-1-k)
-            l_n=N
-            if l_n>3*nside:
-                l_n=3*nside
+            
             if realfft:
                 tmp=self.rfft2fft(im[n:n+N])[0:l_n]
             else:
                 tmp=self.backend.bk_fft(im[n:n+N])[0:l_n]
+            
+            l_n=tmp.shape[0]
+            
+            if l_n<3*nside:
+                repeat_n=3*nside//l_n+1
+                tmp=self.backend.bk_concat([tmp for k in range(repeat_n)],axis=0)
                 
-            ft_im.append(tmp)
-            ft_im.append(self.backend.bk_zeros((3*nside-l_n),dtype=self.backend.all_cbk_type))
+            ft_im.append(tmp[0:3*nside])
             n+=N
-            ii+=1
+            
         lastresult=self.backend.bk_reshape(self.backend.bk_concat(ft_im,axis=0),[nside-1,3*nside])
         return self.backend.bk_concat([result,lastresult],axis=0)*self.matrix_shift_ph[nside]
 
