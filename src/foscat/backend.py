@@ -879,7 +879,10 @@ class foscat_backend:
     def bk_repeat(self, data, nn, axis=0):
         return self.backend.repeat(data, nn, axis=axis)
 
-    def bk_tile(self, data, nn, axis=0):
+    def bk_tile(self, data, nn,axis=0):
+        if self.BACKEND == self.TENSORFLOW:
+            return self.backend.tile(data, [nn])
+        
         return self.backend.tile(data, nn)
 
     def bk_roll(self, data, nn, axis=0):

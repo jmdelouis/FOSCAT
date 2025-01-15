@@ -3659,9 +3659,13 @@ class funct(FOC.FoCUS):
             if x.S3P is not None:
                 nval += self.backend.bk_size(x.S3P)
             result /= self.backend.bk_cast(nval)
+            return result
         else:
-            return self.backend.bk_reduce_sum(x)
-        return result
+            if sigma is None:
+                tmp=x-y
+            else:
+                tmp=(x-y)/sigma
+            return self.backend.bk_reduce_mean(self.backend.bk_square(tmp))
 
     def reduce_sum(self, x):
 
