@@ -3665,7 +3665,8 @@ class funct(FOC.FoCUS):
                 tmp=x-y
             else:
                 tmp=(x-y)/sigma
-            return self.backend.bk_reduce_mean(self.backend.bk_square(tmp))
+            # do abs in case of complex values
+            return self.backend.bk_abs(self.backend.bk_reduce_mean(self.backend.bk_square(tmp)))
 
     def reduce_sum(self, x):
 
