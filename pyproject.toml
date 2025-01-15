@@ -1,6 +1,6 @@
 [project]
 name = "foscat"
-version = "3.5.0"
+version = "3.6.0"
 description = "Generate synthetic Healpix or 2D data using Cross Scattering Transform"
 readme = "README.md"
 license = { text = "BSD-3-Clause" }
