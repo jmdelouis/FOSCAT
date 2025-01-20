@@ -377,8 +377,15 @@ class alm():
             r_inv=self.backend.bk_reverse(self.backend.bk_conjugate(r[:,1:-1]),axis=axis)
         return self.backend.bk_concat([r,r_inv],axis=axis)
     
+    def irfft2fft(self,val,N,axis=0):
+        if axis==0:
+            return self.backend.bk_irfft(val[0:N//2+1])
+        else:
+            return self.backend.bk_irfft(val[:,0:N//2+1])
+    
     def comp_tf(self,im,nside,realfft=False):
         
+        self.shift_ph(nside)
         n=0
         
         ft_im=[]
@@ -438,6 +445,61 @@ class alm():
             return self.backend.bk_concat([result,lastresult],axis=0)*self.matrix_shift_ph[nside]
         else:
             return result*self.matrix_shift_ph[nside]
+
+    
+    def icomp_tf(self,i_im,nside,realfft=False):
+        
+        self.shift_ph(nside)
+        
+        n=0
+        im=[]
+        ft_im=i_im*self.backend.bk_conjugate(self.matrix_shift_ph[nside])
+        
+        for k in range(nside-1):
+            N=4*(k+1)
+            
+            if realfft:
+                tmp=self.irfft2fft(ft_im[k],N)
+            else:
+                tmp=self.backend.bk_ifft(im[k],N)
+                
+            im.append(tmp[0:N])
+            
+            n+=N
+            
+        if nside>1:
+            result=self.backend.bk_concat(im,axis=0)
+        
+        N=4*nside*(2*nside+1)    
+        v=ft_im[nside-1:3*nside,0:2*nside+1]
+        if realfft:
+            v_fft=self.backend.bk_reshape(self.irfft2fft(v,N,axis=1),[4*nside*(2*nside+1)])
+        else:
+            v_fft=self.backend.bk_ifft(v)
+
+        n+=N
+        if nside>1:
+            result=self.backend.bk_concat([result,v_fft],axis=0)
+        else:
+            result=v_fft
+        
+        if nside>1:
+            im=[]
+            for k in range(nside-1):
+                N=4*(nside-1-k)
+            
+                if realfft:
+                    tmp=self.irfft2fft(ft_im[k+3*nside],N)
+                else:
+                    tmp=self.backend.bk_ifft(im[k+3*nside],N)
+                
+                im.append(tmp[0:N])
+            
+                n+=N
+
+            return self.backend.bk_concat([result]+im,axis=0)
+        else:
+            return result
         
     def anafast(self,im,map2=None,nest=False,spin=2):
         
@@ -621,6 +683,8 @@ class alm():
     def map2alm(self,im,nest=False):
         nside=int(np.sqrt(im.shape[0]//12))
         
+        ph=self.shift_ph(nside)
+        
         if nest:
             idx=hp.ring2nest(nside,np.arange(12*nside**2))
             ft_im=self.comp_tf(self.backend.bk_cast(self.backend.bk_gather(im,idx)),nside,realfft=True)
@@ -644,6 +708,51 @@ class alm():
                 alm=self.backend.bk_concat([alm,tmp],axis=0)
             
         return alm
+
+    
+    def alm2map(self,nside,alm):
+
+        lth=self.ring_th(nside)
+
+        co_th=np.cos(lth)
+        
+        ft_im=[]
+
+        n=0
+
+        lmax=3*nside-1
+        
+        for m in range(lmax+1):
+            plm=self.compute_legendre_m(co_th,m,3*nside-1,nside)/(12*nside**2)
+
+            print(alm[n:n+lmax-m+1].shape,plm.shape)
+            ft_im.append(self.backend.bk_reduce_sum(self.backend.bk_reshape(alm[n:n+lmax-m+1],[lmax-m+1,1])*plm,0))
+
+            n=n+lmax-m+1
+            
+        return self.backend.bk_reshape(self.backend.bk_concat(ft_im,0),[lmax+1,4*nside-1])
+        
+            
+        if nest:
+            idx=hp.ring2nest(nside,np.arange(12*nside**2))
+            ft_im=self.comp_tf(self.backend.bk_cast(self.backend.bk_gather(im,idx)),nside,realfft=True)
+        else:
+            ft_im=self.comp_tf(self.backend.bk_cast(im),nside,realfft=True)
+            
+
+        lmax=3*nside-1
+    
+        alm=None
+        for m in range(lmax+1):
+            plm=self.compute_legendre_m(co_th,m,3*nside-1,nside)/(12*nside**2)
+            
+            tmp=self.backend.bk_reduce_sum(plm*ft_im[:,m],1)
+            if m==0:
+                alm=tmp
+            else:
+                alm=self.backend.bk_concat([alm,tmp],axis=0)
+            
+        return o_map
 
     def map2alm_spin(self,im_Q,im_U,spin=2,nest=False):
         

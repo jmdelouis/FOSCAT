@@ -2488,15 +2488,16 @@ class funct(FOC.FoCUS):
         )
 
     def eval(
-        self,
-        image1,
-        image2=None,
-        mask=None,
-        norm=None,
-        Auto=True,
-        calc_var=False,
-        cmat=None,
-        cmat2=None,
+            self,
+            image1,
+            image2=None,
+            mask=None,
+            norm=None,
+            Auto=True,
+            calc_var=False,
+            cmat=None,
+            cmat2=None,
+            out_nside=None
     ):
         """
         Calculates the scattering correlations for a batch of images. Mean are done over pixels.
@@ -2708,6 +2709,8 @@ class funct(FOC.FoCUS):
 
         if return_data:
             s0 = I1
+            if out_nside is not None:
+                s0 = self.backend.bk_reduce_mean(self.backend.bk_reshape(s0,[s0.shape[0],12*out_nside**2,(nside//out_nside)**2]),2)
         else:
             if not cross:
                 s0, l_vs0 = self.masked_mean(I1, vmask, axis=1, calc_var=True)
@@ -2778,6 +2781,12 @@ class funct(FOC.FoCUS):
                 if return_data:
                     if S2 is None:
                         S2 = {}
+                    if out_nside is not None and out_nside<nside_j3:
+                        s2 = self.backend.bk_reduce_mean(
+                            self.backend.bk_reshape(s2,[s2.shape[0],
+                                                        12*out_nside**2,
+                                                        (nside_j3//out_nside)**2,
+                                                        s2.shape[2]]),2)
                     S2[j3] = s2
                 else:
                     if norm == "auto":  # Normalize S2
@@ -2818,6 +2827,12 @@ class funct(FOC.FoCUS):
                 if return_data:
                     if S1 is None:
                         S1 = {}
+                    if out_nside is not None and out_nside<nside_j3:
+                        s1 = self.backend.bk_reduce_mean(
+                            self.backend.bk_reshape(s1,[s1.shape[0],
+                                                        12*out_nside**2,
+                                                        (nside_j3//out_nside)**2,
+                                                        s1.shape[2]]),2)
                     S1[j3] = s1
                 else:
                     ### Normalize S1
@@ -2904,6 +2919,12 @@ class funct(FOC.FoCUS):
                 if return_data:
                     if S2 is None:
                         S2 = {}
+                    if out_nside is not None and out_nside<nside_j3:
+                        s2 = self.backend.bk_reduce_mean(
+                            self.backend.bk_reshape(s2,[s2.shape[0],
+                                                        12*out_nside**2,
+                                                        (nside_j3//out_nside)**2,
+                                                        s2.shape[2]]),2)
                     S2[j3] = s2
                 else:
                     ### Normalize S2_cross
@@ -2949,6 +2970,12 @@ class funct(FOC.FoCUS):
                 if return_data:
                     if S1 is None:
                         S1 = {}
+                    if out_nside is not None and out_nside<nside_j3:
+                        s1 = self.backend.bk_reduce_mean(
+                            self.backend.bk_reshape(s1,[s1.shape[0],
+                                                        12*out_nside**2,
+                                                        (nside_j3//out_nside)**2,
+                                                        s1.shape[2]]),2)
                     S1[j3] = s1
                 else:
                     ### Normalize S1
@@ -2979,6 +3006,7 @@ class funct(FOC.FoCUS):
                 M2convPsi_dic = {}
 
             ###### S3
+            nside_j2=nside_j3
             for j2 in range(0, j3 + 1):  # j2 <= j3
                 if return_data:
                     if S4[j3] is None:
@@ -3013,6 +3041,13 @@ class funct(FOC.FoCUS):
                     if return_data:
                         if S3[j3] is None:
                             S3[j3] = {}
+                        if out_nside is not None and out_nside<nside_j2:
+                            s3 = self.backend.bk_reduce_mean(
+                                self.backend.bk_reshape(s3,[s3.shape[0],
+                                                            12*out_nside**2,
+                                                            (nside_j2//out_nside)**2,
+                                                            s3.shape[2],
+                                                            s3.shape[3]]),2)
                         S3[j3][j2] = s3
                     else:
                         ### Normalize S3 with S2_j [Nbatch, Nmask, Norient_j]
@@ -3095,6 +3130,19 @@ class funct(FOC.FoCUS):
                         if S3[j3] is None:
                             S3[j3] = {}
                             S3P[j3] = {}
+                        if out_nside is not None and out_nside<nside_j2:
+                            s3 = self.backend.bk_reduce_mean(
+                                self.backend.bk_reshape(s3,[s3.shape[0],
+                                                            12*out_nside**2,
+                                                            (nside_j2//out_nside)**2,
+                                                            s3.shape[2],
+                                                            s3.shape[3]]),2)
+                            s3p = self.backend.bk_reduce_mean(
+                                self.backend.bk_reshape(s3p,[s3.shape[0],
+                                                             12*out_nside**2,
+                                                             (nside_j2//out_nside)**2,
+                                                             s3.shape[2],
+                                                             s3.shape[3]]),2)
                         S3[j3][j2] = s3
                         S3P[j3][j2] = s3p
                     else:
@@ -3154,6 +3202,7 @@ class funct(FOC.FoCUS):
                                 )  # Add a dimension for NS3
 
                 ##### S4
+                nside_j1=nside_j2
                 for j1 in range(0, j2 + 1):  # j1 <= j2
                     ### S4_auto = <(|I1 * psi1| * psi3)(|I1 * psi2| * psi3)^*>
                     if not cross:
@@ -3179,6 +3228,14 @@ class funct(FOC.FoCUS):
                         if return_data:
                             if S4[j3][j2] is None:
                                 S4[j3][j2] = {}
+                            if out_nside is not None and out_nside<nside_j1:
+                                s4 = self.backend.bk_reduce_mean(
+                                    self.backend.bk_reshape(s4,[s4.shape[0],
+                                                                12*out_nside**2,
+                                                                (nside_j1//out_nside)**2,
+                                                                s4.shape[2],
+                                                                s4.shape[3],
+                                                                s4.shape[4]]),2)
                             S4[j3][j2][j1] = s4
                         else:
                             ### Normalize S4 with S2_j [Nbatch, Nmask, Norient_j]
@@ -3248,6 +3305,14 @@ class funct(FOC.FoCUS):
                         if return_data:
                             if S4[j3][j2] is None:
                                 S4[j3][j2] = {}
+                            if out_nside is not None and out_nside<nside_j1:
+                                s4 = self.backend.bk_reduce_mean(
+                                    self.backend.bk_reshape(s4,[s4.shape[0],
+                                                                12*out_nside**2,
+                                                                (nside_j1//out_nside)**2,
+                                                                s4.shape[2],
+                                                                s4.shape[3],
+                                                                s4.shape[4]]),2)
                             S4[j3][j2][j1] = s4
                         else:
                             ### Normalize S4 with S2_j [Nbatch, Nmask, Norient_j]
@@ -3292,7 +3357,9 @@ class funct(FOC.FoCUS):
                                         ],
                                         axis=2,
                                     )  # Add a dimension for NS4
-
+                            nside_j1=nside_j1 // 2
+                        nside_j2=nside_j2 // 2
+                        
             ###### Reshape for next iteration on j3
             ### Image I1,
             # downscale the I1 [Nbatch, Npix_j3]

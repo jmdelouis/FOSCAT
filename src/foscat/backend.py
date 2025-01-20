@@ -978,6 +978,16 @@ class foscat_backend:
             return self.backend.rfft(data)
         if self.BACKEND == self.NUMPY:
             return self.backend.fft.rfft(data)
+
+        
+    def bk_irfft(self, data):
+        if self.BACKEND == self.TENSORFLOW:
+            return self.backend.signal.irfft(data)
+        if self.BACKEND == self.TORCH:
+            return self.backend.irfft(data)
+        if self.BACKEND == self.NUMPY:
+            return self.backend.fft.irfft(data)
+        
     def bk_conjugate(self, data):
 
         if self.BACKEND == self.TENSORFLOW:
