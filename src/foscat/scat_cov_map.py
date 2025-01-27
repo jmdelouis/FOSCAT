@@ -24,10 +24,23 @@ class funct(scat.funct):
         super().__init__(return_data=True, *args, **kwargs)
 
     def eval(
-            self, image1, image2=None, mask=None, norm=None, Auto=True, calc_var=False,out_nside=None
+        self,
+        image1,
+        image2=None,
+        mask=None,
+        norm=None,
+        Auto=True,
+        calc_var=False,
+        out_nside=None,
     ):
         r = super().eval(
-            image1, image2=image2, mask=mask, norm=norm, Auto=Auto, calc_var=calc_var,out_nside=out_nside
+            image1,
+            image2=image2,
+            mask=mask,
+            norm=norm,
+            Auto=Auto,
+            calc_var=calc_var,
+            out_nside=out_nside,
         )
         return scat_cov_map(
             r.S2, r.S0, r.S3, r.S4, S1=r.S1, S3P=r.S3P, backend=r.backend
