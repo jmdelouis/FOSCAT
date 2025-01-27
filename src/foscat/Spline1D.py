@@ -1,5 +1,6 @@
 import numpy as np
 
+
 class Spline1D:
     def __init__(self, nodes, degree=3):
         """
@@ -11,25 +12,23 @@ class Spline1D:
         """
         self.degree = degree
         self.nodes = nodes
-        
-        
-    def cubic_spline_function(self,x):
+
+    def cubic_spline_function(self, x):
         """
         Evaluate the cubic spline basis function.
-    
+
         Args:
             x (float or array): Input value(s) to evaluate the spline basis function.
-    
+
         Returns:
             float or array: Result of the cubic spline basis function.
         """
         return -2 * x**3 + 3 * x**2
 
-
-    def eval(self,x):
+    def eval(self, x):
         """
         Compute a 3rd-degree cubic spline with 4-point support.
-    
+
         Args:
             x (float or array): Input value(s) to compute the spline.
 
@@ -37,21 +36,21 @@ class Spline1D:
             indices (array): Indices of the spline support points.
             coefficients (array): Normalized spline coefficients.
         """
-        N=self.nodes
-        
+        N = self.nodes
+
         if isinstance(x, float):
             # Single scalar input
-            base_idx = int(x * (N-1))
+            base_idx = int(x * (N - 1))
             indices = np.zeros([4], dtype="int")
             coefficients = np.zeros([4])
         else:
             # Array input
-            base_idx = (x * (N-1)).astype("int")
+            base_idx = (x * (N - 1)).astype("int")
             indices = np.zeros([4, x.shape[0]], dtype="int")
             coefficients = np.zeros([4, x.shape[0]])
 
         # Compute the fractional part of the input
-        fractional_part = x * (N-1) - base_idx
+        fractional_part = x * (N - 1) - base_idx
 
         # Compute spline coefficients for 4 support points
         coefficients[3] = self.cubic_spline_function(fractional_part / 2) / 2
