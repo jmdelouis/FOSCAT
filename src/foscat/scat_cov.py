@@ -2677,7 +2677,23 @@ class funct(FOC.FoCUS):
 
         ### INITIALIZATION
         # Coefficients
-        S1, S2, S3, S4, S3P = None, None, None, None, None
+        if return_data:
+            S1 = {}
+            S2 = {}
+            S3 = {}
+            S3P = {}
+            S4 = {}
+        else:
+            S1=[]
+            S2=[]
+            S3=[]
+            S4=[]
+            S3P=[]
+            VS1=[]
+            VS2=[]
+            VS3=[]
+            VS3P=[]
+            VS4=[]
 
         off_S2 = -2
         off_S3 = -3
@@ -2725,12 +2741,7 @@ class funct(FOC.FoCUS):
         nside_j3 = nside  # NSIDE start (nside_j3 = nside / 2^j3)
         for j3 in range(Jmax):
             if return_data:
-                if S3 is None:
-                    S3 = {}
                 S3[j3] = None
-
-                if S3P is None:
-                    S3P = {}
                 S3P[j3] = None
 
                 if S4 is None:
@@ -2791,24 +2802,11 @@ class funct(FOC.FoCUS):
                 else:
                     if norm == "auto":  # Normalize S2
                         s2 /= P1_dic[j3]
-                    if S2 is None:
-                        S2 = self.backend.bk_expand_dims(
-                            s2, off_S2
-                        )  # Add a dimension for NS2
-                        if calc_var:
-                            VS2 = self.backend.bk_expand_dims(
-                                vs2, off_S2
-                            )  # Add a dimension for NS2
-                    else:
-                        S2 = self.backend.bk_concat(
-                            [S2, self.backend.bk_expand_dims(s2, off_S2)], axis=2
-                        )
-                        if calc_var:
-                            VS2 = self.backend.bk_concat(
-                                [VS2, self.backend.bk_expand_dims(vs2, off_S2)],
-                                axis=2,
-                            )
-
+                        
+                    S2.append(self.backend.bk_expand_dims(s2, off_S2))  # Add a dimension for NS2
+                    if calc_var:
+                        VS2.append(self.backend.bk_expand_dims(vs2, off_S2))  # Add a dimension for NS2
+                                   
                 #### S1_auto computation
                 ### Image 1 : S1 = < M1 >_pix
                 # Apply the mask [Nmask, Npix_j3] and average over pixels
@@ -2825,8 +2823,6 @@ class funct(FOC.FoCUS):
                         )  # [Nbatch, Nmask, Norient3]
 
                 if return_data:
-                    if S1 is None:
-                        S1 = {}
                     if out_nside is not None and out_nside<nside_j3:
                         s1 = self.backend.bk_reduce_mean(
                             self.backend.bk_reshape(s1,[s1.shape[0],
@@ -2839,22 +2835,9 @@ class funct(FOC.FoCUS):
                     if norm is not None:
                         self.div_norm(s1, (P1_dic[j3]) ** 0.5)
                     ### We store S1 for image1  [Nbatch, Nmask, NS1, Norient3]
-                    if S1 is None:
-                        S1 = self.backend.bk_expand_dims(
-                            s1, off_S2
-                        )  # Add a dimension for NS1
-                        if calc_var:
-                            VS1 = self.backend.bk_expand_dims(
-                                vs1, off_S2
-                            )  # Add a dimension for NS1
-                    else:
-                        S1 = self.backend.bk_concat(
-                            [S1, self.backend.bk_expand_dims(s1, off_S2)], axis=2
-                        )
-                        if calc_var:
-                            VS1 = self.backend.bk_concat(
-                                [VS1, self.backend.bk_expand_dims(vs1, off_S2)], axis=2
-                            )
+                    S1.append(self.backend.bk_expand_dims(s1, off_S2)) # Add a dimension for NS1
+                    if calc_var:
+                        VS1.append(self.backend.bk_expand_dims(vs1, off_S2))  # Add a dimension for NS1
 
             else:  # Cross
                 ### Make the convolution I2 * Psi_j3
@@ -2917,8 +2900,6 @@ class funct(FOC.FoCUS):
                         s2 = self.masked_mean(s2, vmask, axis=1, rank=j3)
 
                 if return_data:
-                    if S2 is None:
-                        S2 = {}
                     if out_nside is not None and out_nside<nside_j3:
                         s2 = self.backend.bk_reduce_mean(
                             self.backend.bk_reshape(s2,[s2.shape[0],
@@ -2935,23 +2916,9 @@ class funct(FOC.FoCUS):
                     if not all_cross:
                         s2 = self.backend.bk_real(s2)
 
-                    if S2 is None:
-                        S2 = self.backend.bk_expand_dims(
-                            s2, off_S2
-                        )  # Add a dimension for NS2
-                        if calc_var:
-                            VS2 = self.backend.bk_expand_dims(
-                                vs2, off_S2
-                            )  # Add a dimension for NS2
-                    else:
-                        S2 = self.backend.bk_concat(
-                            [S2, self.backend.bk_expand_dims(s2, off_S2)], axis=2
-                        )
-                        if calc_var:
-                            VS2 = self.backend.bk_concat(
-                                [VS2, self.backend.bk_expand_dims(vs2, off_S2)],
-                                axis=2,
-                            )
+                    S2.append(self.backend.bk_expand_dims(s2, off_S2))  # Add a dimension for NS2
+                    if calc_var:
+                        VS2.append(self.backend.bk_expand_dims(vs2, off_S2))  # Add a dimension for NS2
 
                 #### S1_auto computation
                 ### Image 1 : S1 = < M1 >_pix
@@ -2968,8 +2935,6 @@ class funct(FOC.FoCUS):
                             MX, vmask, axis=1, rank=j3
                         )  # [Nbatch, Nmask, Norient3]
                 if return_data:
-                    if S1 is None:
-                        S1 = {}
                     if out_nside is not None and out_nside<nside_j3:
                         s1 = self.backend.bk_reduce_mean(
                             self.backend.bk_reshape(s1,[s1.shape[0],
@@ -2982,22 +2947,9 @@ class funct(FOC.FoCUS):
                     if norm is not None:
                         self.div_norm(s1, (P1_dic[j3]) ** 0.5)
                     ### We store S1 for image1  [Nbatch, Nmask, NS1, Norient3]
-                    if S1 is None:
-                        S1 = self.backend.bk_expand_dims(
-                            s1, off_S2
-                        )  # Add a dimension for NS1
-                        if calc_var:
-                            VS1 = self.backend.bk_expand_dims(
-                                vs1, off_S2
-                            )  # Add a dimension for NS1
-                    else:
-                        S1 = self.backend.bk_concat(
-                            [S1, self.backend.bk_expand_dims(s1, off_S2)], axis=2
-                        )
-                        if calc_var:
-                            VS1 = self.backend.bk_concat(
-                                [VS1, self.backend.bk_expand_dims(vs1, off_S2)], axis=2
-                            )
+                    S1.append(self.backend.bk_expand_dims(s1, off_S2))  # Add a dimension for NS1
+                    if calc_var:
+                        VS1.append(self.backend.bk_expand_dims(vs1, off_S2))  # Add a dimension for NS1
 
             # Initialize dictionaries for |I1*Psi_j| * Psi_j3
             M1convPsi_dic = {}
@@ -3062,23 +3014,14 @@ class funct(FOC.FoCUS):
                             )  # [Nbatch, Nmask, Norient3, Norient2]
 
                         ### Store S3 as a complex [Nbatch, Nmask, NS3, Norient3, Norient2]
-                        if S3 is None:
-                            S3 = self.backend.bk_expand_dims(
-                                s3, off_S3
-                            )  # Add a dimension for NS3
-                            if calc_var:
-                                VS3 = self.backend.bk_expand_dims(
-                                    vs3, off_S3
-                                )  # Add a dimension for NS3
-                        else:
-                            S3 = self.backend.bk_concat(
-                                [S3, self.backend.bk_expand_dims(s3, off_S3)], axis=2
-                            )  # Add a dimension for NS3
-                            if calc_var:
-                                VS3 = self.backend.bk_concat(
-                                    [VS3, self.backend.bk_expand_dims(vs3, off_S3)],
-                                    axis=2,
-                                )  # Add a dimension for NS3
+                        
+                        #S3.append(self.backend.bk_reshape(s3,[s3.shape[0],s3.shape[1],
+                        #                                      s3.shape[2]*s3.shape[3]]))
+                        S3.append(self.backend.bk_expand_dims(s3, off_S3))  # Add a dimension for NS3
+                        if calc_var:
+                            VS3.append(self.backend.bk_expand_dims(vs3, off_S3))  # Add a dimension for NS3
+                            #VS3.append(self.backend.bk_reshape(vs3,[s3.shape[0],s3.shape[1],
+                            #                                  s3.shape[2]*s3.shape[3]]))
 
                 ### S3_cross = < (I1 * Psi)_j3 x (|I2 * Psi_j2| * Psi_j3)^* >_pix
                 ### S3P_cross = < (I2 * Psi)_j3 x (|I1 * Psi_j2| * Psi_j3)^* >_pix
@@ -3166,40 +3109,23 @@ class funct(FOC.FoCUS):
                             )  # [Nbatch, Nmask, Norient3, Norient2]
 
                         ### Store S3 and S3P as a complex [Nbatch, Nmask, NS3, Norient3, Norient2]
-                        if S3 is None:
-                            S3 = self.backend.bk_expand_dims(
-                                s3, off_S3
-                            )  # Add a dimension for NS3
-                            if calc_var:
-                                VS3 = self.backend.bk_expand_dims(
-                                    vs3, off_S3
-                                )  # Add a dimension for NS3
-                        else:
-                            S3 = self.backend.bk_concat(
-                                [S3, self.backend.bk_expand_dims(s3, off_S3)], axis=2
-                            )  # Add a dimension for NS3
-                            if calc_var:
-                                VS3 = self.backend.bk_concat(
-                                    [VS3, self.backend.bk_expand_dims(vs3, off_S3)],
-                                    axis=2,
-                                )  # Add a dimension for NS3
-                        if S3P is None:
-                            S3P = self.backend.bk_expand_dims(
-                                s3p, off_S3
-                            )  # Add a dimension for NS3
-                            if calc_var:
-                                VS3P = self.backend.bk_expand_dims(
-                                    vs3p, off_S3
-                                )  # Add a dimension for NS3
-                        else:
-                            S3P = self.backend.bk_concat(
-                                [S3P, self.backend.bk_expand_dims(s3p, off_S3)], axis=2
-                            )  # Add a dimension for NS3
-                            if calc_var:
-                                VS3P = self.backend.bk_concat(
-                                    [VS3P, self.backend.bk_expand_dims(vs3p, off_S3)],
-                                    axis=2,
-                                )  # Add a dimension for NS3
+                        
+                        #S3.append(self.backend.bk_reshape(s3,[s3.shape[0],s3.shape[1],
+                        #                                      s3.shape[2]*s3.shape[3]]))
+                        S3.append(self.backend.bk_expand_dims(s3, off_S3))  # Add a dimension for NS3
+                        if calc_var:
+                            VS3.append(self.backend.bk_expand_dims(vs3, off_S3))  # Add a dimension for NS3
+                            
+                            #VS3.append(self.backend.bk_reshape(vs3,[s3.shape[0],s3.shape[1],
+                            #                                  s3.shape[2]*s3.shape[3]]))
+                            
+                        #S3P.append(self.backend.bk_reshape(s3p,[s3.shape[0],s3.shape[1],
+                        #                                      s3.shape[2]*s3.shape[3]]))
+                        S3P.append(self.backend.bk_expand_dims(s3p, off_S3))  # Add a dimension for NS3
+                        if calc_var:
+                            VS3P.append(self.backend.bk_expand_dims(vs3p, off_S3))  # Add a dimension for NS3
+                            #VS3P.append(self.backend.bk_reshape(vs3p,[s3.shape[0],s3.shape[1],
+                            #                                  s3.shape[2]*s3.shape[3]]))
 
                 ##### S4
                 nside_j1=nside_j2
@@ -3259,27 +3185,18 @@ class funct(FOC.FoCUS):
                                     ** 0.5,
                                 )  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
                             ### Store S4 as a complex [Nbatch, Nmask, NS4, Norient3, Norient2, Norient1]
-                            if S4 is None:
-                                S4 = self.backend.bk_expand_dims(
+                            
+                            #S4.append(self.backend.bk_reshape(s4,[s4.shape[0],s4.shape[1],
+                            #                                  s4.shape[2]*s4.shape[3]*s4.shape[4]]))
+                            S4.append(self.backend.bk_expand_dims(
                                     s4, off_S4
-                                )  # Add a dimension for NS4
-                                if calc_var:
-                                    VS4 = self.backend.bk_expand_dims(
+                                ))  # Add a dimension for NS4
+                            if calc_var:
+                                #VS4.append(self.backend.bk_reshape(vs4,[s4.shape[0],s4.shape[1],
+                                #                              s4.shape[2]*s4.shape[3]*s4.shape[4]]))
+                                VS4.append(self.backend.bk_expand_dims(
                                         vs4, off_S4
-                                    )  # Add a dimension for NS4
-                            else:
-                                S4 = self.backend.bk_concat(
-                                    [S4, self.backend.bk_expand_dims(s4, off_S4)],
-                                    axis=2,
-                                )  # Add a dimension for NS4
-                                if calc_var:
-                                    VS4 = self.backend.bk_concat(
-                                        [
-                                            VS4,
-                                            self.backend.bk_expand_dims(vs4, off_S4),
-                                        ],
-                                        axis=2,
-                                    )  # Add a dimension for NS4
+                                    ))  # Add a dimension for NS4
 
                         ### S4_cross = <(|I1 * psi1| * psi3)(|I2 * psi2| * psi3)^*>
                     else:
@@ -3336,27 +3253,19 @@ class funct(FOC.FoCUS):
                                     ** 0.5,
                                 )  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
                             ### Store S4 as a complex [Nbatch, Nmask, NS4, Norient3, Norient2, Norient1]
-                            if S4 is None:
-                                S4 = self.backend.bk_expand_dims(
+                            #S4.append(self.backend.bk_reshape(s4,[s4.shape[0],s4.shape[1],
+                            #                                  s4.shape[2]*s4.shape[3]*s4.shape[4]]))
+                            S4.append(self.backend.bk_expand_dims(
                                     s4, off_S4
-                                )  # Add a dimension for NS4
-                                if calc_var:
-                                    VS4 = self.backend.bk_expand_dims(
+                                ))  # Add a dimension for NS4
+                            if calc_var:
+                                
+                                #VS4.append(self.backend.bk_reshape(vs4,[s4.shape[0],s4.shape[1],
+                                #                              s4.shape[2]*s4.shape[3]*s4.shape[4]]))
+                                VS4.append(self.backend.bk_expand_dims(
                                         vs4, off_S4
-                                    )  # Add a dimension for NS4
-                            else:
-                                S4 = self.backend.bk_concat(
-                                    [S4, self.backend.bk_expand_dims(s4, off_S4)],
-                                    axis=2,
-                                )  # Add a dimension for NS4
-                                if calc_var:
-                                    VS4 = self.backend.bk_concat(
-                                        [
-                                            VS4,
-                                            self.backend.bk_expand_dims(vs4, off_S4),
-                                        ],
-                                        axis=2,
-                                    )  # Add a dimension for NS4
+                                    ))  # Add a dimension for NS4
+                                
                             nside_j1=nside_j1 // 2
                         nside_j2=nside_j2 // 2
                         
@@ -3404,7 +3313,33 @@ class funct(FOC.FoCUS):
             self.P1_dic = P1_dic
             if cross:
                 self.P2_dic = P2_dic
+        """
+        Sout=[s0]+S1+S2+S3+S4
+        
+        if cross:
+            Sout=Sout+S3P
+        if calc_var:
+            SVout=[vs0]+VS1+VS2+VS3+VS4
+            if cross:
+                VSout=VSout+VS3P
+            return self.backend.bk_concat(Sout, 2),self.backend.bk_concat(VSout, 2)
 
+        return self.backend.bk_concat(Sout, 2)
+        """
+        if not return_data:
+            S1=self.backend.bk_concat(S1, 2)
+            S2=self.backend.bk_concat(S2, 2)
+            S3=self.backend.bk_concat(S3, 2)
+            S4=self.backend.bk_concat(S4, 2)
+            if cross:
+                S3P=self.backend.bk_concat(S3P, 2)
+            if calc_var:
+                VS1=self.backend.bk_concat(VS1, 2)
+                VS2=self.backend.bk_concat(VS2, 2)
+                VS3=self.backend.bk_concat(VS3, 2)
+                VS4=self.backend.bk_concat(VS4, 2)
+                if cross:
+                    VS3P=self.backend.bk_concat(VS3P, 2)
         if calc_var:
             if not cross:
                 return scat_cov(
