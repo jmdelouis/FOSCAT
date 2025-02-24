@@ -2358,129 +2358,132 @@ class funct(FOC.FoCUS):
             tmp = self.up_grade(tmp, l_nside * 2, axis=1)
             if image2 is not None:
                 tmpi2 = self.up_grade(tmpi2, l_nside * 2, axis=1)
-
         l_nside = int(np.sqrt(tmp.shape[1] // 12))
         nscale = int(np.log(l_nside) / np.log(2))
         cmat = {}
         cmat2 = {}
+    
+        # Loop over scales
         for k in range(nscale):
-            sim = self.backend.bk_abs(self.convol(tmp, axis=1))
             if image2 is not None:
                 sim = self.backend.bk_real(
                     self.backend.bk_L1(
-                        self.convol(tmp, axis=1)
-                        * self.backend.bk_conjugate(self.convol(tmpi2, axis=1))
+                        self.convol(tmp, axis=1) *
+                        self.backend.bk_conjugate(self.convol(tmpi2, axis=1))
                     )
                 )
             else:
                 sim = self.backend.bk_abs(self.convol(tmp, axis=1))
 
-            cc = self.backend.bk_reduce_mean(sim[:, :, 0] - sim[:, :, 2], 0)
-            ss = self.backend.bk_reduce_mean(sim[:, :, 1] - sim[:, :, 3], 0)
-            for m in range(smooth_scale):
-                if cc.shape[0] > 12:
-                    cc = self.ud_grade_2(self.smooth(cc))
-                    ss = self.ud_grade_2(self.smooth(ss))
-            if cc.shape[0] != tmp.shape[0]:
-                ll_nside = int(np.sqrt(tmp.shape[1] // 12))
-                cc = self.up_grade(cc, ll_nside)
-                ss = self.up_grade(ss, ll_nside)
 
-            if self.BACKEND == "numpy":
-                phase = np.fmod(np.arctan2(ss, cc) + 2 * np.pi, 2 * np.pi)
-            else:
-                phase = np.fmod(
-                    np.arctan2(ss.numpy(), cc.numpy()) + 2 * np.pi, 2 * np.pi
-                )
-
-            iph = (4 * phase / (2 * np.pi)).astype("int")
-            alpha = 4 * phase / (2 * np.pi) - iph
-            mat = np.zeros([sim.shape[1], 4 * 4])
-            lidx = np.arange(sim.shape[1])
-            for l_orient in range(4):
-                mat[lidx, 4 * ((l_orient + iph) % 4) + l_orient] = 1.0 - alpha
-                mat[lidx, 4 * ((l_orient + iph + 1) % 4) + l_orient] = alpha
-
-            cmat[k] = self.backend.bk_cast(mat.astype("complex64"))
-
-            mat2 = np.zeros([k + 1, sim.shape[1], 4, 4 * 4])
-
-            for k2 in range(k + 1):
-                tmp2 = self.backend.bk_repeat(sim, 4, axis=-1)
-                sim2 = self.backend.bk_reduce_sum(
-                    self.backend.bk_reshape(
-                        mat.reshape(1, mat.shape[0], 16) * tmp2,
-                        [sim.shape[0], cmat[k].shape[0], 4, 4],
-                    ),
-                    2,
-                )
-                sim2 = self.backend.bk_abs(self.convol(sim2, axis=1))
-
-                cc = self.smooth(
-                    self.backend.bk_reduce_mean(sim2[:, :, 0] - sim2[:, :, 2], 0)
-                )
-                ss = self.smooth(
-                    self.backend.bk_reduce_mean(sim2[:, :, 1] - sim2[:, :, 3], 0)
-                )
+            # instead of difference between "opposite" channels use weighted average 
+            # of cosine and sine contributions using all channels
+            angles = 2 * np.pi * np.arange(self.NORIENT) / self.NORIENT  # shape: (NORIENT,)
+            angles = angles.reshape(1, 1, self.NORIENT)  
+    
+            # we use cosines and sines as weights for sim
+            weighted_cos = self.backend.bk_reduce_mean(sim * np.cos(angles), axis=-1)
+            weighted_sin = self.backend.bk_reduce_mean(sim * np.sin(angles), axis=-1)
+            # For simplicity, take first element of the batch
+            cc = weighted_cos[0] 
+            ss = weighted_sin[0]
+    
+            if smooth_scale > 0:
                 for m in range(smooth_scale):
                     if cc.shape[0] > 12:
                         cc = self.ud_grade_2(self.smooth(cc))
                         ss = self.ud_grade_2(self.smooth(ss))
-                if cc.shape[0] != sim.shape[1]:
+            if cc.shape[0] != tmp.shape[0]:
+                ll_nside = int(np.sqrt(tmp.shape[1] // 12))
+                cc = self.up_grade(cc, ll_nside)
+                ss = self.up_grade(ss, ll_nside)
+    
+            # compute local phase from weighted cos and sin (same as before)
+            if self.BACKEND == "numpy":
+                phase = np.fmod(np.arctan2(ss, cc) + 2 * np.pi, 2 * np.pi)
+            else:
+                phase = np.fmod(np.arctan2(ss.numpy(), cc.numpy()) + 2 * np.pi, 2 * np.pi)
+    
+
+            # instead of linear interpolation cosine‐based interpolation
+            phase_scaled = self.NORIENT * phase / (2 * np.pi)
+            iph = np.floor(phase_scaled).astype("int")  # lower bin index
+            delta = phase_scaled - iph  # fractional part in [0,1)
+            # interpolation weights
+            w0 = np.cos(delta * np.pi/2)**2
+            w1 = np.sin(delta * np.pi/2)**2
+    
+            # build rotation matrix
+            mat = np.zeros([sim.shape[1], self.NORIENT * self.NORIENT])
+            lidx = np.arange(sim.shape[1])
+            for l in range(self.NORIENT):
+                # Instead of simple linear weights, we use the cosine weights w0 and w1.
+                col0 = self.NORIENT * ((l + iph) % self.NORIENT) + l
+                col1 = self.NORIENT * ((l + iph + 1) % self.NORIENT) + l
+                mat[lidx, col0] = w0
+                mat[lidx, col1] = w1
+    
+            cmat[k] = self.backend.bk_cast(mat.astype("complex64"))
+    
+            # do same modifications for mat2
+            mat2 = np.zeros([k + 1, sim.shape[1], self.NORIENT, self.NORIENT * self.NORIENT])
+            
+            for k2 in range(k + 1):
+                tmp2 = self.backend.bk_repeat(sim, self.NORIENT, axis=-1)
+            
+                sim2 = self.backend.bk_reduce_sum(
+                    self.backend.bk_reshape(
+                        mat.reshape(1, mat.shape[0], self.NORIENT * self.NORIENT) * tmp2,
+                        [sim.shape[0], cmat[k].shape[0], self.NORIENT, self.NORIENT],
+                    ),
+                    2,
+                )
+            
+                sim2 = self.backend.bk_abs(self.convol(sim2, axis=1))
+            
+                weighted_cos2 = self.backend.bk_reduce_mean(sim2 * np.cos(angles), axis=-1)
+                weighted_sin2 = self.backend.bk_reduce_mean(sim2 * np.sin(angles), axis=-1)
+            
+                cc2 = weighted_cos2[0]
+                ss2 = weighted_sin2[0]
+            
+                if smooth_scale > 0:
+                    for m in range(smooth_scale):
+                        if cc2.shape[0] > 12:
+                            cc2 = self.ud_grade_2(self.smooth(cc2))
+                            ss2 = self.ud_grade_2(self.smooth(ss2))
+                
+                if cc2.shape[0] != sim.shape[1]:
                     ll_nside = int(np.sqrt(sim.shape[1] // 12))
-                    cc = self.up_grade(cc, ll_nside)
-                    ss = self.up_grade(ss, ll_nside)
-
+                    cc2 = self.up_grade(cc2, ll_nside)
+                    ss2 = self.up_grade(ss2, ll_nside)
+                
                 if self.BACKEND == "numpy":
-                    phase = np.fmod(np.arctan2(ss, cc) + 2 * np.pi, 2 * np.pi)
+                    phase2 = np.fmod(np.arctan2(ss2, cc2) + 2 * np.pi, 2 * np.pi)
                 else:
-                    phase = np.fmod(
-                        np.arctan2(ss.numpy(), cc.numpy()) + 2 * np.pi, 2 * np.pi
-                    )
-                """
-                for k in range(4):
-                    hp.mollview(np.fmod(phase+np.pi,2*np.pi),cmap='jet',nest=True,hold=False,sub=(2,2,1+k))
-                plt.show()
-                return None
-                """
-                iph = (4 * phase / (2 * np.pi)).astype("int")
-                alpha = 4 * phase / (2 * np.pi) - iph
+                    phase2 = np.fmod(np.arctan2(ss2.numpy(), cc2.numpy()) + 2 * np.pi, 2 * np.pi)
+        
+                phase2_scaled = self.NORIENT * phase2 / (2 * np.pi)
+                iph2 = np.floor(phase2_scaled).astype("int")
+                delta2 = phase2_scaled - iph2
+                w0_2 = np.cos(delta2 * np.pi/2)**2
+                w1_2 = np.sin(delta2 * np.pi/2)**2
                 lidx = np.arange(sim.shape[1])
-                for m in range(4):
-                    for l_orient in range(4):
-                        mat2[
-                            k2, lidx, m, 4 * ((l_orient + iph[:, m]) % 4) + l_orient
-                        ] = (1.0 - alpha[:, m])
-                        mat2[
-                            k2, lidx, m, 4 * ((l_orient + iph[:, m] + 1) % 4) + l_orient
-                        ] = alpha[:, m]
-
-            cmat2[k] = self.backend.bk_cast(mat2.astype("complex64"))
-            """
-            tmp=self.backend.bk_repeat(sim[0],4,axis=1)
-            sim2=self.backend.bk_reduce_sum(self.backend.bk_reshape(mat*tmp,[12*nside**2,4,4]),1)
-
-            cc2=(sim2[:,0]-sim2[:,2])
-            ss2=(sim2[:,1]-sim2[:,3])
-            phase2=np.fmod(np.arctan2(ss2.numpy(),cc2.numpy())+2*np.pi,2*np.pi)
-
-            plt.figure()
-            hp.mollview(phase,cmap='jet',nest=True,hold=False,sub=(2,2,1))
-            hp.mollview(np.fmod(phase2+np.pi,2*np.pi),cmap='jet',nest=True,hold=False,sub=(2,2,2))
-            plt.figure()
-            for k in range(4):
-                hp.mollview((sim[0,:,k]).numpy().real,cmap='jet',nest=True,hold=False,sub=(2,4,1+k),min=-10,max=10)
-                hp.mollview((sim2[:,k]).numpy().real,cmap='jet',nest=True,hold=False,sub=(2,4,5+k),min=-10,max=10)
-
-            plt.show()
-            """
-
+            
+                for m in range(self.NORIENT):
+                    for l in range(self.NORIENT):
+                        col0 = self.NORIENT * ((l + iph2[:, m]) % self.NORIENT) + l
+                        col1 = self.NORIENT * ((l + iph2[:, m] + 1) % self.NORIENT) + l
+                        mat2[k2, lidx, m, col0] = w0_2[:, m]
+                        mat2[k2, lidx, m, col1] = w1_2[:, m]
+                cmat2[k] = self.backend.bk_cast(mat2.astype("complex64"))
+    
             if k < l_nside - 1:
                 tmp = self.ud_grade_2(tmp, axis=1)
                 if image2 is not None:
                     tmpi2 = self.ud_grade_2(tmpi2, axis=1)
         return cmat, cmat2
-
+        
     def div_norm(self, complex_value, float_value):
         return self.backend.bk_complex(
             self.backend.bk_real(complex_value) / float_value,
