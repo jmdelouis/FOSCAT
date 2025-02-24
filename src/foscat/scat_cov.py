@@ -2756,10 +2756,10 @@ class funct(FOC.FoCUS):
             conv1 = self.convol(I1, axis=1)  # [Nbatch, Npix_j3, Norient3]
 
             if cmat is not None:
-                tmp2 = self.backend.bk_repeat(conv1, 4, axis=-1)
+                tmp2 = self.backend.bk_repeat(conv1, self.NORIENT, axis=-1)
                 conv1 = self.backend.bk_reduce_sum(
                     self.backend.bk_reshape(
-                        cmat[j3] * tmp2, [tmp2.shape[0], cmat[j3].shape[0], 4, 4]
+                        cmat[j3] * tmp2, [tmp2.shape[0], cmat[j3].shape[0], self.NORIENT, self.NORIENT]
                     ),
                     2,
                 )
@@ -2846,10 +2846,10 @@ class funct(FOC.FoCUS):
                 ### Make the convolution I2 * Psi_j3
                 conv2 = self.convol(I2, axis=1)  # [Nbatch, Npix_j3, Norient3]
                 if cmat is not None:
-                    tmp2 = self.backend.bk_repeat(conv2, 4, axis=-1)
+                    tmp2 = self.backend.bk_repeat(conv2, self.NORIENT, axis=-1)
                     conv2 = self.backend.bk_reduce_sum(
                         self.backend.bk_reshape(
-                            cmat[j3] * tmp2, [tmp2.shape[0], cmat[j3].shape[0], 4, 4]
+                            cmat[j3] * tmp2, [tmp2.shape[0], cmat[j3].shape[0], self.NORIENT, self.NORIENT]
                         ),
                         2,
                     )
@@ -3425,10 +3425,10 @@ class funct(FOC.FoCUS):
             M_dic[j2], axis=1
         )  # [Nbatch, Npix_j3, Norient3, Norient2]
         if cmat2 is not None:
-            tmp2 = self.backend.bk_repeat(MconvPsi, 4, axis=-1)
+            tmp2 = self.backend.bk_repeat(MconvPsi, self.NORIENT, axis=-1)
             MconvPsi = self.backend.bk_reduce_sum(
                 self.backend.bk_reshape(
-                    cmat2[j3][j2] * tmp2, [tmp2.shape[0], cmat2[j3].shape[1], 4, 4, 4]
+                    cmat2[j3][j2] * tmp2, [tmp2.shape[0], cmat2[j3].shape[1], self.NORIENT, self.NORIENT, self.NORIENT]
                 ),
                 3,
             )
