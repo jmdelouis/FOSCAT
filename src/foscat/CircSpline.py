@@ -12,25 +12,23 @@ class CircSpline:
         """
         self.degree = degree
         self.nodes = nodes
-        
-        
-    def cubic_spline_function(self,x):
+
+    def cubic_spline_function(self, x):
         """
         Evaluate the cubic spline basis function.
-    
+
         Args:
             x (float or array): Input value(s) to evaluate the spline basis function.
-    
+
         Returns:
             float or array: Result of the cubic spline basis function.
         """
         return -2 * x**3 + 3 * x**2
 
-
-    def eval(self,x):
+    def eval(self, x):
         """
         Compute a 3rd-degree cubic spline with 4-point support.
-    
+
         Args:
             x (float or array): Input value(s) to compute the spline.
 
@@ -38,8 +36,8 @@ class CircSpline:
             indices (array): Indices of the spline support points.
             coefficients (array): Normalized spline coefficients.
         """
-        N=self.nodes
-        
+        N = self.nodes
+
         if isinstance(x, float):
             # Single scalar input
             base_idx = int(x * (N))
@@ -61,10 +59,10 @@ class CircSpline:
         coefficients[0] = self.cubic_spline_function(0.5 - fractional_part / 2) / 2
 
         # Assign indices for the support points
-        indices[3] = (base_idx + 2+N)%N
-        indices[2] = (base_idx + 1+N)%N
-        indices[1] = (base_idx + N  )%N
-        indices[0] = (base_idx + N-1)%N
+        indices[3] = (base_idx + 2 + N) % N
+        indices[2] = (base_idx + 1 + N) % N
+        indices[1] = (base_idx + N) % N
+        indices[0] = (base_idx + N - 1) % N
 
         # Square coefficients and normalize
         coefficients = coefficients * coefficients
@@ -72,11 +70,10 @@ class CircSpline:
 
         return indices, coefficients
 
-    
-    def eval_N(self,x,N):
+    def eval_N(self, x, N):
         """
         Compute a 3rd-degree cubic spline with 4-point support.
-    
+
         Args:
             x (float or array): Input value(s) to compute the spline.
 
@@ -84,7 +81,7 @@ class CircSpline:
             indices (array): Indices of the spline support points.
             coefficients (array): Normalized spline coefficients.
         """
-        
+
         if isinstance(x, float):
             # Single scalar input
             base_idx = int(x * (N))
@@ -106,10 +103,10 @@ class CircSpline:
         coefficients[0] = self.cubic_spline_function(0.5 - fractional_part / 2) / 2
 
         # Assign indices for the support points
-        indices[3] = (base_idx + 2+N)%N
-        indices[2] = (base_idx + 1+N)%N
-        indices[1] = (base_idx + N  )%N
-        indices[0] =( base_idx + N-1)%N
+        indices[3] = (base_idx + 2 + N) % N
+        indices[2] = (base_idx + 1 + N) % N
+        indices[1] = (base_idx + N) % N
+        indices[0] = (base_idx + N - 1) % N
 
         # Adjust indices to start from 0
         # Square coefficients and normalize
