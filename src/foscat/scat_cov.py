@@ -3540,9 +3540,9 @@ class funct(FOC.FoCUS):
 
 
     def from_gaussian(self,x):
-        x[x>self.val_max]=self.val_max
-        x[x<self.val_min]=self.val_min
-        return self.f_gaussian(x)
+        
+        x=self.backend.bk_clip_by_value(x,self.val_min,self.val_max)
+        return self.f_gaussian(self.backend.to_numpy(x))
     
     def square(self, x):
         if isinstance(x, scat_cov):

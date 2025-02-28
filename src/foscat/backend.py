@@ -1075,6 +1075,14 @@ class foscat_backend:
         if self.BACKEND == self.NUMPY:
             return (x > 0) * x
 
+    def bk_clip_by_value(self, x,xmin,xmax):
+        if self.BACKEND == self.TENSORFLOW:
+            return self.backend.clip_by_value(x,xmin,xmax)
+        if self.BACKEND == self.TORCH:
+            return self.backend.clip(x,xmin,xmax)
+        if self.BACKEND == self.NUMPY:
+            return self.backend.clip_by_value(x,xmin,xmax)
+
     def bk_cast(self, x):
         if isinstance(x, np.float64):
             if self.all_bk_type == "float32":
