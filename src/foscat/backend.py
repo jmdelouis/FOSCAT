@@ -1081,6 +1081,9 @@ class foscat_backend:
         if self.BACKEND == self.TENSORFLOW:
             return self.backend.clip_by_value(x,xmin,xmax)
         if self.BACKEND == self.TORCH:
+            x = torch.tensor(x, dtype=torch.float32) if not isinstance(x, torch.Tensor) else x
+            xmin = torch.tensor(xmin, dtype=torch.float32) if not isinstance(xmin, torch.Tensor) else xmin
+            xmax = torch.tensor(xmax, dtype=torch.float32) if not isinstance(xmax, torch.Tensor) else xmax
             return self.backend.clamp(x, min=xmin, max=xmax)
         if self.BACKEND == self.NUMPY:
             return self.backend.clip(x,xmin,xmax)
