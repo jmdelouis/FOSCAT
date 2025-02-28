@@ -54,17 +54,17 @@ class scat_cov:
         if self.S1 is None:
             s1 = None
         else:
-            s1 = self.S1.numpy()
+            s1 = self.backend.to_numpy(self.S1)
         if self.S3P is None:
             s3p = None
         else:
-            s3p = self.S3P.numpy()
+            s3p = self.backend.to_numpy(self.S3P)
 
         return scat_cov(
-            (self.S0.numpy()),
-            (self.S2.numpy()),
-            (self.S3.numpy()),
-            (self.S4.numpy()),
+            self.backend.to_numpy(self.S0),
+            self.backend.to_numpy(self.S2),
+            self.backend.to_numpy(self.S3),
+            self.backend.to_numpy(self.S4),
             s1=s1,
             s3p=s3p,
             backend=self.backend,
@@ -94,7 +94,7 @@ class scat_cov:
         )
 
     def conv2complex(self, val):
-        if val.dtype == "complex64" or val.dtype == "complex128":
+        if val.dtype == "complex64" in val.dtype or "complex128" or val.dtype == "torch.complex64" or val.dtype == "torch.complex128" :
             return val
         else:
             return self.backend.bk_complex(val, 0 * val)
@@ -1531,7 +1531,7 @@ class scat_cov:
             if isinstance(x, np.ndarray):
                 return x
             else:
-                return x.numpy()
+                return self.backend.to_numpy(x)
         else:
             return None
 
@@ -1974,7 +1974,7 @@ class scat_cov:
         if self.BACKEND == "numpy":
             s2[:, :, noff:, :] = self.S2
         else:
-            s2[:, :, noff:, :] = self.S2.numpy()
+            s2[:, :, noff:, :] = self.backend.to_numpy(self.S2)
         for i in range(self.S2.shape[0]):
             for j in range(self.S2.shape[1]):
                 for k in range(self.S2.shape[3]):
@@ -1986,7 +1986,7 @@ class scat_cov:
         if self.BACKEND == "numpy":
             s1[:, :, noff:, :] = self.S1
         else:
-            s1[:, :, noff:, :] = self.S1.numpy()
+            s1[:, :, noff:, :] = self.backend.to_numpy(self.S1)
         for i in range(self.S1.shape[0]):
             for j in range(self.S1.shape[1]):
                 for k in range(self.S1.shape[3]):
@@ -2045,12 +2045,12 @@ class scat_cov:
                                     )
                                 )
                             else:
-                                s3[i, j, idx[noff:], k, l_orient] = self.S3.numpy()[
+                                s3[i, j, idx[noff:], k, l_orient] = self.backend.to_numpy(self.S3)[
                                     i, j, j2 == ij - noff, k, l_orient
                                 ]
                                 s3[i, j, idx[:noff], k, l_orient] = (
                                     self.add_data_from_slope(
-                                        self.S3.numpy()[
+                                        self.backend.to_numpy(self.S3)[
                                             i, j, j2 == ij - noff, k, l_orient
                                         ],
                                         noff,
@@ -2493,11 +2493,12 @@ class funct(FOC.FoCUS):
             image2=None,
             mask=None,
             norm=None,
-            Auto=True,
             calc_var=False,
             cmat=None,
             cmat2=None,
-            out_nside=None
+            Jmax=None,
+            out_nside=None,
+            edge=True
     ):
         """
         Calculates the scattering correlations for a batch of images. Mean are done over pixels.
@@ -2523,9 +2524,6 @@ class funct(FOC.FoCUS):
         norm: None or str
             If None no normalization is applied, if 'auto' normalize by the reference S2,
             if 'self' normalize by the current S2.
-        all_cross: False or True
-            If False compute all the coefficient even the Imaginary part,
-            If True return only the terms computable in the auto case.
         Returns
         -------
         S1, S2, S3, S4 normalized
@@ -2539,7 +2537,7 @@ class funct(FOC.FoCUS):
                 )
                 return None
         if mask is not None:
-            if list(image1.shape) != list(mask.shape)[1:]:
+            if image1.shape[-2] != mask.shape[1] or image1.shape[-1] != mask.shape[2]:
                 print(
                     "The LAST COLUMN of the mask should have the same size ",
                     mask.shape,
@@ -2558,9 +2556,6 @@ class funct(FOC.FoCUS):
         cross = False
         if image2 is not None:
             cross = True
-            all_cross = Auto
-        else:
-            all_cross = False
 
         ### PARAMETERS
         axis = 1
@@ -2596,8 +2591,16 @@ class funct(FOC.FoCUS):
             nside = int(np.sqrt(npix // 12))
 
             J = int(np.log(nside) / np.log(2))  # Number of j scales
-
-        Jmax = J - self.OSTEP  # Number of steps for the loop on scales
+            
+        if (self.use_2D or self.use_1D) and self.KERNELSZ>3:
+            J-=1
+        if Jmax is None:
+            Jmax = J  # Number of steps for the loop on scales
+        if Jmax>J:
+            print('==========\n\n')
+            print('The Jmax you requested is larger than the data size, which may cause problems while computing the scattering transform.')
+            print('\n\n==========')
+        
 
         ### LOCAL VARIABLES (IMAGES and MASK)
         if len(image1.shape) == 1 or (len(image1.shape) == 2 and self.use_2D):
@@ -2621,7 +2624,7 @@ class funct(FOC.FoCUS):
         else:
             vmask = self.backend.bk_cast(mask)  # [Nmask, Npix]
 
-        if self.KERNELSZ > 3:
+        if self.KERNELSZ > 3 and not self.use_2D:
             # if the kernel size is bigger than 3 increase the binning before smoothing
             if self.use_2D:
                 vmask = self.up_grade(
@@ -2645,7 +2648,7 @@ class funct(FOC.FoCUS):
                 if cross:
                     I2 = self.up_grade(I2, nside * 2, axis=axis)
 
-            if self.KERNELSZ > 5:
+            if self.KERNELSZ > 5 and not self.use_2D:
                 # if the kernel size is bigger than 3 increase the binning before smoothing
                 if self.use_2D:
                     vmask = self.up_grade(
@@ -2703,11 +2706,6 @@ class funct(FOC.FoCUS):
             off_S3 = -1
             off_S4 = -1
 
-        # Dictionaries for S3 computation
-        M1_dic = {}  # M stands for Module M1 = |I1 * Psi|
-        if cross:
-            M2_dic = {}
-
         # S2 for normalization
         cond_init_P1_dic = (norm == "self") or (
             (norm == "auto") and (self.P1_dic is None)
@@ -2736,10 +2734,35 @@ class funct(FOC.FoCUS):
                 )
             vs0 = self.backend.bk_concat([l_vs0, l_vs0], 1)
             s0 = self.backend.bk_concat([s0, l_vs0], 1)
-
         #### COMPUTE S1, S2, S3 and S4
         nside_j3 = nside  # NSIDE start (nside_j3 = nside / 2^j3)
+
+        # a remettre comme avant
+        M1_dic={}
+        
         for j3 in range(Jmax):
+            
+            if edge:
+                if self.mask_mask is None:
+                    self.mask_mask={}
+                if self.use_2D:
+                    if (vmask.shape[1],vmask.shape[2]) not in self.mask_mask:
+                        mask_mask=np.zeros([1,vmask.shape[1],vmask.shape[2]])
+                        mask_mask[0,
+                                  self.KERNELSZ//2:-self.KERNELSZ//2+1,
+                                  self.KERNELSZ//2:-self.KERNELSZ//2+1]=1.0
+                        self.mask_mask[(vmask.shape[1],vmask.shape[2])]=self.backend.bk_cast(mask_mask)
+                    vmask=vmask*self.mask_mask[(vmask.shape[1],vmask.shape[2])]
+                    #print(self.KERNELSZ//2,vmask,mask_mask)
+                    
+                if self.use_1D:
+                    if (vmask.shape[1]) not in self.mask_mask:
+                        mask_mask=np.zeros([1,vmask.shape[1]])
+                        mask_mask[0,
+                                  self.KERNELSZ//2:-self.KERNELSZ//2+1]=1.0
+                        self.mask_mask[(vmask.shape[1])]=self.backend.bk_cast(mask_mask)
+                    vmask=vmask*self.mask_mask[(vmask.shape[1])]
+                    
             if return_data:
                 S3[j3] = None
                 S3P[j3] = None
@@ -2751,7 +2774,6 @@ class funct(FOC.FoCUS):
             ####### S1 and S2
             ### Make the convolution I1 * Psi_j3
             conv1 = self.convol(I1, axis=1)  # [Nbatch, Npix_j3, Norient3]
-
             if cmat is not None:
                 tmp2 = self.backend.bk_repeat(conv1, 4, axis=-1)
                 conv1 = self.backend.bk_reduce_sum(
@@ -2913,8 +2935,7 @@ class funct(FOC.FoCUS):
                         s2 /= (P1_dic[j3] * P2_dic[j3]) ** 0.5
 
                     ### Store S2_cross as complex [Nbatch, Nmask, NS2, Norient3]
-                    if not all_cross:
-                        s2 = self.backend.bk_real(s2)
+                    s2 = self.backend.bk_real(s2)
 
                     S2.append(self.backend.bk_expand_dims(s2, off_S2))  # Add a dimension for NS2
                     if calc_var:
@@ -3273,13 +3294,13 @@ class funct(FOC.FoCUS):
             ### Image I1,
             # downscale the I1 [Nbatch, Npix_j3]
             if j3 != Jmax - 1:
-                I1_smooth = self.smooth(I1, axis=1)
-                I1 = self.ud_grade_2(I1_smooth, axis=1)
+                I1 = self.smooth(I1, axis=1)
+                I1 = self.ud_grade_2(I1, axis=1)
 
                 ### Image I2
                 if cross:
-                    I2_smooth = self.smooth(I2, axis=1)
-                    I2 = self.ud_grade_2(I2_smooth, axis=1)
+                    I2 = self.smooth(I2, axis=1)
+                    I2 = self.ud_grade_2(I2, axis=1)
 
                 ### Modules
                 for j2 in range(0, j3 + 1):  # j2 =< j3
@@ -3297,8 +3318,9 @@ class funct(FOC.FoCUS):
                             M2_dic[j2], axis=1
                         )  # [Nbatch, Npix_j3, Norient3]
                         M2_dic[j2] = self.ud_grade_2(
-                            M2_smooth, axis=1
+                            M2, axis=1
                         )  # [Nbatch, Npix_j3, Norient3]
+            
                 ### Mask
                 vmask = self.ud_grade_2(vmask, axis=1)
 
@@ -3501,6 +3523,27 @@ class funct(FOC.FoCUS):
                 )  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
                 return s4
 
+    def to_gaussian(self,x):
+        from scipy.stats import norm
+        from scipy.interpolate import interp1d
+
+        idx=np.argsort(x.flatten())
+        p = (np.arange(1, idx.shape[0] + 1) - 0.5) / idx.shape[0]
+        im_target=x.flatten()
+        im_target[idx] = norm.ppf(p)
+        
+        # Interpolation cubique
+        self.f_gaussian = interp1d(im_target[idx], x.flatten()[idx], kind='cubic')
+        self.val_min=im_target[idx[0]]
+        self.val_max=im_target[idx[-1]]
+        return im_target.reshape(x.shape)
+
+
+    def from_gaussian(self,x):
+        x[x>self.val_max]=self.val_max
+        x[x<self.val_min]=self.val_min
+        return self.f_gaussian(x)
+    
     def square(self, x):
         if isinstance(x, scat_cov):
             if x.S1 is None:
@@ -3844,3 +3887,110 @@ class funct(FOC.FoCUS):
         return scat_cov(
             s0, s2, s3, s4, s1=s1, s3p=s3p, backend=self.backend, use_1D=self.use_1D
         )
+
+    def synthesis(self,
+                  image_target,
+                  nstep=4,
+                  seed=1234,
+                  edge=True,
+                  to_gaussian=True,
+                  EVAL_FREQUENCY=100,
+                  NUM_EPOCHS = 300):
+                      
+        import foscat.Synthesis as synthe
+        import time
+
+        def The_loss(u,scat_operator,args):
+            ref  = args[0]
+            sref = args[1]
+            
+            # compute scattering covariance of the current synthetised map called u
+            learn=scat_operator.reduce_mean_batch(scat_operator.eval(u,edge=edge))
+            
+            # make the difference withe the reference coordinates
+            loss=scat_operator.reduce_distance(learn,ref,sigma=sref)
+    
+            return loss
+
+        if to_gaussian:
+            # Change the data histogram to gaussian distribution
+            im_target=self.to_gaussian(image_target)
+        else:
+            im_target=image_target
+            
+        axis=len(im_target.shape)-1
+        if self.use_2D:
+            axis-=1
+        if axis==0:
+            im_target=self.backend.bk_expand_dims(im_target,0)
+
+        # compute the number of possible steps
+        if self.use_2D:
+            jmax=int(np.min([np.log(im_target.shape[1]),np.log(im_target.shape[2])])/np.log(2))
+        elif self.use_1D:
+            jmax=int(np.log(im_target.shape[1])/np.log(2))
+        else:
+            jmax=int((np.log(im_target.shape[1]//12)/np.log(2))/2)
+            nside=2**jmax
+
+        if nstep>jmax-1:
+            nstep=jmax-1
+
+        t1=time.time()
+        tmp={}
+        tmp[nstep-1]=im_target
+        for l in range(nstep-2,-1,-1):
+            tmp[l]=self.ud_grade_2(tmp[l+1],axis=1)
+            
+        for k in range(nstep):
+            if k==0:
+                np.random.seed(seed)
+                if self.use_2D:
+                    imap=np.random.randn(tmp[k].shape[0],
+                                         tmp[k].shape[1],
+                                        tmp[k].shape[2])
+                else:
+                    imap=np.random.randn(tmp[k].shape[0],
+                                         tmp[k].shape[1])
+            else:
+                axis=1
+                # if the kernel size is bigger than 3 increase the binning before smoothing
+                if self.use_2D:
+                    imap = self.up_grade(
+                        omap, imap.shape[axis] * 2, axis=1, nouty=imap.shape[axis + 1] * 2
+                    )
+                elif self.use_1D:
+                    imap = self.up_grade(omap, imap.shape[axis] * 2, axis=1)
+                else:
+                    imap = self.up_grade(omap, nside * 2, axis=axis)
+                    
+            # compute the coefficients for the target image
+            ref,sref=self.eval(tmp[k],calc_var=True,edge=edge)
+
+            # compute the mean of the population does nothing if only one map is given
+            ref=self.reduce_mean_batch(ref)
+            sref=self.reduce_mean_batch(sref)
+
+            # define a loss to minimize
+            loss=synthe.Loss(The_loss,self,ref,sref)
+        
+            sy = synthe.Synthesis([loss])
+
+            # initialize the synthesised map
+            print('Synthesis scale [ %d x %d ]'%(imap.shape[1],imap.shape[2]))
+            
+            # do the minimization
+            omap=sy.run(imap,
+                        EVAL_FREQUENCY=EVAL_FREQUENCY,
+                        NUM_EPOCHS = NUM_EPOCHS)
+
+        t2=time.time()
+        print('Total computation %.2fs'%(t2-t1))
+
+        if to_gaussian:
+            omap=self.from_gaussian(omap)
+
+        if axis==0:
+            return omap[0]
+        else:
+            return omap
