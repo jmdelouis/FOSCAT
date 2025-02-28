@@ -1076,6 +1076,8 @@ class foscat_backend:
             return (x > 0) * x
 
     def bk_clip_by_value(self, x,xmin,xmax):
+        if isinstance(x, np.ndarray):
+            x = np.clip_by_value(x,xmin,xmax)
         if self.BACKEND == self.TENSORFLOW:
             return self.backend.clip_by_value(x,xmin,xmax)
         if self.BACKEND == self.TORCH:
