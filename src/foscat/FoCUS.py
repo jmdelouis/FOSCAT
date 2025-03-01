@@ -194,10 +194,10 @@ class FoCUS:
                     xx = (3 / float(KERNELSZ)) * LAMBDA * (x * np.cos(a) + y * np.sin(a))
                     yy = (3 / float(KERNELSZ)) * LAMBDA * (x * np.sin(a) - y * np.cos(a))
                 else:
-                    xx = (3 /4) * LAMBDA * (x * np.cos(a) + y * np.sin(a))
-                    yy = (3 /4) * LAMBDA * (x * np.sin(a) - y * np.cos(a))
+                    xx = (3 /5) * LAMBDA * (x * np.cos(a) + y * np.sin(a))
+                    yy = (3 /5) * LAMBDA * (x * np.sin(a) - y * np.cos(a))
                 if KERNELSZ == 5:
-                    w_smooth=np.exp(-2.5*((3.0/float(KERNELSZ)*xx)**2+(3.0/float(KERNELSZ)*yy)**2))
+                    w_smooth=np.exp(-2*((3.0/float(KERNELSZ)*xx)**2+(3.0/float(KERNELSZ)*yy)**2))
                 else:
                     w_smooth = np.exp(-0.5 * (xx**2 + yy**2))
                 tmp1 = np.cos(yy * np.pi) * w_smooth
