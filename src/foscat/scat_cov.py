@@ -33,9 +33,7 @@ testwarn = 0
 
 
 class scat_cov:
-    def __init__(
-        self, s0, s2, s3, s4, s1=None, s3p=None, backend=None, use_1D=False
-    ):
+    def __init__(self, s0, s2, s3, s4, s1=None, s3p=None, backend=None, use_1D=False):
         self.S0 = s0
         self.S2 = s2
         self.S3 = s3
@@ -2358,13 +2356,13 @@ class funct(FOC.FoCUS):
             tmp = self.up_grade(tmp, l_nside * 2, axis=1)
             if image2 is not None:
                 tmpi2 = self.up_grade(tmpi2, l_nside * 2, axis=1)
-
         l_nside = int(np.sqrt(tmp.shape[1] // 12))
         nscale = int(np.log(l_nside) / np.log(2))
         cmat = {}
         cmat2 = {}
+
+        # Loop over scales
         for k in range(nscale):
-            sim = self.backend.bk_abs(self.convol(tmp, axis=1))
             if image2 is not None:
                 sim = self.backend.bk_real(
                     self.backend.bk_L1(
@@ -2375,17 +2373,31 @@ class funct(FOC.FoCUS):
             else:
                 sim = self.backend.bk_abs(self.convol(tmp, axis=1))
 
-            cc = self.backend.bk_reduce_mean(sim[:, :, 0] - sim[:, :, 2], 0)
-            ss = self.backend.bk_reduce_mean(sim[:, :, 1] - sim[:, :, 3], 0)
-            for m in range(smooth_scale):
-                if cc.shape[0] > 12:
-                    cc = self.ud_grade_2(self.smooth(cc))
-                    ss = self.ud_grade_2(self.smooth(ss))
+            # instead of difference between "opposite" channels use weighted average
+            # of cosine and sine contributions using all channels
+            angles = (
+                2 * np.pi * np.arange(self.NORIENT) / self.NORIENT
+            )  # shape: (NORIENT,)
+            angles = angles.reshape(1, 1, self.NORIENT)
+
+            # we use cosines and sines as weights for sim
+            weighted_cos = self.backend.bk_reduce_mean(sim * np.cos(angles), axis=-1)
+            weighted_sin = self.backend.bk_reduce_mean(sim * np.sin(angles), axis=-1)
+            # For simplicity, take first element of the batch
+            cc = weighted_cos[0]
+            ss = weighted_sin[0]
+
+            if smooth_scale > 0:
+                for m in range(smooth_scale):
+                    if cc.shape[0] > 12:
+                        cc = self.ud_grade_2(self.smooth(cc))
+                        ss = self.ud_grade_2(self.smooth(ss))
             if cc.shape[0] != tmp.shape[0]:
                 ll_nside = int(np.sqrt(tmp.shape[1] // 12))
                 cc = self.up_grade(cc, ll_nside)
                 ss = self.up_grade(ss, ll_nside)
 
+            # compute local phase from weighted cos and sin (same as before)
             if self.BACKEND == "numpy":
                 phase = np.fmod(np.arctan2(ss, cc) + 2 * np.pi, 2 * np.pi)
             else:
@@ -2393,87 +2405,87 @@ class funct(FOC.FoCUS):
                     np.arctan2(ss.numpy(), cc.numpy()) + 2 * np.pi, 2 * np.pi
                 )
 
-            iph = (4 * phase / (2 * np.pi)).astype("int")
-            alpha = 4 * phase / (2 * np.pi) - iph
-            mat = np.zeros([sim.shape[1], 4 * 4])
+            # instead of linear interpolation cosine‐based interpolation
+            phase_scaled = self.NORIENT * phase / (2 * np.pi)
+            iph = np.floor(phase_scaled).astype("int")  # lower bin index
+            delta = phase_scaled - iph  # fractional part in [0,1)
+            # interpolation weights
+            w0 = np.cos(delta * np.pi / 2) ** 2
+            w1 = np.sin(delta * np.pi / 2) ** 2
+
+            # build rotation matrix
+            mat = np.zeros([sim.shape[1], self.NORIENT * self.NORIENT])
             lidx = np.arange(sim.shape[1])
-            for l_orient in range(4):
-                mat[lidx, 4 * ((l_orient + iph) % 4) + l_orient] = 1.0 - alpha
-                mat[lidx, 4 * ((l_orient + iph + 1) % 4) + l_orient] = alpha
+            for l in range(self.NORIENT):
+                # Instead of simple linear weights, we use the cosine weights w0 and w1.
+                col0 = self.NORIENT * ((l + iph) % self.NORIENT) + l
+                col1 = self.NORIENT * ((l + iph + 1) % self.NORIENT) + l
+                mat[lidx, col0] = w0
+                mat[lidx, col1] = w1
 
             cmat[k] = self.backend.bk_cast(mat.astype("complex64"))
 
-            mat2 = np.zeros([k + 1, sim.shape[1], 4, 4 * 4])
+            # do same modifications for mat2
+            mat2 = np.zeros(
+                [k + 1, sim.shape[1], self.NORIENT, self.NORIENT * self.NORIENT]
+            )
 
             for k2 in range(k + 1):
-                tmp2 = self.backend.bk_repeat(sim, 4, axis=-1)
+                tmp2 = self.backend.bk_repeat(sim, self.NORIENT, axis=-1)
+
                 sim2 = self.backend.bk_reduce_sum(
                     self.backend.bk_reshape(
-                        mat.reshape(1, mat.shape[0], 16) * tmp2,
-                        [sim.shape[0], cmat[k].shape[0], 4, 4],
+                        mat.reshape(1, mat.shape[0], self.NORIENT * self.NORIENT)
+                        * tmp2,
+                        [sim.shape[0], cmat[k].shape[0], self.NORIENT, self.NORIENT],
                     ),
                     2,
                 )
+
                 sim2 = self.backend.bk_abs(self.convol(sim2, axis=1))
 
-                cc = self.smooth(
-                    self.backend.bk_reduce_mean(sim2[:, :, 0] - sim2[:, :, 2], 0)
+                weighted_cos2 = self.backend.bk_reduce_mean(
+                    sim2 * np.cos(angles), axis=-1
                 )
-                ss = self.smooth(
-                    self.backend.bk_reduce_mean(sim2[:, :, 1] - sim2[:, :, 3], 0)
+                weighted_sin2 = self.backend.bk_reduce_mean(
+                    sim2 * np.sin(angles), axis=-1
                 )
-                for m in range(smooth_scale):
-                    if cc.shape[0] > 12:
-                        cc = self.ud_grade_2(self.smooth(cc))
-                        ss = self.ud_grade_2(self.smooth(ss))
-                if cc.shape[0] != sim.shape[1]:
+
+                cc2 = weighted_cos2[0]
+                ss2 = weighted_sin2[0]
+
+                if smooth_scale > 0:
+                    for m in range(smooth_scale):
+                        if cc2.shape[0] > 12:
+                            cc2 = self.ud_grade_2(self.smooth(cc2))
+                            ss2 = self.ud_grade_2(self.smooth(ss2))
+
+                if cc2.shape[0] != sim.shape[1]:
                     ll_nside = int(np.sqrt(sim.shape[1] // 12))
-                    cc = self.up_grade(cc, ll_nside)
-                    ss = self.up_grade(ss, ll_nside)
+                    cc2 = self.up_grade(cc2, ll_nside)
+                    ss2 = self.up_grade(ss2, ll_nside)
 
                 if self.BACKEND == "numpy":
-                    phase = np.fmod(np.arctan2(ss, cc) + 2 * np.pi, 2 * np.pi)
+                    phase2 = np.fmod(np.arctan2(ss2, cc2) + 2 * np.pi, 2 * np.pi)
                 else:
-                    phase = np.fmod(
-                        np.arctan2(ss.numpy(), cc.numpy()) + 2 * np.pi, 2 * np.pi
+                    phase2 = np.fmod(
+                        np.arctan2(ss2.numpy(), cc2.numpy()) + 2 * np.pi, 2 * np.pi
                     )
-                """
-                for k in range(4):
-                    hp.mollview(np.fmod(phase+np.pi,2*np.pi),cmap='jet',nest=True,hold=False,sub=(2,2,1+k))
-                plt.show()
-                return None
-                """
-                iph = (4 * phase / (2 * np.pi)).astype("int")
-                alpha = 4 * phase / (2 * np.pi) - iph
+
+                phase2_scaled = self.NORIENT * phase2 / (2 * np.pi)
+                iph2 = np.floor(phase2_scaled).astype("int")
+                delta2 = phase2_scaled - iph2
+                w0_2 = np.cos(delta2 * np.pi / 2) ** 2
+                w1_2 = np.sin(delta2 * np.pi / 2) ** 2
                 lidx = np.arange(sim.shape[1])
-                for m in range(4):
-                    for l_orient in range(4):
-                        mat2[
-                            k2, lidx, m, 4 * ((l_orient + iph[:, m]) % 4) + l_orient
-                        ] = (1.0 - alpha[:, m])
-                        mat2[
-                            k2, lidx, m, 4 * ((l_orient + iph[:, m] + 1) % 4) + l_orient
-                        ] = alpha[:, m]
 
-            cmat2[k] = self.backend.bk_cast(mat2.astype("complex64"))
-            """
-            tmp=self.backend.bk_repeat(sim[0],4,axis=1)
-            sim2=self.backend.bk_reduce_sum(self.backend.bk_reshape(mat*tmp,[12*nside**2,4,4]),1)
-
-            cc2=(sim2[:,0]-sim2[:,2])
-            ss2=(sim2[:,1]-sim2[:,3])
-            phase2=np.fmod(np.arctan2(ss2.numpy(),cc2.numpy())+2*np.pi,2*np.pi)
-
-            plt.figure()
-            hp.mollview(phase,cmap='jet',nest=True,hold=False,sub=(2,2,1))
-            hp.mollview(np.fmod(phase2+np.pi,2*np.pi),cmap='jet',nest=True,hold=False,sub=(2,2,2))
-            plt.figure()
-            for k in range(4):
-                hp.mollview((sim[0,:,k]).numpy().real,cmap='jet',nest=True,hold=False,sub=(2,4,1+k),min=-10,max=10)
-                hp.mollview((sim2[:,k]).numpy().real,cmap='jet',nest=True,hold=False,sub=(2,4,5+k),min=-10,max=10)
-
-            plt.show()
-            """
+                for m in range(self.NORIENT):
+                    for l in range(self.NORIENT):
+                        col0 = self.NORIENT * ((l + iph2[:, m]) % self.NORIENT) + l
+                        col1 = self.NORIENT * ((l + iph2[:, m] + 1) % self.NORIENT) + l
+                        mat2[k2, lidx, m, col0] = w0_2[:, m]
+                        mat2[k2, lidx, m, col1] = w1_2[:, m]
+                cmat2[k] = self.backend.bk_cast(mat2.astype("complex64"))
 
             if k < l_nside - 1:
                 tmp = self.ud_grade_2(tmp, axis=1)
@@ -2687,16 +2699,16 @@ class funct(FOC.FoCUS):
             S3P = {}
             S4 = {}
         else:
-            S1=[]
-            S2=[]
-            S3=[]
-            S4=[]
-            S3P=[]
-            VS1=[]
-            VS2=[]
-            VS3=[]
-            VS3P=[]
-            VS4=[]
+            S1 = []
+            S2 = []
+            S3 = []
+            S4 = []
+            S3P = []
+            VS1 = []
+            VS2 = []
+            VS3 = []
+            VS3P = []
+            VS4 = []
 
         off_S2 = -2
         off_S3 = -3
@@ -2724,7 +2736,12 @@ class funct(FOC.FoCUS):
         if return_data:
             s0 = I1
             if out_nside is not None:
-                s0 = self.backend.bk_reduce_mean(self.backend.bk_reshape(s0,[s0.shape[0],12*out_nside**2,(nside//out_nside)**2]),2)
+                s0 = self.backend.bk_reduce_mean(
+                    self.backend.bk_reshape(
+                        s0, [s0.shape[0], 12 * out_nside**2, (nside // out_nside) ** 2]
+                    ),
+                    2,
+                )
         else:
             if not cross:
                 s0, l_vs0 = self.masked_mean(I1, vmask, axis=1, calc_var=True)
@@ -2775,10 +2792,11 @@ class funct(FOC.FoCUS):
             ### Make the convolution I1 * Psi_j3
             conv1 = self.convol(I1, axis=1)  # [Nbatch, Npix_j3, Norient3]
             if cmat is not None:
-                tmp2 = self.backend.bk_repeat(conv1, 4, axis=-1)
+                tmp2 = self.backend.bk_repeat(conv1, self.NORIENT, axis=-1)
                 conv1 = self.backend.bk_reduce_sum(
                     self.backend.bk_reshape(
-                        cmat[j3] * tmp2, [tmp2.shape[0], cmat[j3].shape[0], 4, 4]
+                        cmat[j3] * tmp2,
+                        [tmp2.shape[0], cmat[j3].shape[0], self.NORIENT, self.NORIENT],
                     ),
                     2,
                 )
@@ -2814,21 +2832,32 @@ class funct(FOC.FoCUS):
                 if return_data:
                     if S2 is None:
                         S2 = {}
-                    if out_nside is not None and out_nside<nside_j3:
+                    if out_nside is not None and out_nside < nside_j3:
                         s2 = self.backend.bk_reduce_mean(
-                            self.backend.bk_reshape(s2,[s2.shape[0],
-                                                        12*out_nside**2,
-                                                        (nside_j3//out_nside)**2,
-                                                        s2.shape[2]]),2)
+                            self.backend.bk_reshape(
+                                s2,
+                                [
+                                    s2.shape[0],
+                                    12 * out_nside**2,
+                                    (nside_j3 // out_nside) ** 2,
+                                    s2.shape[2],
+                                ],
+                            ),
+                            2,
+                        )
                     S2[j3] = s2
                 else:
                     if norm == "auto":  # Normalize S2
                         s2 /= P1_dic[j3]
-                        
-                    S2.append(self.backend.bk_expand_dims(s2, off_S2))  # Add a dimension for NS2
+
+                    S2.append(
+                        self.backend.bk_expand_dims(s2, off_S2)
+                    )  # Add a dimension for NS2
                     if calc_var:
-                        VS2.append(self.backend.bk_expand_dims(vs2, off_S2))  # Add a dimension for NS2
-                                   
+                        VS2.append(
+                            self.backend.bk_expand_dims(vs2, off_S2)
+                        )  # Add a dimension for NS2
+
                 #### S1_auto computation
                 ### Image 1 : S1 = < M1 >_pix
                 # Apply the mask [Nmask, Npix_j3] and average over pixels
@@ -2845,30 +2874,47 @@ class funct(FOC.FoCUS):
                         )  # [Nbatch, Nmask, Norient3]
 
                 if return_data:
-                    if out_nside is not None and out_nside<nside_j3:
+                    if out_nside is not None and out_nside < nside_j3:
                         s1 = self.backend.bk_reduce_mean(
-                            self.backend.bk_reshape(s1,[s1.shape[0],
-                                                        12*out_nside**2,
-                                                        (nside_j3//out_nside)**2,
-                                                        s1.shape[2]]),2)
+                            self.backend.bk_reshape(
+                                s1,
+                                [
+                                    s1.shape[0],
+                                    12 * out_nside**2,
+                                    (nside_j3 // out_nside) ** 2,
+                                    s1.shape[2],
+                                ],
+                            ),
+                            2,
+                        )
                     S1[j3] = s1
                 else:
                     ### Normalize S1
                     if norm is not None:
                         self.div_norm(s1, (P1_dic[j3]) ** 0.5)
                     ### We store S1 for image1  [Nbatch, Nmask, NS1, Norient3]
-                    S1.append(self.backend.bk_expand_dims(s1, off_S2)) # Add a dimension for NS1
+                    S1.append(
+                        self.backend.bk_expand_dims(s1, off_S2)
+                    )  # Add a dimension for NS1
                     if calc_var:
-                        VS1.append(self.backend.bk_expand_dims(vs1, off_S2))  # Add a dimension for NS1
+                        VS1.append(
+                            self.backend.bk_expand_dims(vs1, off_S2)
+                        )  # Add a dimension for NS1
 
             else:  # Cross
                 ### Make the convolution I2 * Psi_j3
                 conv2 = self.convol(I2, axis=1)  # [Nbatch, Npix_j3, Norient3]
                 if cmat is not None:
-                    tmp2 = self.backend.bk_repeat(conv2, 4, axis=-1)
+                    tmp2 = self.backend.bk_repeat(conv2, self.NORIENT, axis=-1)
                     conv2 = self.backend.bk_reduce_sum(
                         self.backend.bk_reshape(
-                            cmat[j3] * tmp2, [tmp2.shape[0], cmat[j3].shape[0], 4, 4]
+                            cmat[j3] * tmp2,
+                            [
+                                tmp2.shape[0],
+                                cmat[j3].shape[0],
+                                self.NORIENT,
+                                self.NORIENT,
+                            ],
                         ),
                         2,
                     )
@@ -2922,12 +2968,19 @@ class funct(FOC.FoCUS):
                         s2 = self.masked_mean(s2, vmask, axis=1, rank=j3)
 
                 if return_data:
-                    if out_nside is not None and out_nside<nside_j3:
+                    if out_nside is not None and out_nside < nside_j3:
                         s2 = self.backend.bk_reduce_mean(
-                            self.backend.bk_reshape(s2,[s2.shape[0],
-                                                        12*out_nside**2,
-                                                        (nside_j3//out_nside)**2,
-                                                        s2.shape[2]]),2)
+                            self.backend.bk_reshape(
+                                s2,
+                                [
+                                    s2.shape[0],
+                                    12 * out_nside**2,
+                                    (nside_j3 // out_nside) ** 2,
+                                    s2.shape[2],
+                                ],
+                            ),
+                            2,
+                        )
                     S2[j3] = s2
                 else:
                     ### Normalize S2_cross
@@ -2937,9 +2990,13 @@ class funct(FOC.FoCUS):
                     ### Store S2_cross as complex [Nbatch, Nmask, NS2, Norient3]
                     s2 = self.backend.bk_real(s2)
 
-                    S2.append(self.backend.bk_expand_dims(s2, off_S2))  # Add a dimension for NS2
+                    S2.append(
+                        self.backend.bk_expand_dims(s2, off_S2)
+                    )  # Add a dimension for NS2
                     if calc_var:
-                        VS2.append(self.backend.bk_expand_dims(vs2, off_S2))  # Add a dimension for NS2
+                        VS2.append(
+                            self.backend.bk_expand_dims(vs2, off_S2)
+                        )  # Add a dimension for NS2
 
                 #### S1_auto computation
                 ### Image 1 : S1 = < M1 >_pix
@@ -2956,21 +3013,32 @@ class funct(FOC.FoCUS):
                             MX, vmask, axis=1, rank=j3
                         )  # [Nbatch, Nmask, Norient3]
                 if return_data:
-                    if out_nside is not None and out_nside<nside_j3:
+                    if out_nside is not None and out_nside < nside_j3:
                         s1 = self.backend.bk_reduce_mean(
-                            self.backend.bk_reshape(s1,[s1.shape[0],
-                                                        12*out_nside**2,
-                                                        (nside_j3//out_nside)**2,
-                                                        s1.shape[2]]),2)
+                            self.backend.bk_reshape(
+                                s1,
+                                [
+                                    s1.shape[0],
+                                    12 * out_nside**2,
+                                    (nside_j3 // out_nside) ** 2,
+                                    s1.shape[2],
+                                ],
+                            ),
+                            2,
+                        )
                     S1[j3] = s1
                 else:
                     ### Normalize S1
                     if norm is not None:
                         self.div_norm(s1, (P1_dic[j3]) ** 0.5)
                     ### We store S1 for image1  [Nbatch, Nmask, NS1, Norient3]
-                    S1.append(self.backend.bk_expand_dims(s1, off_S2))  # Add a dimension for NS1
+                    S1.append(
+                        self.backend.bk_expand_dims(s1, off_S2)
+                    )  # Add a dimension for NS1
                     if calc_var:
-                        VS1.append(self.backend.bk_expand_dims(vs1, off_S2))  # Add a dimension for NS1
+                        VS1.append(
+                            self.backend.bk_expand_dims(vs1, off_S2)
+                        )  # Add a dimension for NS1
 
             # Initialize dictionaries for |I1*Psi_j| * Psi_j3
             M1convPsi_dic = {}
@@ -2979,7 +3047,7 @@ class funct(FOC.FoCUS):
                 M2convPsi_dic = {}
 
             ###### S3
-            nside_j2=nside_j3
+            nside_j2 = nside_j3
             for j2 in range(0, j3 + 1):  # j2 <= j3
                 if return_data:
                     if S4[j3] is None:
@@ -3014,13 +3082,20 @@ class funct(FOC.FoCUS):
                     if return_data:
                         if S3[j3] is None:
                             S3[j3] = {}
-                        if out_nside is not None and out_nside<nside_j2:
+                        if out_nside is not None and out_nside < nside_j2:
                             s3 = self.backend.bk_reduce_mean(
-                                self.backend.bk_reshape(s3,[s3.shape[0],
-                                                            12*out_nside**2,
-                                                            (nside_j2//out_nside)**2,
-                                                            s3.shape[2],
-                                                            s3.shape[3]]),2)
+                                self.backend.bk_reshape(
+                                    s3,
+                                    [
+                                        s3.shape[0],
+                                        12 * out_nside**2,
+                                        (nside_j2 // out_nside) ** 2,
+                                        s3.shape[2],
+                                        s3.shape[3],
+                                    ],
+                                ),
+                                2,
+                            )
                         S3[j3][j2] = s3
                     else:
                         ### Normalize S3 with S2_j [Nbatch, Nmask, Norient_j]
@@ -3035,13 +3110,17 @@ class funct(FOC.FoCUS):
                             )  # [Nbatch, Nmask, Norient3, Norient2]
 
                         ### Store S3 as a complex [Nbatch, Nmask, NS3, Norient3, Norient2]
-                        
-                        #S3.append(self.backend.bk_reshape(s3,[s3.shape[0],s3.shape[1],
+
+                        # S3.append(self.backend.bk_reshape(s3,[s3.shape[0],s3.shape[1],
                         #                                      s3.shape[2]*s3.shape[3]]))
-                        S3.append(self.backend.bk_expand_dims(s3, off_S3))  # Add a dimension for NS3
+                        S3.append(
+                            self.backend.bk_expand_dims(s3, off_S3)
+                        )  # Add a dimension for NS3
                         if calc_var:
-                            VS3.append(self.backend.bk_expand_dims(vs3, off_S3))  # Add a dimension for NS3
-                            #VS3.append(self.backend.bk_reshape(vs3,[s3.shape[0],s3.shape[1],
+                            VS3.append(
+                                self.backend.bk_expand_dims(vs3, off_S3)
+                            )  # Add a dimension for NS3
+                            # VS3.append(self.backend.bk_reshape(vs3,[s3.shape[0],s3.shape[1],
                             #                                  s3.shape[2]*s3.shape[3]]))
 
                 ### S3_cross = < (I1 * Psi)_j3 x (|I2 * Psi_j2| * Psi_j3)^* >_pix
@@ -3094,19 +3173,33 @@ class funct(FOC.FoCUS):
                         if S3[j3] is None:
                             S3[j3] = {}
                             S3P[j3] = {}
-                        if out_nside is not None and out_nside<nside_j2:
+                        if out_nside is not None and out_nside < nside_j2:
                             s3 = self.backend.bk_reduce_mean(
-                                self.backend.bk_reshape(s3,[s3.shape[0],
-                                                            12*out_nside**2,
-                                                            (nside_j2//out_nside)**2,
-                                                            s3.shape[2],
-                                                            s3.shape[3]]),2)
+                                self.backend.bk_reshape(
+                                    s3,
+                                    [
+                                        s3.shape[0],
+                                        12 * out_nside**2,
+                                        (nside_j2 // out_nside) ** 2,
+                                        s3.shape[2],
+                                        s3.shape[3],
+                                    ],
+                                ),
+                                2,
+                            )
                             s3p = self.backend.bk_reduce_mean(
-                                self.backend.bk_reshape(s3p,[s3.shape[0],
-                                                             12*out_nside**2,
-                                                             (nside_j2//out_nside)**2,
-                                                             s3.shape[2],
-                                                             s3.shape[3]]),2)
+                                self.backend.bk_reshape(
+                                    s3p,
+                                    [
+                                        s3.shape[0],
+                                        12 * out_nside**2,
+                                        (nside_j2 // out_nside) ** 2,
+                                        s3.shape[2],
+                                        s3.shape[3],
+                                    ],
+                                ),
+                                2,
+                            )
                         S3[j3][j2] = s3
                         S3P[j3][j2] = s3p
                     else:
@@ -3130,26 +3223,34 @@ class funct(FOC.FoCUS):
                             )  # [Nbatch, Nmask, Norient3, Norient2]
 
                         ### Store S3 and S3P as a complex [Nbatch, Nmask, NS3, Norient3, Norient2]
-                        
-                        #S3.append(self.backend.bk_reshape(s3,[s3.shape[0],s3.shape[1],
+
+                        # S3.append(self.backend.bk_reshape(s3,[s3.shape[0],s3.shape[1],
                         #                                      s3.shape[2]*s3.shape[3]]))
-                        S3.append(self.backend.bk_expand_dims(s3, off_S3))  # Add a dimension for NS3
+                        S3.append(
+                            self.backend.bk_expand_dims(s3, off_S3)
+                        )  # Add a dimension for NS3
                         if calc_var:
-                            VS3.append(self.backend.bk_expand_dims(vs3, off_S3))  # Add a dimension for NS3
-                            
-                            #VS3.append(self.backend.bk_reshape(vs3,[s3.shape[0],s3.shape[1],
+                            VS3.append(
+                                self.backend.bk_expand_dims(vs3, off_S3)
+                            )  # Add a dimension for NS3
+
+                            # VS3.append(self.backend.bk_reshape(vs3,[s3.shape[0],s3.shape[1],
                             #                                  s3.shape[2]*s3.shape[3]]))
-                            
-                        #S3P.append(self.backend.bk_reshape(s3p,[s3.shape[0],s3.shape[1],
+
+                        # S3P.append(self.backend.bk_reshape(s3p,[s3.shape[0],s3.shape[1],
                         #                                      s3.shape[2]*s3.shape[3]]))
-                        S3P.append(self.backend.bk_expand_dims(s3p, off_S3))  # Add a dimension for NS3
+                        S3P.append(
+                            self.backend.bk_expand_dims(s3p, off_S3)
+                        )  # Add a dimension for NS3
                         if calc_var:
-                            VS3P.append(self.backend.bk_expand_dims(vs3p, off_S3))  # Add a dimension for NS3
-                            #VS3P.append(self.backend.bk_reshape(vs3p,[s3.shape[0],s3.shape[1],
+                            VS3P.append(
+                                self.backend.bk_expand_dims(vs3p, off_S3)
+                            )  # Add a dimension for NS3
+                            # VS3P.append(self.backend.bk_reshape(vs3p,[s3.shape[0],s3.shape[1],
                             #                                  s3.shape[2]*s3.shape[3]]))
 
                 ##### S4
-                nside_j1=nside_j2
+                nside_j1 = nside_j2
                 for j1 in range(0, j2 + 1):  # j1 <= j2
                     ### S4_auto = <(|I1 * psi1| * psi3)(|I1 * psi2| * psi3)^*>
                     if not cross:
@@ -3175,14 +3276,21 @@ class funct(FOC.FoCUS):
                         if return_data:
                             if S4[j3][j2] is None:
                                 S4[j3][j2] = {}
-                            if out_nside is not None and out_nside<nside_j1:
+                            if out_nside is not None and out_nside < nside_j1:
                                 s4 = self.backend.bk_reduce_mean(
-                                    self.backend.bk_reshape(s4,[s4.shape[0],
-                                                                12*out_nside**2,
-                                                                (nside_j1//out_nside)**2,
-                                                                s4.shape[2],
-                                                                s4.shape[3],
-                                                                s4.shape[4]]),2)
+                                    self.backend.bk_reshape(
+                                        s4,
+                                        [
+                                            s4.shape[0],
+                                            12 * out_nside**2,
+                                            (nside_j1 // out_nside) ** 2,
+                                            s4.shape[2],
+                                            s4.shape[3],
+                                            s4.shape[4],
+                                        ],
+                                    ),
+                                    2,
+                                )
                             S4[j3][j2][j1] = s4
                         else:
                             ### Normalize S4 with S2_j [Nbatch, Nmask, Norient_j]
@@ -3206,18 +3314,18 @@ class funct(FOC.FoCUS):
                                     ** 0.5,
                                 )  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
                             ### Store S4 as a complex [Nbatch, Nmask, NS4, Norient3, Norient2, Norient1]
-                            
-                            #S4.append(self.backend.bk_reshape(s4,[s4.shape[0],s4.shape[1],
+
+                            # S4.append(self.backend.bk_reshape(s4,[s4.shape[0],s4.shape[1],
                             #                                  s4.shape[2]*s4.shape[3]*s4.shape[4]]))
-                            S4.append(self.backend.bk_expand_dims(
-                                    s4, off_S4
-                                ))  # Add a dimension for NS4
+                            S4.append(
+                                self.backend.bk_expand_dims(s4, off_S4)
+                            )  # Add a dimension for NS4
                             if calc_var:
-                                #VS4.append(self.backend.bk_reshape(vs4,[s4.shape[0],s4.shape[1],
+                                # VS4.append(self.backend.bk_reshape(vs4,[s4.shape[0],s4.shape[1],
                                 #                              s4.shape[2]*s4.shape[3]*s4.shape[4]]))
-                                VS4.append(self.backend.bk_expand_dims(
-                                        vs4, off_S4
-                                    ))  # Add a dimension for NS4
+                                VS4.append(
+                                    self.backend.bk_expand_dims(vs4, off_S4)
+                                )  # Add a dimension for NS4
 
                         ### S4_cross = <(|I1 * psi1| * psi3)(|I2 * psi2| * psi3)^*>
                     else:
@@ -3243,14 +3351,21 @@ class funct(FOC.FoCUS):
                         if return_data:
                             if S4[j3][j2] is None:
                                 S4[j3][j2] = {}
-                            if out_nside is not None and out_nside<nside_j1:
+                            if out_nside is not None and out_nside < nside_j1:
                                 s4 = self.backend.bk_reduce_mean(
-                                    self.backend.bk_reshape(s4,[s4.shape[0],
-                                                                12*out_nside**2,
-                                                                (nside_j1//out_nside)**2,
-                                                                s4.shape[2],
-                                                                s4.shape[3],
-                                                                s4.shape[4]]),2)
+                                    self.backend.bk_reshape(
+                                        s4,
+                                        [
+                                            s4.shape[0],
+                                            12 * out_nside**2,
+                                            (nside_j1 // out_nside) ** 2,
+                                            s4.shape[2],
+                                            s4.shape[3],
+                                            s4.shape[4],
+                                        ],
+                                    ),
+                                    2,
+                                )
                             S4[j3][j2][j1] = s4
                         else:
                             ### Normalize S4 with S2_j [Nbatch, Nmask, Norient_j]
@@ -3274,22 +3389,22 @@ class funct(FOC.FoCUS):
                                     ** 0.5,
                                 )  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
                             ### Store S4 as a complex [Nbatch, Nmask, NS4, Norient3, Norient2, Norient1]
-                            #S4.append(self.backend.bk_reshape(s4,[s4.shape[0],s4.shape[1],
+                            # S4.append(self.backend.bk_reshape(s4,[s4.shape[0],s4.shape[1],
                             #                                  s4.shape[2]*s4.shape[3]*s4.shape[4]]))
-                            S4.append(self.backend.bk_expand_dims(
-                                    s4, off_S4
-                                ))  # Add a dimension for NS4
+                            S4.append(
+                                self.backend.bk_expand_dims(s4, off_S4)
+                            )  # Add a dimension for NS4
                             if calc_var:
-                                
-                                #VS4.append(self.backend.bk_reshape(vs4,[s4.shape[0],s4.shape[1],
+
+                                # VS4.append(self.backend.bk_reshape(vs4,[s4.shape[0],s4.shape[1],
                                 #                              s4.shape[2]*s4.shape[3]*s4.shape[4]]))
-                                VS4.append(self.backend.bk_expand_dims(
-                                        vs4, off_S4
-                                    ))  # Add a dimension for NS4
-                                
-                            nside_j1=nside_j1 // 2
-                        nside_j2=nside_j2 // 2
-                        
+                                VS4.append(
+                                    self.backend.bk_expand_dims(vs4, off_S4)
+                                )  # Add a dimension for NS4
+
+                            nside_j1 = nside_j1 // 2
+                        nside_j2 = nside_j2 // 2
+
             ###### Reshape for next iteration on j3
             ### Image I1,
             # downscale the I1 [Nbatch, Npix_j3]
@@ -3337,7 +3452,7 @@ class funct(FOC.FoCUS):
                 self.P2_dic = P2_dic
         """
         Sout=[s0]+S1+S2+S3+S4
-        
+
         if cross:
             Sout=Sout+S3P
         if calc_var:
@@ -3349,19 +3464,19 @@ class funct(FOC.FoCUS):
         return self.backend.bk_concat(Sout, 2)
         """
         if not return_data:
-            S1=self.backend.bk_concat(S1, 2)
-            S2=self.backend.bk_concat(S2, 2)
-            S3=self.backend.bk_concat(S3, 2)
-            S4=self.backend.bk_concat(S4, 2)
+            S1 = self.backend.bk_concat(S1, 2)
+            S2 = self.backend.bk_concat(S2, 2)
+            S3 = self.backend.bk_concat(S3, 2)
+            S4 = self.backend.bk_concat(S4, 2)
             if cross:
-                S3P=self.backend.bk_concat(S3P, 2)
+                S3P = self.backend.bk_concat(S3P, 2)
             if calc_var:
-                VS1=self.backend.bk_concat(VS1, 2)
-                VS2=self.backend.bk_concat(VS2, 2)
-                VS3=self.backend.bk_concat(VS3, 2)
-                VS4=self.backend.bk_concat(VS4, 2)
+                VS1 = self.backend.bk_concat(VS1, 2)
+                VS2 = self.backend.bk_concat(VS2, 2)
+                VS3 = self.backend.bk_concat(VS3, 2)
+                VS4 = self.backend.bk_concat(VS4, 2)
                 if cross:
-                    VS3P=self.backend.bk_concat(VS3P, 2)
+                    VS3P = self.backend.bk_concat(VS3P, 2)
         if calc_var:
             if not cross:
                 return scat_cov(
@@ -3444,10 +3559,17 @@ class funct(FOC.FoCUS):
             M_dic[j2], axis=1
         )  # [Nbatch, Npix_j3, Norient3, Norient2]
         if cmat2 is not None:
-            tmp2 = self.backend.bk_repeat(MconvPsi, 4, axis=-1)
+            tmp2 = self.backend.bk_repeat(MconvPsi, self.NORIENT, axis=-1)
             MconvPsi = self.backend.bk_reduce_sum(
                 self.backend.bk_reshape(
-                    cmat2[j3][j2] * tmp2, [tmp2.shape[0], cmat2[j3].shape[1], 4, 4, 4]
+                    cmat2[j3][j2] * tmp2,
+                    [
+                        tmp2.shape[0],
+                        cmat2[j3].shape[1],
+                        self.NORIENT,
+                        self.NORIENT,
+                        self.NORIENT,
+                    ],
                 ),
                 3,
             )
@@ -3593,42 +3715,47 @@ class funct(FOC.FoCUS):
             return self.backend.bk_abs(self.backend.bk_sqrt(x))
 
     def reduce_mean(self, x):
-        
+
         if isinstance(x, scat_cov):
-            result = self.backend.bk_reduce_sum(self.backend.bk_abs(x.S0)) + \
-                     self.backend.bk_reduce_sum(self.backend.bk_abs(x.S2)) + \
-                     self.backend.bk_reduce_sum(self.backend.bk_abs(x.S3)) + \
-                     self.backend.bk_reduce_sum(self.backend.bk_abs(x.S4))
-                
-            N = self.backend.bk_size(x.S0)+self.backend.bk_size(x.S2)+ \
-                self.backend.bk_size(x.S3)+self.backend.bk_size(x.S4)
-                
+            result = (
+                self.backend.bk_reduce_sum(self.backend.bk_abs(x.S0))
+                + self.backend.bk_reduce_sum(self.backend.bk_abs(x.S2))
+                + self.backend.bk_reduce_sum(self.backend.bk_abs(x.S3))
+                + self.backend.bk_reduce_sum(self.backend.bk_abs(x.S4))
+            )
+
+            N = (
+                self.backend.bk_size(x.S0)
+                + self.backend.bk_size(x.S2)
+                + self.backend.bk_size(x.S3)
+                + self.backend.bk_size(x.S4)
+            )
+
             if x.S1 is not None:
-                result = result+self.backend.bk_reduce_sum(self.backend.bk_abs(x.S1))
+                result = result + self.backend.bk_reduce_sum(self.backend.bk_abs(x.S1))
                 N = N + self.backend.bk_size(x.S1)
             if x.S3P is not None:
-                result = result+self.backend.bk_reduce_sum(self.backend.bk_abs(x.S3P))
+                result = result + self.backend.bk_reduce_sum(self.backend.bk_abs(x.S3P))
                 N = N + self.backend.bk_size(x.S3P)
-            return result/self.backend.bk_cast(N)
+            return result / self.backend.bk_cast(N)
         else:
             return self.backend.bk_reduce_mean(x, axis=0)
-                
 
     def reduce_mean_batch(self, x):
-        
+
         if isinstance(x, scat_cov):
-            
-            sS0=self.backend.bk_reduce_mean(x.S0, axis=0)
-            sS2=self.backend.bk_reduce_mean(x.S2, axis=0)
-            sS3=self.backend.bk_reduce_mean(x.S3, axis=0)
-            sS4=self.backend.bk_reduce_mean(x.S4, axis=0)
-            sS1=None
-            sS3P=None
+
+            sS0 = self.backend.bk_reduce_mean(x.S0, axis=0)
+            sS2 = self.backend.bk_reduce_mean(x.S2, axis=0)
+            sS3 = self.backend.bk_reduce_mean(x.S3, axis=0)
+            sS4 = self.backend.bk_reduce_mean(x.S4, axis=0)
+            sS1 = None
+            sS3P = None
             if x.S1 is not None:
                 sS1 = self.backend.bk_reduce_mean(x.S1, axis=0)
             if x.S3P is not None:
                 sS3P = self.backend.bk_reduce_mean(x.S3P, axis=0)
-                
+
             result = scat_cov(
                 sS0,
                 sS2,
@@ -3642,22 +3769,22 @@ class funct(FOC.FoCUS):
             return result
         else:
             return self.backend.bk_reduce_mean(x, axis=0)
-    
+
     def reduce_sum_batch(self, x):
-        
+
         if isinstance(x, scat_cov):
-            
-            sS0=self.backend.bk_reduce_sum(x.S0, axis=0)
-            sS2=self.backend.bk_reduce_sum(x.S2, axis=0)
-            sS3=self.backend.bk_reduce_sum(x.S3, axis=0)
-            sS4=self.backend.bk_reduce_sum(x.S4, axis=0)
-            sS1=None
-            sS3P=None
+
+            sS0 = self.backend.bk_reduce_sum(x.S0, axis=0)
+            sS2 = self.backend.bk_reduce_sum(x.S2, axis=0)
+            sS3 = self.backend.bk_reduce_sum(x.S3, axis=0)
+            sS4 = self.backend.bk_reduce_sum(x.S4, axis=0)
+            sS1 = None
+            sS3P = None
             if x.S1 is not None:
                 sS1 = self.backend.bk_reduce_sum(x.S1, axis=0)
             if x.S3P is not None:
                 sS3P = self.backend.bk_reduce_sum(x.S3P, axis=0)
-                
+
             result = scat_cov(
                 sS0,
                 sS2,
@@ -3671,7 +3798,7 @@ class funct(FOC.FoCUS):
             return result
         else:
             return self.backend.bk_reduce_mean(x, axis=0)
-    
+
     def reduce_distance(self, x, y, sigma=None):
 
         if isinstance(x, scat_cov):
@@ -3707,11 +3834,13 @@ class funct(FOC.FoCUS):
             return result
         else:
             if sigma is None:
-                tmp=x-y
+                tmp = x - y
             else:
-                tmp=(x-y)/sigma
+                tmp = (x - y) / sigma
             # do abs in case of complex values
-            return self.backend.bk_abs(self.backend.bk_reduce_mean(self.backend.bk_square(tmp)))
+            return self.backend.bk_abs(
+                self.backend.bk_reduce_mean(self.backend.bk_square(tmp))
+            )
 
     def reduce_sum(self, x):
 

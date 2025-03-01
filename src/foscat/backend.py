@@ -629,7 +629,7 @@ class foscat_backend:
 
     # ---------------------------------------------−---------
     # return a tensor size
-    
+
     def bk_size(self, data):
         if self.BACKEND == self.TENSORFLOW:
             return self.backend.size(data)
@@ -637,7 +637,7 @@ class foscat_backend:
             return data.numel()
         if self.BACKEND == self.NUMPY:
             return data.size
-        
+
     # ---------------------------------------------−---------
 
     def iso_mean(self, x, use_2D=False):
@@ -924,10 +924,10 @@ class foscat_backend:
     def bk_repeat(self, data, nn, axis=0):
         return self.backend.repeat(data, nn, axis=axis)
 
-    def bk_tile(self, data, nn,axis=0):
+    def bk_tile(self, data, nn, axis=0):
         if self.BACKEND == self.TENSORFLOW:
             return self.backend.tile(data, [nn])
-        
+
         return self.backend.tile(data, nn)
 
     def bk_roll(self, data, nn, axis=0):
@@ -984,30 +984,30 @@ class foscat_backend:
             else:
                 return np.concatenate(data, axis=axis)
 
-    def bk_zeros(self, shape,dtype=None):
+    def bk_zeros(self, shape, dtype=None):
         if self.BACKEND == self.TENSORFLOW:
-            return self.backend.zeros(shape,dtype=dtype)
+            return self.backend.zeros(shape, dtype=dtype)
         if self.BACKEND == self.TORCH:
-            return self.backend.zeros(shape,dtype=dtype)
+            return self.backend.zeros(shape, dtype=dtype)
         if self.BACKEND == self.NUMPY:
-            return np.zeros(shape,dtype=dtype)
+            return np.zeros(shape, dtype=dtype)
 
-    def bk_gather(self, data,idx):
+    def bk_gather(self, data, idx):
         if self.BACKEND == self.TENSORFLOW:
-            return self.backend.gather(data,idx)
+            return self.backend.gather(data, idx)
         if self.BACKEND == self.TORCH:
             return data[idx]
         if self.BACKEND == self.NUMPY:
             return data[idx]
-        
-    def bk_reverse(self, data,axis=0):
+
+    def bk_reverse(self, data, axis=0):
         if self.BACKEND == self.TENSORFLOW:
-            return self.backend.reverse(data,axis=[axis])
+            return self.backend.reverse(data, axis=[axis])
         if self.BACKEND == self.TORCH:
-            return self.backend.reverse(data,axis=axis)
+            return self.backend.reverse(data, axis=axis)
         if self.BACKEND == self.NUMPY:
-            return np.reverse(data,axis=axis)
-        
+            return np.reverse(data, axis=axis)
+
     def bk_fft(self, data):
         if self.BACKEND == self.TENSORFLOW:
             return self.backend.signal.fft(data)
@@ -1015,7 +1015,7 @@ class foscat_backend:
             return self.backend.fft(data)
         if self.BACKEND == self.NUMPY:
             return self.backend.fft.fft(data)
-        
+
     def bk_rfft(self, data):
         if self.BACKEND == self.TENSORFLOW:
             return self.backend.signal.rfft(data)
@@ -1024,7 +1024,6 @@ class foscat_backend:
         if self.BACKEND == self.NUMPY:
             return self.backend.fft.rfft(data)
 
-        
     def bk_irfft(self, data):
         if self.BACKEND == self.TENSORFLOW:
             return self.backend.signal.irfft(data)
@@ -1032,7 +1031,7 @@ class foscat_backend:
             return self.backend.irfft(data)
         if self.BACKEND == self.NUMPY:
             return self.backend.fft.irfft(data)
-        
+
     def bk_conjugate(self, data):
 
         if self.BACKEND == self.TENSORFLOW:

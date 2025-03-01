@@ -48,12 +48,13 @@ class Loss:
             else:
                 return self.loss_function(x, batch, self.scat_operator, self.args)
 
-    def set_id_loss(self,id_loss):
+    def set_id_loss(self, id_loss):
         self.id_loss = id_loss
-        
-    def get_id_loss(self,id_loss):
+
+    def get_id_loss(self, id_loss):
         return self.id_loss
-    
+
+
 class Synthesis:
     def __init__(
         self,
@@ -67,10 +68,10 @@ class Synthesis:
 
         self.loss_class = loss_list
         self.number_of_loss = len(loss_list)
-        
+
         for k in range(self.number_of_loss):
             self.loss_class[k].set_id_loss(k)
-            
+
         self.__iteration__ = 1234
         self.nlog = 0
         self.m_dw, self.v_dw = 0.0, 0.0
