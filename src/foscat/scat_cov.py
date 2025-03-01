@@ -4070,7 +4070,9 @@ class funct(FOC.FoCUS):
         tmp[nstep-1]=im_target
         for l in range(nstep-2,-1,-1):
             tmp[l]=self.ud_grade_2(tmp[l+1],axis=1)
-            
+        
+        l_nside=nside//(2**(nstep-1))
+        
         for k in range(nstep):
             if k==0:
                 np.random.seed(seed)
@@ -4091,7 +4093,7 @@ class funct(FOC.FoCUS):
                 elif self.use_1D:
                     imap = self.up_grade(omap, imap.shape[axis] * 2, axis=1)
                 else:
-                    imap = self.up_grade(omap, nside * 2, axis=axis)
+                    imap = self.up_grade(omap, l_nside, axis=axis)
                     
             # compute the coefficients for the target image
             ref,sref=self.eval(tmp[k],calc_var=True,edge=edge)
@@ -4111,7 +4113,8 @@ class funct(FOC.FoCUS):
             elif self.use_1D:
                 print('Synthesis scale [ %d ]'%(imap.shape[1]))
             else:
-                print('Synthesis scale nside=%d'%(nside))
+                print('Synthesis scale nside=%d'%(l_nside))
+                l_nside*=2
             
             # do the minimization
             omap=sy.run(imap,
