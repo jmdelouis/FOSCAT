@@ -1128,6 +1128,8 @@ class foscat_backend:
             return x.astype(out_type)
         
     def to_numpy(self,x):
+        if isinstance(x, np.ndarray):
+            return x
         
         if self.BACKEND == self.NUMPY:
             return x

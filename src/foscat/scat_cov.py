@@ -4128,3 +4128,6 @@ class funct(FOC.FoCUS):
             return omap[0]
         else:
             return omap
+            
+    def to_numpy(self,x):
+        return self.backend.to_numpy(x)
