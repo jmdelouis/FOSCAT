@@ -4106,7 +4106,12 @@ class funct(FOC.FoCUS):
             sy = synthe.Synthesis([loss])
 
             # initialize the synthesised map
-            print('Synthesis scale [ %d x %d ]'%(imap.shape[1],imap.shape[2]))
+            if self.use_2D:
+                print('Synthesis scale [ %d x %d ]'%(imap.shape[1],imap.shape[2]))
+            elif self.use_1D:
+                print('Synthesis scale [ %d ]'%(imap.shape[1]))
+            else:
+                print('Synthesis scale nside=%d'%(nside))
             
             # do the minimization
             omap=sy.run(imap,
