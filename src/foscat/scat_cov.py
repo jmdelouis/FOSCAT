@@ -4070,8 +4070,9 @@ class funct(FOC.FoCUS):
         tmp[nstep-1]=im_target
         for l in range(nstep-2,-1,-1):
             tmp[l]=self.ud_grade_2(tmp[l+1],axis=1)
-        
-        l_nside=nside//(2**(nstep-1))
+            
+        if not self.use_2D and not self.use_1D:
+            l_nside=nside//(2**(nstep-1))
         
         for k in range(nstep):
             if k==0:
