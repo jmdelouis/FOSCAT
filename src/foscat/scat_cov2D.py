@@ -48,7 +48,7 @@ class funct(scat.funct):
 
         return spectrum_1d
 
-    def plot_results(self,in_image,out_image,vmin=None,vmax=None,cmap='coolwarm'):
+    def plot_results(self,in_image,out_image,vmin=None,vmax=None,cmap='coolwarm',spec_range=None):
         import matplotlib.pyplot as plt
         
         if len(out_image.shape)>2:
@@ -68,24 +68,26 @@ class funct(scat.funct):
                 plt.yticks([])
             plt.subplot(2,2,3)
             plt.title('Histogram') 
-            plt.hist(in_image.flatten(),bins=100,label='original',color='r',histtype='step',log=True)
             for k in range(nimage):
                 if k==0:
-                    plt.hist(out_image[k].flatten(),bins=100,label='modeled',color='b',histtype='step',log=True)
+                    plt.hist(out_image[k].flatten(),bins=100,label='modeled',color='b',histtype='step',log=True,alpha=0.5)
                 else:
-                    plt.hist(out_image[k].flatten(),bins=100,color='b',histtype='step',log=True)
-                plt.legend(frameon=0)
+                    plt.hist(out_image[k].flatten(),bins=100,color='b',histtype='step',log=True,alpha=0.5)
+            plt.hist(in_image.flatten(),bins=100,label='original',color='r',histtype='step',log=True)
+            plt.legend(frameon=0)
             plt.subplot(2,2,4)
             plt.title('Powerspectra') 
-            plt.plot(self.spectrum(in_image),color='b',label='original')
             for k in range(nimage):
                 if k==0:
-                    plt.plot(self.spectrum(out_image[k]),color='r',label='modeled')
+                    plt.plot(self.spectrum(out_image[k]),color='b',label='modeled',alpha=0.5)
                 else:
-                    plt.plot(self.spectrum(out_image[k]),color='r')
+                    plt.plot(self.spectrum(out_image[k]),color='b',alpha=0.5)
+            plt.plot(self.spectrum(in_image),color='r',label='original')
             plt.xscale('log')
             plt.yscale('log')
             plt.legend(frameon=0)
+            if spec_range is not None:
+                plt.ylim(spec_range[0],spec_range[1])
         else:
             plt.figure(figsize=(16,3))
             plt.subplot(1,4,1)
@@ -109,6 +111,8 @@ class funct(scat.funct):
             plt.plot(self.spectrum(out_image),color='r',label='modeled')
             plt.xscale('log')
             plt.yscale('log')
+            if spec_range is not None:
+                plt.ylim(spec_range[0],spec_range[1])
             plt.legend(frameon=0)
         
         
