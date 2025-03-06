@@ -62,8 +62,8 @@ class funct(scat.funct):
             plt.yticks([])
             for k in range(ndraw):
                 plt.subplot(2,ndraw+1,2+k)
-                plt.title('Modeled field #'%(k)) 
-                plt.imshow(out_image,cmap=cmap,vmin=vmin,vmax=vmax,origin='lower')
+                plt.title('Modeled field #%d'%(k)) 
+                plt.imshow(out_image[k],cmap=cmap,vmin=vmin,vmax=vmax,origin='lower')
                 plt.xticks([])
                 plt.yticks([])
             plt.subplot(2,2,3)

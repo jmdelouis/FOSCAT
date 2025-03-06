@@ -4800,6 +4800,10 @@ class funct(FOC.FoCUS):
     ):
         '''
         Calculates the scattering correlations for a batch of images, including:
+        
+        This function is strongly inspire by the package https://github.com/SihaoCheng/scattering_transform
+        Done by Sihao Cheng and Rudy Morel.
+        
         orig. x orig.:     
                         P00 = <(I * psi)(I * psi)*> = L2(I * psi)^2
         orig. x modulus:   
