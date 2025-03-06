@@ -155,6 +155,9 @@ class FoCUS:
         self.Y_CNN = {}
         self.Z_CNN = {}
 
+        self.filters_set={}
+        self.edge_masks={}
+        
         wwc = np.zeros([KERNELSZ**2, l_NORIENT]).astype(all_type)
         wws = np.zeros([KERNELSZ**2, l_NORIENT]).astype(all_type)
 

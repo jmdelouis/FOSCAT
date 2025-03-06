@@ -3527,6 +3527,1073 @@ class funct(FOC.FoCUS):
                     use_1D=self.use_1D,
                 )
 
+    def eval_new(
+            self,
+            image1,
+            image2=None,
+            mask=None,
+            norm=None,
+            calc_var=False,
+            cmat=None,
+            cmat2=None,
+            Jmax=None,
+            out_nside=None,
+            edge=True
+    ):
+        """
+        Calculates the scattering correlations for a batch of images. Mean are done over pixels.
+        mean of modulus:
+                        S1 = <|I * Psi_j3|>
+             Normalization : take the log
+        power spectrum:
+                        S2 = <|I * Psi_j3|^2>
+            Normalization : take the log
+        orig. x modulus:
+                        S3 = < (I * Psi)_j3 x (|I * Psi_j2| * Psi_j3)^* >
+             Normalization : divide by (S2_j2 * S2_j3)^0.5
+        modulus x modulus:
+                        S4 = <(|I * psi1| * psi3)(|I * psi2| * psi3)^*>
+             Normalization : divide by (S2_j1 * S2_j2)^0.5
+        Parameters
+        ----------
+        image1: tensor
+            Image on which we compute the scattering coefficients [Nbatch, Npix, 1, 1]
+        image2: tensor
+            Second image. If not None, we compute cross-scattering covariance coefficients.
+        mask:
+        norm: None or str
+            If None no normalization is applied, if 'auto' normalize by the reference S2,
+            if 'self' normalize by the current S2.
+        Returns
+        -------
+        S1, S2, S3, S4 normalized
+        """
+        return_data = self.return_data
+        NORIENT=self.NORIENT
+        # Check input consistency
+        if image2 is not None:
+            if list(image1.shape) != list(image2.shape):
+                print(
+                    "The two input image should have the same size to eval Scattering Covariance"
+                )
+                return None
+        if mask is not None:
+            if image1.shape[-2] != mask.shape[1] or image1.shape[-1] != mask.shape[2]:
+                print(
+                    "The LAST COLUMN of the mask should have the same size ",
+                    mask.shape,
+                    "than the input image ",
+                    image1.shape,
+                    "to eval Scattering Covariance",
+                )
+                return None
+        if self.use_2D and len(image1.shape) < 2:
+            print(
+                "To work with 2D scattering transform, two dimension is needed, input map has only on dimension"
+            )
+            return None
+
+        ### AUTO OR CROSS
+        cross = False
+        if image2 is not None:
+            cross = True
+
+        ### PARAMETERS
+        axis = 1
+        # determine jmax and nside corresponding to the input map
+        im_shape = image1.shape
+        if self.use_2D:
+            if len(image1.shape) == 2:
+                nside = np.min([im_shape[0], im_shape[1]])
+                npix = im_shape[0] * im_shape[1]  # Number of pixels
+                x1 = im_shape[0]
+                x2 = im_shape[1]
+            else:
+                nside = np.min([im_shape[1], im_shape[2]])
+                npix = im_shape[1] * im_shape[2]  # Number of pixels
+                x1 = im_shape[1]
+                x2 = im_shape[2]
+            J = int(np.log(nside - self.KERNELSZ) / np.log(2))  # Number of j scales
+        elif self.use_1D:
+            if len(image1.shape) == 2:
+                npix = int(im_shape[1])  # Number of pixels
+            else:
+                npix = int(im_shape[0])  # Number of pixels
+
+            nside = int(npix)
+
+            J = int(np.log(nside) / np.log(2))  # Number of j scales
+        else:
+            if len(image1.shape) == 2:
+                npix = int(im_shape[1])  # Number of pixels
+            else:
+                npix = int(im_shape[0])  # Number of pixels
+
+            nside = int(np.sqrt(npix // 12))
+
+            J = int(np.log(nside) / np.log(2))  # Number of j scales
+            
+        if (self.use_2D or self.use_1D) and self.KERNELSZ>3:
+            J-=1
+        if Jmax is None:
+            Jmax = J  # Number of steps for the loop on scales
+        if Jmax>J:
+            print('==========\n\n')
+            print('The Jmax you requested is larger than the data size, which may cause problems while computing the scattering transform.')
+            print('\n\n==========')
+        
+
+        ### LOCAL VARIABLES (IMAGES and MASK)
+        if len(image1.shape) == 1 or (len(image1.shape) == 2 and self.use_2D):
+            I1 = self.backend.bk_cast(
+                self.backend.bk_expand_dims(image1, 0)
+            )  # Local image1 [Nbatch, Npix]
+            if cross:
+                I2 = self.backend.bk_cast(
+                    self.backend.bk_expand_dims(image2, 0)
+                )  # Local image2 [Nbatch, Npix]
+        else:
+            I1 = self.backend.bk_cast(image1)  # Local image1 [Nbatch, Npix]
+            if cross:
+                I2 = self.backend.bk_cast(image2)  # Local image2 [Nbatch, Npix]
+
+        if mask is None:
+            if self.use_2D:
+                vmask = self.backend.bk_ones([1, x1, x2], dtype=self.all_type)
+            else:
+                vmask = self.backend.bk_ones([1, npix], dtype=self.all_type)
+        else:
+            vmask = self.backend.bk_cast(mask)  # [Nmask, Npix]
+
+        if self.KERNELSZ > 3 and not self.use_2D:
+            # if the kernel size is bigger than 3 increase the binning before smoothing
+            if self.use_2D:
+                vmask = self.up_grade(
+                    vmask, I1.shape[axis] * 2, axis=1, nouty=I1.shape[axis + 1] * 2
+                )
+                I1 = self.up_grade(
+                    I1, I1.shape[axis] * 2, axis=axis, nouty=I1.shape[axis + 1] * 2
+                )
+                if cross:
+                    I2 = self.up_grade(
+                        I2, I2.shape[axis] * 2, axis=axis, nouty=I2.shape[axis + 1] * 2
+                    )
+            elif self.use_1D:
+                vmask = self.up_grade(vmask, I1.shape[axis] * 2, axis=1)
+                I1 = self.up_grade(I1, I1.shape[axis] * 2, axis=axis)
+                if cross:
+                    I2 = self.up_grade(I2, I2.shape[axis] * 2, axis=axis)
+            else:
+                I1 = self.up_grade(I1, nside * 2, axis=axis)
+                vmask = self.up_grade(vmask, nside * 2, axis=1)
+                if cross:
+                    I2 = self.up_grade(I2, nside * 2, axis=axis)
+
+            if self.KERNELSZ > 5 and not self.use_2D:
+                # if the kernel size is bigger than 3 increase the binning before smoothing
+                if self.use_2D:
+                    vmask = self.up_grade(
+                        vmask, I1.shape[axis] * 2, axis=1, nouty=I1.shape[axis + 1] * 2
+                    )
+                    I1 = self.up_grade(
+                        I1, I1.shape[axis] * 2, axis=axis, nouty=I1.shape[axis + 1] * 2
+                    )
+                    if cross:
+                        I2 = self.up_grade(
+                            I2,
+                            I2.shape[axis] * 2,
+                            axis=axis,
+                            nouty=I2.shape[axis + 1] * 2,
+                        )
+                elif self.use_1D:
+                    vmask = self.up_grade(vmask, I1.shape[axis] * 4, axis=1)
+                    I1 = self.up_grade(I1, I1.shape[axis] * 4, axis=axis)
+                    if cross:
+                        I2 = self.up_grade(I2, I2.shape[axis] * 4, axis=axis)
+                else:
+                    I1 = self.up_grade(I1, nside * 4, axis=axis)
+                    vmask = self.up_grade(vmask, nside * 4, axis=1)
+                    if cross:
+                        I2 = self.up_grade(I2, nside * 4, axis=axis)
+
+        # Normalize the masks because they have different pixel numbers
+        # vmask /= self.backend.bk_reduce_sum(vmask, axis=1)[:, None]  # [Nmask, Npix]
+
+        ### INITIALIZATION
+        # Coefficients
+        if return_data:
+            S1 = {}
+            S2 = {}
+            S3 = {}
+            S3P = {}
+            S4 = {}
+        else:
+            result=self.backend.backend.zeros([I1.shape[0],vmask.shape[0],2+2*Jmax*self.NORIENT],
+                    dtype=self.backend.backend.float32,
+                    device=self.backend.torch_device)
+            vresult=self.backend.backend.zeros([I1.shape[0],vmask.shape[0],2+2*Jmax*self.NORIENT],
+                    dtype=self.backend.backend.float32,
+                    device=self.backend.torch_device)
+            S1 = self.backend.backend.zeros([1,Jmax*self.NORIENT],dtype=self.backend.backend.float32,device=self.backend.torch_device)
+            S2 = self.backend.backend.zeros([1,Jmax*self.NORIENT],dtype=self.backend.backend.float32,device=self.backend.torch_device)
+            S3 = []
+            S4 = []
+            S3P = []
+            VS1 = self.backend.backend.zeros([1,Jmax*self.NORIENT],dtype=self.backend.backend.float32,device=self.backend.torch_device)
+            VS2 = self.backend.backend.zeros([1,Jmax*self.NORIENT],dtype=self.backend.backend.float32,device=self.backend.torch_device)
+            VS3 = []
+            VS3P = []
+            VS4 = []
+
+        off_S2 = -2
+        off_S3 = -3
+        off_S4 = -4
+        if self.use_1D:
+            off_S2 = -1
+            off_S3 = -1
+            off_S4 = -1
+
+        # S2 for normalization
+        cond_init_P1_dic = (norm == "self") or (
+            (norm == "auto") and (self.P1_dic is None)
+        )
+        if norm is None:
+            pass
+        elif cond_init_P1_dic:
+            P1_dic = {}
+            if cross:
+                P2_dic = {}
+        elif (norm == "auto") and (self.P1_dic is not None):
+            P1_dic = self.P1_dic
+            if cross:
+                P2_dic = self.P2_dic
+
+        if return_data:
+            s0 = I1
+            if out_nside is not None:
+                s0 = self.backend.bk_reduce_mean(
+                    self.backend.bk_reshape(
+                        s0, [s0.shape[0], 12 * out_nside**2, (nside // out_nside) ** 2]
+                    ),
+                    2,
+                )
+        else:
+            if not cross:
+                s0, l_vs0 = self.masked_mean(I1, vmask, axis=1, calc_var=True)
+            else:
+                s0, l_vs0 = self.masked_mean(
+                    self.backend.bk_L1(I1 * I2), vmask, axis=1, calc_var=True
+                )
+            #vs0 = self.backend.bk_concat([l_vs0, l_vs0], 1)
+            #s0 = self.backend.bk_concat([s0, l_vs0], 1)
+            result[:,:,0]=s0
+            result[:,:,1]=l_vs0
+            vresult[:,:,0]=l_vs0
+            vresult[:,:,1]=l_vs0
+        #### COMPUTE S1, S2, S3 and S4
+        nside_j3 = nside  # NSIDE start (nside_j3 = nside / 2^j3)
+
+        # a remettre comme avant
+        M1_dic={}
+        
+        for j3 in range(Jmax):
+            
+            if edge:
+                if self.mask_mask is None:
+                    self.mask_mask={}
+                if self.use_2D:
+                    if (vmask.shape[1],vmask.shape[2]) not in self.mask_mask:
+                        mask_mask=np.zeros([1,vmask.shape[1],vmask.shape[2]])
+                        mask_mask[0,
+                                  self.KERNELSZ//2:-self.KERNELSZ//2+1,
+                                  self.KERNELSZ//2:-self.KERNELSZ//2+1]=1.0
+                        self.mask_mask[(vmask.shape[1],vmask.shape[2])]=self.backend.bk_cast(mask_mask)
+                    vmask=vmask*self.mask_mask[(vmask.shape[1],vmask.shape[2])]
+                    #print(self.KERNELSZ//2,vmask,mask_mask)
+                    
+                if self.use_1D:
+                    if (vmask.shape[1]) not in self.mask_mask:
+                        mask_mask=np.zeros([1,vmask.shape[1]])
+                        mask_mask[0,
+                                  self.KERNELSZ//2:-self.KERNELSZ//2+1]=1.0
+                        self.mask_mask[(vmask.shape[1])]=self.backend.bk_cast(mask_mask)
+                    vmask=vmask*self.mask_mask[(vmask.shape[1])]
+                    
+            if return_data:
+                S3[j3] = None
+                S3P[j3] = None
+
+                if S4 is None:
+                    S4 = {}
+                S4[j3] = None
+
+            ####### S1 and S2
+            ### Make the convolution I1 * Psi_j3
+            conv1 = self.convol(I1, axis=1)  # [Nbatch, Npix_j3, Norient3]
+            if cmat is not None:
+                tmp2 = self.backend.bk_repeat(conv1, self.NORIENT, axis=-1)
+                conv1 = self.backend.bk_reduce_sum(
+                    self.backend.bk_reshape(
+                        cmat[j3] * tmp2,
+                        [tmp2.shape[0], cmat[j3].shape[0], self.NORIENT, self.NORIENT],
+                    ),
+                    2,
+                )
+
+            ### Take the module M1 = |I1 * Psi_j3|
+            M1_square = conv1 * self.backend.bk_conjugate(
+                conv1
+            )  # [Nbatch, Npix_j3, Norient3]
+            
+            M1 = self.backend.bk_L1(M1_square)  # [Nbatch, Npix_j3, Norient3]
+            
+            # Store M1_j3 in a dictionary
+            M1_dic[j3] = M1
+
+            if not cross:  # Auto
+                M1_square = self.backend.bk_real(M1_square)
+
+                ### S2_auto = < M1^2 >_pix
+                # Apply the mask [Nmask, Npix_j3] and average over pixels
+                if return_data:
+                    s2 = M1_square
+                else:
+                    if calc_var:
+                        s2, vs2 = self.masked_mean(
+                            M1_square, vmask, axis=1, rank=j3, calc_var=True
+                        )
+                        #s2=self.backend.bk_flatten(self.backend.bk_real(s2))
+                        #vs2=self.backend.bk_flatten(vs2)
+                    else:
+                        s2 = self.masked_mean(M1_square, vmask, axis=1, rank=j3)
+
+                if cond_init_P1_dic:
+                    # We fill P1_dic with S2 for normalisation of S3 and S4
+                    P1_dic[j3] = self.backend.bk_real(self.backend.bk_real(s2))  # [Nbatch, Nmask, Norient3]
+                
+                # We store S2_auto to return it [Nbatch, Nmask, NS2, Norient3]
+                if return_data:
+                    if S2 is None:
+                        S2 = {}
+                    if out_nside is not None and out_nside < nside_j3:
+                        s2 = self.backend.bk_reduce_mean(
+                            self.backend.bk_reshape(
+                                s2,
+                                [
+                                    s2.shape[0],
+                                    12 * out_nside**2,
+                                    (nside_j3 // out_nside) ** 2,
+                                    s2.shape[2],
+                                ],
+                            ),
+                            2,
+                        )
+                    S2[j3] = s2
+                else:
+                    if norm == "auto":  # Normalize S2
+                        s2 /= P1_dic[j3]
+                    """
+                    S2.append(
+                        self.backend.bk_expand_dims(s2, off_S2)
+                    )  # Add a dimension for NS2
+                    if calc_var:
+                        VS2.append(
+                            self.backend.bk_expand_dims(vs2, off_S2)
+                        )  # Add a dimension for NS2
+                    """
+                    #print(s2.shape,result[:,:,2+j3*NORIENT*2:2+j3*NORIENT*2+NORIENT].shape,result.shape,2+j3*NORIENT*2)
+                    result[:,:,2+j3*NORIENT*2:2+j3*NORIENT*2+NORIENT]=s2
+                    if calc_var:
+                        vresult[:,:,2+j3*NORIENT*2:2+j3*NORIENT*2+NORIENT]=vs2
+                #### S1_auto computation
+                ### Image 1 : S1 = < M1 >_pix
+                # Apply the mask [Nmask, Npix_j3] and average over pixels
+                if return_data:
+                    s1 = M1
+                else:
+                    if calc_var:
+                        s1, vs1 = self.masked_mean(
+                            M1, vmask, axis=1, rank=j3, calc_var=True
+                        )  # [Nbatch, Nmask, Norient3]
+                        #s1=self.backend.bk_flatten(self.backend.bk_real(s1))
+                        #vs1=self.backend.bk_flatten(vs1)
+                    else:
+                        s1 = self.masked_mean(
+                            M1, vmask, axis=1, rank=j3
+                        )  # [Nbatch, Nmask, Norient3]
+                        #s1=self.backend.bk_flatten(self.backend.bk_real(s1))
+
+                if return_data:
+                    if out_nside is not None and out_nside < nside_j3:
+                        s1 = self.backend.bk_reduce_mean(
+                            self.backend.bk_reshape(
+                                s1,
+                                [
+                                    s1.shape[0],
+                                    12 * out_nside**2,
+                                    (nside_j3 // out_nside) ** 2,
+                                    s1.shape[2],
+                                ],
+                            ),
+                            2,
+                        )
+                    S1[j3] = s1
+                else:
+                    ### Normalize S1
+                    if norm is not None:
+                        self.div_norm(s1, (P1_dic[j3]) ** 0.5)
+                    result[:,:,2+j3*NORIENT*2+NORIENT:2+j3*NORIENT*2+2*NORIENT]=s1
+                    if calc_var:
+                        vresult[:,:,2+j3*NORIENT*2+NORIENT:2+j3*NORIENT*2+2*NORIENT]=vs1
+                    """
+                    ### We store S1 for image1  [Nbatch, Nmask, NS1, Norient3]
+                    S1.append(
+                        self.backend.bk_expand_dims(s1, off_S2)
+                    )  # Add a dimension for NS1
+                    if calc_var:
+                        VS1.append(
+                            self.backend.bk_expand_dims(vs1, off_S2)
+                        )  # Add a dimension for NS1
+                    """
+
+            else:  # Cross
+                ### Make the convolution I2 * Psi_j3
+                conv2 = self.convol(I2, axis=1)  # [Nbatch, Npix_j3, Norient3]
+                if cmat is not None:
+                    tmp2 = self.backend.bk_repeat(conv2, self.NORIENT, axis=-1)
+                    conv2 = self.backend.bk_reduce_sum(
+                        self.backend.bk_reshape(
+                            cmat[j3] * tmp2,
+                            [
+                                tmp2.shape[0],
+                                cmat[j3].shape[0],
+                                self.NORIENT,
+                                self.NORIENT,
+                            ],
+                        ),
+                        2,
+                    )
+                ### Take the module M2 = |I2 * Psi_j3|
+                M2_square = conv2 * self.backend.bk_conjugate(
+                    conv2
+                )  # [Nbatch, Npix_j3, Norient3]
+                M2 = self.backend.bk_L1(M2_square)  # [Nbatch, Npix_j3, Norient3]
+                # Store M2_j3 in a dictionary
+                M2_dic[j3] = M2
+
+                ### S2_auto = < M2^2 >_pix
+                # Not returned, only for normalization
+                if cond_init_P1_dic:
+                    # Apply the mask [Nmask, Npix_j3] and average over pixels
+                    if return_data:
+                        p1 = M1_square
+                        p2 = M2_square
+                    else:
+                        if calc_var:
+                            p1, vp1 = self.masked_mean(
+                                M1_square, vmask, axis=1, rank=j3, calc_var=True
+                            )  # [Nbatch, Nmask, Norient3]
+                            p2, vp2 = self.masked_mean(
+                                M2_square, vmask, axis=1, rank=j3, calc_var=True
+                            )  # [Nbatch, Nmask, Norient3]
+                        else:
+                            p1 = self.masked_mean(
+                                M1_square, vmask, axis=1, rank=j3
+                            )  # [Nbatch, Nmask, Norient3]
+                            p2 = self.masked_mean(
+                                M2_square, vmask, axis=1, rank=j3
+                            )  # [Nbatch, Nmask, Norient3]
+                    # We fill P1_dic with S2 for normalisation of S3 and S4
+                    P1_dic[j3] = self.backend.bk_real(p1)  # [Nbatch, Nmask, Norient3]
+                    P2_dic[j3] = self.backend.bk_real(p2)  # [Nbatch, Nmask, Norient3]
+
+                ### S2_cross = < (I1 * Psi_j3) (I2 * Psi_j3)^* >_pix
+                # z_1 x z_2^* = (a1a2 + b1b2) + i(b1a2 - a1b2)
+                s2 = conv1 * self.backend.bk_conjugate(conv2)
+                MX = self.backend.bk_L1(s2)
+                # Apply the mask [Nmask, Npix_j3] and average over pixels
+                if return_data:
+                    s2 = s2
+                else:
+                    if calc_var:
+                        s2, vs2 = self.masked_mean(
+                            s2, vmask, axis=1, rank=j3, calc_var=True
+                        )
+                    else:
+                        s2 = self.masked_mean(s2, vmask, axis=1, rank=j3)
+
+                if return_data:
+                    if out_nside is not None and out_nside < nside_j3:
+                        s2 = self.backend.bk_reduce_mean(
+                            self.backend.bk_reshape(
+                                s2,
+                                [
+                                    s2.shape[0],
+                                    12 * out_nside**2,
+                                    (nside_j3 // out_nside) ** 2,
+                                    s2.shape[2],
+                                ],
+                            ),
+                            2,
+                        )
+                    S2[j3] = s2
+                else:
+                    ### Normalize S2_cross
+                    if norm == "auto":
+                        s2 /= (P1_dic[j3] * P2_dic[j3]) ** 0.5
+
+                    ### Store S2_cross as complex [Nbatch, Nmask, NS2, Norient3]
+                    s2 = self.backend.bk_real(s2)
+
+                    S2.append(
+                        self.backend.bk_expand_dims(s2, off_S2)
+                    )  # Add a dimension for NS2
+                    if calc_var:
+                        VS2.append(
+                            self.backend.bk_expand_dims(vs2, off_S2)
+                        )  # Add a dimension for NS2
+
+                #### S1_auto computation
+                ### Image 1 : S1 = < M1 >_pix
+                # Apply the mask [Nmask, Npix_j3] and average over pixels
+                if return_data:
+                    s1 = MX
+                else:
+                    if calc_var:
+                        s1, vs1 = self.masked_mean(
+                            MX, vmask, axis=1, rank=j3, calc_var=True
+                        )  # [Nbatch, Nmask, Norient3]
+                    else:
+                        s1 = self.masked_mean(
+                            MX, vmask, axis=1, rank=j3
+                        )  # [Nbatch, Nmask, Norient3]
+                if return_data:
+                    if out_nside is not None and out_nside < nside_j3:
+                        s1 = self.backend.bk_reduce_mean(
+                            self.backend.bk_reshape(
+                                s1,
+                                [
+                                    s1.shape[0],
+                                    12 * out_nside**2,
+                                    (nside_j3 // out_nside) ** 2,
+                                    s1.shape[2],
+                                ],
+                            ),
+                            2,
+                        )
+                    S1[j3] = s1
+                else:
+                    ### Normalize S1
+                    if norm is not None:
+                        self.div_norm(s1, (P1_dic[j3]) ** 0.5)
+                    ### We store S1 for image1  [Nbatch, Nmask, NS1, Norient3]
+                    S1.append(
+                        self.backend.bk_expand_dims(s1, off_S2)
+                    )  # Add a dimension for NS1
+                    if calc_var:
+                        VS1.append(
+                            self.backend.bk_expand_dims(vs1, off_S2)
+                        )  # Add a dimension for NS1
+
+            # Initialize dictionaries for |I1*Psi_j| * Psi_j3
+            M1convPsi_dic = {}
+            if cross:
+                # Initialize dictionaries for |I2*Psi_j| * Psi_j3
+                M2convPsi_dic = {}
+
+            ###### S3
+            nside_j2 = nside_j3
+            for j2 in range(0,-1): # j3 + 1):  # j2 <= j3
+                if return_data:
+                    if S4[j3] is None:
+                        S4[j3] = {}
+                    S4[j3][j2] = None
+
+                ### S3_auto = < (I1 * Psi)_j3 x (|I1 * Psi_j2| * Psi_j3)^* >_pix
+                if not cross:
+                    if calc_var:
+                        s3, vs3 = self._compute_S3(
+                            j2,
+                            j3,
+                            conv1,
+                            vmask,
+                            M1_dic,
+                            M1convPsi_dic,
+                            calc_var=True,
+                            cmat2=cmat2,
+                        )  # [Nbatch, Nmask, Norient3, Norient2]
+                    else:
+                        s3 = self._compute_S3(
+                            j2,
+                            j3,
+                            conv1,
+                            vmask,
+                            M1_dic,
+                            M1convPsi_dic,
+                            return_data=return_data,
+                            cmat2=cmat2,
+                        )  # [Nbatch, Nmask, Norient3, Norient2]
+
+                    if return_data:
+                        if S3[j3] is None:
+                            S3[j3] = {}
+                        if out_nside is not None and out_nside < nside_j2:
+                            s3 = self.backend.bk_reduce_mean(
+                                self.backend.bk_reshape(
+                                    s3,
+                                    [
+                                        s3.shape[0],
+                                        12 * out_nside**2,
+                                        (nside_j2 // out_nside) ** 2,
+                                        s3.shape[2],
+                                        s3.shape[3],
+                                    ],
+                                ),
+                                2,
+                            )
+                        S3[j3][j2] = s3
+                    else:
+                        ### Normalize S3 with S2_j [Nbatch, Nmask, Norient_j]
+                        if norm is not None:
+                            self.div_norm(
+                                s3,
+                                (
+                                    self.backend.bk_expand_dims(P1_dic[j2], off_S2)
+                                    * self.backend.bk_expand_dims(P1_dic[j3], -1)
+                                )
+                                ** 0.5,
+                            )  # [Nbatch, Nmask, Norient3, Norient2]
+
+                        ### Store S3 as a complex [Nbatch, Nmask, NS3, Norient3, Norient2]
+
+                        # S3.append(self.backend.bk_reshape(s3,[s3.shape[0],s3.shape[1],
+                        #                                      s3.shape[2]*s3.shape[3]]))
+                        S3.append(
+                            self.backend.bk_expand_dims(s3, off_S3)
+                        )  # Add a dimension for NS3
+                        if calc_var:
+                            VS3.append(
+                                self.backend.bk_expand_dims(vs3, off_S3)
+                            )  # Add a dimension for NS3
+                            # VS3.append(self.backend.bk_reshape(vs3,[s3.shape[0],s3.shape[1],
+                            #                                  s3.shape[2]*s3.shape[3]]))
+
+                ### S3_cross = < (I1 * Psi)_j3 x (|I2 * Psi_j2| * Psi_j3)^* >_pix
+                ### S3P_cross = < (I2 * Psi)_j3 x (|I1 * Psi_j2| * Psi_j3)^* >_pix
+                else:
+                    if calc_var:
+                        s3, vs3 = self._compute_S3(
+                            j2,
+                            j3,
+                            conv1,
+                            vmask,
+                            M2_dic,
+                            M2convPsi_dic,
+                            calc_var=True,
+                            cmat2=cmat2,
+                        )
+                        s3p, vs3p = self._compute_S3(
+                            j2,
+                            j3,
+                            conv2,
+                            vmask,
+                            M1_dic,
+                            M1convPsi_dic,
+                            calc_var=True,
+                            cmat2=cmat2,
+                        )
+                    else:
+                        s3 = self._compute_S3(
+                            j2,
+                            j3,
+                            conv1,
+                            vmask,
+                            M2_dic,
+                            M2convPsi_dic,
+                            return_data=return_data,
+                            cmat2=cmat2,
+                        )
+                        s3p = self._compute_S3(
+                            j2,
+                            j3,
+                            conv2,
+                            vmask,
+                            M1_dic,
+                            M1convPsi_dic,
+                            return_data=return_data,
+                            cmat2=cmat2,
+                        )
+
+                    if return_data:
+                        if S3[j3] is None:
+                            S3[j3] = {}
+                            S3P[j3] = {}
+                        if out_nside is not None and out_nside < nside_j2:
+                            s3 = self.backend.bk_reduce_mean(
+                                self.backend.bk_reshape(
+                                    s3,
+                                    [
+                                        s3.shape[0],
+                                        12 * out_nside**2,
+                                        (nside_j2 // out_nside) ** 2,
+                                        s3.shape[2],
+                                        s3.shape[3],
+                                    ],
+                                ),
+                                2,
+                            )
+                            s3p = self.backend.bk_reduce_mean(
+                                self.backend.bk_reshape(
+                                    s3p,
+                                    [
+                                        s3.shape[0],
+                                        12 * out_nside**2,
+                                        (nside_j2 // out_nside) ** 2,
+                                        s3.shape[2],
+                                        s3.shape[3],
+                                    ],
+                                ),
+                                2,
+                            )
+                        S3[j3][j2] = s3
+                        S3P[j3][j2] = s3p
+                    else:
+                        ### Normalize S3 and S3P with S2_j [Nbatch, Nmask, Norient_j]
+                        if norm is not None:
+                            self.div_norm(
+                                s3,
+                                (
+                                    self.backend.bk_expand_dims(P2_dic[j2], off_S2)
+                                    * self.backend.bk_expand_dims(P1_dic[j3], -1)
+                                )
+                                ** 0.5,
+                            )  # [Nbatch, Nmask, Norient3, Norient2]
+                            self.div_norm(
+                                s3p,
+                                (
+                                    self.backend.bk_expand_dims(P1_dic[j2], off_S2)
+                                    * self.backend.bk_expand_dims(P2_dic[j3], -1)
+                                )
+                                ** 0.5,
+                            )  # [Nbatch, Nmask, Norient3, Norient2]
+
+                        ### Store S3 and S3P as a complex [Nbatch, Nmask, NS3, Norient3, Norient2]
+
+                        # S3.append(self.backend.bk_reshape(s3,[s3.shape[0],s3.shape[1],
+                        #                                      s3.shape[2]*s3.shape[3]]))
+                        S3.append(
+                            self.backend.bk_expand_dims(s3, off_S3)
+                        )  # Add a dimension for NS3
+                        if calc_var:
+                            VS3.append(
+                                self.backend.bk_expand_dims(vs3, off_S3)
+                            )  # Add a dimension for NS3
+
+                            # VS3.append(self.backend.bk_reshape(vs3,[s3.shape[0],s3.shape[1],
+                            #                                  s3.shape[2]*s3.shape[3]]))
+
+                        # S3P.append(self.backend.bk_reshape(s3p,[s3.shape[0],s3.shape[1],
+                        #                                      s3.shape[2]*s3.shape[3]]))
+                        S3P.append(
+                            self.backend.bk_expand_dims(s3p, off_S3)
+                        )  # Add a dimension for NS3
+                        if calc_var:
+                            VS3P.append(
+                                self.backend.bk_expand_dims(vs3p, off_S3)
+                            )  # Add a dimension for NS3
+                            # VS3P.append(self.backend.bk_reshape(vs3p,[s3.shape[0],s3.shape[1],
+                            #                                  s3.shape[2]*s3.shape[3]]))
+
+                ##### S4
+                nside_j1 = nside_j2
+                for j1 in range(0, j2 + 1):  # j1 <= j2
+                    ### S4_auto = <(|I1 * psi1| * psi3)(|I1 * psi2| * psi3)^*>
+                    if not cross:
+                        if calc_var:
+                            s4, vs4 = self._compute_S4(
+                                j1,
+                                j2,
+                                vmask,
+                                M1convPsi_dic,
+                                M2convPsi_dic=None,
+                                calc_var=True,
+                            )  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
+                        else:
+                            s4 = self._compute_S4(
+                                j1,
+                                j2,
+                                vmask,
+                                M1convPsi_dic,
+                                M2convPsi_dic=None,
+                                return_data=return_data,
+                            )  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
+
+                        if return_data:
+                            if S4[j3][j2] is None:
+                                S4[j3][j2] = {}
+                            if out_nside is not None and out_nside < nside_j1:
+                                s4 = self.backend.bk_reduce_mean(
+                                    self.backend.bk_reshape(
+                                        s4,
+                                        [
+                                            s4.shape[0],
+                                            12 * out_nside**2,
+                                            (nside_j1 // out_nside) ** 2,
+                                            s4.shape[2],
+                                            s4.shape[3],
+                                            s4.shape[4],
+                                        ],
+                                    ),
+                                    2,
+                                )
+                            S4[j3][j2][j1] = s4
+                        else:
+                            ### Normalize S4 with S2_j [Nbatch, Nmask, Norient_j]
+                            if norm is not None:
+                                self.div_norm(
+                                    s4,
+                                    (
+                                        self.backend.bk_expand_dims(
+                                            self.backend.bk_expand_dims(
+                                                P1_dic[j1], off_S2
+                                            ),
+                                            off_S2,
+                                        )
+                                        * self.backend.bk_expand_dims(
+                                            self.backend.bk_expand_dims(
+                                                P1_dic[j2], off_S2
+                                            ),
+                                            -1,
+                                        )
+                                    )
+                                    ** 0.5,
+                                )  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
+                            ### Store S4 as a complex [Nbatch, Nmask, NS4, Norient3, Norient2, Norient1]
+
+                            # S4.append(self.backend.bk_reshape(s4,[s4.shape[0],s4.shape[1],
+                            #                                  s4.shape[2]*s4.shape[3]*s4.shape[4]]))
+                            S4.append(
+                                self.backend.bk_expand_dims(s4, off_S4)
+                            )  # Add a dimension for NS4
+                            if calc_var:
+                                # VS4.append(self.backend.bk_reshape(vs4,[s4.shape[0],s4.shape[1],
+                                #                              s4.shape[2]*s4.shape[3]*s4.shape[4]]))
+                                VS4.append(
+                                    self.backend.bk_expand_dims(vs4, off_S4)
+                                )  # Add a dimension for NS4
+
+                        ### S4_cross = <(|I1 * psi1| * psi3)(|I2 * psi2| * psi3)^*>
+                    else:
+                        if calc_var:
+                            s4, vs4 = self._compute_S4(
+                                j1,
+                                j2,
+                                vmask,
+                                M1convPsi_dic,
+                                M2convPsi_dic=M2convPsi_dic,
+                                calc_var=True,
+                            )  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
+                        else:
+                            s4 = self._compute_S4(
+                                j1,
+                                j2,
+                                vmask,
+                                M1convPsi_dic,
+                                M2convPsi_dic=M2convPsi_dic,
+                                return_data=return_data,
+                            )  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
+
+                        if return_data:
+                            if S4[j3][j2] is None:
+                                S4[j3][j2] = {}
+                            if out_nside is not None and out_nside < nside_j1:
+                                s4 = self.backend.bk_reduce_mean(
+                                    self.backend.bk_reshape(
+                                        s4,
+                                        [
+                                            s4.shape[0],
+                                            12 * out_nside**2,
+                                            (nside_j1 // out_nside) ** 2,
+                                            s4.shape[2],
+                                            s4.shape[3],
+                                            s4.shape[4],
+                                        ],
+                                    ),
+                                    2,
+                                )
+                            S4[j3][j2][j1] = s4
+                        else:
+                            ### Normalize S4 with S2_j [Nbatch, Nmask, Norient_j]
+                            if norm is not None:
+                                self.div_norm(
+                                    s4,
+                                    (
+                                        self.backend.bk_expand_dims(
+                                            self.backend.bk_expand_dims(
+                                                P1_dic[j1], off_S2
+                                            ),
+                                            off_S2,
+                                        )
+                                        * self.backend.bk_expand_dims(
+                                            self.backend.bk_expand_dims(
+                                                P2_dic[j2], off_S2
+                                            ),
+                                            -1,
+                                        )
+                                    )
+                                    ** 0.5,
+                                )  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
+                            ### Store S4 as a complex [Nbatch, Nmask, NS4, Norient3, Norient2, Norient1]
+                            # S4.append(self.backend.bk_reshape(s4,[s4.shape[0],s4.shape[1],
+                            #                                  s4.shape[2]*s4.shape[3]*s4.shape[4]]))
+                            S4.append(
+                                self.backend.bk_expand_dims(s4, off_S4)
+                            )  # Add a dimension for NS4
+                            if calc_var:
+
+                                # VS4.append(self.backend.bk_reshape(vs4,[s4.shape[0],s4.shape[1],
+                                #                              s4.shape[2]*s4.shape[3]*s4.shape[4]]))
+                                VS4.append(
+                                    self.backend.bk_expand_dims(vs4, off_S4)
+                                )  # Add a dimension for NS4
+
+                            nside_j1 = nside_j1 // 2
+                        nside_j2 = nside_j2 // 2
+
+            ###### Reshape for next iteration on j3
+            ### Image I1,
+            # downscale the I1 [Nbatch, Npix_j3]
+            if j3 != Jmax - 1:
+                I1 = self.smooth(I1, axis=1)
+                I1 = self.ud_grade_2(I1, axis=1)
+
+                ### Image I2
+                if cross:
+                    I2 = self.smooth(I2, axis=1)
+                    I2 = self.ud_grade_2(I2, axis=1)
+
+                ### Modules
+                for j2 in range(0, j3 + 1):  # j2 =< j3
+                    ### Dictionary M1_dic[j2]
+                    M1_smooth = self.smooth(
+                        M1_dic[j2], axis=1
+                    )  # [Nbatch, Npix_j3, Norient3]
+                    M1_dic[j2] = self.ud_grade_2(
+                        M1_smooth, axis=1
+                    )  # [Nbatch, Npix_j3, Norient3]
+
+                    ### Dictionary M2_dic[j2]
+                    if cross:
+                        M2_smooth = self.smooth(
+                            M2_dic[j2], axis=1
+                        )  # [Nbatch, Npix_j3, Norient3]
+                        M2_dic[j2] = self.ud_grade_2(
+                            M2, axis=1
+                        )  # [Nbatch, Npix_j3, Norient3]
+            
+                ### Mask
+                vmask = self.ud_grade_2(vmask, axis=1)
+
+                if self.mask_thres is not None:
+                    vmask = self.backend.bk_threshold(vmask, self.mask_thres)
+
+                ### NSIDE_j3
+                nside_j3 = nside_j3 // 2
+
+        ### Store P1_dic and P2_dic in self
+        if (norm == "auto") and (self.P1_dic is None):
+            self.P1_dic = P1_dic
+            if cross:
+                self.P2_dic = P2_dic
+        """
+        Sout=[s0]+S1+S2+S3+S4
+
+        if cross:
+            Sout=Sout+S3P
+        if calc_var:
+            SVout=[vs0]+VS1+VS2+VS3+VS4
+            if cross:
+                VSout=VSout+VS3P
+            return self.backend.bk_concat(Sout, 2),self.backend.bk_concat(VSout, 2)
+
+        return self.backend.bk_concat(Sout, 2)
+        """
+        if calc_var:
+            return result,vresult
+        else:
+            return result
+        if calc_var:
+            for k in S1:
+                print(k.shape,k.dtype)
+            for k in S2:
+                print(k.shape,k.dtype)
+            print(s0.shape,s0.dtype)
+            return self.backend.bk_concat([s0]+S1+S2,axis=1),self.backend.bk_concat([vs0]+VS1+VS2,axis=1)
+        else:
+            return self.backend.bk_concat([s0]+S1+S2,axis=1)
+        if not return_data:
+            S1 = self.backend.bk_concat(S1, 2)
+            S2 = self.backend.bk_concat(S2, 2)
+            S3 = self.backend.bk_concat(S3, 2)
+            S4 = self.backend.bk_concat(S4, 2)
+            if cross:
+                S3P = self.backend.bk_concat(S3P, 2)
+            if calc_var:
+                VS1 = self.backend.bk_concat(VS1, 2)
+                VS2 = self.backend.bk_concat(VS2, 2)
+                VS3 = self.backend.bk_concat(VS3, 2)
+                VS4 = self.backend.bk_concat(VS4, 2)
+                if cross:
+                    VS3P = self.backend.bk_concat(VS3P, 2)
+        if calc_var:
+            if not cross:
+                return scat_cov(
+                    s0, S2, S3, S4, s1=S1, backend=self.backend, use_1D=self.use_1D
+                ), scat_cov(
+                    vs0,
+                    VS2,
+                    VS3,
+                    VS4,
+                    s1=VS1,
+                    backend=self.backend,
+                    use_1D=self.use_1D,
+                )
+            else:
+                return scat_cov(
+                    s0,
+                    S2,
+                    S3,
+                    S4,
+                    s1=S1,
+                    s3p=S3P,
+                    backend=self.backend,
+                    use_1D=self.use_1D,
+                ), scat_cov(
+                    vs0,
+                    VS2,
+                    VS3,
+                    VS4,
+                    s1=VS1,
+                    s3p=VS3P,
+                    backend=self.backend,
+                    use_1D=self.use_1D,
+                )
+        else:
+            if not cross:
+                return scat_cov(
+                    s0, S2, S3, S4, s1=S1, backend=self.backend, use_1D=self.use_1D
+                )
+            else:
+                return scat_cov(
+                    s0,
+                    S2,
+                    S3,
+                    S4,
+                    s1=S1,
+                    s3p=S3P,
+                    backend=self.backend,
+                    use_1D=self.use_1D,
+                )
     def clean_norm(self):
         self.P1_dic = None
         self.P2_dic = None
@@ -3644,7 +4711,531 @@ class funct(FOC.FoCUS):
                     s4, vmask, axis=1, rank=j2
                 )  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
                 return s4
+                
+    def computer_filter(self,M,N,J,L):
+        kx, ky = np.meshgrid(np.fft.fftfreq(M) * M, np.fft.fftfreq(N) * N, indexing='ij')
+        
+        filter = np.zeros([J, L, M, N])
+        
+        for k in range(J):
+            center_distance = M / (2**(k + 1))
+            sigma_parallel = center_distance / (3*L/8)   # Longitudinal sigma
+            sigma_orthogonal = center_distance/1.5   # Transverse sigma (adjust as needed)
+        
+            for l in range(L):
+                theta = (l + 1) / L * np.pi  # Orientation angle
+                centerx = center_distance * np.sin(theta)
+                centery = center_distance * np.cos(theta)
+        
+                # Rotation matrix
+                R = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
+                Sigma = np.array([[1 / sigma_parallel**2, 0], [0, 1 / sigma_orthogonal**2]])
+        
+                # Compute rotated frequency coordinates
+                k_rot = np.einsum('ij,jkl->ikl', R, np.stack([kx - centerx, ky - centery]))
+        
+                # Quadratic form for Gaussian
+                quad_form = k_rot[0]**2 * Sigma[0, 0] + 2 * k_rot[0] * k_rot[1] * Sigma[0, 1] + k_rot[1]**2 * Sigma[1, 1]
+        
+                # Apply the Gaussian
+                filter[k, l] = np.exp(-quad_form)
+        filter[:,:,0,0]=0.0
+    
+        return self.backend.bk_cast(filter)
+    # ------------------------------------------------------------------------------------------
+    #
+    # utility functions 
+    #
+    # ------------------------------------------------------------------------------------------
+    def cut_high_k_off(self,data_f, dx, dy):
+        if_xodd = (data_f.shape[-2]%2==1)
+        if_yodd = (data_f.shape[-1]%2==1)
+        result = self.backend.backend.cat(
+            (self.backend.backend.cat(
+                ( data_f[...,:dx+if_xodd, :dy+if_yodd] , data_f[...,-dx:, :dy+if_yodd]
+                ), -2),
+              self.backend.backend.cat(
+                ( data_f[...,:dx+if_xodd, -dy:] , data_f[...,-dx:, -dy:]
+                ), -2)
+            ),-1)
+        return result
+    # ---------------------------------------------------------------------------
+    #
+    # utility functions for computing scattering coef and covariance
+    #
+    # ---------------------------------------------------------------------------
+     
+    def get_dxdy(self, j,M,N):
+        dx = int(max( 8, min( np.ceil(M/2**j), M//2 ) ))
+        dy = int(max( 8, min( np.ceil(N/2**j), N//2 ) ))
+        return dx, dy
+        
+    
 
+    def get_edge_masks(self,M, N, J, d0=1):
+        edge_masks = self.backend.backend.empty((J, M, N))
+        X, Y = self.backend.backend.meshgrid(self.backend.backend.arange(M), self.backend.backend.arange(N), indexing='ij')
+        for j in range(J):
+            edge_dx = min(M//4, 2**j*d0)
+            edge_dy = min(N//4, 2**j*d0)
+            edge_masks[j] = (X>=edge_dx) * (X<=M-edge_dx) * (Y>=edge_dy) * (Y<=N-edge_dy)
+        return edge_masks.to(self.backend.torch_device)
+    
+    # ---------------------------------------------------------------------------
+    #
+    # scattering cov
+    #
+    # ---------------------------------------------------------------------------
+    def scattering_cov(
+        self, data, Jmax=None,
+        if_large_batch=False, 
+        S4_criteria=None, 
+        use_ref=False, 
+        normalization='S2', 
+        edge=False,
+        pseudo_coef=1, 
+        get_variance=False, 
+        ref_sigma=None,
+        iso_ang=False
+    ):
+        '''
+        Calculates the scattering correlations for a batch of images, including:
+        orig. x orig.:     
+                        P00 = <(I * psi)(I * psi)*> = L2(I * psi)^2
+        orig. x modulus:   
+                        C01 = <(I * psi2)(|I * psi1| * psi2)*> / factor
+            when normalization == 'P00', factor = L2(I * psi2) * L2(I * psi1)
+            when normalization == 'P11', factor = L2(I * psi2) * L2(|I * psi1| * psi2)
+        modulus x modulus: 
+                        C11_pre_norm = <(|I * psi1| * psi3)(|I * psi2| * psi3)>
+                        C11 = C11_pre_norm / factor
+            when normalization == 'P00', factor = L2(I * psi1) * L2(I * psi2)
+            when normalization == 'P11', factor = L2(|I * psi1| * psi3) * L2(|I * psi2| * psi3)
+        modulus x modulus (auto): 
+                        P11 = <(|I * psi1| * psi2)(|I * psi1| * psi2)*>
+        Parameters
+        ----------
+        data : numpy array or torch tensor
+            image set, with size [N_image, x-sidelength, y-sidelength]
+        if_large_batch : Bool (=False)
+            It is recommended to use "False" unless one meets a memory issue
+        C11_criteria : str or None (=None)
+            Only C11 coefficients that satisfy this criteria will be computed.
+            Any expressions of j1, j2, and j3 that can be evaluated as a Bool 
+            is accepted.The default "None" corresponds to "j1 <= j2 <= j3".
+        use_ref : Bool (=False)
+            When normalizing, whether or not to use the normalization factor
+            computed from a reference field. For just computing the statistics,
+            the default is False. However, for synthesis, set it to "True" will
+            stablize the optimization process.
+        normalization : str 'P00' or 'P11' (='P00')
+            Whether 'P00' or 'P11' is used as the normalization factor for C01
+            and C11.
+        remove_edge : Bool (=False)
+            If true, the edge region with a width of rougly the size of the largest
+            wavelet involved is excluded when taking the global average to obtain
+            the scattering coefficients.
+        
+        Returns
+        -------
+        'P00'       : torch tensor with size [N_image, J, L] (# image, j1, l1)
+            the power in each wavelet bands (the orig. x orig. term)
+        'S1'        : torch tensor with size [N_image, J, L] (# image, j1, l1)
+            the 1st-order scattering coefficients, i.e., the mean of wavelet modulus fields
+        'C01'       : torch tensor with size [N_image, J, J, L, L] (# image, j1, j2, l1, l2)
+            the orig. x modulus terms. Elements with j1 < j2 are all set to np.nan and not computed.
+        'C11'       : torch tensor with size [N_image, J, J, J, L, L, L] (# image, j1, j2, j3, l1, l2, l3)
+            the modulus x modulus terms. Elements not satisfying j1 <= j2 <= j3 and the conditions
+            defined in 'C11_criteria' are all set to np.nan and not computed.
+        'C11_pre_norm' and 'C11_pre_norm_iso': pre-normalized modulus x modulus terms.
+        'P11'       : torch tensor with size [N_image, J, J, L, L] (# image, j1, j2, l1, l2)
+            the modulus x modulus terms with the two wavelets within modulus the same. Elements not following
+            j1 <= j3 are set to np.nan and not computed.
+        'P11_iso'   : torch tensor with size [N_image, J, J, L] (# image, j1, j2, l2-l1)
+            'P11' averaged over l1 while keeping l2-l1 constant.
+        '''
+        if S4_criteria is None:
+            S4_criteria = 'j2>=j1'
+        
+        # determine jmax and nside corresponding to the input map
+        im_shape = data.shape
+        if self.use_2D:
+            if len(data.shape) == 2:
+                nside = np.min([im_shape[0], im_shape[1]])
+                M,N = im_shape[0],im_shape[1]
+                N_image =  1
+            else:
+                nside = np.min([im_shape[1], im_shape[2]])
+                M,N = im_shape[1],im_shape[2]
+                N_image = data.shape[0]
+            J = int(np.log(nside) / np.log(2))-1  # Number of j scales
+        elif self.use_1D:
+            if len(data.shape) == 2:
+                npix = int(im_shape[1])  # Number of pixels
+                N_image =  1
+            else:
+                npix = int(im_shape[0])  # Number of pixels
+                N_image = data.shape[0]
+
+            nside = int(npix)
+
+            J = int(np.log(nside) / np.log(2))-1  # Number of j scales
+        else:
+            if len(data.shape) == 2:
+                npix = int(im_shape[1])  # Number of pixels
+                N_image =  1
+            else:
+                npix = int(im_shape[0])  # Number of pixels
+                N_image = data.shape[0]
+
+            nside = int(np.sqrt(npix // 12))
+
+            J = int(np.log(nside) / np.log(2))  # Number of j scales
+           
+        if Jmax is None:
+            Jmax = J  # Number of steps for the loop on scales
+        if Jmax>J:
+            print('==========\n\n')
+            print('The Jmax you requested is larger than the data size, which may cause problems while computing the scattering transform.')
+            print('\n\n==========')
+        
+        L=self.NORIENT
+        
+        if (M,N,J,L) not in self.filters_set:
+            self.filters_set[(M,N,J,L)] = self.computer_filter(M,N,J,L)
+            
+        filters_set = self.filters_set[(M,N,J,L)]
+        
+        #weight = self.weight
+        if use_ref:
+            if normalization=='S2': 
+                ref_S2 = self.ref_scattering_cov_S2
+            else: 
+                ref_P11 = self.ref_scattering_cov['P11']
+
+        # convert numpy array input into self.backend.bk_ tensors
+        data = self.backend.bk_cast(data)
+        data_f = self.backend.bk_fftn(data, dim=(-2,-1))
+        
+        # initialize tensors for scattering coefficients
+        S2 = self.backend.bk_zeros((N_image,J,L), dtype=data.dtype)
+        S1 = self.backend.bk_zeros((N_image,J,L), dtype=data.dtype)
+        
+        Ndata_S3 = J*(J+1)//2
+        Ndata_S4 = J*(J+1)*(J+2)//6
+        J_S4={}
+        
+        S3 = self.backend.bk_zeros((N_image,Ndata_S3,L,L), dtype=data_f.dtype) 
+        S4_pre_norm = self.backend.bk_zeros((N_image,Ndata_S4,L,L,L), dtype=data_f.dtype) 
+        S4 = self.backend.bk_zeros((N_image,Ndata_S4,L,L,L), dtype=data_f.dtype) 
+        
+        # variance
+        if get_variance:
+            S2_sigma = self.backend.bk_zeros((N_image,J,L), dtype=data.dtype)
+            S1_sigma = self.backend.bk_zeros((N_image,J,L), dtype=data.dtype)
+            S3_sigma = self.backend.bk_zeros((N_image,Ndata_S3,L,L), dtype=data_f.dtype) 
+            S4_sigma = self.backend.bk_zeros((N_image,Ndata_S4,L,L,L), dtype=data_f.dtype) 
+            
+        if iso_ang:
+            S3_iso = self.backend.bk_zeros((N_image,Ndata_S3,L), dtype=data_f.dtype) 
+            S4_iso = self.backend.bk_zeros((N_image,Ndata_S4,L,L), dtype=data_f.dtype) 
+            if get_variance:
+                S3_sigma_iso = self.backend.bk_zeros((N_image,Ndata_S3,L), dtype=data_f.dtype) 
+                S4_sigma_iso = self.backend.bk_zeros((N_image,Ndata_S4,L,L), dtype=data_f.dtype) 
+            
+        # calculate scattering fields
+        if self.use_2D:
+            if len(data.shape) == 2:
+                I1 = self.backend.bk_ifftn(
+                    data_f[None,None,None,:,:] * filters_set[None,:J,:,:,:], dim=(-2,-1)
+                ).abs()
+            else:
+                I1 = self.backend.bk_ifftn(
+                    data_f[:,None,None,:,:] * filters_set[None,:J,:,:,:], dim=(-2,-1)
+                ).abs()
+        elif self.use_1D:
+            if len(data.shape) == 1:
+                I1 = self.backend.bk_ifftn(
+                    data_f[None,None,None,:] * filters_set[None,:J,:,:], dim=(-1)
+                ).abs()
+            else:
+                I1 = self.backend.bk_ifftn(
+                    data_f[:,None,None,:] * filters_set[None,:J,:,:], dim=(-1)
+                ).abs()
+        else:
+            print('todo')
+    
+        I1_f= self.backend.bk_fftn(I1, dim=(-2,-1))
+        
+        #
+        if edge: 
+            if (M,N,J) not in self.edge_masks:
+                self.edge_masks[(M,N,J)] = self.get_edge_masks(M,N,J)
+            edge_mask = self.edge_masks[(M,N,J)][:,None,:,:]
+            edge_mask = edge_mask / edge_mask.mean((-2,-1))[:,:,None,None]
+        else: 
+            edge_mask = 1
+        S2 = (I1**2 * edge_mask).mean((-2,-1))
+        S1  = (I1 * edge_mask).mean((-2,-1))
+
+        if get_variance:
+            S2_sigma = (I1**2 * edge_mask).std((-2,-1))
+            S1_sigma  = (I1 * edge_mask).std((-2,-1))
+            
+        if pseudo_coef != 1:
+            I1 = I1**pseudo_coef
+        
+        Ndata_S3=0
+        Ndata_S4=0
+        
+        # calculate the covariance and correlations of the scattering fields
+        # only use the low-k Fourier coefs when calculating large-j scattering coefs.
+        for j3 in range(0,J):
+            J_S4[j3]=Ndata_S4
+            
+            dx3, dy3 = self.get_dxdy(j3,M,N)
+            I1_f_small = self.cut_high_k_off(I1_f[:,:j3+1], dx3, dy3) # Nimage, J, L, x, y
+            data_f_small = self.cut_high_k_off(data_f, dx3, dy3)
+            if edge:
+                I1_small = self.backend.bk_ifftn(I1_f_small, dim=(-2,-1), norm='ortho')
+                data_small = self.backend.bk_ifftn(data_f_small, dim=(-2,-1), norm='ortho')
+            wavelet_f3 = self.cut_high_k_off(filters_set[j3], dx3, dy3) # L,x,y
+            _, M3, N3 = wavelet_f3.shape
+            wavelet_f3_squared = wavelet_f3**2
+            edge_dx = min(4, int(2**j3*dx3*2/M))
+            edge_dy = min(4, int(2**j3*dy3*2/N))
+            # a normalization change due to the cutoff of frequency space
+            fft_factor = 1 /(M3*N3) * (M3*N3/M/N)**2
+            for j2 in range(0,j3+1):
+                I1_f2_wf3_small = I1_f_small[:,j2].view(N_image,L,1,M3,N3) * wavelet_f3.view(1,1,L,M3,N3)
+                I1_f2_wf3_2_small = I1_f_small[:,j2].view(N_image,L,1,M3,N3) * wavelet_f3_squared.view(1,1,L,M3,N3)
+                if edge:
+                    I12_w3_small = self.backend.bk_ifftn(I1_f2_wf3_small, dim=(-2,-1), norm='ortho')
+                    I12_w3_2_small = self.backend.bk_ifftn(I1_f2_wf3_2_small, dim=(-2,-1), norm='ortho')
+                if use_ref:
+                    if normalization=='P11':
+                        norm_factor_S3 = (ref_S2[:,None,j3,:] * ref_P11[:,j2,j3,:,:]**pseudo_coef)**0.5
+                    if normalization=='S2':
+                        norm_factor_S3 = (ref_S2[:,None,j3,:] * ref_S2[:,j2,:,None]**pseudo_coef)**0.5
+                else:
+                    if normalization=='P11':
+                        # [N_image,l2,l3,x,y]
+                        P11_temp = (I1_f2_wf3_small.abs()**2).mean((-2,-1)) * fft_factor
+                        norm_factor_S3 = (S2[:,None,j3,:] * P11_temp**pseudo_coef)**0.5
+                    if normalization=='S2':
+                        norm_factor_S3 = (S2[:,None,j3,:] * S2[:,j2,:,None]**pseudo_coef)**0.5
+
+                if not edge:
+                    S3[:,Ndata_S3,:,:] = (
+                        data_f_small.view(N_image,1,1,M3,N3) * self.backend.bk_conjugate(I1_f2_wf3_small)
+                    ).mean((-2,-1)) * fft_factor / norm_factor_S3
+                    
+                    if get_variance:
+                        S3_sigma[:,Ndata_S3,:,:] = (
+                            data_f_small.view(N_image,1,1,M3,N3) * self.backend.bk_conjugate(I1_f2_wf3_small)
+                        ).std((-2,-1)) * fft_factor / norm_factor_S3
+                else:
+                    
+                    S3[:,Ndata_S3,:,:] = (
+                        data_small.view(N_image,1,1,M3,N3) * self.backend.bk_conjugate(I12_w3_small)
+                    )[...,edge_dx:M3-edge_dx, edge_dy:N3-edge_dy].mean((-2,-1)) * fft_factor / norm_factor_S3
+                    if get_variance:
+                        S3_sigma[:,Ndata_S3,:,:] = (
+                            data_small.view(N_image,1,1,M3,N3) * self.backend.bk_conjugate(I12_w3_small)
+                            )[...,edge_dx:M3-edge_dx, edge_dy:N3-edge_dy].std((-2,-1)) * fft_factor / norm_factor_S3
+                Ndata_S3+=1
+                if j2 <= j3:
+                    beg_n=Ndata_S4
+                    for j1 in range(0, j2+1):
+                        if eval(S4_criteria):
+                            if not edge:
+                                if not if_large_batch:
+                                    # [N_image,l1,l2,l3,x,y]
+                                    S4_pre_norm[:,Ndata_S4,:,:,:] = (
+                                        I1_f_small[:,j1].view(N_image,L,1,1,M3,N3) * 
+                                        self.backend.bk_conjugate(I1_f2_wf3_2_small.view(N_image,1,L,L,M3,N3))
+                                    ).mean((-2,-1)) * fft_factor
+                                    if get_variance:
+                                        S4_sigma[:,Ndata_S4,:,:,:] = (
+                                            I1_f_small[:,j1].view(N_image,L,1,1,M3,N3) * 
+                                            self.backend.bk_conjugate(I1_f2_wf3_2_small.view(N_image,1,L,L,M3,N3))
+                                        ).std((-2,-1)) * fft_factor
+                                else:
+                                    for l1 in range(L):
+                                        # [N_image,l2,l3,x,y]
+                                        S4_pre_norm[:,Ndata_S4,l1,:,:] = (
+                                            I1_f_small[:,j1,l1].view(N_image,1,1,M3,N3) * 
+                                            self.backend.bk_conjugate(I1_f2_wf3_2_small.view(N_image,L,L,M3,N3))
+                                        ).mean((-2,-1)) * fft_factor
+                                        if get_variance:
+                                            S4_sigma[:,Ndata_S4,l1,:,:] = (
+                                                I1_f_small[:,j1,l1].view(N_image,1,1,M3,N3) * 
+                                                self.backend.bk_conjugate(I1_f2_wf3_2_small.view(N_image,L,L,M3,N3))
+                                            ).std((-2,-1)) * fft_factor
+                            else:
+                                if not if_large_batch:
+                                    # [N_image,l1,l2,l3,x,y]
+                                    S4_pre_norm[:,Ndata_S4,:,:,:] = (
+                                        I1_small[:,j1].view(N_image,L,1,1,M3,N3) * self.backend.bk_conjugate(
+                                            I12_w3_2_small.view(N_image,1,L,L,M3,N3)
+                                        )
+                                    )[...,edge_dx:-edge_dx, edge_dy:-edge_dy].mean((-2,-1)) * fft_factor
+                                    if get_variance:
+                                        S4_sigma[:,Ndata_S4,:,:,:] = (
+                                            I1_small[:,j1].view(N_image,L,1,1,M3,N3) * self.backend.bk_conjugate(
+                                                I12_w3_2_small.view(N_image,1,L,L,M3,N3)
+                                            )
+                                        )[...,edge_dx:-edge_dx, edge_dy:-edge_dy].std((-2,-1)) * fft_factor
+                                else:
+                                    for l1 in range(L):
+                                    # [N_image,l2,l3,x,y]
+                                        S4_pre_norm[:,Ndata_S4,l1,:,:] = (
+                                            I1_small[:,j1].view(N_image,1,1,M3,N3) * self.backend.bk_conjugate(
+                                                I12_w3_2_small.view(N_image,L,L,M3,N3)
+                                            )
+                                        )[...,edge_dx:-edge_dx, edge_dy:-edge_dy].mean((-2,-1)) * fft_factor
+                                        if get_variance:
+                                            S4_sigma[:,Ndata_S4,l1,:,:] = (
+                                                I1_small[:,j1].view(N_image,1,1,M3,N3) * self.backend.bk_conjugate(
+                                                    I12_w3_2_small.view(N_image,L,L,M3,N3)
+                                                )
+                                            )[...,edge_dx:-edge_dx, edge_dy:-edge_dy].mean((-2,-1)) * fft_factor
+                                
+                            Ndata_S4+=1
+                            
+                    if normalization=='S2':
+                        if use_ref: 
+                            P = (ref_S2[:,j3,:,None,None] * ref_S2[:,j2,None,:,None] )**(0.5*pseudo_coef)
+                        else: 
+                            P = (S2[:,j3,:,None,None] * S2[:,j2,None,:,None] )**(0.5*pseudo_coef)
+                            
+                        S4[:,beg_n:Ndata_S4,:,:,:]=S4_pre_norm[:,beg_n:Ndata_S4,:,:,:]/P
+                            
+                        if get_variance:
+                            S4_sigma[:,beg_n:Ndata_S4,:,:,:] = S4_sigma[:,beg_n:Ndata_S4,:,:,:] / P
+                            
+        """
+        # define P11 from diagonals of S4
+        for j1 in range(J):
+            for l1 in range(L):
+                P11[:,j1,:,l1,:] = S4_pre_norm[:,j1,j1,:,l1,l1,:].real
+       
+                
+        if normalization=='S4':
+            if use_ref: 
+                P = ref_P11
+            else: 
+                P = P11
+            #.view(N_image,J,1,J,L,1,L) * .view(N_image,1,J,J,1,L,L)
+            S4 = S4_pre_norm / (
+                P[:,:,None,:,:,None,:] * P[:,None,:,:,None,:,:]
+            )**(0.5*pseudo_coef)
+        
+        
+        
+        
+        # get a single, flattened data vector for_synthesis
+        select_and_index        = self.get_scattering_index(J, L, normalization, S4_criteria)
+        index_for_synthesis     = select_and_index['index_for_synthesis']
+        index_for_synthesis_iso = select_and_index['index_for_synthesis_iso']
+        """
+        # average over l1 to obtain simple isotropic statistics
+        if iso_ang:
+            S2_iso = S2.mean(-1)
+            S1_iso = S1.mean(-1)
+            for l1 in range(L):
+                for l2 in range(L):
+                    S3_iso[...,(l2-l1)%L] += S3[...,l1,l2]
+                    for l3 in range(L):
+                        S4_iso[...,(l2-l1)%L,(l3-l1)%L] += S4[...,l1,l2,l3]
+            S3_iso /= L; S4_iso /= L
+            
+            if get_variance:
+                S2_sigma_iso = S2_sigma.mean(-1)
+                S1_sigma_iso = S1_sigma.mean(-1)
+                for l1 in range(L):
+                    for l2 in range(L):
+                        S3_sigma_iso[...,(l2-l1)%L] += S3_sigma[...,l1,l2]
+                        for l3 in range(L):
+                            S4_sigma_iso[...,(l2-l1)%L,(l3-l1)%L] += S4_sigma[...,l1,l2,l3]
+                S3_sigma_iso /= L; S4_sigma_iso /= L
+        
+        mean_data=self.backend.bk_zeros((N_image,1), dtype=data.dtype) 
+        std_data=self.backend.bk_zeros((N_image,1), dtype=data.dtype) 
+        mean_data[:,0]=data.mean((-2,-1))
+        std_data[:,0]=data.std((-2,-1))
+        
+        if get_variance:
+            ref_sigma={}
+            if iso_ang:
+                ref_sigma['std_data']=std_data
+                ref_sigma['S1_sigma']=S1_sigma_iso
+                ref_sigma['S2_sigma']=S2_sigma_iso
+                ref_sigma['S3_sigma']=S3_sigma_iso
+                ref_sigma['S4_sigma']=S4_sigma_iso
+            else:
+                ref_sigma['std_data']=std_data
+                ref_sigma['S1_sigma']=S1_sigma
+                ref_sigma['S2_sigma']=S2_sigma
+                ref_sigma['S3_sigma']=S3_sigma
+                ref_sigma['S4_sigma']=S4_sigma
+        
+        if iso_ang:
+            if ref_sigma is not None:
+                for_synthesis = self.backend.backend.cat((
+                    mean_data/ref_sigma['std_data'],
+                    std_data/ref_sigma['std_data'],
+                    (S2_iso/ref_sigma['S2_sigma']).reshape((N_image, -1)).log(), 
+                    (S1_iso/ref_sigma['S1_sigma']).reshape((N_image, -1)).log(),
+                    (S3_iso/ref_sigma['S3_sigma']).reshape((N_image, -1)).real, 
+                    (S3_iso/ref_sigma['S3_sigma']).reshape((N_image, -1)).imag,
+                    (S4_iso/ref_sigma['S4_sigma']).reshape((N_image, -1)).real, 
+                    (S4_iso/ref_sigma['S4_sigma']).reshape((N_image, -1)).imag,
+                    ),dim=-1)
+            else:
+                for_synthesis = self.backend.backend.cat((
+                    mean_data/std_data,
+                    std_data,
+                    S2_iso.reshape((N_image, -1)).log(), 
+                    S1_iso.reshape((N_image, -1)).log(),
+                    S3_iso.reshape((N_image, -1)).real, 
+                    S3_iso.reshape((N_image, -1)).imag,
+                    S4_iso.reshape((N_image, -1)).real, 
+                    S4_iso.reshape((N_image, -1)).imag,
+                    ),dim=-1)
+        else:
+            if ref_sigma is not None:
+                for_synthesis = self.backend.backend.cat((
+                    mean_data/ref_sigma['std_data'],
+                    std_data/ref_sigma['std_data'],
+                    (S2/ref_sigma['S2_sigma']).reshape((N_image, -1)).log(), 
+                    (S1/ref_sigma['S1_sigma']).reshape((N_image, -1)).log(),
+                    (S3/ref_sigma['S3_sigma']).reshape((N_image, -1)).real, 
+                    (S3/ref_sigma['S3_sigma']).reshape((N_image, -1)).imag,
+                    (S4/ref_sigma['S4_sigma']).reshape((N_image, -1)).real, 
+                    (S4/ref_sigma['S4_sigma']).reshape((N_image, -1)).imag,
+                    ),dim=-1)
+            else:
+                for_synthesis = self.backend.backend.cat((
+                    mean_data/std_data,
+                    std_data,
+                    S2.reshape((N_image, -1)).log(), 
+                    S1.reshape((N_image, -1)).log(),
+                    S3.reshape((N_image, -1)).real, 
+                    S3.reshape((N_image, -1)).imag,
+                    S4.reshape((N_image, -1)).real, 
+                    S4.reshape((N_image, -1)).imag,
+                    ),dim=-1)
+                
+        if not use_ref: 
+            self.ref_scattering_cov_S2=S2
+        
+        if get_variance:
+            return for_synthesis,ref_sigma
+            
+        return for_synthesis
+        
+        
     def to_gaussian(self,x):
         from scipy.stats import norm
         from scipy.interpolate import interp1d
@@ -4021,8 +5612,12 @@ class funct(FOC.FoCUS):
                   image_target,
                   nstep=4,
                   seed=1234,
-                  edge=True,
+                  Jmax=None,
+                  edge=False,
                   to_gaussian=True,
+                  use_variance=False,
+                  synthesised_N=1,
+                  iso_ang=False,
                   EVAL_FREQUENCY=100,
                   NUM_EPOCHS = 300):
                       
@@ -4032,13 +5627,16 @@ class funct(FOC.FoCUS):
         def The_loss(u,scat_operator,args):
             ref  = args[0]
             sref = args[1]
+            use_v= args[2]
             
             # compute scattering covariance of the current synthetised map called u
-            learn=scat_operator.reduce_mean_batch(scat_operator.eval(u,edge=edge))
+            if use_v:
+                learn=scat_operator.reduce_mean_batch(scat_operator.scattering_cov(u,edge=edge,Jmax=Jmax,ref_sigma=sref,use_ref=True,iso_ang=iso_ang))
+            else:
+                learn=scat_operator.reduce_mean_batch(scat_operator.scattering_cov(u,edge=edge,Jmax=Jmax,use_ref=True,iso_ang=iso_ang))
             
             # make the difference withe the reference coordinates
-            loss=scat_operator.reduce_distance(learn,ref,sigma=sref)
-    
+            loss=scat_operator.backend.bk_reduce_mean(scat_operator.backend.bk_square((learn-ref)))
             return loss
 
         if to_gaussian:
@@ -4078,33 +5676,35 @@ class funct(FOC.FoCUS):
             if k==0:
                 np.random.seed(seed)
                 if self.use_2D:
-                    imap=np.random.randn(tmp[k].shape[0],
+                    imap=np.random.randn(synthesised_N,
                                          tmp[k].shape[1],
                                         tmp[k].shape[2])
                 else:
-                    imap=np.random.randn(tmp[k].shape[0],
+                    imap=np.random.randn(synthesised_N,
                                          tmp[k].shape[1])
             else:
-                axis=1
-                # if the kernel size is bigger than 3 increase the binning before smoothing
+                # Increase the resolution between each step
                 if self.use_2D:
                     imap = self.up_grade(
-                        omap, imap.shape[axis] * 2, axis=1, nouty=imap.shape[axis + 1] * 2
+                        omap, imap.shape[1] * 2, axis=1, nouty=imap.shape[2] * 2
                     )
                 elif self.use_1D:
-                    imap = self.up_grade(omap, imap.shape[axis] * 2, axis=1)
+                    imap = self.up_grade(omap, imap.shape[1] * 2, axis=1)
                 else:
-                    imap = self.up_grade(omap, l_nside, axis=axis)
+                    imap = self.up_grade(omap, l_nside, axis=1)
                     
             # compute the coefficients for the target image
-            ref,sref=self.eval(tmp[k],calc_var=True,edge=edge)
-
+            if use_variance:
+                ref,sref=self.scattering_cov(tmp[k],get_variance=True,edge=edge,Jmax=Jmax,iso_ang=iso_ang)
+            else:
+                ref=self.scattering_cov(tmp[k],edge=edge,Jmax=Jmax,iso_ang=iso_ang)
+                sref=ref
+            
             # compute the mean of the population does nothing if only one map is given
             ref=self.reduce_mean_batch(ref)
-            sref=self.reduce_mean_batch(sref)
-
+            
             # define a loss to minimize
-            loss=synthe.Loss(The_loss,self,ref,sref)
+            loss=synthe.Loss(The_loss,self,ref,sref,use_variance)
         
             sy = synthe.Synthesis([loss])
 
@@ -4121,6 +5721,8 @@ class funct(FOC.FoCUS):
             omap=sy.run(imap,
                         EVAL_FREQUENCY=EVAL_FREQUENCY,
                         NUM_EPOCHS = NUM_EPOCHS)
+                        
+            
 
         t2=time.time()
         print('Total computation %.2fs'%(t2-t1))
@@ -4128,7 +5730,7 @@ class funct(FOC.FoCUS):
         if to_gaussian:
             omap=self.from_gaussian(omap)
 
-        if axis==0:
+        if axis==0 and synthesised_N==1:
             return omap[0]
         else:
             return omap

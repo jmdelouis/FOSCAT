@@ -383,7 +383,7 @@ class foscat_backend:
         if self.BACKEND == self.TENSORFLOW:
             return self.backend.SparseTensor(indice, w, dense_shape=dense_shape)
         if self.BACKEND == self.TORCH:
-            return self.backend.sparse_coo_tensor(indice.T, w, dense_shape)
+            return self.backend.sparse_coo_tensor(indice.T, w, dense_shape).to_sparse_csr().to(self.torch_device)
         if self.BACKEND == self.NUMPY:
             return self.scipy.sparse.coo_matrix(
                 (w, (indice[:, 0], indice[:, 1])), shape=dense_shape
@@ -393,7 +393,7 @@ class foscat_backend:
         if self.BACKEND == self.TENSORFLOW:
             return self.backend.stack(list, axis=axis)
         if self.BACKEND == self.TORCH:
-            return self.backend.stack(list, axis=axis)
+            return self.backend.stack(list, axis=axis).to(self.torch_device)
         if self.BACKEND == self.NUMPY:
             return self.backend.stack(list, axis=axis)
 
@@ -552,6 +552,15 @@ class foscat_backend:
                 return np.concatenate([x.real.flatten(), x.imag.flatten()], 0)
             else:
                 return x.flatten()
+                
+    
+    def bk_flatten(self, x):
+        if self.BACKEND == self.TENSORFLOW:
+            return self.backend.flatten(x)
+        elif self.BACKEND == self.TORCH:
+            return self.backend.flatten(x)
+        else:
+            return x.flatten()
 
     def bk_flatten(self, x):
         if self.BACKEND == self.TENSORFLOW:
@@ -870,7 +879,7 @@ class foscat_backend:
         if self.BACKEND == self.TENSORFLOW:
             return self.backend.constant(data)
         if self.BACKEND == self.TORCH:
-            return self.backend.constant(data)
+            return self.backend.constant(data).to(self.torch_device)
         if self.BACKEND == self.NUMPY:
             return data
         
@@ -878,7 +887,7 @@ class foscat_backend:
         if self.BACKEND == self.TENSORFLOW:
             return self.backend.tensor(shape=shape)
         if self.BACKEND == self.TORCH:
-            return self.backend.tensor(shape=shape)
+            return self.backend.tensor(shape=shape).to(self.torch_device)
         if self.BACKEND == self.NUMPY:
             return np.zeros(shape)
 
@@ -886,7 +895,7 @@ class foscat_backend:
         if self.BACKEND == self.TENSORFLOW:
             return self.backend.dtypes.complex(real, imag)
         if self.BACKEND == self.TORCH:
-            return self.backend.complex(real, imag)
+            return self.backend.complex(real, imag).to(self.torch_device)
         if self.BACKEND == self.NUMPY:
             return real + 1j * imag
 
@@ -963,7 +972,7 @@ class foscat_backend:
                     xi = self.backend.concat(
                         [self.bk_imag(data[k]) for k in range(ndata)]
                     )
-                    return self.backend.complex(xr, xi)
+                    return self.bk_complex(xr, xi)
                 else:
                     return self.backend.concat(data)
             else:
@@ -975,7 +984,7 @@ class foscat_backend:
                     xi = self.backend.concat(
                         [self.bk_imag(data[k]) for k in range(ndata)], axis=axis
                     )
-                    return self.backend.complex(xr, xi)
+                    return self.bk_complex(xr, xi)
                 else:
                     return self.backend.concat(data, axis=axis)
         else:
@@ -988,7 +997,7 @@ class foscat_backend:
         if self.BACKEND == self.TENSORFLOW:
             return self.backend.zeros(shape, dtype=dtype)
         if self.BACKEND == self.TORCH:
-            return self.backend.zeros(shape, dtype=dtype)
+            return self.backend.zeros(shape, dtype=dtype).to(self.torch_device)
         if self.BACKEND == self.NUMPY:
             return np.zeros(shape, dtype=dtype)
 
@@ -1015,6 +1024,22 @@ class foscat_backend:
             return self.backend.fft(data)
         if self.BACKEND == self.NUMPY:
             return self.backend.fft.fft(data)
+            
+    def bk_fftn(self, data,dim=None):
+        if self.BACKEND == self.TENSORFLOW:
+            return self.backend.signal.fftn(data)
+        if self.BACKEND == self.TORCH:
+            return self.backend.fft.fftn(data,dim=dim)
+        if self.BACKEND == self.NUMPY:
+            return self.backend.fft.fftn(data)
+
+    def bk_ifftn(self, data,dim=None,norm=None):
+        if self.BACKEND == self.TENSORFLOW:
+            return self.backend.signal.ifftn(data)
+        if self.BACKEND == self.TORCH:
+            return self.backend.fft.ifftn(data,dim=dim,norm=norm)
+        if self.BACKEND == self.NUMPY:
+            return self.backend.fft.ifftn(data)
 
     def bk_rfft(self, data):
         if self.BACKEND == self.TENSORFLOW:
@@ -1066,7 +1091,7 @@ class foscat_backend:
             if x.dtype == self.all_cbk_type:
                 xr = self.backend.nn.relu(self.bk_real(x))
                 xi = self.backend.nn.relu(self.bk_imag(x))
-                return self.backend.complex(xr, xi)
+                return self.bk_complex(xr, xi)
             else:
                 return self.backend.nn.relu(x)
         if self.BACKEND == self.TORCH:
@@ -1115,7 +1140,7 @@ class foscat_backend:
 
         if self.BACKEND == self.TORCH:
             if isinstance(x, np.ndarray):
-                x = self.backend.from_numpy(x)
+                x = self.backend.from_numpy(x).to(self.torch_device)
 
             if x.dtype.is_complex:
                 out_type = self.all_cbk_type
