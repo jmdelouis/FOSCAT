@@ -4713,35 +4713,54 @@ class funct(FOC.FoCUS):
                 return s4
                 
     def computer_filter(self,M,N,J,L):
-        kx, ky = np.meshgrid(np.fft.fftfreq(M) * M, np.fft.fftfreq(N) * N, indexing='ij')
-        
-        filter = np.zeros([J, L, M, N])
-        
-        for k in range(J):
-            center_distance = M / (2**(k + 1))
-            sigma_parallel = center_distance / (3*L/8)   # Longitudinal sigma
-            sigma_orthogonal = center_distance/1.5   # Transverse sigma (adjust as needed)
+    
+        filter = np.zeros([J, L, M, N],dtype='complex64')
+    
+        slant=4.0 / L
+
+        for j in range(J):
         
             for l in range(L):
-                theta = (l + 1) / L * np.pi  # Orientation angle
-                centerx = center_distance * np.sin(theta)
-                centery = center_distance * np.cos(theta)
+                
+                theta = (int(L-L/2-1)-l) * np.pi / L
+                sigma = 0.8 * 2**j
+                xi = 3.0 / 4.0 * np.pi /2**j
+                
+                R = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]], np.float64)
+                R_inv = np.array([[np.cos(theta), np.sin(theta)], [-np.sin(theta), np.cos(theta)]], np.float64)
+                D = np.array([[1, 0], [0, slant * slant]])
+                curv = np.matmul(R, np.matmul(D, R_inv)) / ( 2 * sigma * sigma)
         
-                # Rotation matrix
-                R = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
-                Sigma = np.array([[1 / sigma_parallel**2, 0], [0, 1 / sigma_orthogonal**2]])
+                gab = np.zeros((M, N), np.complex128)
+                xx = np.empty((2,2, M, N))
+                yy = np.empty((2,2, M, N))
         
-                # Compute rotated frequency coordinates
-                k_rot = np.einsum('ij,jkl->ikl', R, np.stack([kx - centerx, ky - centery]))
+                for ii, ex in enumerate([-1, 0]):
+                    for jj, ey in enumerate([-1, 0]):
+                        xx[ii,jj], yy[ii,jj] = np.mgrid[
+                            ex * M : M + ex * M, 
+                            ey * N : N + ey * N]
+                
+                arg = -(curv[0, 0] * xx * xx + (curv[0, 1] + curv[1, 0]) * xx * yy + curv[1, 1] * yy * yy) 
+                argi = arg + 1.j * (xx * xi * np.cos(theta) + yy * xi * np.sin(theta))
+                
+                gabi = np.exp(argi).sum((0,1))
+                gab = np.exp(arg).sum((0,1))
         
-                # Quadratic form for Gaussian
-                quad_form = k_rot[0]**2 * Sigma[0, 0] + 2 * k_rot[0] * k_rot[1] * Sigma[0, 1] + k_rot[1]**2 * Sigma[1, 1]
-        
+                norm_factor = 2 * np.pi * sigma * sigma / slant
+                
+                gab = gab / norm_factor
+                
+                gabi = gabi / norm_factor
+
+                K = gabi.sum() / gab.sum()
+
                 # Apply the Gaussian
-                filter[k, l] = np.exp(-quad_form)
-        filter[:,:,0,0]=0.0
+                filter[j, l] = np.fft.fft2(gabi-K*gab)
+                filter[j,l,0,0]=0.0
     
         return self.backend.bk_cast(filter)
+        
     # ------------------------------------------------------------------------------------------
     #
     # utility functions 
@@ -4906,7 +4925,7 @@ class funct(FOC.FoCUS):
         L=self.NORIENT
         
         if (M,N,J,L) not in self.filters_set:
-            self.filters_set[(M,N,J,L)] = self.computer_filter(M,N,J,L)
+            self.filters_set[(M,N,J,L)] = self.computer_filter(M,N,J,L) #self.computer_filter(M,N,J,L)
             
         filters_set = self.filters_set[(M,N,J,L)]
         
