@@ -2756,6 +2756,7 @@ class funct(FOC.FoCUS):
 
         # a remettre comme avant
         M1_dic={}
+        M2_dic={}
         
         for j3 in range(Jmax):
             
@@ -3796,6 +3797,8 @@ class funct(FOC.FoCUS):
         # a remettre comme avant
         M1_dic={}
         
+        M2_dic={}
+        
         for j3 in range(Jmax):
             
             if edge:
@@ -4713,6 +4716,10 @@ class funct(FOC.FoCUS):
                 return s4
                 
     def computer_filter(self,M,N,J,L):
+        '''
+        This function is strongly inspire by the package https://github.com/SihaoCheng/scattering_transform
+        Done by Sihao Cheng and Rudy Morel.
+        '''
     
         filter = np.zeros([J, L, M, N],dtype='complex64')
     
@@ -4767,6 +4774,10 @@ class funct(FOC.FoCUS):
     #
     # ------------------------------------------------------------------------------------------
     def cut_high_k_off(self,data_f, dx, dy):
+        '''
+        This function is strongly inspire by the package https://github.com/SihaoCheng/scattering_transform
+        Done by Sihao Cheng and Rudy Morel.
+        '''
         if_xodd = (data_f.shape[-2]%2==1)
         if_yodd = (data_f.shape[-1]%2==1)
         result = self.backend.backend.cat(
@@ -4785,6 +4796,10 @@ class funct(FOC.FoCUS):
     # ---------------------------------------------------------------------------
      
     def get_dxdy(self, j,M,N):
+        '''
+        This function is strongly inspire by the package https://github.com/SihaoCheng/scattering_transform
+        Done by Sihao Cheng and Rudy Morel.
+        '''
         dx = int(max( 8, min( np.ceil(M/2**j), M//2 ) ))
         dy = int(max( 8, min( np.ceil(N/2**j), N//2 ) ))
         return dx, dy
@@ -4792,6 +4807,10 @@ class funct(FOC.FoCUS):
     
 
     def get_edge_masks(self,M, N, J, d0=1):
+        '''
+        This function is strongly inspire by the package https://github.com/SihaoCheng/scattering_transform
+        Done by Sihao Cheng and Rudy Morel.
+        '''
         edge_masks = self.backend.backend.empty((J, M, N))
         X, Y = self.backend.backend.meshgrid(self.backend.backend.arange(M), self.backend.backend.arange(N), indexing='ij')
         for j in range(J):
