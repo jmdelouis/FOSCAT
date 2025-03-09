@@ -92,7 +92,7 @@ class scat_cov:
         )
 
     def conv2complex(self, val):
-        if val.dtype == "complex64" in val.dtype or "complex128" or val.dtype == "torch.complex64" or val.dtype == "torch.complex128" :
+        if val.dtype == "complex64" or val.dtype=="complex128" or val.dtype == "torch.complex64" or val.dtype == "torch.complex128" :
             return val
         else:
             return self.backend.bk_complex(val, 0 * val)
