@@ -1123,6 +1123,16 @@ class foscat_backend:
                 return np.float64(x)
             else:
                 return x
+        if isinstance(x, np.complex128):
+            if self.all_bk_type == "float32":
+                return np.complex64(x)
+            else:
+                return x
+        if isinstance(x, np.complex64):
+            if self.all_bk_type == "float64":
+                return np.complex128(x)
+            else:
+                return x
 
         if isinstance(x, np.int32) or isinstance(x, np.int64) or isinstance(x, int):
             if self.all_bk_type == "float64":
