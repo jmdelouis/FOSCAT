@@ -2560,7 +2560,7 @@ class funct(FOC.FoCUS):
                     )
                     return None
             else:
-                if image1.shape[-1] != mask.shape[2]:  
+                if image1.shape[-1] != mask.shape[1]:  
                     print(
                         "The LAST COLUMN of the mask should have the same size ",
                         mask.shape,
