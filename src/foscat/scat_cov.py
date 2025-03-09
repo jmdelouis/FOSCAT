@@ -2549,15 +2549,26 @@ class funct(FOC.FoCUS):
                 )
                 return None
         if mask is not None:
-            if image1.shape[-2] != mask.shape[1] or image1.shape[-1] != mask.shape[2]:
-                print(
-                    "The LAST COLUMN of the mask should have the same size ",
-                    mask.shape,
-                    "than the input image ",
-                    image1.shape,
-                    "to eval Scattering Covariance",
-                )
-                return None
+            if self.use_2D:
+                if image1.shape[-2] != mask.shape[1] or image1.shape[-1] != mask.shape[2]:  
+                    print(
+                        "The LAST 2 COLUMNs of the mask should have the same size ",
+                        mask.shape,
+                        "than the input image ",
+                        image1.shape,
+                        "to eval Scattering Covariance",
+                    )
+                    return None
+            else:
+                if image1.shape[-1] != mask.shape[2]:  
+                    print(
+                        "The LAST COLUMN of the mask should have the same size ",
+                        mask.shape,
+                        "than the input image ",
+                        image1.shape,
+                        "to eval Scattering Covariance",
+                    )
+                    return None
         if self.use_2D and len(image1.shape) < 2:
             print(
                 "To work with 2D scattering transform, two dimension is needed, input map has only on dimension"
