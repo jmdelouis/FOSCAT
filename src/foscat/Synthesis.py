@@ -426,7 +426,7 @@ class Synthesis:
                 factr=factr,
                 maxiter=maxitt,
             )
-            print('Final Loss ',loss)
+            print("Final Loss ", loss)
             # update bias input data
             if iteration < NUM_STEP_BIAS - 1:
                 # if self.mpi_rank==0:
