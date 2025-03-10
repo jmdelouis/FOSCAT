@@ -92,7 +92,12 @@ class scat_cov:
         )
 
     def conv2complex(self, val):
-        if val.dtype == "complex64" in val.dtype or "complex128" or val.dtype == "torch.complex64" or val.dtype == "torch.complex128" :
+        if (
+            val.dtype == "complex64" in val.dtype
+            or "complex128"
+            or val.dtype == "torch.complex64"
+            or val.dtype == "torch.complex128"
+        ):
             return val
         else:
             return self.backend.bk_complex(val, 0 * val)
@@ -2043,9 +2048,11 @@ class scat_cov:
                                     )
                                 )
                             else:
-                                s3[i, j, idx[noff:], k, l_orient] = self.backend.to_numpy(self.S3)[
-                                    i, j, j2 == ij - noff, k, l_orient
-                                ]
+                                s3[i, j, idx[noff:], k, l_orient] = (
+                                    self.backend.to_numpy(self.S3)[
+                                        i, j, j2 == ij - noff, k, l_orient
+                                    ]
+                                )
                                 s3[i, j, idx[:noff], k, l_orient] = (
                                     self.add_data_from_slope(
                                         self.backend.to_numpy(self.S3)[
@@ -2500,17 +2507,17 @@ class funct(FOC.FoCUS):
         )
 
     def eval(
-            self,
-            image1,
-            image2=None,
-            mask=None,
-            norm=None,
-            calc_var=False,
-            cmat=None,
-            cmat2=None,
-            Jmax=None,
-            out_nside=None,
-            edge=True
+        self,
+        image1,
+        image2=None,
+        mask=None,
+        norm=None,
+        calc_var=False,
+        cmat=None,
+        cmat2=None,
+        Jmax=None,
+        out_nside=None,
+        edge=True,
     ):
         """
         Calculates the scattering correlations for a batch of images. Mean are done over pixels.
@@ -2603,16 +2610,17 @@ class funct(FOC.FoCUS):
             nside = int(np.sqrt(npix // 12))
 
             J = int(np.log(nside) / np.log(2))  # Number of j scales
-            
-        if (self.use_2D or self.use_1D) and self.KERNELSZ>3:
-            J-=1
+
+        if (self.use_2D or self.use_1D) and self.KERNELSZ > 3:
+            J -= 1
         if Jmax is None:
             Jmax = J  # Number of steps for the loop on scales
-        if Jmax>J:
-            print('==========\n\n')
-            print('The Jmax you requested is larger than the data size, which may cause problems while computing the scattering transform.')
-            print('\n\n==========')
-        
+        if Jmax > J:
+            print("==========\n\n")
+            print(
+                "The Jmax you requested is larger than the data size, which may cause problems while computing the scattering transform."
+            )
+            print("\n\n==========")
 
         ### LOCAL VARIABLES (IMAGES and MASK)
         if len(image1.shape) == 1 or (len(image1.shape) == 2 and self.use_2D):
@@ -2755,31 +2763,36 @@ class funct(FOC.FoCUS):
         nside_j3 = nside  # NSIDE start (nside_j3 = nside / 2^j3)
 
         # a remettre comme avant
-        M1_dic={}
-        
+        M1_dic = {}
+
         for j3 in range(Jmax):
-            
+
             if edge:
                 if self.mask_mask is None:
-                    self.mask_mask={}
+                    self.mask_mask = {}
                 if self.use_2D:
-                    if (vmask.shape[1],vmask.shape[2]) not in self.mask_mask:
-                        mask_mask=np.zeros([1,vmask.shape[1],vmask.shape[2]])
-                        mask_mask[0,
-                                  self.KERNELSZ//2:-self.KERNELSZ//2+1,
-                                  self.KERNELSZ//2:-self.KERNELSZ//2+1]=1.0
-                        self.mask_mask[(vmask.shape[1],vmask.shape[2])]=self.backend.bk_cast(mask_mask)
-                    vmask=vmask*self.mask_mask[(vmask.shape[1],vmask.shape[2])]
-                    #print(self.KERNELSZ//2,vmask,mask_mask)
-                    
+                    if (vmask.shape[1], vmask.shape[2]) not in self.mask_mask:
+                        mask_mask = np.zeros([1, vmask.shape[1], vmask.shape[2]])
+                        mask_mask[
+                            0,
+                            self.KERNELSZ // 2 : -self.KERNELSZ // 2 + 1,
+                            self.KERNELSZ // 2 : -self.KERNELSZ // 2 + 1,
+                        ] = 1.0
+                        self.mask_mask[(vmask.shape[1], vmask.shape[2])] = (
+                            self.backend.bk_cast(mask_mask)
+                        )
+                    vmask = vmask * self.mask_mask[(vmask.shape[1], vmask.shape[2])]
+                    # print(self.KERNELSZ//2,vmask,mask_mask)
+
                 if self.use_1D:
                     if (vmask.shape[1]) not in self.mask_mask:
-                        mask_mask=np.zeros([1,vmask.shape[1]])
-                        mask_mask[0,
-                                  self.KERNELSZ//2:-self.KERNELSZ//2+1]=1.0
-                        self.mask_mask[(vmask.shape[1])]=self.backend.bk_cast(mask_mask)
-                    vmask=vmask*self.mask_mask[(vmask.shape[1])]
-                    
+                        mask_mask = np.zeros([1, vmask.shape[1]])
+                        mask_mask[0, self.KERNELSZ // 2 : -self.KERNELSZ // 2 + 1] = 1.0
+                        self.mask_mask[(vmask.shape[1])] = self.backend.bk_cast(
+                            mask_mask
+                        )
+                    vmask = vmask * self.mask_mask[(vmask.shape[1])]
+
             if return_data:
                 S3[j3] = None
                 S3P[j3] = None
@@ -3435,7 +3448,7 @@ class funct(FOC.FoCUS):
                         M2_dic[j2] = self.ud_grade_2(
                             M2, axis=1
                         )  # [Nbatch, Npix_j3, Norient3]
-            
+
                 ### Mask
                 vmask = self.ud_grade_2(vmask, axis=1)
 
@@ -3645,27 +3658,26 @@ class funct(FOC.FoCUS):
                 )  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
                 return s4
 
-    def to_gaussian(self,x):
-        from scipy.stats import norm
+    def to_gaussian(self, x):
         from scipy.interpolate import interp1d
+        from scipy.stats import norm
 
-        idx=np.argsort(x.flatten())
+        idx = np.argsort(x.flatten())
         p = (np.arange(1, idx.shape[0] + 1) - 0.5) / idx.shape[0]
-        im_target=x.flatten()
+        im_target = x.flatten()
         im_target[idx] = norm.ppf(p)
-        
+
         # Interpolation cubique
-        self.f_gaussian = interp1d(im_target[idx], x.flatten()[idx], kind='cubic')
-        self.val_min=im_target[idx[0]]
-        self.val_max=im_target[idx[-1]]
+        self.f_gaussian = interp1d(im_target[idx], x.flatten()[idx], kind="cubic")
+        self.val_min = im_target[idx[0]]
+        self.val_max = im_target[idx[-1]]
         return im_target.reshape(x.shape)
 
+    def from_gaussian(self, x):
 
-    def from_gaussian(self,x):
-        
-        x=self.backend.bk_clip_by_value(x,self.val_min,self.val_max)
+        x = self.backend.bk_clip_by_value(x, self.val_min, self.val_max)
         return self.f_gaussian(self.backend.to_numpy(x))
-    
+
     def square(self, x):
         if isinstance(x, scat_cov):
             if x.S1 is None:
@@ -4017,121 +4029,127 @@ class funct(FOC.FoCUS):
             s0, s2, s3, s4, s1=s1, s3p=s3p, backend=self.backend, use_1D=self.use_1D
         )
 
-    def synthesis(self,
-                  image_target,
-                  nstep=4,
-                  seed=1234,
-                  edge=True,
-                  to_gaussian=True,
-                  EVAL_FREQUENCY=100,
-                  NUM_EPOCHS = 300):
-                      
-        import foscat.Synthesis as synthe
+    def synthesis(
+        self,
+        image_target,
+        nstep=4,
+        seed=1234,
+        edge=True,
+        to_gaussian=True,
+        EVAL_FREQUENCY=100,
+        NUM_EPOCHS=300,
+    ):
+
         import time
 
-        def The_loss(u,scat_operator,args):
-            ref  = args[0]
+        import foscat.Synthesis as synthe
+
+        def The_loss(u, scat_operator, args):
+            ref = args[0]
             sref = args[1]
-            
+
             # compute scattering covariance of the current synthetised map called u
-            learn=scat_operator.reduce_mean_batch(scat_operator.eval(u,edge=edge))
-            
+            learn = scat_operator.reduce_mean_batch(scat_operator.eval(u, edge=edge))
+
             # make the difference withe the reference coordinates
-            loss=scat_operator.reduce_distance(learn,ref,sigma=sref)
-    
+            loss = scat_operator.reduce_distance(learn, ref, sigma=sref)
+
             return loss
 
         if to_gaussian:
             # Change the data histogram to gaussian distribution
-            im_target=self.to_gaussian(image_target)
+            im_target = self.to_gaussian(image_target)
         else:
-            im_target=image_target
-            
-        axis=len(im_target.shape)-1
+            im_target = image_target
+
+        axis = len(im_target.shape) - 1
         if self.use_2D:
-            axis-=1
-        if axis==0:
-            im_target=self.backend.bk_expand_dims(im_target,0)
+            axis -= 1
+        if axis == 0:
+            im_target = self.backend.bk_expand_dims(im_target, 0)
 
         # compute the number of possible steps
         if self.use_2D:
-            jmax=int(np.min([np.log(im_target.shape[1]),np.log(im_target.shape[2])])/np.log(2))
+            jmax = int(
+                np.min([np.log(im_target.shape[1]), np.log(im_target.shape[2])])
+                / np.log(2)
+            )
         elif self.use_1D:
-            jmax=int(np.log(im_target.shape[1])/np.log(2))
+            jmax = int(np.log(im_target.shape[1]) / np.log(2))
         else:
-            jmax=int((np.log(im_target.shape[1]//12)/np.log(2))/2)
-            nside=2**jmax
+            jmax = int((np.log(im_target.shape[1] // 12) / np.log(2)) / 2)
+            nside = 2**jmax
 
-        if nstep>jmax-1:
-            nstep=jmax-1
+        if nstep > jmax - 1:
+            nstep = jmax - 1
 
-        t1=time.time()
-        tmp={}
-        tmp[nstep-1]=im_target
-        for l in range(nstep-2,-1,-1):
-            tmp[l]=self.ud_grade_2(tmp[l+1],axis=1)
-            
+        t1 = time.time()
+        tmp = {}
+        tmp[nstep - 1] = im_target
+        for l in range(nstep - 2, -1, -1):
+            tmp[l] = self.ud_grade_2(tmp[l + 1], axis=1)
+
         if not self.use_2D and not self.use_1D:
-            l_nside=nside//(2**(nstep-1))
-        
+            l_nside = nside // (2 ** (nstep - 1))
+
         for k in range(nstep):
-            if k==0:
+            if k == 0:
                 np.random.seed(seed)
                 if self.use_2D:
-                    imap=np.random.randn(tmp[k].shape[0],
-                                         tmp[k].shape[1],
-                                        tmp[k].shape[2])
+                    imap = np.random.randn(
+                        tmp[k].shape[0], tmp[k].shape[1], tmp[k].shape[2]
+                    )
                 else:
-                    imap=np.random.randn(tmp[k].shape[0],
-                                         tmp[k].shape[1])
+                    imap = np.random.randn(tmp[k].shape[0], tmp[k].shape[1])
             else:
-                axis=1
+                axis = 1
                 # if the kernel size is bigger than 3 increase the binning before smoothing
                 if self.use_2D:
                     imap = self.up_grade(
-                        omap, imap.shape[axis] * 2, axis=1, nouty=imap.shape[axis + 1] * 2
+                        omap,
+                        imap.shape[axis] * 2,
+                        axis=1,
+                        nouty=imap.shape[axis + 1] * 2,
                     )
                 elif self.use_1D:
                     imap = self.up_grade(omap, imap.shape[axis] * 2, axis=1)
                 else:
                     imap = self.up_grade(omap, l_nside, axis=axis)
-                    
+
             # compute the coefficients for the target image
-            ref,sref=self.eval(tmp[k],calc_var=True,edge=edge)
+            ref, sref = self.eval(tmp[k], calc_var=True, edge=edge)
 
             # compute the mean of the population does nothing if only one map is given
-            ref=self.reduce_mean_batch(ref)
-            sref=self.reduce_mean_batch(sref)
+            ref = self.reduce_mean_batch(ref)
+            sref = self.reduce_mean_batch(sref)
 
             # define a loss to minimize
-            loss=synthe.Loss(The_loss,self,ref,sref)
-        
+            loss = synthe.Loss(The_loss, self, ref, sref)
+
             sy = synthe.Synthesis([loss])
 
             # initialize the synthesised map
             if self.use_2D:
-                print('Synthesis scale [ %d x %d ]'%(imap.shape[1],imap.shape[2]))
+                print("Synthesis scale [ %d x %d ]" % (imap.shape[1], imap.shape[2]))
             elif self.use_1D:
-                print('Synthesis scale [ %d ]'%(imap.shape[1]))
+                print("Synthesis scale [ %d ]" % (imap.shape[1]))
             else:
-                print('Synthesis scale nside=%d'%(l_nside))
-                l_nside*=2
-            
-            # do the minimization
-            omap=sy.run(imap,
-                        EVAL_FREQUENCY=EVAL_FREQUENCY,
-                        NUM_EPOCHS = NUM_EPOCHS)
+                print("Synthesis scale nside=%d" % (l_nside))
+                l_nside *= 2
 
-        t2=time.time()
-        print('Total computation %.2fs'%(t2-t1))
+            # do the minimization
+            omap = sy.run(imap, EVAL_FREQUENCY=EVAL_FREQUENCY, NUM_EPOCHS=NUM_EPOCHS)
+
+        t2 = time.time()
+        print("Total computation %.2fs" % (t2 - t1))
 
         if to_gaussian:
-            omap=self.from_gaussian(omap)
+            omap = self.from_gaussian(omap)
 
-        if axis==0:
+        if axis == 0:
             return omap[0]
         else:
             return omap
-            
-    def to_numpy(self,x):
+
+    def to_numpy(self, x):
         return self.backend.to_numpy(x)
