@@ -4921,18 +4921,24 @@ class funct(FOC.FoCUS):
                 nside = np.min([im_shape[0], im_shape[1]])
                 M,N = im_shape[0],im_shape[1]
                 N_image =  1
+                N_image2 = 1
             else:
                 nside = np.min([im_shape[1], im_shape[2]])
                 M,N = im_shape[1],im_shape[2]
                 N_image = data.shape[0]
+                if data2 is not None:
+                    N_image2 = data2.shape[0]
             J = int(np.log(nside) / np.log(2))-1  # Number of j scales
         elif self.use_1D:
             if len(data.shape) == 2:
                 npix = int(im_shape[1])  # Number of pixels
                 N_image =  1
+                N_image2 = 1
             else:
                 npix = int(im_shape[0])  # Number of pixels
                 N_image = data.shape[0]
+                if data2 is not None:
+                    N_image2 = data2.shape[0]
 
             nside = int(npix)
 
@@ -4941,9 +4947,12 @@ class funct(FOC.FoCUS):
             if len(data.shape) == 2:
                 npix = int(im_shape[1])  # Number of pixels
                 N_image =  1
+                N_image2 =  1
             else:
                 npix = int(im_shape[0])  # Number of pixels
                 N_image = data.shape[0]
+                if data2 is not None:
+                    N_image2 = data2.shape[0]
 
             nside = int(np.sqrt(npix // 12))
 
@@ -5172,21 +5181,21 @@ class funct(FOC.FoCUS):
                 if data2 is not None:
                     if not edge:
                         S3p[:,Ndata_S3,:,:] = (
-                            data2_f_small.view(N_image,1,1,M3,N3) * self.backend.bk_conjugate(I1_f2_wf3_small)
+                            data2_f_small.view(N_image2,1,1,M3,N3) * self.backend.bk_conjugate(I1_f2_wf3_small)
                         ).mean((-2,-1)) * fft_factor / norm_factor_S3
                     
                         if get_variance:
                             S3p_sigma[:,Ndata_S3,:,:] = (
-                                data2_f_small.view(N_image,1,1,M3,N3) * self.backend.bk_conjugate(I1_f2_wf3_small)
+                                data2_f_small.view(N_image2,1,1,M3,N3) * self.backend.bk_conjugate(I1_f2_wf3_small)
                             ).std((-2,-1)) * fft_factor / norm_factor_S3
                     else:
                     
                         S3p[:,Ndata_S3,:,:] = (
-                            data2_small.view(N_image,1,1,M3,N3) * self.backend.bk_conjugate(I12_w3_small)
+                            data2_small.view(N_image2,1,1,M3,N3) * self.backend.bk_conjugate(I12_w3_small)
                         )[...,edge_dx:M3-edge_dx, edge_dy:N3-edge_dy].mean((-2,-1)) * fft_factor / norm_factor_S3
                         if get_variance:
                             S3p_sigma[:,Ndata_S3,:,:] = (
-                                data2_small.view(N_image,1,1,M3,N3) * self.backend.bk_conjugate(I12_w3_small)
+                                data2_small.view(N_image2,1,1,M3,N3) * self.backend.bk_conjugate(I12_w3_small)
                                 )[...,edge_dx:M3-edge_dx, edge_dy:N3-edge_dy].std((-2,-1)) * fft_factor / norm_factor_S3
                                 
                 Ndata_S3+=1
