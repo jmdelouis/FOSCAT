@@ -173,14 +173,17 @@ class BkTensorflow(BackendBase.BackendBase):
         return self.bk_cast(self.backend.image.resize(x, shape, method="bilinear"))
 
     def bk_L1(self, x):
-        xr = self.bk_real(x)
-        xi = self.bk_imag(x)
+        if x.dtype == self.all_cbk_type:
+            xr = self.bk_real(x)
+            xi = self.bk_imag(x)
 
-        r = self.backend.sign(xr) * self.backend.sqrt(self.backend.sign(xr) * xr)
-        # return r
-        i = self.backend.sign(xi) * self.backend.sqrt(self.backend.sign(xi) * xi)
+            r = self.backend.sign(xr) * self.backend.sqrt(self.backend.sign(xr) * xr)
+            # return r
+            i = self.backend.sign(xi) * self.backend.sqrt(self.backend.sign(xi) * xi)
 
-        return self.bk_complex(r, i)
+            return self.bk_complex(r, i)
+        else:
+            return self.backend.sign(x) * self.backend.sqrt(self.backend.sign(x) * x)
 
     def bk_square_comp(self, x):
         xr = self.bk_real(x)
