@@ -5277,10 +5277,10 @@ class funct(FOC.FoCUS):
                                 
                         if normalization=='S2':
                             if use_ref: 
-                                P = (ref_S2[:,j3,:,None,None] * ref_S2[:,j2,None,:,None] )**(0.5*pseudo_coef)
+                                P = (ref_S2[:,j3:j3+1,:,None,None] * ref_S2[:,j2:j2+1,None,:,None] )**(0.5*pseudo_coef)
                             else: 
-                                P = (S2[:,j3,:,None,None] * S2[:,j2,None,:,None] )**(0.5*pseudo_coef)
-                                
+                                P = (S2[:,j3:j3+1,:,None,None] * S2[:,j2:j2+1,None,:,None] )**(0.5*pseudo_coef)
+                                                        
                             S4[:,beg_n:Ndata_S4,:,:,:]=S4_pre_norm[:,beg_n:Ndata_S4,:,:,:]/P
                                 
                             if get_variance:
@@ -5647,7 +5647,7 @@ class funct(FOC.FoCUS):
                         P11_temp = self.backend.bk_reduce_mean((I1_f2_wf3_small.abs()**2),axis=(-2,-1)) * fft_factor
                         norm_factor_S3 = (S2[:,None,j3,:] * P11_temp**pseudo_coef)**0.5
                     elif normalization=='S2':
-                        norm_factor_S3 = (S2[:,None,j3,:] * S2[:,j2,:,None]**pseudo_coef)**0.5
+                        norm_factor_S3 = (S2[:,None,j3,None,:] * S2[:,None,j2,:,None]**pseudo_coef)**0.5
                     else:
                         norm_factor_S3 = 1.0
                         
