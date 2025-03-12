@@ -1,3 +1,5 @@
+import numpy as np
+
 class BackendBase:
     
     def __init__(self, name, mpi_rank=0, all_type="float64", gpupos=0, silent=False):
