@@ -5126,7 +5126,7 @@ class funct(FOC.FoCUS):
                 S1  = self.backend.bk_reduce_mean((I1 * edge_mask),axis=(-2,-1))
 
                 if get_variance:
-                    S1_sigma  = self.backend.bk_reduce_std((I1 * edge_mask),axis=(-2,-1)
+                    S1_sigma  = self.backend.bk_reduce_std((I1 * edge_mask),axis=(-2,-1))
                 
             I1_f= self.backend.bk_fftn(I1, dim=(-2,-1))
                 
@@ -5874,14 +5874,14 @@ class funct(FOC.FoCUS):
                     for_synthesis = self.backend.backend.cat((
                         mean_data/ref_sigma['std_data'],
                         std_data/ref_sigma['std_data'],
-                        self.backend.bk_reshape(self.backend.bk_real(S2_iso/ref_sigma['S2_sigma']).reshape((N_image, -1)), 
-                        self.backend.bk_reshape(self.backend.bk_real(S1_iso/ref_sigma['S1_sigma']).reshape((N_image, -1)),
-                        self.backend.bk_reshape(self.backend.bk_real(S3_iso/ref_sigma['S3_sigma']).reshape((N_image, -1)), 
-                        self.backend.bk_reshape(self.backend.bk_imag(S3_iso/ref_sigma['S3_sigma']).reshape((N_image, -1)),
-                        self.backend.bk_reshape(self.backend.bk_real(S3p_iso/ref_sigma['S3p_sigma']).reshape((N_image, -1)), 
-                        self.backend.bk_reshape(self.backend.bk_imag(S3p_iso/ref_sigma['S3p_sigma']).reshape((N_image, -1)),
-                        self.backend.bk_reshape(self.backend.bk_real(S4_iso/ref_sigma['S4_sigma']).reshape((N_image, -1)), 
-                        self.backend.bk_reshape(self.backend.bk_imag(S4_iso/ref_sigma['S4_sigma']).reshape((N_image, -1)),
+                        self.backend.bk_reshape(self.backend.bk_real(S2_iso/ref_sigma['S2_sigma']),[N_image, -1]), 
+                        self.backend.bk_reshape(self.backend.bk_real(S1_iso/ref_sigma['S1_sigma']),[N_image, -1]),
+                        self.backend.bk_reshape(self.backend.bk_real(S3_iso/ref_sigma['S3_sigma']),[N_image, -1]), 
+                        self.backend.bk_reshape(self.backend.bk_imag(S3_iso/ref_sigma['S3_sigma']),[N_image, -1]),
+                        self.backend.bk_reshape(self.backend.bk_real(S3p_iso/ref_sigma['S3p_sigma']),[N_image, -1]), 
+                        self.backend.bk_reshape(self.backend.bk_imag(S3p_iso/ref_sigma['S3p_sigma']),[N_image, -1]),
+                        self.backend.bk_reshape(self.backend.bk_real(S4_iso/ref_sigma['S4_sigma']),[N_image, -1]), 
+                        self.backend.bk_reshape(self.backend.bk_imag(S4_iso/ref_sigma['S4_sigma']),[N_image, -1]),
                         ),axis=-1)
                 else:
                     for_synthesis = self.backend.backend.cat((
