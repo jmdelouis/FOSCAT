@@ -99,7 +99,249 @@ class BackendBase:
         return self.bk_reshape(
             self.backend.matmul(self.bk_reshape(x, oshape), lmat), oshape2
         )
-        
+    def calc_iso_orient(self, norient):
+        tmp = np.zeros([norient * norient, norient])
+        for i in range(norient):
+            for j in range(norient):
+                tmp[j * norient + (j + i) % norient, i] = 0.25
+
+        self._iso_orient[norient] = self.constant(self.bk_cast(tmp))
+        self._iso_orient_T[norient] = self.constant(self.bk_cast(4 * tmp.T))
+        self._iso_orient_C[norient] = self.bk_complex(
+            self._iso_orient[norient], 0 * self._iso_orient[norient]
+        )
+        self._iso_orient_C_T[norient] = self.bk_complex(
+            self._iso_orient_T[norient], 0 * self._iso_orient_T[norient]
+        )
+
+    def calc_fft_orient(self, norient, nharm, imaginary):
+
+        x = np.arange(norient) / norient * 2 * np.pi
+
+        if imaginary:
+            tmp = np.zeros([norient, 1 + nharm * 2])
+            tmp[:, 0] = 1.0
+            for k in range(nharm):
+                tmp[:, k * 2 + 1] = np.cos(x * (k + 1))
+                tmp[:, k * 2 + 2] = np.sin(x * (k + 1))
+
+            self._fft_1_orient[(norient, nharm, imaginary)] = self.bk_cast(
+                self.constant(tmp)
+            )
+            self._fft_1_orient_C[(norient, nharm, imaginary)] = self.bk_complex(
+                self._fft_1_orient[(norient, nharm, imaginary)],
+                0 * self._fft_1_orient[(norient, nharm, imaginary)],
+            )
+        else:
+            tmp = np.zeros([norient, 1 + nharm])
+            for k in range(nharm + 1):
+                tmp[:, k] = np.cos(x * k)
+
+            self._fft_1_orient[(norient, nharm, imaginary)] = self.bk_cast(
+                self.constant(tmp)
+            )
+            self._fft_1_orient_C[(norient, nharm, imaginary)] = self.bk_complex(
+                self._fft_1_orient[(norient, nharm, imaginary)],
+                0 * self._fft_1_orient[(norient, nharm, imaginary)],
+            )
+
+        x = np.repeat(x, norient).reshape(norient, norient)
+
+        if imaginary:
+            tmp = np.zeros([norient, norient, (1 + nharm * 2), (1 + nharm * 2)])
+            tmp[:, :, 0, 0] = 1.0
+            for k in range(nharm):
+                tmp[:, :, k * 2 + 1, 0] = np.cos(x * (k + 1))
+                tmp[:, :, k * 2 + 2, 0] = np.sin(x * (k + 1))
+                tmp[:, :, 0, k * 2 + 1] = np.cos((x.T) * (k + 1))
+                tmp[:, :, 0, k * 2 + 2] = np.sin((x.T) * (k + 1))
+                for l_orient in range(nharm):
+                    tmp[:, :, k * 2 + 1, l_orient * 2 + 1] = np.cos(
+                        x * (k + 1)
+                    ) * np.cos((x.T) * (l_orient + 1))
+                    tmp[:, :, k * 2 + 2, l_orient * 2 + 1] = np.sin(
+                        x * (k + 1)
+                    ) * np.cos((x.T) * (l_orient + 1))
+                    tmp[:, :, k * 2 + 1, l_orient * 2 + 2] = np.cos(
+                        x * (k + 1)
+                    ) * np.sin((x.T) * (l_orient + 1))
+                    tmp[:, :, k * 2 + 2, l_orient * 2 + 2] = np.sin(
+                        x * (k + 1)
+                    ) * np.sin((x.T) * (l_orient + 1))
+
+            self._fft_2_orient[(norient, nharm, imaginary)] = self.bk_cast(
+                self.constant(
+                    tmp.reshape(norient * norient, (1 + 2 * nharm) * (1 + 2 * nharm))
+                )
+            )
+            self._fft_2_orient_C[(norient, nharm, imaginary)] = self.bk_complex(
+                self._fft_2_orient[(norient, nharm, imaginary)],
+                0 * self._fft_2_orient[(norient, nharm, imaginary)],
+            )
+        else:
+            tmp = np.zeros([norient, norient, (1 + nharm), (1 + nharm)])
+
+            for k in range(nharm + 1):
+                for l_orient in range(nharm + 1):
+                    tmp[:, :, k, l_orient] = np.cos(x * k) * np.cos((x.T) * l_orient)
+
+            self._fft_2_orient[(norient, nharm, imaginary)] = self.bk_cast(
+                self.constant(tmp.reshape(norient * norient, (1 + nharm) * (1 + nharm)))
+            )
+            self._fft_2_orient_C[(norient, nharm, imaginary)] = self.bk_complex(
+                self._fft_2_orient[(norient, nharm, imaginary)],
+                0 * self._fft_2_orient[(norient, nharm, imaginary)],
+            )
+
+        x = np.arange(norient) / norient * 2 * np.pi
+        xx = np.zeros([norient, norient, norient])
+        yy = np.zeros([norient, norient, norient])
+        zz = np.zeros([norient, norient, norient])
+        for i in range(norient):
+            for j in range(norient):
+                xx[:, i, j] = x
+                yy[i, :, j] = x
+                zz[i, j, :] = x
+
+        if imaginary:
+            tmp = np.ones(
+                [
+                    norient,
+                    norient,
+                    norient,
+                    (1 + nharm * 2),
+                    (1 + nharm * 2),
+                    (1 + nharm * 2),
+                ]
+            )
+
+            for k in range(nharm):
+                tmp[:, :, :, k * 2 + 1, 0, 0] = np.cos(xx * (k + 1))
+                tmp[:, :, :, 0, k * 2 + 1, 0] = np.cos(yy * (k + 1))
+                tmp[:, :, :, 0, 0, k * 2 + 1] = np.cos(zz * (k + 1))
+
+                tmp[:, :, :, k * 2 + 2, 0, 0] = np.sin(xx * (k + 1))
+                tmp[:, :, :, 0, k * 2 + 2, 0] = np.sin(yy * (k + 1))
+                tmp[:, :, :, 0, 0, k * 2 + 2] = np.sin(zz * (k + 1))
+                for l_orient in range(nharm):
+                    tmp[:, :, :, k * 2 + 1, l_orient * 2 + 1, 0] = np.cos(
+                        xx * (k + 1)
+                    ) * np.cos(yy * (l_orient + 1))
+                    tmp[:, :, :, k * 2 + 1, l_orient * 2 + 2, 0] = np.cos(
+                        xx * (k + 1)
+                    ) * np.sin(yy * (l_orient + 1))
+                    tmp[:, :, :, k * 2 + 2, l_orient * 2 + 1, 0] = np.sin(
+                        xx * (k + 1)
+                    ) * np.cos(yy * (l_orient + 1))
+                    tmp[:, :, :, k * 2 + 2, l_orient * 2 + 2, 0] = np.sin(
+                        xx * (k + 1)
+                    ) * np.sin(yy * (l_orient + 1))
+
+                    tmp[:, :, :, k * 2 + 1, 0, l_orient * 2 + 1] = np.cos(
+                        xx * (k + 1)
+                    ) * np.cos(zz * (l_orient + 1))
+                    tmp[:, :, :, k * 2 + 1, 0, l_orient * 2 + 2] = np.cos(
+                        xx * (k + 1)
+                    ) * np.sin(zz * (l_orient + 1))
+                    tmp[:, :, :, k * 2 + 2, 0, l_orient * 2 + 1] = np.sin(
+                        xx * (k + 1)
+                    ) * np.cos(zz * (l_orient + 1))
+                    tmp[:, :, :, k * 2 + 2, 0, l_orient * 2 + 2] = np.sin(
+                        xx * (k + 1)
+                    ) * np.sin(zz * (l_orient + 1))
+
+                    tmp[:, :, :, 0, k * 2 + 1, l_orient * 2 + 1] = np.cos(
+                        yy * (k + 1)
+                    ) * np.cos(zz * (l_orient + 1))
+                    tmp[:, :, :, 0, k * 2 + 1, l_orient * 2 + 2] = np.cos(
+                        yy * (k + 1)
+                    ) * np.sin(zz * (l_orient + 1))
+                    tmp[:, :, :, 0, k * 2 + 2, l_orient * 2 + 1] = np.sin(
+                        yy * (k + 1)
+                    ) * np.cos(zz * (l_orient + 1))
+                    tmp[:, :, :, 0, k * 2 + 2, l_orient * 2 + 2] = np.sin(
+                        yy * (k + 1)
+                    ) * np.sin(zz * (l_orient + 1))
+
+                    for m in range(nharm):
+                        tmp[:, :, :, k * 2 + 1, l_orient * 2 + 1, m * 2 + 1] = (
+                            np.cos(xx * (k + 1))
+                            * np.cos(yy * (l_orient + 1))
+                            * np.cos(zz * (m + 1))
+                        )
+                        tmp[:, :, :, k * 2 + 1, l_orient * 2 + 1, m * 2 + 2] = (
+                            np.cos(xx * (k + 1))
+                            * np.cos(yy * (l_orient + 1))
+                            * np.sin(zz * (m + 1))
+                        )
+                        tmp[:, :, :, k * 2 + 1, l_orient * 2 + 2, m * 2 + 1] = (
+                            np.cos(xx * (k + 1))
+                            * np.sin(yy * (l_orient + 1))
+                            * np.cos(zz * (m + 1))
+                        )
+                        tmp[:, :, :, k * 2 + 1, l_orient * 2 + 2, m * 2 + 2] = (
+                            np.cos(xx * (k + 1))
+                            * np.sin(yy * (l_orient + 1))
+                            * np.sin(zz * (m + 1))
+                        )
+                        tmp[:, :, :, k * 2 + 2, l_orient * 2 + 1, m * 2 + 1] = (
+                            np.sin(xx * (k + 1))
+                            * np.cos(yy * (l_orient + 1))
+                            * np.cos(zz * (m + 1))
+                        )
+                        tmp[:, :, :, k * 2 + 2, l_orient * 2 + 1, m * 2 + 2] = (
+                            np.sin(xx * (k + 1))
+                            * np.cos(yy * (l_orient + 1))
+                            * np.sin(zz * (m + 1))
+                        )
+                        tmp[:, :, :, k * 2 + 2, l_orient * 2 + 2, m * 2 + 1] = (
+                            np.sin(xx * (k + 1))
+                            * np.sin(yy * (l_orient + 1))
+                            * np.cos(zz * (m + 1))
+                        )
+                        tmp[:, :, :, k * 2 + 2, l_orient * 2 + 2, m * 2 + 2] = (
+                            np.sin(xx * (k + 1))
+                            * np.sin(yy * (l_orient + 1))
+                            * np.sin(zz * (m + 1))
+                        )
+
+            self._fft_3_orient[(norient, nharm, imaginary)] = self.bk_cast(
+                self.constant(
+                    tmp.reshape(
+                        norient * norient * norient,
+                        (1 + nharm * 2) * (1 + nharm * 2) * (1 + nharm * 2),
+                    )
+                )
+            )
+            self._fft_3_orient_C[(norient, nharm, imaginary)] = self.bk_complex(
+                self._fft_3_orient[(norient, nharm, imaginary)],
+                0 * self._fft_3_orient[(norient, nharm, imaginary)],
+            )
+        else:
+            tmp = np.zeros(
+                [norient, norient, norient, (1 + nharm), (1 + nharm), (1 + nharm)]
+            )
+
+            for k in range(nharm + 1):
+                for l_orient in range(nharm + 1):
+                    for m in range(nharm + 1):
+                        tmp[:, :, :, k, l_orient, m] = (
+                            np.cos(xx * k) * np.cos(yy * l_orient) * np.cos(zz * m)
+                        )
+
+            self._fft_3_orient[(norient, nharm, imaginary)] = self.bk_cast(
+                self.constant(
+                    tmp.reshape(
+                        norient * norient * norient,
+                        (1 + nharm) * (1 + nharm) * (1 + nharm),
+                    )
+                )
+            )
+            self._fft_3_orient_C[(norient, nharm, imaginary)] = self.bk_complex(
+                self._fft_3_orient[(norient, nharm, imaginary)],
+                0 * self._fft_3_orient[(norient, nharm, imaginary)],
+            )
+            
     # ---------------------------------------------−---------
     # --             BACKEND DEFINITION                    --
     # ---------------------------------------------−---------
