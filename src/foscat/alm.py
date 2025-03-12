@@ -129,9 +129,9 @@ class alm:
                             - 0.5 * self.log(l + m)
                         )
 
-                self.A[nside, m] = self.backend.constant((aval))
-                self.B[nside, m] = self.backend.constant((bval))
-                self.ratio_mm[nside, m] = self.backend.constant(
+                self.A[nside, m] = self.backend.bk_constant((aval))
+                self.B[nside, m] = self.backend.bk_constant((bval))
+                self.ratio_mm[nside, m] = self.backend.bk_constant(
                     np.sqrt(4 * np.pi) * np.expand_dims(np.exp(val), 1)
                 )
             # Calcul de P_{mm}(x)
@@ -141,7 +141,7 @@ class alm:
                 P_mm[m] = 1.0
             for m in range(3 * nside - 1):
                 P_mm[m] = (0.5 - m % 2) * 2 * (1 - x**2) ** (m / 2)
-            self.P_mm[nside] = self.backend.constant(P_mm)
+            self.P_mm[nside] = self.backend.bk_constant(P_mm)
 
     def init_Ys(self, s, nside):
 
