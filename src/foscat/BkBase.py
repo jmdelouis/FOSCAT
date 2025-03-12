@@ -107,8 +107,8 @@ class BackendBase:
             for j in range(norient):
                 tmp[j * norient + (j + i) % norient, i] = 0.25
 
-        self._iso_orient[norient] = self.constant(self.bk_cast(tmp))
-        self._iso_orient_T[norient] = self.constant(self.bk_cast(4 * tmp.T))
+        self._iso_orient[norient] = self.bk_constant(self.bk_cast(tmp))
+        self._iso_orient_T[norient] = self.bk_constant(self.bk_cast(4 * tmp.T))
         self._iso_orient_C[norient] = self.bk_complex(
             self._iso_orient[norient], 0 * self._iso_orient[norient]
         )
@@ -128,7 +128,7 @@ class BackendBase:
                 tmp[:, k * 2 + 2] = np.sin(x * (k + 1))
 
             self._fft_1_orient[(norient, nharm, imaginary)] = self.bk_cast(
-                self.constant(tmp)
+                self.bk_constant(tmp)
             )
             self._fft_1_orient_C[(norient, nharm, imaginary)] = self.bk_complex(
                 self._fft_1_orient[(norient, nharm, imaginary)],
@@ -140,7 +140,7 @@ class BackendBase:
                 tmp[:, k] = np.cos(x * k)
 
             self._fft_1_orient[(norient, nharm, imaginary)] = self.bk_cast(
-                self.constant(tmp)
+                self.bk_constant(tmp)
             )
             self._fft_1_orient_C[(norient, nharm, imaginary)] = self.bk_complex(
                 self._fft_1_orient[(norient, nharm, imaginary)],
@@ -172,7 +172,7 @@ class BackendBase:
                     ) * np.sin((x.T) * (l_orient + 1))
 
             self._fft_2_orient[(norient, nharm, imaginary)] = self.bk_cast(
-                self.constant(
+                self.bk_constant(
                     tmp.reshape(norient * norient, (1 + 2 * nharm) * (1 + 2 * nharm))
                 )
             )
@@ -188,7 +188,7 @@ class BackendBase:
                     tmp[:, :, k, l_orient] = np.cos(x * k) * np.cos((x.T) * l_orient)
 
             self._fft_2_orient[(norient, nharm, imaginary)] = self.bk_cast(
-                self.constant(tmp.reshape(norient * norient, (1 + nharm) * (1 + nharm)))
+                self.bk_constant(tmp.reshape(norient * norient, (1 + nharm) * (1 + nharm)))
             )
             self._fft_2_orient_C[(norient, nharm, imaginary)] = self.bk_complex(
                 self._fft_2_orient[(norient, nharm, imaginary)],
@@ -308,7 +308,7 @@ class BackendBase:
                         )
 
             self._fft_3_orient[(norient, nharm, imaginary)] = self.bk_cast(
-                self.constant(
+                self.bk_constant(
                     tmp.reshape(
                         norient * norient * norient,
                         (1 + nharm * 2) * (1 + nharm * 2) * (1 + nharm * 2),
@@ -332,7 +332,7 @@ class BackendBase:
                         )
 
             self._fft_3_orient[(norient, nharm, imaginary)] = self.bk_cast(
-                self.constant(
+                self.bk_constant(
                     tmp.reshape(
                         norient * norient * norient,
                         (1 + nharm) * (1 + nharm) * (1 + nharm),
