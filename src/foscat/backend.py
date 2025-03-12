@@ -927,6 +927,7 @@ class foscat_backend:
         if self.BACKEND == self.TORCH:
             if isinstance(data, np.ndarray):
                 return data.reshape(shape)
+            return data.view(shape)
 
         return self.backend.reshape(data, shape)
 
@@ -1027,7 +1028,9 @@ class foscat_backend:
             
     def bk_fftn(self, data,dim=None):
         if self.BACKEND == self.TENSORFLOW:
-            return self.backend.signal.fftn(data)
+            #Equivalent of torch.fft.fftn(x, dim=dims) in TensorFlow
+            x=self.bk_complex(data,0*data)
+            return self.backend.signal.fftnd(x, fft_length=tuple(x.shape[d] for d in dim),axes=dim)
         if self.BACKEND == self.TORCH:
             return self.backend.fft.fftn(data,dim=dim)
         if self.BACKEND == self.NUMPY:
@@ -1035,7 +1038,7 @@ class foscat_backend:
 
     def bk_ifftn(self, data,dim=None,norm=None):
         if self.BACKEND == self.TENSORFLOW:
-            return self.backend.signal.ifftn(data)
+            return self.backend.signal.ifftnd(data,fft_length=tuple(data.shape[d] for d in dim),axes=dim,norm=norm)
         if self.BACKEND == self.TORCH:
             return self.backend.fft.ifftn(data,dim=dim,norm=norm)
         if self.BACKEND == self.NUMPY:

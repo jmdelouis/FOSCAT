@@ -4791,17 +4791,37 @@ class funct(FOC.FoCUS):
         This function is strongly inspire by the package https://github.com/SihaoCheng/scattering_transform
         Done by Sihao Cheng and Rudy Morel.
         '''
-        if_xodd = (data_f.shape[-2]%2==1)
-        if_yodd = (data_f.shape[-1]%2==1)
-        result = self.backend.backend.cat(
-            (self.backend.backend.cat(
-                ( data_f[...,:dx+if_xodd, :dy+if_yodd] , data_f[...,-dx:, :dy+if_yodd]
-                ), -2),
-              self.backend.backend.cat(
-                ( data_f[...,:dx+if_xodd, -dy:] , data_f[...,-dx:, -dy:]
-                ), -2)
-            ),-1)
-        return result
+        
+        if self.backend.BACKEND=='torch':
+            if_xodd = (data_f.shape[-2]%2==1)
+            if_yodd = (data_f.shape[-1]%2==1)
+            result = self.backend.backend.cat(
+                (self.backend.backend.cat(
+                    ( data_f[...,:dx+if_xodd, :dy+if_yodd] , data_f[...,-dx:, :dy+if_yodd]
+                    ), -2),
+                self.backend.backend.cat(
+                    ( data_f[...,:dx+if_xodd, -dy:] , data_f[...,-dx:, -dy:]
+                    ), -2)
+                ),-1)
+            return result
+        else:
+            # Check if the last two dimensions are odd
+            if_xodd = self.backend.backend.cast(self.backend.backend.shape(data_f)[-2] % 2 == 1, self.backend.backend.int32)
+            if_yodd = self.backend.backend.cast(self.backend.backend.shape(data_f)[-1] % 2 == 1, self.backend.backend.int32)
+
+            # Extract four regions
+            top_left = data_f[..., :dx+if_xodd, :dy+if_yodd]
+            top_right = data_f[..., -dx:, :dy+if_yodd]
+            bottom_left = data_f[..., :dx+if_xodd, -dy:]
+            bottom_right = data_f[..., -dx:, -dy:]
+
+            # Concatenate along the last two dimensions
+            top = self.backend.backend.concat([top_left, top_right], axis=-2)
+            bottom = self.backend.backend.concat([bottom_left, bottom_right], axis=-2)
+            result = self.backend.backend.concat([top, bottom], axis=-1)
+
+            return result
+
     # ---------------------------------------------------------------------------
     #
     # utility functions for computing scattering coef and covariance
@@ -4966,72 +4986,52 @@ class funct(FOC.FoCUS):
             print('\n\n==========')
         
         L=self.NORIENT
+        norm_factor_S3=1.0
         
-        if (M,N,J,L) not in self.filters_set:
-            self.filters_set[(M,N,J,L)] = self.computer_filter(M,N,J,L) #self.computer_filter(M,N,J,L)
-            
-        filters_set = self.filters_set[(M,N,J,L)]
-        
-        #weight = self.weight
-        if use_ref:
-            if normalization=='S2': 
-                ref_S2 = self.ref_scattering_cov_S2
-            else: 
-                ref_P11 = self.ref_scattering_cov['P11']
-
-        # convert numpy array input into self.backend.bk_ tensors
-        data = self.backend.bk_cast(data)
-        data_f = self.backend.bk_fftn(data, dim=(-2,-1))
-        if data2 is not None:
-            data2 = self.backend.bk_cast(data2)
-            data2_f = self.backend.bk_fftn(data2, dim=(-2,-1))
-        
-        # initialize tensors for scattering coefficients
-        S2 = self.backend.bk_zeros((N_image,J,L), dtype=data.dtype)
-        S1 = self.backend.bk_zeros((N_image,J,L), dtype=data.dtype)
-        
-        Ndata_S3 = J*(J+1)//2
-        Ndata_S4 = J*(J+1)*(J+2)//6
-        J_S4={}
-        
-        S3 = self.backend.bk_zeros((N_image,Ndata_S3,L,L), dtype=data_f.dtype) 
-        if data2 is not None:
-            S3p = self.backend.bk_zeros((N_image,Ndata_S3,L,L), dtype=data_f.dtype)
-        S4_pre_norm = self.backend.bk_zeros((N_image,Ndata_S4,L,L,L), dtype=data_f.dtype) 
-        S4 = self.backend.bk_zeros((N_image,Ndata_S4,L,L,L), dtype=data_f.dtype) 
-        
-        # variance
-        if get_variance:
-            S2_sigma = self.backend.bk_zeros((N_image,J,L), dtype=data.dtype)
-            S1_sigma = self.backend.bk_zeros((N_image,J,L), dtype=data.dtype)
-            S3_sigma = self.backend.bk_zeros((N_image,Ndata_S3,L,L), dtype=data_f.dtype) 
-            if data2 is not None:
-                S3p_sigma = self.backend.bk_zeros((N_image,Ndata_S3,L,L), dtype=data_f.dtype)
-            S4_sigma = self.backend.bk_zeros((N_image,Ndata_S4,L,L,L), dtype=data_f.dtype) 
-            
-        if iso_ang:
-            S3_iso = self.backend.bk_zeros((N_image,Ndata_S3,L), dtype=data_f.dtype) 
-            if data2 is not None:
-                S3p_iso = self.backend.bk_zeros((N_image,Ndata_S3,L,L), dtype=data_f.dtype)
+        if self.backend.BACKEND=='torch':
+            if (M,N,J,L) not in self.filters_set:
+                self.filters_set[(M,N,J,L)] = self.computer_filter(M,N,J,L) #self.computer_filter(M,N,J,L)
                 
-            S4_iso = self.backend.bk_zeros((N_image,Ndata_S4,L,L), dtype=data_f.dtype) 
+            filters_set = self.filters_set[(M,N,J,L)]
+            
+            #weight = self.weight
+            if use_ref:
+                if normalization=='S2': 
+                    ref_S2 = self.ref_scattering_cov_S2
+                else: 
+                    ref_P11 = self.ref_scattering_cov['P11']
+
+            # convert numpy array input into self.backend.bk_ tensors
+            data = self.backend.bk_cast(data)
+            data_f = self.backend.bk_fftn(data, dim=(-2,-1))
+            
+            # initialize tensors for scattering coefficients
+            S2 = self.backend.bk_zeros((N_image,J,L), dtype=data.dtype)
+            S1 = self.backend.bk_zeros((N_image,J,L), dtype=data.dtype)
+            
+            Ndata_S3 = J*(J+1)//2
+            Ndata_S4 = J*(J+1)*(J+2)//6
+            J_S4={}
+            
+            S3 = self.backend.bk_zeros((N_image,Ndata_S3,L,L), dtype=data_f.dtype) 
+            S4_pre_norm = self.backend.bk_zeros((N_image,Ndata_S4,L,L,L), dtype=data_f.dtype) 
+            S4 = self.backend.bk_zeros((N_image,Ndata_S4,L,L,L), dtype=data_f.dtype) 
+            
+            # variance
             if get_variance:
-                S3_sigma_iso = self.backend.bk_zeros((N_image,Ndata_S3,L), dtype=data_f.dtype) 
-                if data2 is not None:
-                    S3p_sigma_iso = self.backend.bk_zeros((N_image,Ndata_S3,L), dtype=data_f.dtype) 
-                S4_sigma_iso = self.backend.bk_zeros((N_image,Ndata_S4,L,L), dtype=data_f.dtype) 
-            
-        #
-        if edge: 
-            if (M,N,J) not in self.edge_masks:
-                self.edge_masks[(M,N,J)] = self.get_edge_masks(M,N,J)
-            edge_mask = self.edge_masks[(M,N,J)][:,None,:,:]
-            edge_mask = edge_mask / edge_mask.mean((-2,-1))[:,:,None,None]
-        else: 
-            edge_mask = 1
-            
-        # calculate scattering fields
-        if data2 is None:
+                S2_sigma = self.backend.bk_zeros((N_image,J,L), dtype=data.dtype)
+                S1_sigma = self.backend.bk_zeros((N_image,J,L), dtype=data.dtype)
+                S3_sigma = self.backend.bk_zeros((N_image,Ndata_S3,L,L), dtype=data_f.dtype) 
+                S4_sigma = self.backend.bk_zeros((N_image,Ndata_S4,L,L,L), dtype=data_f.dtype) 
+                
+            if iso_ang:
+                S3_iso = self.backend.bk_zeros((N_image,Ndata_S3,L), dtype=data_f.dtype) 
+                S4_iso = self.backend.bk_zeros((N_image,Ndata_S4,L,L), dtype=data_f.dtype) 
+                if get_variance:
+                    S3_sigma_iso = self.backend.bk_zeros((N_image,Ndata_S3,L), dtype=data_f.dtype) 
+                    S4_sigma_iso = self.backend.bk_zeros((N_image,Ndata_S4,L,L), dtype=data_f.dtype) 
+                
+            # calculate scattering fields
             if self.use_2D:
                 if len(data.shape) == 2:
                     I1 = self.backend.bk_ifftn(
@@ -5052,7 +5052,17 @@ class funct(FOC.FoCUS):
                     ).abs()
             else:
                 print('todo')
+        
+            I1_f= self.backend.bk_fftn(I1, dim=(-2,-1))
             
+            #
+            if edge: 
+                if (M,N,J) not in self.edge_masks:
+                    self.edge_masks[(M,N,J)] = self.get_edge_masks(M,N,J)
+                edge_mask = self.edge_masks[(M,N,J)][:,None,:,:]
+                edge_mask = edge_mask / edge_mask.mean((-2,-1))[:,:,None,None]
+            else: 
+                edge_mask = 1
             S2 = (I1**2 * edge_mask).mean((-2,-1))
             S1  = (I1 * edge_mask).mean((-2,-1))
 
@@ -5060,299 +5070,181 @@ class funct(FOC.FoCUS):
                 S2_sigma = (I1**2 * edge_mask).std((-2,-1))
                 S1_sigma  = (I1 * edge_mask).std((-2,-1))
                 
-            I1_f= self.backend.bk_fftn(I1, dim=(-2,-1))
+            if pseudo_coef != 1:
+                I1 = I1**pseudo_coef
             
-        else: 
-            if self.use_2D:
-                if len(data.shape) == 2:
-                    I1 = self.backend.bk_ifftn(
-                        data_f[None,None,None,:,:] * filters_set[None,:J,:,:,:], dim=(-2,-1)
-                    )
-                    I2 = self.backend.bk_ifftn(
-                        data2_f[None,None,None,:,:] * filters_set[None,:J,:,:,:], dim=(-2,-1)
-                    )
-                else:
-                    I1 = self.backend.bk_ifftn(
-                        data_f[:,None,None,:,:] * filters_set[None,:J,:,:,:], dim=(-2,-1)
-                    )
-                    I2 = self.backend.bk_ifftn(
-                        data2_f[:,None,None,:,:] * filters_set[None,:J,:,:,:], dim=(-2,-1)
-                    )
-            elif self.use_1D:
-                if len(data.shape) == 1:
-                    I1 = self.backend.bk_ifftn(
-                        data_f[None,None,None,:] * filters_set[None,:J,:,:], dim=(-1)
-                    )
-                    I2 = self.backend.bk_ifftn(
-                        data2_f[None,None,None,:] * filters_set[None,:J,:,:], dim=(-1)
-                    )
-                else:
-                    I1 = self.backend.bk_ifftn(
-                        data_f[:,None,None,:] * filters_set[None,:J,:,:], dim=(-1)
-                    )
-                    I2 = self.backend.bk_ifftn(
-                        data2_f[:,None,None,:] * filters_set[None,:J,:,:], dim=(-1)
-                    )
-            else:
-                print('todo')
+            Ndata_S3=0
+            Ndata_S4=0
             
-            I1=self.backend.bk_real(I1*self.backend.bk_conjugate(I2))
-            
-            S2 = (I1 * edge_mask).mean((-2,-1))
-            if get_variance:
-                S2_sigma = (I1 * edge_mask).std((-2,-1))
-            
-            I1=self.backend.bk_L1(I1)
-            
-            S1  = (I1 * edge_mask).mean((-2,-1))
-
-            if get_variance:
-                S1_sigma  = (I1 * edge_mask).std((-2,-1))
+            # calculate the covariance and correlations of the scattering fields
+            # only use the low-k Fourier coefs when calculating large-j scattering coefs.
+            for j3 in range(0,J):
+                J_S4[j3]=Ndata_S4
                 
-            I1_f= self.backend.bk_fftn(I1, dim=(-2,-1))
-            
-        if pseudo_coef != 1:
-            I1 = I1**pseudo_coef
-        
-        Ndata_S3=0
-        Ndata_S4=0
-        
-        # calculate the covariance and correlations of the scattering fields
-        # only use the low-k Fourier coefs when calculating large-j scattering coefs.
-        for j3 in range(0,J):
-            J_S4[j3]=Ndata_S4
-            
-            dx3, dy3 = self.get_dxdy(j3,M,N)
-            I1_f_small = self.cut_high_k_off(I1_f[:,:j3+1], dx3, dy3) # Nimage, J, L, x, y
-            data_f_small = self.cut_high_k_off(data_f, dx3, dy3)
-            if data2 is not None:
-                data2_f_small = self.cut_high_k_off(data2_f, dx3, dy3)
-            if edge:
-                I1_small = self.backend.bk_ifftn(I1_f_small, dim=(-2,-1), norm='ortho')
-                data_small = self.backend.bk_ifftn(data_f_small, dim=(-2,-1), norm='ortho')
-                if data2 is not None:
-                    data2_small = self.backend.bk_ifftn(data2_f_small, dim=(-2,-1), norm='ortho')
-            wavelet_f3 = self.cut_high_k_off(filters_set[j3], dx3, dy3) # L,x,y
-            _, M3, N3 = wavelet_f3.shape
-            wavelet_f3_squared = wavelet_f3**2
-            edge_dx = min(4, int(2**j3*dx3*2/M))
-            edge_dy = min(4, int(2**j3*dy3*2/N))
-            # a normalization change due to the cutoff of frequency space
-            fft_factor = 1 /(M3*N3) * (M3*N3/M/N)**2
-            for j2 in range(0,j3+1):
-                I1_f2_wf3_small = I1_f_small[:,j2].view(N_image,L,1,M3,N3) * wavelet_f3.view(1,1,L,M3,N3)
-                I1_f2_wf3_2_small = I1_f_small[:,j2].view(N_image,L,1,M3,N3) * wavelet_f3_squared.view(1,1,L,M3,N3)
+                dx3, dy3 = self.get_dxdy(j3,M,N)
+                I1_f_small = self.cut_high_k_off(I1_f[:,:j3+1], dx3, dy3) # Nimage, J, L, x, y
+                data_f_small = self.cut_high_k_off(data_f, dx3, dy3)
                 if edge:
-                    I12_w3_small = self.backend.bk_ifftn(I1_f2_wf3_small, dim=(-2,-1), norm='ortho')
-                    I12_w3_2_small = self.backend.bk_ifftn(I1_f2_wf3_2_small, dim=(-2,-1), norm='ortho')
-                if use_ref:
-                    if normalization=='P11':
-                        norm_factor_S3 = (ref_S2[:,None,j3,:] * ref_P11[:,j2,j3,:,:]**pseudo_coef)**0.5
-                    elif normalization=='S2':
-                        norm_factor_S3 = (ref_S2[:,None,j3,:] * ref_S2[:,j2,:,None]**pseudo_coef)**0.5
-                    norm_factor_S3 = 1.0
-                else:
-                    if normalization=='P11':
-                        # [N_image,l2,l3,x,y]
-                        P11_temp = (I1_f2_wf3_small.abs()**2).mean((-2,-1)) * fft_factor
-                        norm_factor_S3 = (S2[:,None,j3,:] * P11_temp**pseudo_coef)**0.5
-                    elif normalization=='S2':
-                        norm_factor_S3 = (S2[:,None,j3,:] * S2[:,j2,:,None]**pseudo_coef)**0.5
-                    norm_factor_S3 = 1.0
+                    I1_small = self.backend.bk_ifftn(I1_f_small, dim=(-2,-1), norm='ortho')
+                    data_small = self.backend.bk_ifftn(data_f_small, dim=(-2,-1), norm='ortho')
+                wavelet_f3 = self.cut_high_k_off(filters_set[j3], dx3, dy3) # L,x,y
+                _, M3, N3 = wavelet_f3.shape
+                wavelet_f3_squared = wavelet_f3**2
+                edge_dx = min(4, int(2**j3*dx3*2/M))
+                edge_dy = min(4, int(2**j3*dy3*2/N))
+                # a normalization change due to the cutoff of frequency space
+                fft_factor = 1 /(M3*N3) * (M3*N3/M/N)**2
+                for j2 in range(0,j3+1):
+                    I1_f2_wf3_small = I1_f_small[:,j2].view(N_image,L,1,M3,N3) * wavelet_f3.view(1,1,L,M3,N3)
+                    I1_f2_wf3_2_small = I1_f_small[:,j2].view(N_image,L,1,M3,N3) * wavelet_f3_squared.view(1,1,L,M3,N3)
+                    if edge:
+                        I12_w3_small = self.backend.bk_ifftn(I1_f2_wf3_small, dim=(-2,-1), norm='ortho')
+                        I12_w3_2_small = self.backend.bk_ifftn(I1_f2_wf3_2_small, dim=(-2,-1), norm='ortho')
+                    if use_ref:
+                        if normalization=='P11':
+                            norm_factor_S3 = (ref_S2[:,None,j3,:] * ref_P11[:,j2,j3,:,:]**pseudo_coef)**0.5
+                        if normalization=='S2':
+                            norm_factor_S3 = (ref_S2[:,None,j3,:] * ref_S2[:,j2,:,None]**pseudo_coef)**0.5
+                    else:
+                        if normalization=='P11':
+                            # [N_image,l2,l3,x,y]
+                            P11_temp = (I1_f2_wf3_small.abs()**2).mean((-2,-1)) * fft_factor
+                            norm_factor_S3 = (S2[:,None,j3,:] * P11_temp**pseudo_coef)**0.5
+                        if normalization=='S2':
+                            norm_factor_S3 = (S2[:,None,j3,:] * S2[:,j2,:,None]**pseudo_coef)**0.5
 
-                if not edge:
-                    S3[:,Ndata_S3,:,:] = (
-                        data_f_small.view(N_image,1,1,M3,N3) * self.backend.bk_conjugate(I1_f2_wf3_small)
-                    ).mean((-2,-1)) * fft_factor / norm_factor_S3
-                    
-                    if get_variance:
-                        S3_sigma[:,Ndata_S3,:,:] = (
-                            data_f_small.view(N_image,1,1,M3,N3) * self.backend.bk_conjugate(I1_f2_wf3_small)
-                        ).std((-2,-1)) * fft_factor / norm_factor_S3
-                else:
-                    
-                    S3[:,Ndata_S3,:,:] = (
-                        data_small.view(N_image,1,1,M3,N3) * self.backend.bk_conjugate(I12_w3_small)
-                    )[...,edge_dx:M3-edge_dx, edge_dy:N3-edge_dy].mean((-2,-1)) * fft_factor / norm_factor_S3
-                    if get_variance:
-                        S3_sigma[:,Ndata_S3,:,:] = (
-                            data_small.view(N_image,1,1,M3,N3) * self.backend.bk_conjugate(I12_w3_small)
-                            )[...,edge_dx:M3-edge_dx, edge_dy:N3-edge_dy].std((-2,-1)) * fft_factor / norm_factor_S3
-                if data2 is not None:
                     if not edge:
-                        S3p[:,Ndata_S3,:,:] = (
-                            data2_f_small.view(N_image2,1,1,M3,N3) * self.backend.bk_conjugate(I1_f2_wf3_small)
+                        S3[:,Ndata_S3,:,:] = (
+                            data_f_small.view(N_image,1,1,M3,N3) * self.backend.bk_conjugate(I1_f2_wf3_small)
                         ).mean((-2,-1)) * fft_factor / norm_factor_S3
-                    
+                        
                         if get_variance:
-                            S3p_sigma[:,Ndata_S3,:,:] = (
-                                data2_f_small.view(N_image2,1,1,M3,N3) * self.backend.bk_conjugate(I1_f2_wf3_small)
+                            S3_sigma[:,Ndata_S3,:,:] = (
+                                data_f_small.view(N_image,1,1,M3,N3) * self.backend.bk_conjugate(I1_f2_wf3_small)
                             ).std((-2,-1)) * fft_factor / norm_factor_S3
                     else:
-                    
-                        S3p[:,Ndata_S3,:,:] = (
-                            data2_small.view(N_image2,1,1,M3,N3) * self.backend.bk_conjugate(I12_w3_small)
+                        
+                        S3[:,Ndata_S3,:,:] = (
+                            data_small.view(N_image,1,1,M3,N3) * self.backend.bk_conjugate(I12_w3_small)
                         )[...,edge_dx:M3-edge_dx, edge_dy:N3-edge_dy].mean((-2,-1)) * fft_factor / norm_factor_S3
                         if get_variance:
-                            S3p_sigma[:,Ndata_S3,:,:] = (
-                                data2_small.view(N_image2,1,1,M3,N3) * self.backend.bk_conjugate(I12_w3_small)
+                            S3_sigma[:,Ndata_S3,:,:] = (
+                                data_small.view(N_image,1,1,M3,N3) * self.backend.bk_conjugate(I12_w3_small)
                                 )[...,edge_dx:M3-edge_dx, edge_dy:N3-edge_dy].std((-2,-1)) * fft_factor / norm_factor_S3
-                                
-                Ndata_S3+=1
-                if j2 <= j3:
-                    beg_n=Ndata_S4
-                    for j1 in range(0, j2+1):
-                        if eval(S4_criteria):
-                            if not edge:
-                                if not if_large_batch:
-                                    # [N_image,l1,l2,l3,x,y]
-                                    S4_pre_norm[:,Ndata_S4,:,:,:] = (
-                                        I1_f_small[:,j1].view(N_image,L,1,1,M3,N3) * 
-                                        self.backend.bk_conjugate(I1_f2_wf3_2_small.view(N_image,1,L,L,M3,N3))
-                                    ).mean((-2,-1)) * fft_factor
-                                    if get_variance:
-                                        S4_sigma[:,Ndata_S4,:,:,:] = (
+                    Ndata_S3+=1
+                    if j2 <= j3:
+                        beg_n=Ndata_S4
+                        for j1 in range(0, j2+1):
+                            if eval(S4_criteria):
+                                if not edge:
+                                    if not if_large_batch:
+                                        # [N_image,l1,l2,l3,x,y]
+                                        S4_pre_norm[:,Ndata_S4,:,:,:] = (
                                             I1_f_small[:,j1].view(N_image,L,1,1,M3,N3) * 
                                             self.backend.bk_conjugate(I1_f2_wf3_2_small.view(N_image,1,L,L,M3,N3))
-                                        ).std((-2,-1)) * fft_factor
-                                else:
-                                    for l1 in range(L):
-                                        # [N_image,l2,l3,x,y]
-                                        S4_pre_norm[:,Ndata_S4,l1,:,:] = (
-                                            I1_f_small[:,j1,l1].view(N_image,1,1,M3,N3) * 
-                                            self.backend.bk_conjugate(I1_f2_wf3_2_small.view(N_image,L,L,M3,N3))
                                         ).mean((-2,-1)) * fft_factor
                                         if get_variance:
-                                            S4_sigma[:,Ndata_S4,l1,:,:] = (
+                                            S4_sigma[:,Ndata_S4,:,:,:] = (
+                                                I1_f_small[:,j1].view(N_image,L,1,1,M3,N3) * 
+                                                self.backend.bk_conjugate(I1_f2_wf3_2_small.view(N_image,1,L,L,M3,N3))
+                                            ).std((-2,-1)) * fft_factor
+                                    else:
+                                        for l1 in range(L):
+                                            # [N_image,l2,l3,x,y]
+                                            S4_pre_norm[:,Ndata_S4,l1,:,:] = (
                                                 I1_f_small[:,j1,l1].view(N_image,1,1,M3,N3) * 
                                                 self.backend.bk_conjugate(I1_f2_wf3_2_small.view(N_image,L,L,M3,N3))
-                                            ).std((-2,-1)) * fft_factor
-                            else:
-                                if not if_large_batch:
-                                    # [N_image,l1,l2,l3,x,y]
-                                    S4_pre_norm[:,Ndata_S4,:,:,:] = (
-                                        I1_small[:,j1].view(N_image,L,1,1,M3,N3) * self.backend.bk_conjugate(
-                                            I12_w3_2_small.view(N_image,1,L,L,M3,N3)
-                                        )
-                                    )[...,edge_dx:-edge_dx, edge_dy:-edge_dy].mean((-2,-1)) * fft_factor
-                                    if get_variance:
-                                        S4_sigma[:,Ndata_S4,:,:,:] = (
+                                            ).mean((-2,-1)) * fft_factor
+                                            if get_variance:
+                                                S4_sigma[:,Ndata_S4,l1,:,:] = (
+                                                    I1_f_small[:,j1,l1].view(N_image,1,1,M3,N3) * 
+                                                    self.backend.bk_conjugate(I1_f2_wf3_2_small.view(N_image,L,L,M3,N3))
+                                                ).std((-2,-1)) * fft_factor
+                                else:
+                                    if not if_large_batch:
+                                        # [N_image,l1,l2,l3,x,y]
+                                        S4_pre_norm[:,Ndata_S4,:,:,:] = (
                                             I1_small[:,j1].view(N_image,L,1,1,M3,N3) * self.backend.bk_conjugate(
                                                 I12_w3_2_small.view(N_image,1,L,L,M3,N3)
                                             )
-                                        )[...,edge_dx:-edge_dx, edge_dy:-edge_dy].std((-2,-1)) * fft_factor
-                                else:
-                                    for l1 in range(L):
-                                    # [N_image,l2,l3,x,y]
-                                        S4_pre_norm[:,Ndata_S4,l1,:,:] = (
-                                            I1_small[:,j1].view(N_image,1,1,M3,N3) * self.backend.bk_conjugate(
-                                                I12_w3_2_small.view(N_image,L,L,M3,N3)
-                                            )
                                         )[...,edge_dx:-edge_dx, edge_dy:-edge_dy].mean((-2,-1)) * fft_factor
                                         if get_variance:
-                                            S4_sigma[:,Ndata_S4,l1,:,:] = (
+                                            S4_sigma[:,Ndata_S4,:,:,:] = (
+                                                I1_small[:,j1].view(N_image,L,1,1,M3,N3) * self.backend.bk_conjugate(
+                                                    I12_w3_2_small.view(N_image,1,L,L,M3,N3)
+                                                )
+                                            )[...,edge_dx:-edge_dx, edge_dy:-edge_dy].std((-2,-1)) * fft_factor
+                                    else:
+                                        for l1 in range(L):
+                                        # [N_image,l2,l3,x,y]
+                                            S4_pre_norm[:,Ndata_S4,l1,:,:] = (
                                                 I1_small[:,j1].view(N_image,1,1,M3,N3) * self.backend.bk_conjugate(
                                                     I12_w3_2_small.view(N_image,L,L,M3,N3)
                                                 )
                                             )[...,edge_dx:-edge_dx, edge_dy:-edge_dy].mean((-2,-1)) * fft_factor
+                                            if get_variance:
+                                                S4_sigma[:,Ndata_S4,l1,:,:] = (
+                                                    I1_small[:,j1].view(N_image,1,1,M3,N3) * self.backend.bk_conjugate(
+                                                        I12_w3_2_small.view(N_image,L,L,M3,N3)
+                                                    )
+                                                )[...,edge_dx:-edge_dx, edge_dy:-edge_dy].mean((-2,-1)) * fft_factor
+                                    
+                                Ndata_S4+=1
                                 
-                            Ndata_S4+=1
+                        if normalization=='S2':
+                            if use_ref: 
+                                P = (ref_S2[:,j3,:,None,None] * ref_S2[:,j2,None,:,None] )**(0.5*pseudo_coef)
+                            else: 
+                                P = (S2[:,j3,:,None,None] * S2[:,j2,None,:,None] )**(0.5*pseudo_coef)
+                                
+                            S4[:,beg_n:Ndata_S4,:,:,:]=S4_pre_norm[:,beg_n:Ndata_S4,:,:,:]/P
+                                
+                            if get_variance:
+                                S4_sigma[:,beg_n:Ndata_S4,:,:,:] = S4_sigma[:,beg_n:Ndata_S4,:,:,:] / P
+                        else:
+                            S4=S4_pre_norm
                             
-                    if normalization=='S2':
-                        if use_ref: 
-                            P = (ref_S2[:,j3:j3+1,:,None,None] * ref_S2[:,j2:j2+1,None,:,None] )**(0.5*pseudo_coef)
-                        else: 
-                            P = ((S2[:,j3:j3+1,:,None,None] * S2[:,j2:j2+1,None,:,None] )**(0.5*pseudo_coef))
-                            
-                        S4[:,beg_n:Ndata_S4,:,:,:]=S4_pre_norm[:,beg_n:Ndata_S4,:,:,:].clone()/(P.clone())
-                            
-                        if get_variance:
-                            S4_sigma[:,beg_n:Ndata_S4,:,:,:] = S4_sigma[:,beg_n:Ndata_S4,:,:,:] / (P)
-                    else:
-                        S4[:,beg_n:Ndata_S4,:,:,:]=S4_pre_norm[:,beg_n:Ndata_S4,:,:,:].clone()
-                            
-                        if get_variance:
-                            S4_sigma[:,beg_n:Ndata_S4,:,:,:] = S4_sigma[:,beg_n:Ndata_S4,:,:,:]
-                            
-        """
-        # define P11 from diagonals of S4
-        for j1 in range(J):
-            for l1 in range(L):
-                P11[:,j1,:,l1,:] = S4_pre_norm[:,j1,j1,:,l1,l1,:].real
-       
-                
-        if normalization=='S4':
-            if use_ref: 
-                P = ref_P11
-            else: 
-                P = P11
-            #.view(N_image,J,1,J,L,1,L) * .view(N_image,1,J,J,1,L,L)
-            S4 = S4_pre_norm / (
-                P[:,:,None,:,:,None,:] * P[:,None,:,:,None,:,:]
-            )**(0.5*pseudo_coef)
-        
-        
-        
-        
-        # get a single, flattened data vector for_synthesis
-        select_and_index        = self.get_scattering_index(J, L, normalization, S4_criteria)
-        index_for_synthesis     = select_and_index['index_for_synthesis']
-        index_for_synthesis_iso = select_and_index['index_for_synthesis_iso']
-        """
-        # average over l1 to obtain simple isotropic statistics
-        if iso_ang:
-            S2_iso = S2.mean(-1)
-            S1_iso = S1.mean(-1)
-            for l1 in range(L):
-                for l2 in range(L):
-                    S3_iso[...,(l2-l1)%L] += S3[...,l1,l2]
-                    if data2 is not None:
-                        S3p_iso[...,(l2-l1)%L] += S3p[...,l1,l2]
-                    for l3 in range(L):
-                        S4_iso[...,(l2-l1)%L,(l3-l1)%L] += S4[...,l1,l2,l3]
-            S3_iso /= L; S4_iso /= L
-            if data2 is not None:
-                S3p_iso /= L
-            
-            if get_variance:
-                S2_sigma_iso = S2_sigma.mean(-1)
-                S1_sigma_iso = S1_sigma.mean(-1)
+            # average over l1 to obtain simple isotropic statistics
+            if iso_ang:
+                S2_iso = S2.mean(-1)
+                S1_iso = S1.mean(-1)
                 for l1 in range(L):
                     for l2 in range(L):
-                        S3_sigma_iso[...,(l2-l1)%L] += S3_sigma[...,l1,l2]
-                        if data2 is not None:
-                            S3p_sigma_iso[...,(l2-l1)%L] += S3p_sigma[...,l1,l2]
+                        S3_iso[...,(l2-l1)%L] += S3[...,l1,l2]
                         for l3 in range(L):
-                            S4_sigma_iso[...,(l2-l1)%L,(l3-l1)%L] += S4_sigma[...,l1,l2,l3]
-                S3_sigma_iso /= L; S4_sigma_iso /= L
-                if data2 is not None:
-                    S3p_sigma_iso /= L
-        
-        mean_data=self.backend.bk_zeros((N_image,1), dtype=data.dtype) 
-        std_data=self.backend.bk_zeros((N_image,1), dtype=data.dtype) 
-        mean_data[:,0]=data.mean((-2,-1))
-        std_data[:,0]=data.std((-2,-1))
-        
-        if get_variance:
-            ref_sigma={}
-            if iso_ang:
-                ref_sigma['std_data']=std_data
-                ref_sigma['S1_sigma']=S1_sigma_iso
-                ref_sigma['S2_sigma']=S2_sigma_iso
-                ref_sigma['S3_sigma']=S3_sigma_iso
-                ref_sigma['S4_sigma']=S4_sigma_iso
-                if data2 is not None:
-                    ref_sigma['S3p_sigma']=S3p_sigma_iso
-            else:
-                ref_sigma['std_data']=std_data
-                ref_sigma['S1_sigma']=S1_sigma
-                ref_sigma['S2_sigma']=S2_sigma
-                ref_sigma['S3_sigma']=S3_sigma
-                ref_sigma['S4_sigma']=S4_sigma
-                if data2 is not None:
-                    ref_sigma['S3p_sigma']=S3_sigma
-        
-        if data2 is None:
+                            S4_iso[...,(l2-l1)%L,(l3-l1)%L] += S4[...,l1,l2,l3]
+                S3_iso /= L; S4_iso /= L
+                
+                if get_variance:
+                    S2_sigma_iso = S2_sigma.mean(-1)
+                    S1_sigma_iso = S1_sigma.mean(-1)
+                    for l1 in range(L):
+                        for l2 in range(L):
+                            S3_sigma_iso[...,(l2-l1)%L] += S3_sigma[...,l1,l2]
+                            for l3 in range(L):
+                                S4_sigma_iso[...,(l2-l1)%L,(l3-l1)%L] += S4_sigma[...,l1,l2,l3]
+                    S3_sigma_iso /= L; S4_sigma_iso /= L
+            
+            mean_data=self.backend.bk_zeros((N_image,1), dtype=data.dtype) 
+            std_data=self.backend.bk_zeros((N_image,1), dtype=data.dtype) 
+            mean_data[:,0]=data.mean((-2,-1))
+            std_data[:,0]=data.std((-2,-1))
+            
+            if get_variance:
+                ref_sigma={}
+                if iso_ang:
+                    ref_sigma['std_data']=std_data
+                    ref_sigma['S1_sigma']=S1_sigma_iso
+                    ref_sigma['S2_sigma']=S2_sigma_iso
+                    ref_sigma['S3_sigma']=S3_sigma_iso
+                    ref_sigma['S4_sigma']=S4_sigma_iso
+                else:
+                    ref_sigma['std_data']=std_data
+                    ref_sigma['S1_sigma']=S1_sigma
+                    ref_sigma['S2_sigma']=S2_sigma
+                    ref_sigma['S3_sigma']=S3_sigma
+                    ref_sigma['S4_sigma']=S4_sigma
+            
             if iso_ang:
                 if ref_sigma is not None:
                     for_synthesis = self.backend.backend.cat((
@@ -5399,6 +5291,422 @@ class funct(FOC.FoCUS):
                         S4.reshape((N_image, -1)).real, 
                         S4.reshape((N_image, -1)).imag,
                         ),dim=-1)
+                    
+            if not use_ref: 
+                self.ref_scattering_cov_S2=S2
+            
+            if get_variance:
+                return for_synthesis,ref_sigma
+                
+            return for_synthesis
+            
+        if (M,N,J,L) not in self.filters_set:
+            self.filters_set[(M,N,J,L)] = self.computer_filter(M,N,J,L) #self.computer_filter(M,N,J,L)
+            
+        filters_set = self.filters_set[(M,N,J,L)]
+        
+        #weight = self.weight
+        if use_ref:
+            if normalization=='S2': 
+                ref_S2 = self.ref_scattering_cov_S2
+            else: 
+                ref_P11 = self.ref_scattering_cov['P11']
+
+        # convert numpy array input into self.backend.bk_ tensors
+        data = self.backend.bk_cast(data)
+        data_f = self.backend.bk_fftn(data, dim=(-2,-1))
+        if data2 is not None:
+            data2 = self.backend.bk_cast(data2)
+            data2_f = self.backend.bk_fftn(data2, dim=(-2,-1))
+        
+        # initialize tensors for scattering coefficients
+        
+        Ndata_S3 = J*(J+1)//2
+        Ndata_S4 = J*(J+1)*(J+2)//6
+        J_S4={}
+        
+        S3 = []
+        if data2 is not None:
+            S3p = []
+        S4_pre_norm = [] 
+        S4 = [] 
+        
+        # variance
+        if get_variance:
+            S3_sigma = [] 
+            if data2 is not None:
+                S3p_sigma = []
+            S4_sigma = [] 
+            
+        if iso_ang:
+            S3_iso = []
+            if data2 is not None:
+                S3p_iso = []
+                
+            S4_iso = []
+            if get_variance:
+                S3_sigma_iso = []
+                if data2 is not None:
+                    S3p_sigma_iso = [] 
+                S4_sigma_iso = [] 
+            
+        #
+        if edge: 
+            if (M,N,J) not in self.edge_masks:
+                self.edge_masks[(M,N,J)] = self.get_edge_masks(M,N,J)
+            edge_mask = self.edge_masks[(M,N,J)][:,None,:,:]
+            edge_mask = edge_mask / edge_mask.mean((-2,-1))[:,:,None,None]
+        else: 
+            edge_mask = 1
+            
+        # calculate scattering fields
+        if data2 is None:
+            if self.use_2D:
+                if len(data.shape) == 2:
+                    I1 = self.backend.bk_abs(self.backend.bk_ifftn(
+                        data_f[None,None,None,:,:] * filters_set[None,:J,:,:,:], dim=(-2,-1)
+                    ))
+                else:
+                    I1 = self.backend.bk_abs(self.backend.bk_ifftn(
+                        data_f[:,None,None,:,:] * filters_set[None,:J,:,:,:], dim=(-2,-1)
+                    ))
+            elif self.use_1D:
+                if len(data.shape) == 1:
+                    I1 = self.backend.bk_abs(self.backend.bk_ifftn(
+                        data_f[None,None,None,:] * filters_set[None,:J,:,:], dim=(-1)
+                    ))
+                else:
+                    I1 = self.backend.bk_abs(self.backend.bk_ifftn(
+                        data_f[:,None,None,:] * filters_set[None,:J,:,:], dim=(-1)
+                    ))
+            else:
+                print('todo')
+            
+            S2 = self.backend.bk_reduce_mean((I1**2 * edge_mask),axis=(-2,-1))
+            S1 = self.backend.bk_reduce_mean(I1 * edge_mask,axis=(-2,-1))
+
+            if get_variance:
+                S2_sigma = self.backend.bk_reduce_std((I1**2 * edge_mask),axis=(-2,-1))
+                S1_sigma  = self.backend.bk_reduce_std((I1 * edge_mask),axis=(-2,-1))
+                
+            I1_f= self.backend.bk_fftn(I1, dim=(-2,-1))
+            
+        else: 
+            if self.use_2D:
+                if len(data.shape) == 2:
+                    I1 = self.backend.bk_ifftn(
+                        data_f[None,None,None,:,:] * filters_set[None,:J,:,:,:], dim=(-2,-1)
+                    )
+                    I2 = self.backend.bk_ifftn(
+                        data2_f[None,None,None,:,:] * filters_set[None,:J,:,:,:], dim=(-2,-1)
+                    )
+                else:
+                    I1 = self.backend.bk_ifftn(
+                        data_f[:,None,None,:,:] * filters_set[None,:J,:,:,:], dim=(-2,-1)
+                    )
+                    I2 = self.backend.bk_ifftn(
+                        data2_f[:,None,None,:,:] * filters_set[None,:J,:,:,:], dim=(-2,-1)
+                    )
+            elif self.use_1D:
+                if len(data.shape) == 1:
+                    I1 = self.backend.bk_ifftn(
+                        data_f[None,None,None,:] * filters_set[None,:J,:,:], dim=(-1)
+                    )
+                    I2 = self.backend.bk_ifftn(
+                        data2_f[None,None,None,:] * filters_set[None,:J,:,:], dim=(-1)
+                    )
+                else:
+                    I1 = self.backend.bk_ifftn(
+                        data_f[:,None,None,:] * filters_set[None,:J,:,:], dim=(-1)
+                    )
+                    I2 = self.backend.bk_ifftn(
+                        data2_f[:,None,None,:] * filters_set[None,:J,:,:], dim=(-1)
+                    )
+            else:
+                print('todo')
+            
+            I1=self.backend.bk_real(I1*self.backend.bk_conjugate(I2))
+            
+            S2 = self.backend.bk_reduce_mean((I1 * edge_mask),axis=(-2,-1))
+            if get_variance:
+                S2_sigma = self.backend.bk_reduce_std((I1 * edge_mask),axis=(-2,-1))
+            
+            I1=self.backend.bk_L1(I1)
+            
+            S1  = self.backend.bk_reduce_mean((I1 * edge_mask),axis=(-2,-1))
+
+            if get_variance:
+                S1_sigma  = self.backend.bk_reduce_std((I1 * edge_mask),axis=(-2,-1))
+                
+            I1_f= self.backend.bk_fftn(I1, dim=(-2,-1))
+            
+        if pseudo_coef != 1:
+            I1 = I1**pseudo_coef
+        
+        Ndata_S3=0
+        Ndata_S4=0
+        
+        # calculate the covariance and correlations of the scattering fields
+        # only use the low-k Fourier coefs when calculating large-j scattering coefs.
+        for j3 in range(0,J):
+            J_S4[j3]=Ndata_S4
+            
+            dx3, dy3 = self.get_dxdy(j3,M,N)
+            I1_f_small = self.cut_high_k_off(I1_f[:,:j3+1], dx3, dy3) # Nimage, J, L, x, y
+            data_f_small = self.cut_high_k_off(data_f, dx3, dy3)
+            if data2 is not None:
+                data2_f_small = self.cut_high_k_off(data2_f, dx3, dy3)
+            if edge:
+                I1_small = self.backend.bk_ifftn(I1_f_small, dim=(-2,-1), norm='ortho')
+                data_small = self.backend.bk_ifftn(data_f_small, dim=(-2,-1), norm='ortho')
+                print(data_small.shape)
+                if data2 is not None:
+                    data2_small = self.backend.bk_ifftn(data2_f_small, dim=(-2,-1), norm='ortho')
+            wavelet_f3 = self.cut_high_k_off(filters_set[j3], dx3, dy3) # L,x,y
+            _, M3, N3 = wavelet_f3.shape
+            wavelet_f3_squared = wavelet_f3**2
+            edge_dx = min(4, int(2**j3*dx3*2/M))
+            edge_dy = min(4, int(2**j3*dy3*2/N))
+            # a normalization change due to the cutoff of frequency space
+            fft_factor = 1 /(M3*N3) * (M3*N3/M/N)**2
+            for j2 in range(0,j3+1):
+                #I1_f2_wf3_small = I1_f_small[:,j2].view(N_image,L,1,M3,N3) * wavelet_f3.view(1,1,L,M3,N3)
+                #I1_f2_wf3_2_small = I1_f_small[:,j2].view(N_image,L,1,M3,N3) * wavelet_f3_squared.view(1,1,L,M3,N3)
+                I1_f2_wf3_small = self.backend.bk_reshape(I1_f_small[:,j2],[N_image,1,L,1,M3,N3]) * self.backend.bk_reshape(wavelet_f3,[1,1,1,L,M3,N3])
+                I1_f2_wf3_2_small = self.backend.bk_reshape(I1_f_small[:,j2],[N_image,1,L,1,M3,N3]) * self.backend.bk_reshape(wavelet_f3_squared,[1,1,1,L,M3,N3])
+                if edge:
+                    I12_w3_small = self.backend.bk_ifftn(I1_f2_wf3_small, dim=(-2,-1), norm='ortho')
+                    I12_w3_2_small = self.backend.bk_ifftn(I1_f2_wf3_2_small, dim=(-2,-1), norm='ortho')
+                if use_ref:
+                    if normalization=='P11':
+                        norm_factor_S3 = (ref_S2[:,None,j3,:] * ref_P11[:,j2,j3,:,:]**pseudo_coef)**0.5
+                    elif normalization=='S2':
+                        norm_factor_S3 = (ref_S2[:,None,j3,:] * ref_S2[:,j2,:,None]**pseudo_coef)**0.5
+                    else:
+                        norm_factor_S3 = 1.0
+                else:
+                    if normalization=='P11':
+                        # [N_image,l2,l3,x,y]
+                        P11_temp = self.backend.bk_reduce_mean((I1_f2_wf3_small.abs()**2),axis=(-2,-1)) * fft_factor
+                        norm_factor_S3 = (S2[:,None,j3,:] * P11_temp**pseudo_coef)**0.5
+                    elif normalization=='S2':
+                        norm_factor_S3 = (S2[:,None,j3,:] * S2[:,j2,:,None]**pseudo_coef)**0.5
+                    else:
+                        norm_factor_S3 = 1.0
+                        
+                norm_factor_S3 = self.backend.bk_complex(norm_factor_S3,0*norm_factor_S3)
+
+                if not edge:
+                    S3.append(self.backend.bk_reduce_mean(
+                        self.backend.bk_reshape(data_f_small,[N_image,1,1,1,M3,N3]) * self.backend.bk_conjugate(I1_f2_wf3_small)
+                    ,axis=(-2,-1)) * fft_factor / norm_factor_S3)
+                    if get_variance:
+                        S3_sigma.append(self.backend.bk_reduce_std(
+                            self.backend.bk_reshape(data_f_small,[N_image,1,1,1,M3,N3]) * self.backend.bk_conjugate(I1_f2_wf3_small)
+                        ,axis=(-2,-1)) * fft_factor / norm_factor_S3)
+                else:
+                    
+                    S3.append(self.backend.bk_reduce_mean(
+                        (self.backend.bk_reshape(data_small,[N_image,1,1,1,M3,N3]) * self.backend.bk_conjugate(I12_w3_small)
+                    )[...,edge_dx:M3-edge_dx, edge_dy:N3-edge_dy],axis=(-2,-1)) * fft_factor / norm_factor_S3)
+                    if get_variance:
+                        S3_sigma.apend(self.backend.bk_reduce_std(
+                            (self.backend.bk_reshape(data_small,[N_image,1,1,1,M3,N3]) * self.backend.bk_conjugate(I12_w3_small)
+                            )[...,edge_dx:M3-edge_dx, edge_dy:N3-edge_dy],axis=(-2,-1)) * fft_factor / norm_factor_S3)
+                if data2 is not None:
+                    if not edge:
+                        S3p.append(self.backend.bk_reduce_mean(
+                            (self.backend.bk_reshape(data2_f_small,[N_image2,1,1,1,M3,N3]) * self.backend.bk_conjugate(I1_f2_wf3_small)
+                        ),axis=(-2,-1)) * fft_factor / norm_factor_S3)
+                    
+                        if get_variance:
+                            S3p_sigma.append(self.backend.bk_reduce_std(
+                                (self.backend.bk_reshape(data2_f_small,[N_image2,1,1,1,M3,N3]) * self.backend.bk_conjugate(I1_f2_wf3_small)
+                            ),axis=(-2,-1)) * fft_factor / norm_factor_S3)
+                    else:
+                    
+                        S3p.append(self.backend.bk_reduce_mean(
+                            (self.backend.bk_reshape(data2_small,[N_image2,1,1,1,M3,N3]) * self.backend.bk_conjugate(I12_w3_small)
+                        )[...,edge_dx:M3-edge_dx, edge_dy:N3-edge_dy],axis=(-2,-1)) * fft_factor / norm_factor_S3)
+                        if get_variance:
+                            S3p_sigma.append(self.backend.bk_reduce_std(
+                                (self.backend.bk_reshape(data2_small,[N_image2,1,1,1,M3,N3]) * self.backend.bk_conjugate(I12_w3_small)
+                                )[...,edge_dx:M3-edge_dx, edge_dy:N3-edge_dy],axis=(-2,-1)) * fft_factor / norm_factor_S3)
+                              
+                if j2 <= j3:
+                    if normalization=='S2':
+                        if use_ref: 
+                            P = 1/((ref_S2[:,j3:j3+1,:,None,None] * ref_S2[:,j2:j2+1,None,:,None] )**(0.5*pseudo_coef))
+                        else: 
+                            P = 1/(((S2[:,j3:j3+1,:,None,None] * S2[:,j2:j2+1,None,:,None] )**(0.5*pseudo_coef)))
+                        P=self.backend.bk_complex(P,0.0*P)
+                    else:
+                        P=self.backend.bk_complex(1.0,0.0)
+                        
+                    for j1 in range(0, j2+1):
+                            if not edge:
+                                if not if_large_batch:
+                                    # [N_image,l1,l2,l3,x,y]
+                                    S4.append(self.backend.bk_reduce_mean(
+                                        (self.backend.bk_reshape(I1_f_small[:,j1],[N_image,1,L,1,1,M3,N3]) * 
+                                        self.backend.bk_conjugate(self.backend.bk_reshape(I1_f2_wf3_2_small,[N_image,1,1,L,L,M3,N3]))
+                                    ),axis=(-2,-1)) * fft_factor*P)
+                                    if get_variance:
+                                        S4_sigma.append(self.backend.bk_reduce_std(
+                                            (self.backend.bk_reshape(I1_f_small[:,j1],[N_image,1,L,1,1,M3,N3]) * 
+                                            self.backend.bk_conjugate(self.backend.bk_reshape(I1_f2_wf3_2_small,[N_image,1,1,L,L,M3,N3]))
+                                        ),axis=(-2,-1)) * fft_factor*P)
+                                else:
+                                    for l1 in range(L):
+                                        # [N_image,l2,l3,x,y]
+                                        S4.append(self.backend.bk_reduce_mean(
+                                            (self.backend.bk_reshape(I1_f_small[:,j1,l1],[N_image,1,1,1,M3,N3]) * 
+                                            self.backend.bk_conjugate(self.backend.bk_reshape(I1_f2_wf3_2_small,[N_image,1,L,L,M3,N3]))
+                                        ),axis=(-2,-1)) * fft_factor*P)
+                                        if get_variance:
+                                            S4_sigma.append(self.backend.bk_reduce_std(
+                                                (self.backend.bk_reshape(I1_f_small[:,j1,l1],[N_image,1,1,1,M3,N3]) * 
+                                                self.backend.bk_conjugate(self.backend.bk_reshape(I1_f2_wf3_2_small,[N_image,1,L,L,M3,N3]))
+                                            ),axis=(-2,-1)) * fft_factor*P)
+                            else:
+                                if not if_large_batch:
+                                    # [N_image,l1,l2,l3,x,y]
+                                    S4.append(self.backend.bk_reduce_mean(
+                                        (self.backend.bk_reshape(I1_small[:,j1],[N_image,1,L,1,1,M3,N3]) * self.backend.bk_conjugate(
+                                            self.backend.bk_reshape(I12_w3_2_small,[N_image,1,1,L,L,M3,N3])
+                                        )
+                                    )[...,edge_dx:-edge_dx, edge_dy:-edge_dy],axis=(-2,-1)) * fft_factor*P)
+                                    if get_variance:
+                                        S4_sigma.append(self.backend.bk_reduce_std(
+                                            (self.backend.bk_reshape(I1_small[:,j1],[N_image,1,L,1,1,M3,N3]) * self.backend.bk_conjugate(
+                                                self.backend.bk_reshape(I12_w3_2_small,[N_image,1,1,L,L,M3,N3])
+                                            )
+                                        )[...,edge_dx:-edge_dx, edge_dy:-edge_dy],axis=(-2,-1)) * fft_factor*P)
+                                else:
+                                    for l1 in range(L):
+                                    # [N_image,l2,l3,x,y]
+                                        S4.append(self.backend.bk_reduce_mean(
+                                            (self.backend.bk_reshape(I1_small[:,j1],[N_image,1,1,1,M3,N3]) * self.backend.bk_conjugate(
+                                                self.backend.bk_reshape(I12_w3_2_small,[N_image,1,L,L,M3,N3])
+                                            )
+                                        )[...,edge_dx:-edge_dx, edge_dy:-edge_dy],axis=(-2,-1)) * fft_factor*P)
+                                        if get_variance:
+                                            S4_sigma.append(self.backend.bk_reduce_std(
+                                                (self.backend.bk_reshape(I1_small[:,j1],[N_image,1,1,1,M3,N3]) * self.backend.bk_conjugate(
+                                                    self.backend.bk_reshape(I12_w3_2_small,[N_image,1,L,L,M3,N3])
+                                                )
+                                            )[...,edge_dx:-edge_dx, edge_dy:-edge_dy],axis=(-2,-1)) * fft_factor*P)
+                                
+        S3=self.backend.bk_concat(S3,axis=1)
+        S4=self.backend.bk_concat(S4,axis=1)
+        
+        if get_variance:
+            S3_sigma=self.backend.bk_concat(S3_sigma,axis=1)
+            S4_sigma=self.backend.bk_concat(S4_sigma,axis=1)
+            
+        if data2 is not None:
+            S3p=self.backend.bk_concat(S3p,axis=1)
+            if get_variance:
+                S3p_sigma=self.backend.bk_concat(S3p_sigma,axis=1)
+        
+        # average over l1 to obtain simple isotropic statistics
+        if iso_ang:
+            S2_iso = self.backend.bk_reduce_mean(S2,axis=(-1))
+            S1_iso = self.backend.bk_reduce_mean(S1,axis=(-1))
+            for l1 in range(L):
+                for l2 in range(L):
+                    S3_iso[...,(l2-l1)%L] += S3[...,l1,l2]
+                    if data2 is not None:
+                        S3p_iso[...,(l2-l1)%L] += S3p[...,l1,l2]
+                    for l3 in range(L):
+                        S4_iso[...,(l2-l1)%L,(l3-l1)%L] += S4[...,l1,l2,l3]
+            S3_iso /= L; S4_iso /= L
+            if data2 is not None:
+                S3p_iso /= L
+            
+            if get_variance:
+                S2_sigma_iso = self.backend.bk_reduce_mean(S2_sigma,axis=(-1))
+                S1_sigma_iso = self.backend.bk_reduce_mean(S1_sigma,axis=(-1))
+                for l1 in range(L):
+                    for l2 in range(L):
+                        S3_sigma_iso[...,(l2-l1)%L] += S3_sigma[...,l1,l2]
+                        if data2 is not None:
+                            S3p_sigma_iso[...,(l2-l1)%L] += S3p_sigma[...,l1,l2]
+                        for l3 in range(L):
+                            S4_sigma_iso[...,(l2-l1)%L,(l3-l1)%L] += S4_sigma[...,l1,l2,l3]
+                S3_sigma_iso /= L; S4_sigma_iso /= L
+                if data2 is not None:
+                    S3p_sigma_iso /= L
+        
+        mean_data=self.backend.bk_reshape(self.backend.bk_reduce_mean(data,axis=(-2,-1)),[N_image,1])
+        std_data=self.backend.bk_reshape(self.backend.bk_reduce_std(data,axis=(-2,-1)),[N_image,1])
+        
+        if get_variance:
+            ref_sigma={}
+            if iso_ang:
+                ref_sigma['std_data']=std_data
+                ref_sigma['S1_sigma']=S1_sigma_iso
+                ref_sigma['S2_sigma']=S2_sigma_iso
+                ref_sigma['S3_sigma']=S3_sigma_iso
+                ref_sigma['S4_sigma']=S4_sigma_iso
+                if data2 is not None:
+                    ref_sigma['S3p_sigma']=S3p_sigma_iso
+            else:
+                ref_sigma['std_data']=std_data
+                ref_sigma['S1_sigma']=S1_sigma
+                ref_sigma['S2_sigma']=S2_sigma
+                ref_sigma['S3_sigma']=S3_sigma
+                ref_sigma['S4_sigma']=S4_sigma
+                if data2 is not None:
+                    ref_sigma['S3p_sigma']=S3_sigma
+        
+        if data2 is None:
+            if iso_ang:
+                if ref_sigma is not None:
+                    for_synthesis = self.backend.bk_concat((
+                        mean_data/ref_sigma['std_data'],
+                        std_data/ref_sigma['std_data'],
+                        (S2_iso/ref_sigma['S2_sigma']).reshape((N_image, -1)).log(), 
+                        (S1_iso/ref_sigma['S1_sigma']).reshape((N_image, -1)).log(),
+                        (S3_iso/ref_sigma['S3_sigma']).reshape((N_image, -1)).real, 
+                        (S3_iso/ref_sigma['S3_sigma']).reshape((N_image, -1)).imag,
+                        (S4_iso/ref_sigma['S4_sigma']).reshape((N_image, -1)).real, 
+                        (S4_iso/ref_sigma['S4_sigma']).reshape((N_image, -1)).imag,
+                        ),dim=-1)
+                else:
+                    for_synthesis = self.backend.bk_concat((
+                        mean_data/std_data,
+                        std_data,
+                        S2_iso.reshape((N_image, -1)).log(), 
+                        S1_iso.reshape((N_image, -1)).log(),
+                        S3_iso.reshape((N_image, -1)).real, 
+                        S3_iso.reshape((N_image, -1)).imag,
+                        S4_iso.reshape((N_image, -1)).real, 
+                        S4_iso.reshape((N_image, -1)).imag,
+                        ),dim=-1)
+            else:
+                if ref_sigma is not None:
+                    for_synthesis = self.backend.backend.cat((
+                        mean_data/ref_sigma['std_data'],
+                        std_data/ref_sigma['std_data'],
+                        (S2/ref_sigma['S2_sigma']).reshape((N_image, -1)).log(), 
+                        (S1/ref_sigma['S1_sigma']).reshape((N_image, -1)).log(),
+                        (S3/ref_sigma['S3_sigma']).reshape((N_image, -1)).real, 
+                        (S3/ref_sigma['S3_sigma']).reshape((N_image, -1)).imag,
+                        (S4/ref_sigma['S4_sigma']).reshape((N_image, -1)).real, 
+                        (S4/ref_sigma['S4_sigma']).reshape((N_image, -1)).imag,
+                        ),dim=-1)
+                else:
+                    for_synthesis = self.backend.bk_concat((
+                            mean_data/std_data,
+                            std_data,
+                            self.backend.bk_reshape(self.backend.bk_log(S2),[N_image, -1]), 
+                            self.backend.bk_reshape(self.backend.bk_log(S1),[N_image, -1]), 
+                            self.backend.bk_reshape(self.backend.bk_real(S3),[N_image, -1]), 
+                            self.backend.bk_reshape(self.backend.bk_imag(S3),[N_image, -1]), 
+                            self.backend.bk_reshape(self.backend.bk_real(S4),[N_image, -1]), 
+                            self.backend.bk_reshape(self.backend.bk_imag(S4),[N_image, -1])
+                        ),axis=-1)
         else:
             if iso_ang:
                 if ref_sigma is not None:
@@ -5442,17 +5750,17 @@ class funct(FOC.FoCUS):
                         (S4/ref_sigma['S4_sigma']).reshape((N_image, -1)).imag,
                         ),dim=-1)
                 else:
-                    for_synthesis = self.backend.backend.cat((
-                        mean_data/std_data,
-                        std_data,
-                        S2.reshape((N_image, -1)), 
-                        S1.reshape((N_image, -1)),
-                        S3.reshape((N_image, -1)).real, 
-                        S3.reshape((N_image, -1)).imag,
-                        S3p.reshape((N_image, -1)).real, 
-                        S3p.reshape((N_image, -1)).imag,
-                        S4.reshape((N_image, -1)).real, 
-                        S4.reshape((N_image, -1)).imag,
+                    for_synthesis = self.backend.bk_concat((
+                            mean_data/std_data,
+                            std_data,
+                            self.backend.bk_reshape(S2,[N_image, -1]), 
+                            self.backend.bk_reshape(S1,[N_image, -1]), 
+                            self.backend.bk_reshape(self.backend.bk_real(S3),[N_image, -1]), 
+                            self.backend.bk_reshape(self.backend.bk_imag(S3),[N_image, -1]), 
+                            self.backend.bk_reshape(self.backend.bk_real(S3p),[N_image, -1]), 
+                            self.backend.bk_reshape(self.backend.bk_imag(S3p),[N_image, -1]),
+                            self.backend.bk_reshape(self.backend.bk_real(S4),[N_image, -1]), 
+                            self.backend.bk_reshape(self.backend.bk_imag(S4),[N_image, -1])
                         ),dim=-1)
                 
         if not use_ref: 
