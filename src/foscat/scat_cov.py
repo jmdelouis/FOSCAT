@@ -5200,20 +5200,20 @@ class funct(FOC.FoCUS):
                     if data2 is not None:
                         if not edge:
                             S3p[:,Ndata_S3,:,:] = (
-                                data2_f_small.view(N_image,1,1,M3,N3) * self.backend.bk_conjugate(I1_f2_wf3_small)
+                                data2_f_small.view(N_image2,1,1,M3,N3) * self.backend.bk_conjugate(I1_f2_wf3_small)
                             ).mean((-2,-1)) * fft_factor / norm_factor_S3
                         
                             if get_variance:
                                 S3p_sigma[:,Ndata_S3,:,:] = (
-                                    data2_f_small.view(N_image,1,1,M3,N3) * self.backend.bk_conjugate(I1_f2_wf3_small)
+                                    data2_f_small.view(N_image2,1,1,M3,N3) * self.backend.bk_conjugate(I1_f2_wf3_small)
                                 ).std((-2,-1)) * fft_factor / norm_factor_S3
                         else:
                             S3p[:,Ndata_S3,:,:] = (
-                                data2_small.view(N_image,1,1,M3,N3) * self.backend.bk_conjugate(I12_w3_small)
+                                data2_small.view(N_image2,1,1,M3,N3) * self.backend.bk_conjugate(I12_w3_small)
                             )[...,edge_dx:M3-edge_dx, edge_dy:N3-edge_dy].mean((-2,-1)) * fft_factor / norm_factor_S3
                             if get_variance:
                                 S3p_sigma[:,Ndata_S3,:,:] = (
-                                    data2_small.view(N_image,1,1,M3,N3) * self.backend.bk_conjugate(I12_w3_small)
+                                    data2_small.view(N_image2,1,1,M3,N3) * self.backend.bk_conjugate(I12_w3_small)
                                     )[...,edge_dx:M3-edge_dx, edge_dy:N3-edge_dy].std((-2,-1)) * fft_factor / norm_factor_S3
                     Ndata_S3+=1
                     if j2 <= j3:
@@ -5277,15 +5277,14 @@ class funct(FOC.FoCUS):
                                 
                         if normalization=='S2':
                             if use_ref: 
-                                P = 1/((ref_S2[:,j3:j3+1,:,None,None] * ref_S2[:,j2:j2+1,None,:,None] )**(0.5*pseudo_coef))
+                                P = ((ref_S2[:,j3:j3+1,:,None,None] * ref_S2[:,j2:j2+1,None,:,None] )**(0.5*pseudo_coef))
                             else: 
-                                P = 1/((S2[:,j3:j3+1,:,None,None] * S2[:,j2:j2+1,None,:,None] )**(0.5*pseudo_coef))
-                                P=P.clone()
+                                P = ((S2[:,j3:j3+1,:,None,None] * S2[:,j2:j2+1,None,:,None] )**(0.5*pseudo_coef))
                                                         
-                            S4[:,beg_n:Ndata_S4,:,:,:]=S4_pre_norm[:,beg_n:Ndata_S4,:,:,:]*P
+                            S4[:,beg_n:Ndata_S4,:,:,:]=S4_pre_norm[:,beg_n:Ndata_S4,:,:,:].clone()/P
                                 
                             if get_variance:
-                                S4_sigma[:,beg_n:Ndata_S4,:,:,:] = S4_sigma[:,beg_n:Ndata_S4,:,:,:] / P
+                                S4_sigma[:,beg_n:Ndata_S4,:,:,:] = S4_sigma[:,beg_n:Ndata_S4,:,:,:]/P
                         else:
                             S4=S4_pre_norm
                             
