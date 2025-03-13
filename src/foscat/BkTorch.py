@@ -427,5 +427,11 @@ class BkTorch(BackendBase.BackendBase):
             
         return self.bk_cast(x)
         
+    def bk_empty(self,list):
+        return self.backend.empty(list)
+        
     def to_numpy(self,x):
+        if isinstance(x, np.ndarray):
+            return x
+            
         return x.cpu().numpy()

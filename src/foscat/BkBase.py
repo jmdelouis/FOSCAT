@@ -538,6 +538,9 @@ class BackendBase:
             
     def bk_constant(self,x):
         raise NotImplementedError("This is an abstract class.")
+            
+    def bk_empty(self,x):
+        raise NotImplementedError("This is an abstract class.")
         
     def to_numpy(self,x):
         raise NotImplementedError("This is an abstract class.")

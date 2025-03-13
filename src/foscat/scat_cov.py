@@ -4844,13 +4844,15 @@ class funct(FOC.FoCUS):
         This function is strongly inspire by the package https://github.com/SihaoCheng/scattering_transform
         Done by Sihao Cheng and Rudy Morel.
         '''
-        edge_masks = self.backend.backend.empty((J, M, N))
-        X, Y = self.backend.backend.meshgrid(self.backend.backend.arange(M), self.backend.backend.arange(N), indexing='ij')
+        edge_masks = np.empty((J, M, N))
+        X, Y = np.meshgrid(np.arange(M), np.arange(N), indexing='ij')
         for j in range(J):
             edge_dx = min(M//4, 2**j*d0)
             edge_dy = min(N//4, 2**j*d0)
             edge_masks[j] = (X>=edge_dx) * (X<=M-edge_dx) * (Y>=edge_dy) * (Y<=N-edge_dy)
-        return edge_masks.to(self.backend.torch_device)
+        edge_masks = edge_masks[:,None,:,:]
+        edge_masks = edge_masks / edge_masks.mean((-2,-1))[:,:,None,None]
+        return self.backend.bk_cast(edge_masks)
     
     # ---------------------------------------------------------------------------
     #
@@ -5046,8 +5048,7 @@ class funct(FOC.FoCUS):
             if edge: 
                 if (M,N,J) not in self.edge_masks:
                     self.edge_masks[(M,N,J)] = self.get_edge_masks(M,N,J)
-                edge_mask = self.edge_masks[(M,N,J)][:,None,:,:]
-                edge_mask = edge_mask / edge_mask.mean((-2,-1))[:,:,None,None]
+                edge_mask=self.edge_masks[(M,N,J)]
             else: 
                 edge_mask = 1
                 
@@ -5157,6 +5158,7 @@ class funct(FOC.FoCUS):
                 wavelet_f3_squared = wavelet_f3**2
                 edge_dx = min(4, int(2**j3*dx3*2/M))
                 edge_dy = min(4, int(2**j3*dy3*2/N))
+                print('A ',edge_dx,edge_dy)
                 # a normalization change due to the cutoff of frequency space
                 fft_factor = 1 /(M3*N3) * (M3*N3/M/N)**2
                 for j2 in range(0,j3+1):
@@ -5511,8 +5513,7 @@ class funct(FOC.FoCUS):
         if edge: 
             if (M,N,J) not in self.edge_masks:
                 self.edge_masks[(M,N,J)] = self.get_edge_masks(M,N,J)
-            edge_mask = self.edge_masks[(M,N,J)][:,None,:,:]
-            edge_mask = edge_mask / edge_mask.mean((-2,-1))[:,:,None,None]
+            edge_mask = self.edge_masks[(M,N,J)]
         else: 
             edge_mask = 1
             
@@ -5616,7 +5617,6 @@ class funct(FOC.FoCUS):
             if edge:
                 I1_small = self.backend.bk_ifftn(I1_f_small, dim=(-2,-1), norm='ortho')
                 data_small = self.backend.bk_ifftn(data_f_small, dim=(-2,-1), norm='ortho')
-                print(data_small.shape)
                 if data2 is not None:
                     data2_small = self.backend.bk_ifftn(data2_f_small, dim=(-2,-1), norm='ortho')
             wavelet_f3 = self.cut_high_k_off(filters_set[j3], dx3, dy3) # L,x,y
@@ -5624,6 +5624,7 @@ class funct(FOC.FoCUS):
             wavelet_f3_squared = wavelet_f3**2
             edge_dx = min(4, int(2**j3*dx3*2/M))
             edge_dy = min(4, int(2**j3*dy3*2/N))
+            print('B ',edge_dx,edge_dy)
             # a normalization change due to the cutoff of frequency space
             fft_factor = 1 /(M3*N3) * (M3*N3/M/N)**2
             for j2 in range(0,j3+1):

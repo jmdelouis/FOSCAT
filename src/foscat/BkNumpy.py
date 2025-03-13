@@ -367,8 +367,8 @@ class BkNumpy(BackendBase.BackendBase):
             
         return self.bk_cast(x)
         
-    def to_numpy(self,x):
-        if isinstance(x, np.ndarray):
-            return x
+    def bk_empty(self,list):
+        return self.backend.empty(list)
         
-        return x.cpu().numpy()
+    def to_numpy(self,x):
+        return x

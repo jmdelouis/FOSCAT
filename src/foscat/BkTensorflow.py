@@ -458,6 +458,9 @@ class BkTensorflow(BackendBase.BackendBase):
     def bk_constant(self,x):
         return self.backend.constant(x)
         
+    def bk_empty(self,list):
+        return self.backend.constant(list)
+        
     def to_numpy(self,x):
         if isinstance(x, np.ndarray):
             return x
