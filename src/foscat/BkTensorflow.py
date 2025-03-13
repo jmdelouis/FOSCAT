@@ -379,10 +379,19 @@ class BkTensorflow(BackendBase.BackendBase):
             return self.backend.signal.fft1d(self.bk_complex(data, 0*data))
 
     def bk_ifftn(self, data,dim=None,norm=None):
-        if len(dim)==2:
-            return self.backend.signal.ifft2d(data)
+        if norm is not None:
+            if len(dim)==2:
+                normalization=self.backend.sqrt(self.backend.cast(data.shape[dim[0]]*data.shape[dim[1]], self.all_cbk_type))
+                return self.backend.signal.ifft2d(data)*normalization
+                    
+            else:
+                normalization=self.backend.sqrt(self.backend.cast(data.shape[dim[0]], self.all_cbk_type))
+                return self.backend.signal.ifft1d(data)*normalization
         else:
-            return self.backend.signal.ifft1d(data)
+            if len(dim)==2:
+                return self.backend.signal.ifft2d(data)
+            else:
+                return self.backend.signal.ifft1d(data)
         
 
     def bk_rfft(self, data):

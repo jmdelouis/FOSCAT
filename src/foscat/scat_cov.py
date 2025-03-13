@@ -5158,7 +5158,7 @@ class funct(FOC.FoCUS):
                 wavelet_f3_squared = wavelet_f3**2
                 edge_dx = min(4, int(2**j3*dx3*2/M))
                 edge_dy = min(4, int(2**j3*dy3*2/N))
-                print('A ',edge_dx,edge_dy)
+                
                 # a normalization change due to the cutoff of frequency space
                 fft_factor = 1 /(M3*N3) * (M3*N3/M/N)**2
                 for j2 in range(0,j3+1):
@@ -5190,7 +5190,6 @@ class funct(FOC.FoCUS):
                                 data_f_small.view(N_image,1,1,M3,N3) * self.backend.bk_conjugate(I1_f2_wf3_small)
                             ).std((-2,-1)) * fft_factor / norm_factor_S3
                     else:
-                        
                         S3[:,Ndata_S3,:,:] = (
                             data_small.view(N_image,1,1,M3,N3) * self.backend.bk_conjugate(I12_w3_small)
                         )[...,edge_dx:M3-edge_dx, edge_dy:N3-edge_dy].mean((-2,-1)) * fft_factor / norm_factor_S3
@@ -5209,7 +5208,6 @@ class funct(FOC.FoCUS):
                                     data2_f_small.view(N_image,1,1,M3,N3) * self.backend.bk_conjugate(I1_f2_wf3_small)
                                 ).std((-2,-1)) * fft_factor / norm_factor_S3
                         else:
-                        
                             S3p[:,Ndata_S3,:,:] = (
                                 data2_small.view(N_image,1,1,M3,N3) * self.backend.bk_conjugate(I12_w3_small)
                             )[...,edge_dx:M3-edge_dx, edge_dy:N3-edge_dy].mean((-2,-1)) * fft_factor / norm_factor_S3
@@ -5624,7 +5622,6 @@ class funct(FOC.FoCUS):
             wavelet_f3_squared = wavelet_f3**2
             edge_dx = min(4, int(2**j3*dx3*2/M))
             edge_dy = min(4, int(2**j3*dy3*2/N))
-            print('B ',edge_dx,edge_dy)
             # a normalization change due to the cutoff of frequency space
             fft_factor = 1 /(M3*N3) * (M3*N3/M/N)**2
             for j2 in range(0,j3+1):
@@ -5663,7 +5660,6 @@ class funct(FOC.FoCUS):
                             self.backend.bk_reshape(data_f_small,[N_image,1,1,1,M3,N3]) * self.backend.bk_conjugate(I1_f2_wf3_small)
                         ,axis=(-2,-1)) * fft_factor / norm_factor_S3)
                 else:
-                    
                     S3.append(self.backend.bk_reduce_mean(
                         (self.backend.bk_reshape(data_small,[N_image,1,1,1,M3,N3]) * self.backend.bk_conjugate(I12_w3_small)
                     )[...,edge_dx:M3-edge_dx, edge_dy:N3-edge_dy],axis=(-2,-1)) * fft_factor / norm_factor_S3)
