@@ -70,7 +70,7 @@ class BkTorch(BackendBase.BackendBase):
     def conv2d(self, x, w, strides=[1, 1, 1, 1], padding="SAME"):
         import torch.nn.functional as F
         lx = x.permute(0, 3, 1, 2)
-        wx = self.backend.from_numpy(w).to(self.torch_device).permute(3, 2, 0, 1)  # de (5, 5, 1, 4) à (4, 1, 5, 5)
+        wx = w.permute(3, 2, 0, 1)  # de (5, 5, 1, 4) à (4, 1, 5, 5)
 
         # Calculer le padding symétrique
         kx, ky = w.shape[0], w.shape[1]
@@ -286,7 +286,7 @@ class BkTorch(BackendBase.BackendBase):
 
     def bk_tile(self, data, nn, axis=0):
 
-        return self.backend.tile(data, nn)
+        return self.backend.tile(data, dims=[nn])
 
     def bk_roll(self, data, nn, axis=0):
         return self.backend.roll(data, nn, axis=axis)
@@ -333,10 +333,10 @@ class BkTorch(BackendBase.BackendBase):
         return data[idx]
 
     def bk_reverse(self, data, axis=0):
-        return self.backend.reverse(data, axis=axis)
+        return self.backend.flip(data, dims=[axis])
 
     def bk_fft(self, data):
-        return self.backend.fft(data)
+        return self.backend.fft.fft(data)
             
     def bk_fftn(self, data,dim=None):
         return self.backend.fft.fftn(data,dim=dim)
@@ -345,10 +345,10 @@ class BkTorch(BackendBase.BackendBase):
         return self.backend.fft.ifftn(data,dim=dim,norm=norm)
 
     def bk_rfft(self, data):
-        return self.backend.rfft(data)
+        return self.backend.fft.rfft(data)
 
     def bk_irfft(self, data):
-        return self.backend.irfft(data)
+        return self.backend.fft.irfft(data)
 
     def bk_conjugate(self, data):
 
@@ -377,30 +377,30 @@ class BkTorch(BackendBase.BackendBase):
     def bk_cast(self, x):
         if isinstance(x, np.float64):
             if self.all_bk_type == "float32":
-                return np.float32(x)
+                return self.backend.tensor(np.float32(x)).to(self.torch_device)
             else:
-                return x
+                return self.backend.tensor(x).to(self.torch_device)
         if isinstance(x, np.float32):
             if self.all_bk_type == "float64":
-                return np.float64(x)
+                return self.backend.tensor(np.float64(x)).to(self.torch_device)
             else:
-                return x
+                return self.backend.tensor(x).to(self.torch_device)
         if isinstance(x, np.complex128):
             if self.all_bk_type == "float32":
-                return np.complex64(x)
+                return self.backend.tensor(np.complex64(x)).to(self.torch_device)
             else:
-                return x
+                return self.backend.tensor(x).to(self.torch_device)
         if isinstance(x, np.complex64):
             if self.all_bk_type == "float64":
-                return np.complex128(x)
+                return self.backend.tensor(np.complex128(x)).to(self.torch_device)
             else:
-                return x
+                return self.backend.tensor(x).to(self.torch_device)
 
         if isinstance(x, np.int32) or isinstance(x, np.int64) or isinstance(x, int):
             if self.all_bk_type == "float64":
-                return np.float64(x)
+                return self.backend.tensor(np.float64(x)).to(self.torch_device)
             else:
-                return np.float32(x)
+                return self.backend.tensor(np.float32(x)).to(self.torch_device)
 
         if self.bk_is_complex(x):
             out_type = self.all_cbk_type

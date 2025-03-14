@@ -723,7 +723,7 @@ class FoCUS:
     def ud_grade(self, im, j, axis=0):
         rim = im
         for k in range(j):
-            rim = self.smooth(rim, axis=axis)
+            #rim = self.smooth(rim, axis=axis)
             rim = self.ud_grade_2(rim, axis=axis)
         return rim
 

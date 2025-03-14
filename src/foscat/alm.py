@@ -97,8 +97,8 @@ class alm:
             self.ring_th(nside)
             self.ring_ph(nside)
             x = (-1j * np.arange(3 * nside)).reshape(1, 3 * nside)
-            self.matrix_shift_ph[nside] = self.backend.bk_cast(
-                self.backend.bk_exp(x * self.lph[nside].reshape(4 * nside - 1, 1))
+            self.matrix_shift_ph[nside] = self.backend.bk_exp(
+                    self.backend.bk_cast(x * self.lph[nside].reshape(4 * nside - 1, 1))
             )
 
             self.lmax = 3 * nside - 1
@@ -423,15 +423,16 @@ class alm:
 
     def rfft2fft(self, val, axis=0):
         r = self.backend.bk_rfft(val)
+        print("r ",r.shape,val.shape)
         if axis == 0:
             r_inv = self.backend.bk_reverse(
-                self.backend.bk_conjugate(r[1:-1]), axis=axis
+                self.backend.bk_conjugate(r[:,1:-1]), axis=axis
             )
         else:
             r_inv = self.backend.bk_reverse(
                 self.backend.bk_conjugate(r[:, 1:-1]), axis=axis
             )
-        return self.backend.bk_concat([r, r_inv], axis=axis)
+        return self.backend.bk_concat([r, r_inv], axis=1)
 
     def irfft2fft(self, val, N, axis=0):
         if axis == 0:
@@ -440,7 +441,9 @@ class alm:
             return self.backend.bk_irfft(val[:, 0 : N // 2 + 1])
 
     def comp_tf(self, im, nside, realfft=False):
-
+        
+        #im is [Nimage,12*nside**2]
+        
         self.shift_ph(nside)
         n = 0
 
@@ -449,65 +452,66 @@ class alm:
             N = 4 * (k + 1)
 
             if realfft:
-                tmp = self.rfft2fft(im[n : n + N])
+                tmp = self.rfft2fft(im[:,n : n + N])
             else:
-                tmp = self.backend.bk_fft(im[n : n + N])
+                tmp = self.backend.bk_fft(im[:,n : n + N])
 
-            l_n = tmp.shape[0]
+            l_n = tmp.shape[1]
 
             if l_n < 3 * nside + 1:
                 repeat_n = 3 * nside // l_n + 1
-                tmp = self.backend.bk_tile(tmp, repeat_n, axis=0)
+                tmp = self.backend.bk_tile(tmp, repeat_n, axis=1)
 
-            ft_im.append(tmp[0 : 3 * nside])
+            ft_im.append(tmp[:,None,0 : 3 * nside])
 
             n += N
+        '''
         if nside > 1:
             result = self.backend.bk_reshape(
                 self.backend.bk_concat(ft_im, axis=0), [nside - 1, 3 * nside]
             )
+        '''
 
         N = 4 * nside * (2 * nside + 1)
-        v = self.backend.bk_reshape(im[n : n + N], [2 * nside + 1, 4 * nside])
+        v = self.backend.bk_reshape(im[:,n : n + N], [im.shape[0],2 * nside + 1, 4 * nside])
         if realfft:
-            v_fft = self.rfft2fft(v, axis=1)[:, : 3 * nside]
+            v_fft = self.rfft2fft(v, axis=2)[:, :, : 3 * nside]
         else:
-            v_fft = self.backend.bk_fft(v)[:, : 3 * nside]
+            v_fft = self.backend.bk_fft(v)[:, :, : 3 * nside]
 
         n += N
+        '''
         if nside > 1:
             result = self.backend.bk_concat([result, v_fft], axis=0)
         else:
             result = v_fft
-
+        '''
+        print(v_fft.shape)
+        ft_im.append(v_fft)
+        
         if nside > 1:
             ft_im = []
             for k in range(nside - 1):
                 N = 4 * (nside - 1 - k)
 
                 if realfft:
-                    tmp = self.rfft2fft(im[n : n + N])[0:l_n]
+                    tmp = self.rfft2fft(im[:,n : n + N])[0:l_n]
                 else:
-                    tmp = self.backend.bk_fft(im[n : n + N])[0:l_n]
+                    tmp = self.backend.bk_fft(im[:,n : n + N])[0:l_n]
 
-                l_n = tmp.shape[0]
+                l_n = tmp.shape[1]
 
                 if l_n < 3 * nside + 1:
                     repeat_n = 3 * nside // l_n + 1
-                    tmp = self.backend.bk_tile(tmp, repeat_n, axis=0)
+                    tmp = self.backend.bk_tile(tmp, repeat_n, axis=1)
 
-                ft_im.append(tmp[0 : 3 * nside])
+                ft_im.append(tmp[:,None,0 : 3 * nside])
                 n += N
-
-            lastresult = self.backend.bk_reshape(
-                self.backend.bk_concat(ft_im, axis=0), [nside - 1, 3 * nside]
-            )
-            return (
-                self.backend.bk_concat([result, lastresult], axis=0)
-                * self.matrix_shift_ph[nside]
-            )
-        else:
-            return result * self.matrix_shift_ph[nside]
+        print(ft_im)
+        return (
+                self.backend.bk_concat(ft_im, axis=1)
+                * self.matrix_shift_ph[nside][None,:,:]
+                )
 
     def icomp_tf(self, i_im, nside, realfft=False):
 
@@ -565,7 +569,7 @@ class alm:
         else:
             return result
 
-    def anafast(self, im, map2=None, nest=False, spin=2):
+    def anafast(self, im, map2=None, nest=False, spin=2,axes=0):
         """The `anafast` function computes the L1 and L2 norm power spectra.
 
         Currently, it is not optimized for single-pass computation due to the relatively inefficient computation of \(Y_{lm}\).
@@ -589,20 +593,20 @@ class alm:
             i_map2 = self.backend.bk_cast(map2)
 
         doT = True
-        if len(i_im.shape) == 1:  # nopol
-            nside = int(np.sqrt(i_im.shape[0] // 12))
+        if len(i_im.shape)-axes == 1:  # nopol
+            nside = int(np.sqrt(i_im.shape[axes] // 12))
         else:
-            if i_im.shape[0] == 2:
+            if i_im.shape[0]-axes == 2:
                 doT = False
-            nside = int(np.sqrt(i_im.shape[1] // 12))
+            nside = int(np.sqrt(i_im.shape[axes+1] // 12))
 
         self.shift_ph(nside)
 
         if doT:  # nopol
-            if len(i_im.shape) == 2:  # pol
-                l_im = i_im[0]
+            if len(i_im.shape) == 1:  # pol
+                l_im = i_im[None,:]
                 if map2 is not None:
-                    l_map2 = i_map2[0]
+                    l_map2 = i_map2[None,:]
             else:
                 l_im = i_im
                 if map2 is not None:
@@ -622,7 +626,7 @@ class alm:
                 ft_im = self.comp_tf(l_im, nside, realfft=True)
                 if map2 is not None:
                     ft_im2 = self.comp_tf(l_map2, nside, realfft=True)
-
+                print(ft_im.shape)
         lth = self.ring_th(nside)
 
         co_th = np.cos(lth)
@@ -634,7 +638,7 @@ class alm:
         dt2 = 0
         dt3 = 0
         dt4 = 0
-        if len(i_im.shape) == 2:  # nopol
+        if not doT:  # pol
 
             self.init_Ys(spin, nside)
 
@@ -670,9 +674,11 @@ class alm:
 
         for m in range(lmax + 1):
 
-            plm = self.compute_legendre_m(co_th, m, 3 * nside - 1, nside) / (
-                12 * nside**2
-            )
+            plm = self.backend.bk_cast(
+                self.compute_legendre_m(co_th, m, 3 * nside - 1, nside) / (
+                    12 * nside**2
+                    )
+                )
 
             if doT:
                 tmp = self.backend.bk_reduce_sum(plm * ft_im[:, m], 1)

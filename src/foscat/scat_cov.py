@@ -6311,6 +6311,7 @@ class funct(FOC.FoCUS):
                   to_gaussian=True,
                   use_variance=False,
                   synthesised_N=1,
+                  input_image=None,
                   iso_ang=False,
                   EVAL_FREQUENCY=100,
                   NUM_EPOCHS = 300):
@@ -6368,14 +6369,22 @@ class funct(FOC.FoCUS):
         
         for k in range(nstep):
             if k==0:
-                np.random.seed(seed)
-                if self.use_2D:
-                    imap=np.random.randn(synthesised_N,
-                                         tmp[k].shape[1],
-                                        tmp[k].shape[2])
+                if input_image is None:
+                    np.random.seed(seed)
+                    if self.use_2D:
+                        imap=np.random.randn(synthesised_N,
+                                             tmp[k].shape[1],
+                                            tmp[k].shape[2])
+                    else:
+                        imap=np.random.randn(synthesised_N,
+                                             tmp[k].shape[1])
                 else:
-                    imap=np.random.randn(synthesised_N,
-                                         tmp[k].shape[1])
+                    if self.use_2D:
+                        imap=self.backend.bk_reshape(self.backend.bk_tile(self.backend.bk_cast(input_image.flatten()),synthesised_N),
+                                                        [synthesised_N,tmp[k].shape[1],tmp[k].shape[2]])
+                    else:
+                        imap=self.backend.bk_reshape(self.backend.bk_tile(self.backend.bk_cast(input_image.flatten()),synthesised_N),
+                                                        [synthesised_N,tmp[k].shape[1]])
             else:
                 # Increase the resolution between each step
                 if self.use_2D:
