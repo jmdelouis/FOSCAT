@@ -363,8 +363,8 @@ class BkTensorflow(BackendBase.BackendBase):
     def bk_zeros(self, shape, dtype=None):
         return self.backend.zeros(shape, dtype=dtype)
 
-    def bk_gather(self, data, idx):
-        return self.backend.gather(data, idx)
+    def bk_gather(self, data, idx,axis=0):
+        return self.backend.gather(data, idx,axis=axis)
 
     def bk_reverse(self, data, axis=0):
         return self.backend.reverse(data, axis=[axis])

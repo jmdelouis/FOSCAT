@@ -284,8 +284,17 @@ class BkNumpy(BackendBase.BackendBase):
     def bk_zeros(self, shape, dtype=None):
         return np.zeros(shape, dtype=dtype)
 
-    def bk_gather(self, data, idx):
-        return data[idx]
+    def bk_gather(self, data, idx,axis=0):
+        if axis==0:
+            return data[idx]
+        elif axis==1:
+            return data[:,idx]
+        elif axis==2:
+            return data[:,:,idx]
+        elif axis==3:
+            return data[:,:,:,idx]
+        return data[:,:,:,:,idx]
+        
 
     def bk_reverse(self, data, axis=0):
         return np.reverse(data, axis=axis)

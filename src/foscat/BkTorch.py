@@ -329,8 +329,16 @@ class BkTorch(BackendBase.BackendBase):
     def bk_zeros(self, shape, dtype=None):
         return self.backend.zeros(shape, dtype=dtype).to(self.torch_device)
 
-    def bk_gather(self, data, idx):
-        return data[idx]
+    def bk_gather(self, data, idx,axis=0):
+        if axis==0:
+            return data[idx]
+        elif axis==1:
+            return data[:,idx]
+        elif axis==2:
+            return data[:,:,idx]
+        elif axis==3:
+            return data[:,:,:,idx]
+        return data[:,:,:,:,idx]
 
     def bk_reverse(self, data, axis=0):
         return self.backend.flip(data, dims=[axis])

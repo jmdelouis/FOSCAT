@@ -615,14 +615,13 @@ class alm:
 
             if nest:
                 idx = hp.ring2nest(nside, np.arange(12 * nside**2))
-                if len(i_im.shape) == 1:  # nopol
-                    ft_im = self.comp_tf(
-                        self.backend.bk_gather(l_im, idx), nside, realfft=True
+                ft_im = self.comp_tf(
+                    self.backend.bk_gather(l_im, idx, axis=1), nside, realfft=True
+                )
+                if map2 is not None:
+                    ft_im2 = self.comp_tf(
+                        self.backend.bk_gather(l_map2, idx, axis=1), nside, realfft=True
                     )
-                    if map2 is not None:
-                        ft_im2 = self.comp_tf(
-                            self.backend.bk_gather(l_map2, idx), nside, realfft=True
-                        )
             else:
                 ft_im = self.comp_tf(l_im, nside, realfft=True)
                 if map2 is not None:
@@ -657,13 +656,13 @@ class alm:
 
             if nest:
                 idx = hp.ring2nest(nside, np.arange(12 * nside**2))
-                l_Q = self.backend.bk_gather(l_im[:,int(do_all_pol)], idx)
-                l_U = self.backend.bk_gather(l_im[:,1 + int(do_all_pol)], idx)
+                l_Q = self.backend.bk_gather(l_im[:,int(do_all_pol)], idx,axis=1)
+                l_U = self.backend.bk_gather(l_im[:,1 + int(do_all_pol)], idx,axis=1)
                 ft_im_Pp = self.comp_tf(self.backend.bk_complex(l_Q, l_U), nside)
                 ft_im_Pm = self.comp_tf(self.backend.bk_complex(l_Q, -l_U), nside)
                 if map2 is not None:
-                    l_Q = self.backend.bk_gather(l_map2[:,int(do_all_pol)], idx)
-                    l_U = self.backend.bk_gather(l_map2[:,1 + int(do_all_pol)], idx)
+                    l_Q = self.backend.bk_gather(l_map2[:,int(do_all_pol)], idx,axis=1)
+                    l_U = self.backend.bk_gather(l_map2[:,1 + int(do_all_pol)], idx,axis=1)
                     ft_im2_Pp = self.comp_tf(self.backend.bk_complex(l_Q, l_U), nside)
                     ft_im2_Pm = self.comp_tf(self.backend.bk_complex(l_Q, -l_U), nside)
             else:
