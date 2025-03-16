@@ -27,6 +27,7 @@ for BACKEND in bk_tab:
         
         for k in range(6):
             print('foscat ml',(cl1[k]-cl3[k]).std())
+            assert  (cl1[k]-cl3[k]).std()<1E-6/nside
 
         cl1,cl1_l1=alm1.anafast(im[1:])
         cl1=alm1.backend.to_numpy(cl1)
@@ -37,6 +38,9 @@ for BACKEND in bk_tab:
         print('foscat ml',(cl1[0]-cl3[1]).std())
         print('foscat ml',(cl1[1]-cl3[2]).std())
         print('foscat ml',(cl1[2]-cl3[4]).std())
+        assert  (cl1[0]-cl3[1]).std()<1E-6/nside
+        assert  (cl1[1]-cl3[2]).std()<1E-6/nside
+        assert  (cl1[2]-cl3[4]).std()<1E-6/nside
         
         cl1,cl1_l1=alm1.anafast(im[0])
         cl1=alm1.backend.to_numpy(cl1)
@@ -45,6 +49,7 @@ for BACKEND in bk_tab:
         print('TT',nside,BACKEND)
         
         print('foscat ml',(cl1-cl3).std())
+        assert  (cl1-cl3).std()<1E-6/nside
         
 #============================================================================================
 #
@@ -67,6 +72,7 @@ for BACKEND in bk_tab:
             cl3=hp.anafast(im[l],iter=0)
             for k in range(6):
                 print('foscat ml',l,(cl1[l,k]-cl3[k]).std())
+                assert  (cl1[l,k]-cl3[k]).std()<1E-6/nside
 
         cl1,cl1_l1=alm1.anafast(im[:,1:],axes=1)
         cl1=alm1.backend.to_numpy(cl1)
@@ -78,6 +84,9 @@ for BACKEND in bk_tab:
             print('foscat ml',l,(cl1[l,0]-cl3[1]).std())
             print('foscat ml',l,(cl1[l,1]-cl3[2]).std())
             print('foscat ml',l,(cl1[l,2]-cl3[4]).std())
+            assert  (cl1[l,0]-cl3[1]).std()<1E-6/nside
+            assert  (cl1[l,1]-cl3[2]).std()<1E-6/nside
+            assert  (cl1[l,2]-cl3[4]).std()<1E-6/nside
         
         cl1,cl1_l1=alm1.anafast(im[:,0],axes=1)
         cl1=alm1.backend.to_numpy(cl1)
@@ -86,3 +95,4 @@ for BACKEND in bk_tab:
             cl3=hp.anafast(im[l,0],iter=0)
         
             print('foscat ml',l,(cl1[l]-cl3).std())
+            assert  (cl1[l]-cl3).std()<1E-6/nside
