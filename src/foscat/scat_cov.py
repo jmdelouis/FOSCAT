@@ -4936,6 +4936,11 @@ class funct(FOC.FoCUS):
         if S4_criteria is None:
             S4_criteria = 'j2>=j1'
         
+        if self.all_bk_type == "float32":
+            C_ONE=np.complex64(1.0)
+        else:
+            C_ONE=np.complex128(1.0)
+            
         # determine jmax and nside corresponding to the input map
         im_shape = data.shape
         if self.use_2D:
@@ -5623,7 +5628,10 @@ class funct(FOC.FoCUS):
             edge_dx = min(4, int(2**j3*dx3*2/M))
             edge_dy = min(4, int(2**j3*dy3*2/N))
             # a normalization change due to the cutoff of frequency space
-            fft_factor = 1 /(M3*N3) * (M3*N3/M/N)**2
+            if self.all_bk_type == "float32":
+                fft_factor = np.complex64(1 /(M3*N3) * (M3*N3/M/N)**2)
+            else:
+                fft_factor = np.complex128(1 /(M3*N3) * (M3*N3/M/N)**2)
             for j2 in range(0,j3+1):
                 #I1_f2_wf3_small = I1_f_small[:,j2].view(N_image,L,1,M3,N3) * wavelet_f3.view(1,1,L,M3,N3)
                 #I1_f2_wf3_2_small = I1_f_small[:,j2].view(N_image,L,1,M3,N3) * wavelet_f3_squared.view(1,1,L,M3,N3)
@@ -5635,21 +5643,24 @@ class funct(FOC.FoCUS):
                 if use_ref:
                     if normalization=='P11':
                         norm_factor_S3 = (ref_S2[:,None,j3,:] * ref_P11[:,j2,j3,:,:]**pseudo_coef)**0.5
+                        norm_factor_S3 = self.backend.bk_complex(norm_factor_S3,0*norm_factor_S3)
                     elif normalization=='S2':
                         norm_factor_S3 = (ref_S2[:,None,j3,:] * ref_S2[:,j2,:,None]**pseudo_coef)**0.5
+                        norm_factor_S3 = self.backend.bk_complex(norm_factor_S3,0*norm_factor_S3)
                     else:
-                        norm_factor_S3 = 1.0
+                        norm_factor_S3 = C_ONE
                 else:
                     if normalization=='P11':
                         # [N_image,l2,l3,x,y]
                         P11_temp = self.backend.bk_reduce_mean((I1_f2_wf3_small.abs()**2),axis=(-2,-1)) * fft_factor
                         norm_factor_S3 = (S2[:,None,j3,:] * P11_temp**pseudo_coef)**0.5
+                        norm_factor_S3 = self.backend.bk_complex(norm_factor_S3,0*norm_factor_S3)
                     elif normalization=='S2':
                         norm_factor_S3 = (S2[:,None,j3,None,:] * S2[:,None,j2,:,None]**pseudo_coef)**0.5
+                        norm_factor_S3 = self.backend.bk_complex(norm_factor_S3,0*norm_factor_S3)
                     else:
-                        norm_factor_S3 = 1.0
+                        norm_factor_S3 = C_ONE
                         
-                norm_factor_S3 = self.backend.bk_complex(norm_factor_S3,0*norm_factor_S3)
 
                 if not edge:
                     S3.append(self.backend.bk_reduce_mean(
@@ -5695,7 +5706,7 @@ class funct(FOC.FoCUS):
                             P = 1/(((S2[:,j3:j3+1,:,None,None] * S2[:,j2:j2+1,None,:,None] )**(0.5*pseudo_coef)))
                         P=self.backend.bk_complex(P,0.0*P)
                     else:
-                        P=self.backend.bk_complex(1.0,0.0)
+                        P=C_ONE
                         
                     for j1 in range(0, j2+1):
                             if not edge:
