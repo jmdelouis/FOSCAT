@@ -167,8 +167,8 @@ class alm:
                 vnorm = 1 / np.expand_dims(
                     np.sqrt(2 * (np.arange(ell_max - m + 1) + m) + 1), 1
                 )
-                self.Yp[s, nside][m] = self.backend.bk_cast(iplus[idx] * vnorm)
-                self.Ym[s, nside][m] = self.backend.bk_cast(imoins[idx] * vnorm)
+                self.Yp[s, nside][m] = self.backend.bk_cast(iplus[idx] * vnorm+0J)
+                self.Ym[s, nside][m] = self.backend.bk_cast(imoins[idx] * vnorm+0J)
 
             del iplus
             del imoins
@@ -224,7 +224,7 @@ class alm:
         result[0] = Pmm
 
         if m == lmax:
-            return result * np.exp(ratio) * np.sqrt(4 * np.pi)
+            return result * np.exp(ratio) * np.sqrt(4 * np.pi)+0J
 
         # Étape 2 : Calcul de P_{l+1, m}(x)
         result[1] = x * (2 * m + 1) * result[0]
@@ -245,7 +245,7 @@ class alm:
                 ratio[l - m - 1, 0] += self._log_limit_range
                 ratio[l - m, 0] += self._log_limit_range
 
-        return result * np.exp(ratio) * np.sqrt(4 * np.pi)
+        return result * np.exp(ratio) * np.sqrt(4 * np.pi)+0J
 
     # Calcul des P_{lm}(x) pour tout l inclus dans [m,lmax]
     def compute_legendre_m_old2(self, x, m, lmax, nside):
@@ -457,12 +457,6 @@ class alm:
             ft_im.append(tmp[:,None,0 : 3 * nside])
 
             n += N
-        '''
-        if nside > 1:
-            result = self.backend.bk_reshape(
-                self.backend.bk_concat(ft_im, axis=0), [nside - 1, 3 * nside]
-            )
-        '''
 
         N = 4 * nside * (2 * nside + 1)
         v = self.backend.bk_reshape(im[:,n : n + N], [im.shape[0],2 * nside + 1, 4 * nside])
@@ -472,12 +466,7 @@ class alm:
             v_fft = self.backend.bk_fft(v)[:, :, : 3 * nside]
 
         n += N
-        '''
-        if nside > 1:
-            result = self.backend.bk_concat([result, v_fft], axis=0)
-        else:
-            result = v_fft
-        '''
+        
         ft_im.append(v_fft)
         
         if nside > 1:
@@ -704,7 +693,6 @@ class alm:
                     12 * nside**2
                     )
                 )
-            plm=self.backend.bk_complex(plm,0*plm)
 
             if doT or do_all_pol:
                 tmp = self.backend.bk_reduce_sum(plm[None,:,:] * ft_im[:,None,:, m], 2)
