@@ -320,7 +320,9 @@ class BkTensorflow(BackendBase.BackendBase):
         return self.backend.repeat(data, nn, axis=axis)
 
     def bk_tile(self, data, nn, axis=0):
-        return self.backend.tile(data, [nn])
+        order=[1 for k in data.shape]
+        order[axis]=nn
+        return self.backend.tile(data, self.backend.constant(order, tf.int32))
         
     def bk_roll(self, data, nn, axis=0):
         return self.backend.roll(data, nn, axis=axis)
