@@ -23,6 +23,7 @@ class Loss:
 
         self.loss_function = function
         self.scat_operator = scat_operator
+        self.to_numpy = scat_operator.backend.to_numpy
         self.args = param
         self.name = name
         self.batch = batch
@@ -84,6 +85,7 @@ class Synthesis:
         self.curr_gpu = 0
         self.event = Event()
         self.operation = loss_list[0].scat_operator
+        self.to_numpy = self.operation.backend.to_numpy
         self.mpi_size = self.operation.mpi_size
         self.mpi_rank = self.operation.mpi_rank
         self.KEEP_TRACK = None
@@ -223,24 +225,24 @@ class Synthesis:
                 else:
                     g_tot = g_tot + g
 
-                l_tot = l_tot + l_loss.numpy()
+                l_tot = l_tot + self.to_numpy(l_loss)
 
                 if self.l_log[self.mpi_rank * self.MAXNUMLOSS + k] == -1:
                     self.l_log[self.mpi_rank * self.MAXNUMLOSS + k] = (
-                        l_loss.numpy() / nstep
+                        self.to_numpy(l_loss) / nstep
                     )
                 else:
                     self.l_log[self.mpi_rank * self.MAXNUMLOSS + k] = (
                         self.l_log[self.mpi_rank * self.MAXNUMLOSS + k]
-                        + l_loss.numpy() / nstep
+                        + self.to_numpy(l_loss) / nstep
                     )
 
         grd_mask = self.grd_mask
 
         if grd_mask is not None:
-            g_tot = grd_mask * g_tot.numpy()
+            g_tot = grd_mask * self.to_numpy(g_tot)
         else:
-            g_tot = g_tot.numpy()
+            g_tot = self.to_numpy(g_tot)
 
         g_tot[np.isnan(g_tot)] = 0.0
 
@@ -390,7 +392,7 @@ class Synthesis:
         self.oshape = list(x.shape)
 
         if not isinstance(x, np.ndarray):
-            x = x.numpy()
+            x = self.to_numpy(x)
 
         x = x.flatten()
 
@@ -424,7 +426,7 @@ class Synthesis:
                 factr=factr,
                 maxiter=maxitt,
             )
-
+            print("Final Loss ", loss)
             # update bias input data
             if iteration < NUM_STEP_BIAS - 1:
                 # if self.mpi_rank==0:
