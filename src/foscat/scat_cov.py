@@ -5124,11 +5124,11 @@ class funct(FOC.FoCUS):
                             )
                         else:
                             P = 1 / (
-                                    (
-                                        S2[:, j3 : j3 + 1, :, None, None]
-                                        * S2[:, j2 : j2 + 1, None, :, None]
-                                    )
-                                    ** (0.5 * pseudo_coef)
+                                (
+                                    S2[:, j3 : j3 + 1, :, None, None]
+                                    * S2[:, j2 : j2 + 1, None, :, None]
+                                )
+                                ** (0.5 * pseudo_coef)
                             )
                         P = self.backend.bk_complex(P, 0.0 * P)
                     else:
