@@ -2502,7 +2502,9 @@ class funct(FOC.FoCUS):
                 for m in range(self.NORIENT):
                     for ell in range(self.NORIENT):
                         col0 = self.NORIENT * ((ell + iph2[:, m]) % self.NORIENT) + ell
-                        col1 = self.NORIENT * ((ell + iph2[:, m] + 1) % self.NORIENT) + ell
+                        col1 = (
+                            self.NORIENT * ((ell + iph2[:, m] + 1) % self.NORIENT) + ell
+                        )
                         mat2[k2, lidx, m, col0] = w0_2[:, m]
                         mat2[k2, lidx, m, col1] = w1_2[:, m]
                 cmat2[k] = self.backend.bk_cast(mat2.astype("complex64"))
