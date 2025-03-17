@@ -566,7 +566,7 @@ class alm:
         - `spin=2` for 1/2 spin data as Q and U. Spin=1 for seep fields
 
         Output:
-        -A tensor of size ([l_{\text{max}} \times (l_{\text{max}}-1)) formatted as ([6, \ldots]),
+        -A tensor of size ([l_{\text{max}} \times (l_{\text{max}}-1)) formatted as ([6, ldots]),
         ordered as TT, EE, BB, TE, EB.TBanafast function computes L1 and L2 norm powerspctra.
 
         """
