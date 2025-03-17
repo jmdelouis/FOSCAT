@@ -33,13 +33,12 @@ class BkNumpy(BackendBase.BackendBase):
                 self.all_bk_type = self.backend.float64
                 self.all_cbk_type = self.backend.complex128
             else:
-                print("ERROR INIT FOCUS ", all_type, " should be float32 or float64")
+                print("ERROR INIT FOCUS ", self.all_type, " should be float32 or float64")
                 return None
 
         # ===========================================================================
         # INIT
 
-        gpus = []
         gpuname = "CPU:0"
         self.gpulist = {}
         self.gpulist[0] = gpuname
@@ -114,9 +113,6 @@ class BkNumpy(BackendBase.BackendBase):
             return np.concatenate([x.real.flatten(), x.imag.flatten()], 0)
         else:
             return x.flatten()
-
-    def bk_flatten(self, x):
-        return x.flatten()
 
     def bk_flatten(self, x):
         return x.flatten()
@@ -367,10 +363,9 @@ class BkNumpy(BackendBase.BackendBase):
         return self.bk_cast(x)
 
     def bk_assign(self, x, y):
-        x = y
+        return y
 
     def bk_constant(self, x):
-
         return self.bk_cast(x)
 
     def bk_cos(self, x):

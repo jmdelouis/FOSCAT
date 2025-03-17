@@ -36,7 +36,7 @@ class BkTensorflow(BackendBase.BackendBase):
             self.all_bk_type, self.all_cbk_type = dtype_map[self.all_type]
         else:
             raise ValueError(
-                f"ERROR INIT foscat: {all_type} should be float32 or float64"
+                f"ERROR INIT foscat: {self.all_type} should be float32 or float64"
             )
 
         if self.mpi_rank == 0:
@@ -167,9 +167,6 @@ class BkTensorflow(BackendBase.BackendBase):
 
     def bk_flatten(self, x):
         return self.backend.flatten(x)
-
-    def bk_size(self, x):
-        return self.backend.size(x)
 
     def bk_resize_image(self, x, shape):
         return self.bk_cast(self.backend.image.resize(x, shape, method="bilinear"))

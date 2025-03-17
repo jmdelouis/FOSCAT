@@ -32,7 +32,7 @@ class BkTorch(BackendBase.BackendBase):
             self.all_bk_type, self.all_cbk_type = dtype_map[self.all_type]
         else:
             raise ValueError(
-                f"ERROR INIT foscat: {all_type} should be float32 or float64"
+                f"ERROR INIT foscat: {self.all_type} should be float32 or float64"
             )
 
         # ===========================================================================
@@ -145,7 +145,7 @@ class BkTorch(BackendBase.BackendBase):
 
             r = self.backend.sign(xr) * self.backend.sqrt(self.backend.sign(xr) * xr)
             # return r
-            i = self.backend.sign(xi) * self.backend.sqrt(self.backend.sign(xi) * xi)
+            #i = self.backend.sign(xi) * self.backend.sqrt(self.backend.sign(xi) * xi)
 
             return r
         else:
@@ -448,7 +448,7 @@ class BkTorch(BackendBase.BackendBase):
         return self.bk_cast(x)
 
     def bk_assign(self, x, y):
-        x = y
+        return y
 
     def bk_constant(self, x):
 

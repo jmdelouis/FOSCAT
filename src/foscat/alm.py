@@ -1,8 +1,5 @@
-import time
-
 import healpy as hp
 import numpy as np
-
 
 class alm:
 
@@ -103,7 +100,7 @@ class alm:
 
             self.lmax = 3 * nside - 1
 
-            ratio_mm = {}
+            #ratio_mm = {}
 
             for m in range(3 * nside):
                 val = np.zeros([self.lmax - m + 1])
@@ -129,11 +126,11 @@ class alm:
                             - 0.5 * self.log(l + m)
                         )
 
-                self.A[nside, m] = self.backend.bk_constant((aval))
-                self.B[nside, m] = self.backend.bk_constant((bval))
+                self.A[nside, m] = self.backend.bk_constant(aval)
+                self.B[nside, m] = self.backend.bk_constant(bval)
                 self.ratio_mm[nside, m] = self.backend.bk_constant(
                     np.sqrt(4 * np.pi) * np.expand_dims(np.exp(val), 1)
-                )
+                    )
             # Calcul de P_{mm}(x)
             P_mm = np.ones([3 * nside, 4 * nside - 1])
             x = np.cos(self.lth[nside])
@@ -553,19 +550,19 @@ class alm:
     def anafast(self, im, map2=None, nest=False, spin=2, axes=0):
         """The `anafast` function computes the L1 and L2 norm power spectra.
 
-        Currently, it is not optimized for single-pass computation due to the relatively inefficient computation of \(Y_{lm}\).
+        Currently, it is not optimized for single-pass computation due to the relatively inefficient computation of (Y_{lm}).
         Nonetheless, it utilizes TensorFlow and can be integrated into gradient computations.
 
         Input:
-        - `im`: a vector of size \([12 \times \text{Nside}^2]\) for scalar data, or of size \([2, 12 \times \text{Nside}^2]\) for Q,U polar data,
-        or of size \([3, 12 \times \text{Nside}^2]\) for I,Q,U polar data.
-        - `map2` (optional): a vector of size \([12 \times \text{Nside}^2]\) for scalar data, or of size
-        \([3, 12 \times \text{Nside}^2]\) for polar data. If provided, cross power spectra will be computed.
+        - `im`: a vector of size ([12 \times \text{Nside}^2]) for scalar data, or of size ([2, 12 \times \text{Nside}^2]) for Q,U polar data,
+        or of size ([3, 12 \times \text{Nside}^2]) for I,Q,U polar data.
+        - `map2` (optional): a vector of size ([12 \times \text{Nside}^2]) for scalar data, or of size
+        ([3, 12 \times \text{Nside}^2]) for polar data. If provided, cross power spectra will be computed.
         - `nest=True`: alters the ordering of the input maps.
         - `spin=2` for 1/2 spin data as Q and U. Spin=1 for seep fields
 
         Output:
-        -A tensor of size \([l_{\text{max}} \times (l_{\text{max}}-1)]\) formatted as \([6, \ldots]\),
+        -A tensor of size ([l_{\text{max}} \times (l_{\text{max}}-1)\) formatted as ([6, \ldots]),
         ordered as TT, EE, BB, TE, EB.TBanafast function computes L1 and L2 norm powerspctra.
 
         """

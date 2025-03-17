@@ -1,6 +1,5 @@
 import time
 
-import numpy as np
 import tensorflow as tf
 
 # Vérifier si un GPU est disponible

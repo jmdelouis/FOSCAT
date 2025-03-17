@@ -387,9 +387,6 @@ class BackendBase:
     def bk_flatten(self, x):
         raise NotImplementedError("This is an abstract class.")
 
-    def bk_flatten(self, x):
-        raise NotImplementedError("This is an abstract class.")
-
     def bk_size(self, x):
         raise NotImplementedError("This is an abstract class.")
 

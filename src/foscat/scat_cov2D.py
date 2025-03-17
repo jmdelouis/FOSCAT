@@ -117,7 +117,6 @@ class funct(scat.funct):
             plt.legend(frameon=0)
 
 
-=======
     def plot_results(self, in_image, out_image, vmin=None, vmax=None, cmap="coolwarm"):
         import matplotlib.pyplot as plt
 
