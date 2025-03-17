@@ -463,7 +463,7 @@ class BkTensorflow(BackendBase.BackendBase):
         return self.backend.Variable(x)
 
     def bk_assign(self, x, y):
-        x.assign(y)
+        return x.assign(y)
 
     def bk_constant(self, x):
         return self.backend.constant(x)

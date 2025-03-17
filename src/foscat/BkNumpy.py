@@ -139,9 +139,6 @@ class BkNumpy(BackendBase.BackendBase):
     # ---------------------------------------------−---------
     # return a tensor size
 
-    def bk_size(self, data):
-        return data.size
-
     def bk_reduce_mean(self, data, axis=None):
 
         if axis is None:

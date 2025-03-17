@@ -141,7 +141,7 @@ class BkTorch(BackendBase.BackendBase):
     def bk_L1(self, x):
         if x.dtype == self.all_cbk_type:
             xr = self.bk_real(x)
-            xi = self.bk_imag(x)
+            #xi = self.bk_imag(x)
 
             r = self.backend.sign(xr) * self.backend.sqrt(self.backend.sign(xr) * xr)
             # return r

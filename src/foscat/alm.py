@@ -117,13 +117,13 @@ class alm:
                     aval[1] = 2 * m + 1
                     val[1] = val[0] - 0.5 * self.log(2 * m + 1)
 
-                    for l in range(m + 2, self.lmax + 1):
-                        aval[l - m] = (2 * l - 1) / (l - m)
-                        bval[l - m] = (l + m - 1) / (l - m)
-                        val[l - m] = (
-                            val[l - m - 1]
-                            + 0.5 * self.log(l - m)
-                            - 0.5 * self.log(l + m)
+                    for ell in range(m + 2, self.lmax + 1):
+                        aval[ell - m] = (2 * ell - 1) / (ell - m)
+                        bval[ell - m] = (ell + m - 1) / (ell - m)
+                        val[ell - m] = (
+                            val[ell - m - 1]
+                            + 0.5 * self.log(ell - m)
+                            - 0.5 * self.log(ell + m)
                         )
 
                 self.A[nside, m] = self.backend.bk_constant(aval)
@@ -229,18 +229,18 @@ class alm:
         ratio[1, 0] = ratio[0, 0] - 0.5 * self.log(2 * m + 1)
 
         # Étape 3 : Récurence pour l > m + 1
-        for l in range(m + 2, lmax + 1):
-            result[l - m] = (
-                (2 * l - 1) * x * result[l - m - 1] - (l + m - 1) * result[l - m - 2]
-            ) / (l - m)
-            ratio[l - m, 0] = (
-                0.5 * self.log(l - m) - 0.5 * self.log(l + m) + ratio[l - m - 1, 0]
+        for ell in range(m + 2, lmax + 1):
+            result[ell - m] = (
+                (2 * ell - 1) * x * result[ell - m - 1] - (ell + m - 1) * result[ell - m - 2]
+            ) / (ell - m)
+            ratio[ell - m, 0] = (
+                0.5 * self.log(ell - m) - 0.5 * self.log(ell + m) + ratio[ell - m - 1, 0]
             )
-            if np.max(abs(result[l - m])) > self._limit_range:
-                result[l - m - 1] *= self._limit_range
-                result[l - m] *= self._limit_range
-                ratio[l - m - 1, 0] += self._log_limit_range
-                ratio[l - m, 0] += self._log_limit_range
+            if np.max(abs(result[ell - m])) > self._limit_range:
+                result[ell - m - 1] *= self._limit_range
+                result[ell - m] *= self._limit_range
+                ratio[ell - m - 1, 0] += self._log_limit_range
+                ratio[ell - m, 0] += self._log_limit_range
 
         return result * np.exp(ratio) * np.sqrt(4 * np.pi) + 0j
 
@@ -262,10 +262,10 @@ class alm:
         result[1] = x * self.A[nside, m][1] * result[0]
 
         # Étape 3 : Récurence pour l > m + 1
-        for l in range(m + 2, lmax + 1):
-            result[l - m] = (
-                self.A[nside, m][l - m] * x * result[l - m - 1]
-                - self.B[nside, m][l - m] * result[l - m - 2]
+        for ell in range(m + 2, lmax + 1):
+            result[ell - m] = (
+                self.A[nside, m][ell - m] * x * result[ell - m - 1]
+                - self.B[nside, m][ell - m] * result[ell - m - 2]
             )
         result = self.backend.bk_reshape(
             self.backend.bk_concat([result[k] for k in range(lmax + 1 - m)], axis=0),
@@ -364,19 +364,19 @@ class alm:
             ratio[2, 0] = ratio[1, 0] - self.log(2 * m + 1) / 2
 
             # Étape 3 : Récurence pour l > m + 1
-            for l in range(m + 2, lmax + 1):
-                result[l - m + 1] = (
-                    (2 * l - 1) * co_th * result[l - m]
-                    - (l + m - 1) * result[l - m - 1]
-                ) / (l - m)
-                ratio[l - m + 1, 0] = (self.log(l - m) - self.log(l + m)) / 2 + ratio[
-                    l - m, 0
+            for ell in range(m + 2, lmax + 1):
+                result[ell - m + 1] = (
+                    (2 * ell - 1) * co_th * result[ell - m]
+                    - (ell + m - 1) * result[ell - m - 1]
+                ) / (ell - m)
+                ratio[ell - m + 1, 0] = (self.log(ell - m) - self.log(ell + m)) / 2 + ratio[
+                    ell - m, 0
                 ]
-                if np.max(abs(result[l - m + 1])) > self._limit_range:
-                    result[l - m] *= self._limit_range
-                    result[l - m + 1] *= self._limit_range
-                    ratio[l - m, 0] += self._log_limit_range
-                    ratio[l - m + 1, 0] += self._log_limit_range
+                if np.max(abs(result[ell - m + 1])) > self._limit_range:
+                    result[ell - m] *= self._limit_range
+                    result[ell - m + 1] *= self._limit_range
+                    ratio[ell - m, 0] += self._log_limit_range
+                    ratio[ell - m + 1, 0] += self._log_limit_range
 
             ylm = result * np.exp(ratio)
             ylm[1:] *= (
@@ -393,8 +393,8 @@ class alm:
         ) + ell * (ell - 1) * cot_th * cot_th
         b = 2 * m * (ell - 1) * cot_th / si_th
         w = np.zeros([lmax + 1 - m, 1])
-        l = ell[ell > 1]
-        w[ell > 1] = np.sqrt(1 / ((l + 2) * (l + 1) * (l) * (l - 1)))
+        l_ell = ell[ell > 1]
+        w[ell > 1] = np.sqrt(1 / ((l_ell + 2) * (l_ell + 1) * (l_ell) * (l_ell - 1)))
         w = w.reshape(lmax + 1 - m, 1)
 
         alpha_plus = w * (a + b)
@@ -562,7 +562,7 @@ class alm:
         - `spin=2` for 1/2 spin data as Q and U. Spin=1 for seep fields
 
         Output:
-        -A tensor of size ([l_{\text{max}} \times (l_{\text{max}}-1)\) formatted as ([6, \ldots]),
+        -A tensor of size ([l_{\text{max}} \times (l_{\text{max}}-1)) formatted as ([6, \ldots]),
         ordered as TT, EE, BB, TE, EB.TBanafast function computes L1 and L2 norm powerspctra.
 
         """
@@ -633,10 +633,7 @@ class alm:
         lmax = 3 * nside - 1
 
         cl2 = None
-        cl2_L1 = None
-        dt2 = 0
-        dt3 = 0
-        dt4 = 0
+        
         if not doT:  # polarize case
 
             self.init_Ys(spin, nside)
@@ -743,24 +740,24 @@ class alm:
 
                 if do_all_pol:
                     tmpTT = self.backend.bk_real(
-                        (tmp * self.backend.bk_conjugate(tmp2))
+                        tmp * self.backend.bk_conjugate(tmp2)
                     )
                     tmpTE = self.backend.bk_real(
-                        (tmp * self.backend.bk_conjugate(almE2))
+                        tmp * self.backend.bk_conjugate(almE2)
                     )
                     tmpTB = -self.backend.bk_real(
-                        (tmp * self.backend.bk_conjugate(almB2))
+                        tmp * self.backend.bk_conjugate(almB2)
                     )
 
-                tmpEE = self.backend.bk_real((almE * self.backend.bk_conjugate(almE2)))
-                tmpBB = self.backend.bk_real((almB * self.backend.bk_conjugate(almB2)))
-                tmpEB = -self.backend.bk_real((almE * self.backend.bk_conjugate(almB2)))
+                tmpEE = self.backend.bk_real(almE * self.backend.bk_conjugate(almE2))
+                tmpBB = self.backend.bk_real(almB * self.backend.bk_conjugate(almB2))
+                tmpEB = -self.backend.bk_real(almE * self.backend.bk_conjugate(almB2))
 
                 if map2 is not None:
                     tmpEB = (
                         tmpEB
                         - self.backend.bk_real(
-                            (almE2 * self.backend.bk_conjugate(almB))
+                            almE2 * self.backend.bk_conjugate(almB)
                         )
                     ) / 2
 
