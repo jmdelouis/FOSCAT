@@ -2430,10 +2430,10 @@ class funct(FOC.FoCUS):
             # build rotation matrix
             mat = np.zeros([sim.shape[1], self.NORIENT * self.NORIENT])
             lidx = np.arange(sim.shape[1])
-            for l in range(self.NORIENT):
+            for ell in range(self.NORIENT):
                 # Instead of simple linear weights, we use the cosine weights w0 and w1.
-                col0 = self.NORIENT * ((l + iph) % self.NORIENT) + l
-                col1 = self.NORIENT * ((l + iph + 1) % self.NORIENT) + l
+                col0 = self.NORIENT * ((ell + iph) % self.NORIENT) + ell
+                col1 = self.NORIENT * ((ell + iph + 1) % self.NORIENT) + ell
                 mat[lidx, col0] = w0
                 mat[lidx, col1] = w1
 

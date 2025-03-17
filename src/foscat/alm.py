@@ -763,13 +763,13 @@ class alm:
                         tmpTE = (
                             tmpTE
                             + self.backend.bk_real(
-                                (tmp2 * self.backend.bk_conjugate(almE))
+                                tmp2 * self.backend.bk_conjugate(almE)
                             )
                         ) / 2
                         tmpTB = (
                             tmpTB
                             - self.backend.bk_real(
-                                (tmp2 * self.backend.bk_conjugate(almB))
+                                tmp2 * self.backend.bk_conjugate(almB)
                             )
                         ) / 2
 
@@ -811,7 +811,7 @@ class alm:
                         l_cl.append(offset_tensor)
                         l_cl.append(2 * tmpEB)
             else:
-                tmp = self.backend.bk_real((tmp * self.backend.bk_conjugate(tmp2)))
+                tmp = self.backend.bk_real(tmp * self.backend.bk_conjugate(tmp2))
                 if m == 0:
                     l_cl.append(tmp)
                 else:
@@ -843,7 +843,7 @@ class alm:
     def map2alm(self, im, nest=False):
         nside = int(np.sqrt(im.shape[0] // 12))
 
-        ph = self.shift_ph(nside)
+        #ph = self.shift_ph(nside)
 
         if nest:
             idx = hp.ring2nest(nside, np.arange(12 * nside**2))
@@ -908,7 +908,7 @@ class alm:
         return self.backend.bk_reshape(
             self.backend.bk_concat(ft_im, 0), [lmax + 1, 4 * nside - 1]
         )
-
+        '''
         if nest:
             idx = hp.ring2nest(nside, np.arange(12 * nside**2))
             ft_im = self.comp_tf(
@@ -934,7 +934,7 @@ class alm:
                 alm = self.backend.bk_concat([alm, tmp], axis=0)
 
         return o_map
-
+        '''
     def map2alm_spin(self, im_Q, im_U, spin=2, nest=False):
 
         if spin == 0:
@@ -944,7 +944,7 @@ class alm:
 
         lth = self.ring_th(nside)
 
-        co_th = np.cos(lth)
+        #co_th = np.cos(lth)
 
         if nest:
             idx = hp.ring2nest(nside, np.arange(12 * nside**2))
@@ -958,7 +958,7 @@ class alm:
 
         lmax = 3 * nside - 1
 
-        alm = None
+        #alm = None
         for m in range(lmax + 1):
             # not yet debug use spherical
             # plmp1,plmm1=self.compute_legendre_spin2_m(co_th,si_th,m,3*nside-1)

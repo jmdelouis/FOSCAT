@@ -571,28 +571,11 @@ class foscat_backend:
 
     def bk_flatten(self, x):
         if self.BACKEND == self.TENSORFLOW:
-            return self.backend.flatten(x)
-        elif self.BACKEND == self.TORCH:
-            return self.backend.flatten(x)
-        else:
-            return x.flatten()
-
-    def bk_flatten(self, x):
-        if self.BACKEND == self.TENSORFLOW:
             return self.backend.reshape(x, [np.prod(np.array(list(x.shape)))])
         if self.BACKEND == self.TORCH:
             return self.backend.reshape(x, [np.prod(np.array(list(x.shape)))])
         if self.BACKEND == self.NUMPY:
             return x.flatten()
-
-    def bk_size(self, x):
-        if self.BACKEND == self.TENSORFLOW:
-            return self.backend.size(x)
-        if self.BACKEND == self.TORCH:
-            return x.numel()
-
-        if self.BACKEND == self.NUMPY:
-            return x.size
 
     def bk_resize_image(self, x, shape):
         if self.BACKEND == self.TENSORFLOW:
