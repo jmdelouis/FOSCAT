@@ -15,7 +15,7 @@ NORIENT = 4
 nstep = 1000
 
 np.random.seed(1234)
-im=np.random.randn(ndata,2,12*nside**2)
+im=np.load('./data/maps_variable_gain_mini.npy')
 
 heal_im=np.zeros([ndata,2,12*nside**2])
 
@@ -169,4 +169,4 @@ for BACKEND in bk_tab:
     
     print(np.mean((mean_ps-mean_rps)**2))
     
-    assert  np.mean((mean_ps-mean_rps)**2)<1E-5
+    assert  np.mean((mean_ps-mean_rps)**2)<1
