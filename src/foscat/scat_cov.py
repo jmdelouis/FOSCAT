@@ -2277,14 +2277,14 @@ class funct(FOC.FoCUS):
                     if tmp.S1 is not None:
                         nS1 = np.expand_dims(tmp.S1, 0)
                 else:
-                    nS0 = np.expand_dims(tmp.S0.numpy(), 0)
-                    nS2 = np.expand_dims(tmp.S2.numpy(), 0)
-                    nS3 = np.expand_dims(tmp.S3.numpy(), 0)
-                    nS4 = np.expand_dims(tmp.S4.numpy(), 0)
+                    nS0 = np.expand_dims(self.backend.to_numpy(tmp.S0), 0)
+                    nS2 = np.expand_dims(self.backend.to_numpy(tmp.S2), 0)
+                    nS3 = np.expand_dims(self.backend.to_numpy(tmp.S3), 0)
+                    nS4 = np.expand_dims(self.backend.to_numpy(tmp.S4), 0)
                     if tmp.S3P is not None:
-                        nS3P = np.expand_dims(tmp.S3P.numpy(), 0)
+                        nS3P = np.expand_dims(self.backend.to_numpy(tmp.S3P), 0)
                     if tmp.S1 is not None:
-                        nS1 = np.expand_dims(tmp.S1.numpy(), 0)
+                        nS1 = np.expand_dims(self.backend.to_numpy(tmp.S1), 0)
 
                 if S0 is None:
                     S0 = nS0
@@ -2304,24 +2304,24 @@ class funct(FOC.FoCUS):
                         S3P = np.concatenate([S3P, nS3P], 0)
                     if tmp.S1 is not None:
                         S1 = np.concatenate([S1, nS1], 0)
-            sS0 = np.std(S0, 0)
-            sS2 = np.std(S2, 0)
-            sS3 = np.std(S3, 0)
-            sS4 = np.std(S4, 0)
-            mS0 = np.mean(S0, 0)
-            mS2 = np.mean(S2, 0)
-            mS3 = np.mean(S3, 0)
-            mS4 = np.mean(S4, 0)
+            sS0 = self.backend.bk_cast(np.std(S0, 0))
+            sS2 = self.backend.bk_cast(np.std(S2, 0))
+            sS3 = self.backend.bk_cast(np.std(S3, 0))
+            sS4 = self.backend.bk_cast(np.std(S4, 0))
+            mS0 = self.backend.bk_cast(np.mean(S0, 0))
+            mS2 = self.backend.bk_cast(np.mean(S2, 0))
+            mS3 = self.backend.bk_cast(np.mean(S3, 0))
+            mS4 = self.backend.bk_cast(np.mean(S4, 0))
             if tmp.S3P is not None:
-                sS3P = np.std(S3P, 0)
-                mS3P = np.mean(S3P, 0)
+                sS3P = self.backend.bk_cast(np.std(S3P, 0))
+                mS3P = self.backend.bk_cast(np.mean(S3P, 0))
             else:
                 sS3P = None
                 mS3P = None
 
             if tmp.S1 is not None:
-                sS1 = np.std(S1, 0)
-                mS1 = np.mean(S1, 0)
+                sS1 = self.backend.bk_cast(np.std(S1, 0))
+                mS1 = self.backend.bk_cast(np.mean(S1, 0))
             else:
                 sS1 = None
                 mS1 = None
@@ -2375,14 +2375,13 @@ class funct(FOC.FoCUS):
 
             # instead of difference between "opposite" channels use weighted average
             # of cosine and sine contributions using all channels
-            angles = (
+            angles = self.backend.bk_cast((
                 2 * np.pi * np.arange(self.NORIENT) / self.NORIENT
-            )  # shape: (NORIENT,)
-            angles = angles.reshape(1, 1, self.NORIENT)
+            ).reshape(1, 1, self.NORIENT))  # shape: (NORIENT,)
 
             # we use cosines and sines as weights for sim
-            weighted_cos = self.backend.bk_reduce_mean(sim * np.cos(angles), axis=-1)
-            weighted_sin = self.backend.bk_reduce_mean(sim * np.sin(angles), axis=-1)
+            weighted_cos = self.backend.bk_reduce_mean(sim * self.backend.bk_cos(angles), axis=-1)
+            weighted_sin = self.backend.bk_reduce_mean(sim * self.backend.bk_sin(angles), axis=-1)
             # For simplicity, take first element of the batch
             cc = weighted_cos[0]
             ss = weighted_sin[0]
@@ -2402,7 +2401,8 @@ class funct(FOC.FoCUS):
                 phase = np.fmod(np.arctan2(ss, cc) + 2 * np.pi, 2 * np.pi)
             else:
                 phase = np.fmod(
-                    np.arctan2(ss.numpy(), cc.numpy()) + 2 * np.pi, 2 * np.pi
+                    np.arctan2(self.backend.to_numpy(ss), 
+                                self.backend.to_numpy(cc)) + 2 * np.pi, 2 * np.pi
                 )
 
             # instead of linear interpolation cosine‐based interpolation
@@ -2435,7 +2435,8 @@ class funct(FOC.FoCUS):
 
                 sim2 = self.backend.bk_reduce_sum(
                     self.backend.bk_reshape(
-                        mat.reshape(1, mat.shape[0], self.NORIENT * self.NORIENT)
+                        self.backend.bk_cast(
+                        mat.reshape(1, mat.shape[0], self.NORIENT * self.NORIENT))
                         * tmp2,
                         [sim.shape[0], cmat[k].shape[0], self.NORIENT, self.NORIENT],
                     ),
@@ -2445,10 +2446,10 @@ class funct(FOC.FoCUS):
                 sim2 = self.backend.bk_abs(self.convol(sim2, axis=1))
 
                 weighted_cos2 = self.backend.bk_reduce_mean(
-                    sim2 * np.cos(angles), axis=-1
+                    sim2 * self.backend.bk_cos(angles), axis=-1
                 )
                 weighted_sin2 = self.backend.bk_reduce_mean(
-                    sim2 * np.sin(angles), axis=-1
+                    sim2 * self.backend.bk_sin(angles), axis=-1
                 )
 
                 cc2 = weighted_cos2[0]
@@ -2469,7 +2470,8 @@ class funct(FOC.FoCUS):
                     phase2 = np.fmod(np.arctan2(ss2, cc2) + 2 * np.pi, 2 * np.pi)
                 else:
                     phase2 = np.fmod(
-                        np.arctan2(ss2.numpy(), cc2.numpy()) + 2 * np.pi, 2 * np.pi
+                        np.arctan2(self.backend.to_numpy(ss2), 
+                                self.backend.to_numpy(cc2)) + 2 * np.pi, 2 * np.pi
                     )
 
                 phase2_scaled = self.NORIENT * phase2 / (2 * np.pi)

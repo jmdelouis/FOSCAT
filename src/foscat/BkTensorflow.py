@@ -469,6 +469,15 @@ class BkTensorflow(BackendBase.BackendBase):
     def bk_constant(self,x):
         return self.backend.constant(x)
         
+    def bk_cos(self,x):
+        return self.backend.cos(x)
+        
+    def bk_sin(self,x):
+        return self.backend.sin(x)
+        
+    def bk_arctan2(self,c,s):
+        return self.backend.arctan2(c,s)
+        
     def bk_empty(self,list):
         return self.backend.constant(list)
         

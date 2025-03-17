@@ -71,8 +71,8 @@ for BACKEND in bk_tab:
         ref1[k] = scat_op.eval((heal_im[k,0]-mean_data[0])/std_data[0], norm='self',cmat=cmat_0,cmat2=cmat2_0)
         ref2[k] = scat_op.eval((heal_im[k,1]-mean_data[1])/std_data[1], norm='self',cmat=cmat_1,cmat2=cmat2_1)
         tp_l2,tp_l1=dospec(heal_im[k])
-        c_l1[k]=tp_l1.numpy()
-        c_l2[k]=tp_l2.numpy()
+        c_l1[k]=scat_op.backend.to_numpy(tp_l1)
+        c_l2[k]=scat_op.backend.to_numpy(tp_l2)
 
     mref1,vref1=scat_op.moments(ref1)
     mref2,vref2=scat_op.moments(ref2)
@@ -135,19 +135,19 @@ for BACKEND in bk_tab:
                    cmat_0,cmat2_0,
                    cmat_1,cmat2_1)
 
-    loss_sp = synthe.Loss(The_loss_spec,scat_op,mean_data,std_data,
-                   scat_op.backend.bk_cast(r_c_l1), scat_op.backend.bk_cast(r_c_l2),
+    loss_sp = synthe.Loss(The_loss_spec,scat_op,
+                    scat_op.backend.bk_cast(mean_data),scat_op.backend.bk_cast(std_data),
+                    scat_op.backend.bk_cast(r_c_l1), scat_op.backend.bk_cast(r_c_l2),
                     scat_op.backend.bk_cast(d_c_l1), scat_op.backend.bk_cast(d_c_l2),alm)
 
     sy = synthe.Synthesis([loss,loss_sp])
     
-    
+    np.random.seed(7)
     omap=np.random.randn(nstepmap,2,12*nside**2)*np.std(heal_im)
-
 
     omap=scat_op.backend.to_numpy(sy.run(omap,
                 EVAL_FREQUENCY=10,
-                NUM_EPOCHS = 100).numpy())
+                NUM_EPOCHS = 100))
                 
     assert np.min(sy.get_history())<1.0
                 

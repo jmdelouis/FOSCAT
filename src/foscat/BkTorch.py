@@ -282,7 +282,7 @@ class BkTorch(BackendBase.BackendBase):
         return data.view(shape)
 
     def bk_repeat(self, data, nn, axis=0):
-        return self.backend.repeat(data, nn, axis=axis)
+        return self.backend.repeat_interleave(data, repeats=nn, dim=axis)
 
     def bk_tile(self, data, nn, axis=0):
 
@@ -434,6 +434,15 @@ class BkTorch(BackendBase.BackendBase):
     def bk_constant(self,x):
             
         return self.bk_cast(x)
+        
+    def bk_cos(self,x):
+        return self.backend.cos(x)
+        
+    def bk_sin(self,x):
+        return self.backend.sin(x)
+        
+    def bk_arctan2(self,c,s):
+        return self.backend.arctan2(c,s)
         
     def bk_empty(self,list):
         return self.backend.empty(list)
