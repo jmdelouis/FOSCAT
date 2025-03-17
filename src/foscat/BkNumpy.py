@@ -33,7 +33,9 @@ class BkNumpy(BackendBase.BackendBase):
                 self.all_bk_type = self.backend.float64
                 self.all_cbk_type = self.backend.complex128
             else:
-                print("ERROR INIT FOCUS ", self.all_type, " should be float32 or float64")
+                print(
+                    "ERROR INIT FOCUS ", self.all_type, " should be float32 or float64"
+                )
                 return None
 
         # ===========================================================================

@@ -145,7 +145,7 @@ class BkTorch(BackendBase.BackendBase):
 
             r = self.backend.sign(xr) * self.backend.sqrt(self.backend.sign(xr) * xr)
             # return r
-            #i = self.backend.sign(xi) * self.backend.sqrt(self.backend.sign(xi) * xi)
+            # i = self.backend.sign(xi) * self.backend.sqrt(self.backend.sign(xi) * xi)
 
             return r
         else:

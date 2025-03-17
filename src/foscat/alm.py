@@ -1,6 +1,7 @@
 import healpy as hp
 import numpy as np
 
+
 class alm:
 
     def __init__(self, backend=None, lmax=24, nside=None, limit_range=1e10):
@@ -100,7 +101,7 @@ class alm:
 
             self.lmax = 3 * nside - 1
 
-            #ratio_mm = {}
+            # ratio_mm = {}
 
             for m in range(3 * nside):
                 val = np.zeros([self.lmax - m + 1])
@@ -130,7 +131,7 @@ class alm:
                 self.B[nside, m] = self.backend.bk_constant(bval)
                 self.ratio_mm[nside, m] = self.backend.bk_constant(
                     np.sqrt(4 * np.pi) * np.expand_dims(np.exp(val), 1)
-                    )
+                )
             # Calcul de P_{mm}(x)
             P_mm = np.ones([3 * nside, 4 * nside - 1])
             x = np.cos(self.lth[nside])
