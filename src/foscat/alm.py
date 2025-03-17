@@ -98,7 +98,7 @@ class alm:
             self.ring_ph(nside)
             x = (-1j * np.arange(3 * nside)).reshape(1, 3 * nside)
             self.matrix_shift_ph[nside] = self.backend.bk_exp(
-                    self.backend.bk_cast(x * self.lph[nside].reshape(4 * nside - 1, 1))
+                self.backend.bk_cast(x * self.lph[nside].reshape(4 * nside - 1, 1))
             )
 
             self.lmax = 3 * nside - 1
@@ -167,8 +167,8 @@ class alm:
                 vnorm = 1 / np.expand_dims(
                     np.sqrt(2 * (np.arange(ell_max - m + 1) + m) + 1), 1
                 )
-                self.Yp[s, nside][m] = self.backend.bk_cast(iplus[idx] * vnorm+0J)
-                self.Ym[s, nside][m] = self.backend.bk_cast(imoins[idx] * vnorm+0J)
+                self.Yp[s, nside][m] = self.backend.bk_cast(iplus[idx] * vnorm + 0j)
+                self.Ym[s, nside][m] = self.backend.bk_cast(imoins[idx] * vnorm + 0j)
 
             del iplus
             del imoins
@@ -224,7 +224,7 @@ class alm:
         result[0] = Pmm
 
         if m == lmax:
-            return result * np.exp(ratio) * np.sqrt(4 * np.pi)+0J
+            return result * np.exp(ratio) * np.sqrt(4 * np.pi) + 0j
 
         # Étape 2 : Calcul de P_{l+1, m}(x)
         result[1] = x * (2 * m + 1) * result[0]
@@ -245,7 +245,7 @@ class alm:
                 ratio[l - m - 1, 0] += self._log_limit_range
                 ratio[l - m, 0] += self._log_limit_range
 
-        return result * np.exp(ratio) * np.sqrt(4 * np.pi)+0J
+        return result * np.exp(ratio) * np.sqrt(4 * np.pi) + 0j
 
     # Calcul des P_{lm}(x) pour tout l inclus dans [m,lmax]
     def compute_legendre_m_old2(self, x, m, lmax, nside):
@@ -418,13 +418,13 @@ class alm:
         r = self.backend.bk_rfft(val)
         if axis == 0:
             r_inv = self.backend.bk_reverse(
-                self.backend.bk_conjugate(r[...,1:-1]), axis=-1
+                self.backend.bk_conjugate(r[..., 1:-1]), axis=-1
             )
         else:
             r_inv = self.backend.bk_reverse(
                 self.backend.bk_conjugate(r[..., 1:-1]), axis=-1
             )
-        return self.backend.bk_concat([r, r_inv], axis=axis+1)
+        return self.backend.bk_concat([r, r_inv], axis=axis + 1)
 
     def irfft2fft(self, val, N, axis=0):
         if axis == 0:
@@ -433,9 +433,9 @@ class alm:
             return self.backend.bk_irfft(val[:, 0 : N // 2 + 1])
 
     def comp_tf(self, im, nside, realfft=False):
-        
-        #im is [Nimage,12*nside**2]
-        
+
+        # im is [Nimage,12*nside**2]
+
         self.shift_ph(nside)
         n = 0
 
@@ -444,9 +444,9 @@ class alm:
             N = 4 * (k + 1)
 
             if realfft:
-                tmp = self.rfft2fft(im[:,n : n + N])
+                tmp = self.rfft2fft(im[:, n : n + N])
             else:
-                tmp = self.backend.bk_fft(im[:,n : n + N])
+                tmp = self.backend.bk_fft(im[:, n : n + N])
 
             l_n = tmp.shape[1]
 
@@ -454,43 +454,45 @@ class alm:
                 repeat_n = 3 * nside // l_n + 1
                 tmp = self.backend.bk_tile(tmp, repeat_n, axis=1)
 
-            ft_im.append(tmp[:,None,0 : 3 * nside])
+            ft_im.append(tmp[:, None, 0 : 3 * nside])
 
             n += N
 
         N = 4 * nside * (2 * nside + 1)
-        v = self.backend.bk_reshape(im[:,n : n + N], [im.shape[0],2 * nside + 1, 4 * nside])
+        v = self.backend.bk_reshape(
+            im[:, n : n + N], [im.shape[0], 2 * nside + 1, 4 * nside]
+        )
         if realfft:
             v_fft = self.rfft2fft(v, axis=1)[:, :, : 3 * nside]
         else:
             v_fft = self.backend.bk_fft(v)[:, :, : 3 * nside]
 
         n += N
-        
+
         ft_im.append(v_fft)
-        
+
         if nside > 1:
             for k in range(nside - 1):
                 N = 4 * (nside - 1 - k)
 
                 if realfft:
-                    tmp = self.rfft2fft(im[:,n : n + N])
+                    tmp = self.rfft2fft(im[:, n : n + N])
                 else:
-                    tmp = self.backend.bk_fft(im[:,n : n + N])
+                    tmp = self.backend.bk_fft(im[:, n : n + N])
 
                 l_n = tmp.shape[1]
 
                 if l_n < 3 * nside + 1:
                     repeat_n = 3 * nside // l_n + 1
                     tmp = self.backend.bk_tile(tmp, repeat_n, axis=1)
-                    
-                ft_im.append(tmp[:,None,0 : 3 * nside])
+
+                ft_im.append(tmp[:, None, 0 : 3 * nside])
                 n += N
-                
+
         return (
-                self.backend.bk_concat(ft_im, axis=1)
-                * self.matrix_shift_ph[nside][None,:,:]
-                )
+            self.backend.bk_concat(ft_im, axis=1)
+            * self.matrix_shift_ph[nside][None, :, :]
+        )
 
     def icomp_tf(self, i_im, nside, realfft=False):
 
@@ -548,7 +550,7 @@ class alm:
         else:
             return result
 
-    def anafast(self, im, map2=None, nest=False, spin=2,axes=0):
+    def anafast(self, im, map2=None, nest=False, spin=2, axes=0):
         """The `anafast` function computes the L1 and L2 norm power spectra.
 
         Currently, it is not optimized for single-pass computation due to the relatively inefficient computation of \(Y_{lm}\).
@@ -568,50 +570,50 @@ class alm:
 
         """
         no_input_column = False
-        
+
         i_im = self.backend.bk_cast(im)
         if map2 is not None:
             i_map2 = self.backend.bk_cast(map2)
 
         doT = True
-        
-        if len(i_im.shape)-axes == 1:  # nopol
+
+        if len(i_im.shape) - axes == 1:  # nopol
             nside = int(np.sqrt(i_im.shape[axes] // 12))
         else:
-            if len(i_im.shape)-axes == 2:
+            if len(i_im.shape) - axes == 2:
                 doT = False
-            nside = int(np.sqrt(i_im.shape[axes+1] // 12))
-        do_all_pol=False
-        if i_im.shape[axes]==3:
-            do_all_pol=True
-            
+            nside = int(np.sqrt(i_im.shape[axes + 1] // 12))
+        do_all_pol = False
+        if i_im.shape[axes] == 3:
+            do_all_pol = True
+
         self.shift_ph(nside)
 
         if doT or do_all_pol:
-            if len(i_im.shape) == 1 + int(do_all_pol):# no pol if 1 all pol if 2
+            if len(i_im.shape) == 1 + int(do_all_pol):  # no pol if 1 all pol if 2
                 if do_all_pol:
-                    l_im = i_im[None,0,...]
+                    l_im = i_im[None, 0, ...]
                     if map2 is not None:
-                        l_map2 = i_map2[None,0,...]
+                        l_map2 = i_map2[None, 0, ...]
                 else:
-                    l_im = i_im[None,...]
+                    l_im = i_im[None, ...]
                     if map2 is not None:
-                        l_map2 = i_map2[None,...]
+                        l_map2 = i_map2[None, ...]
                 no_input_column = True
-                N_image=1
-                 
-            else:  
+                N_image = 1
+
+            else:
                 if do_all_pol:
-                    l_im = i_im[:,0]
+                    l_im = i_im[:, 0]
                     if map2 is not None:
-                        l_map2 = i_map2[:,0]
-                    N_image=i_im.shape[0]
-                    
+                        l_map2 = i_map2[:, 0]
+                    N_image = i_im.shape[0]
+
                 else:
                     l_im = i_im
                     if map2 is not None:
                         l_map2 = i_map2
-                    N_image=i_im.shape[0]
+                    N_image = i_im.shape[0]
 
             if nest:
                 idx = hp.ring2nest(nside, np.arange(12 * nside**2))
@@ -626,7 +628,7 @@ class alm:
                 ft_im = self.comp_tf(l_im, nside, realfft=True)
                 if map2 is not None:
                     ft_im2 = self.comp_tf(l_map2, nside, realfft=True)
-                    
+
         lth = self.ring_th(nside)
 
         co_th = np.cos(lth)
@@ -641,77 +643,100 @@ class alm:
         if not doT:  # polarize case
 
             self.init_Ys(spin, nside)
-            
+
             if len(i_im.shape) == 2:
-                l_im = i_im[None,:,:]
+                l_im = i_im[None, :, :]
                 if map2 is not None:
-                    l_map2 = i_map2[None,:,:]
+                    l_map2 = i_map2[None, :, :]
                 no_input_column = True
-                N_image=1
+                N_image = 1
             else:
                 l_im = i_im
                 if map2 is not None:
                     l_map2 = i_map2
-                N_image=i_im.shape[0]
+                N_image = i_im.shape[0]
 
             if nest:
                 idx = hp.ring2nest(nside, np.arange(12 * nside**2))
-                l_Q = self.backend.bk_gather(l_im[:,int(do_all_pol)], idx,axis=1)
-                l_U = self.backend.bk_gather(l_im[:,1 + int(do_all_pol)], idx,axis=1)
+                l_Q = self.backend.bk_gather(l_im[:, int(do_all_pol)], idx, axis=1)
+                l_U = self.backend.bk_gather(l_im[:, 1 + int(do_all_pol)], idx, axis=1)
                 ft_im_Pp = self.comp_tf(self.backend.bk_complex(l_Q, l_U), nside)
                 ft_im_Pm = self.comp_tf(self.backend.bk_complex(l_Q, -l_U), nside)
                 if map2 is not None:
-                    l_Q = self.backend.bk_gather(l_map2[:,int(do_all_pol)], idx,axis=1)
-                    l_U = self.backend.bk_gather(l_map2[:,1 + int(do_all_pol)], idx,axis=1)
+                    l_Q = self.backend.bk_gather(
+                        l_map2[:, int(do_all_pol)], idx, axis=1
+                    )
+                    l_U = self.backend.bk_gather(
+                        l_map2[:, 1 + int(do_all_pol)], idx, axis=1
+                    )
                     ft_im2_Pp = self.comp_tf(self.backend.bk_complex(l_Q, l_U), nside)
                     ft_im2_Pm = self.comp_tf(self.backend.bk_complex(l_Q, -l_U), nside)
             else:
                 ft_im_Pp = self.comp_tf(
-                    self.backend.bk_complex(l_im[:,int(do_all_pol)], l_im[:,1 + int(do_all_pol)]), nside
+                    self.backend.bk_complex(
+                        l_im[:, int(do_all_pol)], l_im[:, 1 + int(do_all_pol)]
+                    ),
+                    nside,
                 )
                 ft_im_Pm = self.comp_tf(
-                    self.backend.bk_complex(l_im[:,int(do_all_pol)], -l_im[:,1 + int(do_all_pol)]), nside
+                    self.backend.bk_complex(
+                        l_im[:, int(do_all_pol)], -l_im[:, 1 + int(do_all_pol)]
+                    ),
+                    nside,
                 )
                 if map2 is not None:
                     ft_im2_Pp = self.comp_tf(
-                        self.backend.bk_complex(l_map2[:,int(do_all_pol)], l_map2[:,1 + int(do_all_pol)]),
+                        self.backend.bk_complex(
+                            l_map2[:, int(do_all_pol)], l_map2[:, 1 + int(do_all_pol)]
+                        ),
                         nside,
                     )
                     ft_im2_Pm = self.comp_tf(
                         self.backend.bk_complex(
-                            l_map2[:,int(doT)], -l_map2[:,1 + int(do_all_pol)]
+                            l_map2[:, int(doT)], -l_map2[:, 1 + int(do_all_pol)]
                         ),
                         nside,
                     )
-                    
-        l_cl=[]
+
+        l_cl = []
         for m in range(lmax + 1):
 
             plm = self.backend.bk_cast(
-                self.compute_legendre_m(co_th, m, 3 * nside - 1, nside) / (
-                    12 * nside**2
-                    )
-                )
+                self.compute_legendre_m(co_th, m, 3 * nside - 1, nside)
+                / (12 * nside**2)
+            )
 
             if doT or do_all_pol:
-                tmp = self.backend.bk_reduce_sum(plm[None,:,:] * ft_im[:,None,:, m], 2)
+                tmp = self.backend.bk_reduce_sum(
+                    plm[None, :, :] * ft_im[:, None, :, m], 2
+                )
 
                 if map2 is not None:
-                    tmp2 = self.backend.bk_reduce_sum(plm[None,:,:] * ft_im2[:,None, :, m], 2)
+                    tmp2 = self.backend.bk_reduce_sum(
+                        plm[None, :, :] * ft_im2[:, None, :, m], 2
+                    )
                 else:
                     tmp2 = tmp
 
             if not doT:  # polarize case
                 plmp = self.Yp[spin, nside][m]
                 plmm = self.Ym[spin, nside][m]
-                tmpp = self.backend.bk_reduce_sum(plmp[None,:,:] * ft_im_Pp[:,None, :,m], 2)
-                tmpm = self.backend.bk_reduce_sum(plmm[None,:,:] * ft_im_Pm[:,None, :,m], 2)
+                tmpp = self.backend.bk_reduce_sum(
+                    plmp[None, :, :] * ft_im_Pp[:, None, :, m], 2
+                )
+                tmpm = self.backend.bk_reduce_sum(
+                    plmm[None, :, :] * ft_im_Pm[:, None, :, m], 2
+                )
                 almE = -(tmpp + tmpm) / 2.0
                 almB = (tmpp - tmpm) / (2j)
 
                 if map2 is not None:
-                    tmpp2 = self.backend.bk_reduce_sum(plmp[None,:,:] * ft_im2_Pp[:,None,:, m], 2)
-                    tmpm2 = self.backend.bk_reduce_sum(plmm[None,:,:] * ft_im2_Pm[:,None,:, m], 2)
+                    tmpp2 = self.backend.bk_reduce_sum(
+                        plmp[None, :, :] * ft_im2_Pp[:, None, :, m], 2
+                    )
+                    tmpm2 = self.backend.bk_reduce_sum(
+                        plmm[None, :, :] * ft_im2_Pm[:, None, :, m], 2
+                    )
 
                     almE2 = -(tmpp2 + tmpm2) / 2.0
                     almB2 = (tmpp2 - tmpm2) / (2j)
@@ -768,57 +793,57 @@ class alm:
                         l_cl.append(tmpEE)
                         l_cl.append(tmpBB)
                         l_cl.append(tmpEB)
-                        
+
                 else:
                     offset_tensor = self.backend.bk_zeros(
-                        (N_image,m), dtype=self.backend.all_bk_type
+                        (N_image, m), dtype=self.backend.all_bk_type
                     )
                     if do_all_pol:
                         l_cl.append(offset_tensor)
-                        l_cl.append(2*tmpTT)
+                        l_cl.append(2 * tmpTT)
                         l_cl.append(offset_tensor)
-                        l_cl.append(2*tmpEE)
+                        l_cl.append(2 * tmpEE)
                         l_cl.append(offset_tensor)
-                        l_cl.append(2*tmpBB)
+                        l_cl.append(2 * tmpBB)
                         l_cl.append(offset_tensor)
-                        l_cl.append(2*tmpTE)
+                        l_cl.append(2 * tmpTE)
                         l_cl.append(offset_tensor)
-                        l_cl.append(2*tmpEB)
+                        l_cl.append(2 * tmpEB)
                         l_cl.append(offset_tensor)
-                        l_cl.append(2*tmpTB)
+                        l_cl.append(2 * tmpTB)
                     else:
                         l_cl.append(offset_tensor)
-                        l_cl.append(2*tmpEE)
+                        l_cl.append(2 * tmpEE)
                         l_cl.append(offset_tensor)
-                        l_cl.append(2*tmpBB)
+                        l_cl.append(2 * tmpBB)
                         l_cl.append(offset_tensor)
-                        l_cl.append(2*tmpEB)
+                        l_cl.append(2 * tmpEB)
             else:
                 tmp = self.backend.bk_real((tmp * self.backend.bk_conjugate(tmp2)))
                 if m == 0:
                     l_cl.append(tmp)
                 else:
                     offset_tensor = self.backend.bk_zeros(
-                        (N_image,m), dtype=self.backend.all_bk_type
+                        (N_image, m), dtype=self.backend.all_bk_type
                     )
                     l_cl.append(offset_tensor)
-                    l_cl.append(2*tmp)
-                    
-        l_cl=self.backend.bk_concat(l_cl,1)
-            
+                    l_cl.append(2 * tmp)
+
+        l_cl = self.backend.bk_concat(l_cl, 1)
+
         if doT:
-            cl2 = self.backend.bk_reshape(l_cl,[N_image,lmax+1,lmax+1])
-            cl2 = self.backend.bk_reduce_sum(cl2,1)
+            cl2 = self.backend.bk_reshape(l_cl, [N_image, lmax + 1, lmax + 1])
+            cl2 = self.backend.bk_reduce_sum(cl2, 1)
         else:
             if do_all_pol:
-                cl2 = self.backend.bk_reshape(l_cl,[N_image,lmax+1,6,lmax+1])
+                cl2 = self.backend.bk_reshape(l_cl, [N_image, lmax + 1, 6, lmax + 1])
             else:
-                cl2 = self.backend.bk_reshape(l_cl,[N_image,lmax+1,3,lmax+1])
-            cl2 = self.backend.bk_reduce_sum(cl2,1)
-        
+                cl2 = self.backend.bk_reshape(l_cl, [N_image, lmax + 1, 3, lmax + 1])
+            cl2 = self.backend.bk_reduce_sum(cl2, 1)
+
         if no_input_column:
-            cl2=cl2[0]
-            
+            cl2 = cl2[0]
+
         cl2_l1 = self.backend.bk_L1(cl2)
 
         return cl2, cl2_l1

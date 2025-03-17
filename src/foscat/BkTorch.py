@@ -1,15 +1,20 @@
 import sys
-import foscat.BkBase as BackendBase
+
 import numpy as np
 import torch
 
+import foscat.BkBase as BackendBase
+
+
 class BkTorch(BackendBase.BackendBase):
-    
+
     def __init__(self, *args, **kwargs):
         # Impose que use_2D=True pour la classe scat
-        super().__init__(name='torch', *args, **kwargs)
+        super().__init__(name="torch", *args, **kwargs)
         self.backend = torch
-        self.device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+        self.device = (
+            torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+        )
 
         self.float64 = self.backend.float64
         self.float32 = self.backend.float32
@@ -22,11 +27,13 @@ class BkTorch(BackendBase.BackendBase):
             "float32": (self.backend.float32, self.backend.complex64),
             "float64": (self.backend.float64, self.backend.complex128),
         }
-        
+
         if self.all_type in dtype_map:
             self.all_bk_type, self.all_cbk_type = dtype_map[self.all_type]
         else:
-            raise ValueError(f"ERROR INIT foscat: {all_type} should be float32 or float64")
+            raise ValueError(
+                f"ERROR INIT foscat: {all_type} should be float32 or float64"
+            )
 
         # ===========================================================================
         # INIT
@@ -50,14 +57,20 @@ class BkTorch(BackendBase.BackendBase):
             except RuntimeError as e:
                 # Memory growth must be set before GPUs have been initialized
                 print(e)
-                
-        self.torch_device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+
+        self.torch_device = (
+            torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+        )
 
     # ---------------------------------------------−---------
     # --             BACKEND DEFINITION                    --
     # ---------------------------------------------−---------
     def bk_SparseTensor(self, indice, w, dense_shape=[]):
-        return self.backend.sparse_coo_tensor(indice.T, w, dense_shape).to_sparse_csr().to(self.torch_device)
+        return (
+            self.backend.sparse_coo_tensor(indice.T, w, dense_shape)
+            .to_sparse_csr()
+            .to(self.torch_device)
+        )
 
     def bk_stack(self, list, axis=0):
         return self.backend.stack(list, axis=axis).to(self.torch_device)
@@ -65,21 +78,20 @@ class BkTorch(BackendBase.BackendBase):
     def bk_sparse_dense_matmul(self, smat, mat):
         return smat.matmul(mat)
 
-    
-    
     def conv2d(self, x, w, strides=[1, 1, 1, 1], padding="SAME"):
         import torch.nn.functional as F
+
         lx = x.permute(0, 3, 1, 2)
         wx = w.permute(3, 2, 0, 1)  # de (5, 5, 1, 4) à (4, 1, 5, 5)
 
         # Calculer le padding symétrique
         kx, ky = w.shape[0], w.shape[1]
-            
+
         # Appliquer le padding
-        x_padded = F.pad(lx, (ky // 2, ky // 2, kx // 2, kx // 2), mode='circular')
+        x_padded = F.pad(lx, (ky // 2, ky // 2, kx // 2, kx // 2), mode="circular")
 
         # Appliquer la convolution
-        return F.conv2d(x_padded, wx, stride=1, padding=0).permute(0,2,3,1)
+        return F.conv2d(x_padded, wx, stride=1, padding=0).permute(0, 2, 3, 1)
 
     def conv1d(self, x, w, strides=[1, 1, 1], padding="SAME"):
         # to be written!!!
@@ -108,7 +120,7 @@ class BkTorch(BackendBase.BackendBase):
     def bk_flattenR(self, x):
         if self.bk_is_complex(x):
             rr = self.backend.reshape(
-                 self.bk_real(x), [np.prod(np.array(list(x.shape)))]
+                self.bk_real(x), [np.prod(np.array(list(x.shape)))]
             )
             ii = self.backend.reshape(
                 self.bk_imag(x), [np.prod(np.array(list(x.shape)))]
@@ -122,9 +134,9 @@ class BkTorch(BackendBase.BackendBase):
 
     def bk_resize_image(self, x, shape):
         tmp = self.backend.nn.functional.interpolate(
-                x.permute(0,3,1,2), size=shape, mode="bilinear", align_corners=False
-            )
-        return self.bk_cast(tmp.permute(0,2,3,1))
+            x.permute(0, 3, 1, 2), size=shape, mode="bilinear", align_corners=False
+        )
+        return self.bk_cast(tmp.permute(0, 2, 3, 1))
 
     def bk_L1(self, x):
         if x.dtype == self.all_cbk_type:
@@ -163,7 +175,6 @@ class BkTorch(BackendBase.BackendBase):
     def bk_size(self, data):
         return data.numel()
 
-
     def constant(self, data):
         return data
 
@@ -194,7 +205,7 @@ class BkTorch(BackendBase.BackendBase):
             r = self.backend.std(data)
         else:
             r = self.backend.std(data, axis)
-            
+
         if self.bk_is_complex(data):
             return self.bk_complex(r, 0 * r)
         else:
@@ -245,7 +256,7 @@ class BkTorch(BackendBase.BackendBase):
 
     def bk_tensor(self, data):
         return self.backend.constant(data).to(self.torch_device)
-        
+
     def bk_shape_tensor(self, shape):
         return self.backend.tensor(shape=shape).to(self.torch_device)
 
@@ -304,12 +315,8 @@ class BkTorch(BackendBase.BackendBase):
         if axis is None:
             if data[0].dtype == self.all_cbk_type:
                 ndata = len(data)
-                xr = self.backend.concat(
-                        [self.bk_real(data[k]) for k in range(ndata)]
-                    )
-                xi = self.backend.concat(
-                        [self.bk_imag(data[k]) for k in range(ndata)]
-                    )
+                xr = self.backend.concat([self.bk_real(data[k]) for k in range(ndata)])
+                xi = self.backend.concat([self.bk_imag(data[k]) for k in range(ndata)])
                 return self.bk_complex(xr, xi)
             else:
                 return self.backend.concat(data)
@@ -317,11 +324,11 @@ class BkTorch(BackendBase.BackendBase):
             if data[0].dtype == self.all_cbk_type:
                 ndata = len(data)
                 xr = self.backend.concat(
-                        [self.bk_real(data[k]) for k in range(ndata)], axis=axis
-                    )
+                    [self.bk_real(data[k]) for k in range(ndata)], axis=axis
+                )
                 xi = self.backend.concat(
-                        [self.bk_imag(data[k]) for k in range(ndata)], axis=axis
-                    )
+                    [self.bk_imag(data[k]) for k in range(ndata)], axis=axis
+                )
                 return self.bk_complex(xr, xi)
             else:
                 return self.backend.concat(data, axis=axis)
@@ -329,28 +336,28 @@ class BkTorch(BackendBase.BackendBase):
     def bk_zeros(self, shape, dtype=None):
         return self.backend.zeros(shape, dtype=dtype).to(self.torch_device)
 
-    def bk_gather(self, data, idx,axis=0):
-        if axis==0:
+    def bk_gather(self, data, idx, axis=0):
+        if axis == 0:
             return data[idx]
-        elif axis==1:
-            return data[:,idx]
-        elif axis==2:
-            return data[:,:,idx]
-        elif axis==3:
-            return data[:,:,:,idx]
-        return data[:,:,:,:,idx]
+        elif axis == 1:
+            return data[:, idx]
+        elif axis == 2:
+            return data[:, :, idx]
+        elif axis == 3:
+            return data[:, :, :, idx]
+        return data[:, :, :, :, idx]
 
     def bk_reverse(self, data, axis=0):
         return self.backend.flip(data, dims=[axis])
 
     def bk_fft(self, data):
         return self.backend.fft.fft(data)
-            
-    def bk_fftn(self, data,dim=None):
-        return self.backend.fft.fftn(data,dim=dim)
 
-    def bk_ifftn(self, data,dim=None,norm=None):
-        return self.backend.fft.ifftn(data,dim=dim,norm=norm)
+    def bk_fftn(self, data, dim=None):
+        return self.backend.fft.fftn(data, dim=dim)
+
+    def bk_ifftn(self, data, dim=None, norm=None):
+        return self.backend.fft.ifftn(data, dim=dim, norm=norm)
 
     def bk_rfft(self, data):
         return self.backend.fft.rfft(data)
@@ -374,12 +381,24 @@ class BkTorch(BackendBase.BackendBase):
     def bk_relu(self, x):
         return self.backend.relu(x)
 
-    def bk_clip_by_value(self, x,xmin,xmax):
+    def bk_clip_by_value(self, x, xmin, xmax):
         if isinstance(x, np.ndarray):
-            x = np.clip(x,xmin,xmax)
-        x = self.backend.tensor(x, dtype=self.backend.float32) if not isinstance(x, self.backend.Tensor) else x
-        xmin = self.backend.tensor(xmin, dtype=self.backend.float32) if not isinstance(xmin, self.backend.Tensor) else xmin
-        xmax = self.backend.tensor(xmax, dtype=self.backend.float32) if not isinstance(xmax, self.backend.Tensor) else xmax
+            x = np.clip(x, xmin, xmax)
+        x = (
+            self.backend.tensor(x, dtype=self.backend.float32)
+            if not isinstance(x, self.backend.Tensor)
+            else x
+        )
+        xmin = (
+            self.backend.tensor(xmin, dtype=self.backend.float32)
+            if not isinstance(xmin, self.backend.Tensor)
+            else xmin
+        )
+        xmax = (
+            self.backend.tensor(xmax, dtype=self.backend.float32)
+            if not isinstance(xmax, self.backend.Tensor)
+            else xmax
+        )
         return self.backend.clamp(x, min=xmin, max=xmax)
 
     def bk_cast(self, x):
@@ -424,31 +443,31 @@ class BkTorch(BackendBase.BackendBase):
             out_type = self.all_bk_type
 
         return x.type(out_type).to(self.torch_device)
-            
-    def bk_variable(self,x):
+
+    def bk_variable(self, x):
         return self.bk_cast(x)
-        
-    def bk_assign(self,x,y):
-        x=y
-            
-    def bk_constant(self,x):
-            
+
+    def bk_assign(self, x, y):
+        x = y
+
+    def bk_constant(self, x):
+
         return self.bk_cast(x)
-        
-    def bk_cos(self,x):
+
+    def bk_cos(self, x):
         return self.backend.cos(x)
-        
-    def bk_sin(self,x):
+
+    def bk_sin(self, x):
         return self.backend.sin(x)
-        
-    def bk_arctan2(self,c,s):
-        return self.backend.arctan2(c,s)
-        
-    def bk_empty(self,list):
+
+    def bk_arctan2(self, c, s):
+        return self.backend.arctan2(c, s)
+
+    def bk_empty(self, list):
         return self.backend.empty(list)
-        
-    def to_numpy(self,x):
+
+    def to_numpy(self, x):
         if isinstance(x, np.ndarray):
             return x
-            
+
         return x.cpu().numpy()

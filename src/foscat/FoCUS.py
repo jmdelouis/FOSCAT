@@ -1,5 +1,4 @@
 import os
-import os
 import sys
 
 import healpy as hp
@@ -105,31 +104,34 @@ class FoCUS:
 
         self.all_type = all_type
         self.BACKEND = BACKEND
-        
-        if BACKEND=='torch':
+
+        if BACKEND == "torch":
             from foscat.BkTorch import BkTorch
+
             self.backend = BkTorch(
                 all_type=all_type,
                 mpi_rank=mpi_rank,
                 gpupos=gpupos,
                 silent=self.silent,
-                )
-        elif BACKEND=='tensorflow':
+            )
+        elif BACKEND == "tensorflow":
             from foscat.BkTensorflow import BkTensorflow
+
             self.backend = BkTensorflow(
                 all_type=all_type,
                 mpi_rank=mpi_rank,
                 gpupos=gpupos,
                 silent=self.silent,
-                )
+            )
         else:
             from foscat.BkNumpy import BkNumpy
+
             self.backend = BkNumpy(
                 all_type=all_type,
                 mpi_rank=mpi_rank,
                 gpupos=gpupos,
                 silent=self.silent,
-                )
+            )
 
         self.all_bk_type = self.backend.all_bk_type
         self.all_cbk_type = self.backend.all_cbk_type
@@ -172,9 +174,9 @@ class FoCUS:
         self.Y_CNN = {}
         self.Z_CNN = {}
 
-        self.filters_set={}
-        self.edge_masks={}
-        
+        self.filters_set = {}
+        self.edge_masks = {}
+
         wwc = np.zeros([KERNELSZ**2, l_NORIENT]).astype(all_type)
         wws = np.zeros([KERNELSZ**2, l_NORIENT]).astype(all_type)
 
@@ -735,7 +737,7 @@ class FoCUS:
     def ud_grade(self, im, j, axis=0):
         rim = im
         for k in range(j):
-            #rim = self.smooth(rim, axis=axis)
+            # rim = self.smooth(rim, axis=axis)
             rim = self.ud_grade_2(rim, axis=axis)
         return rim
 

@@ -1,14 +1,15 @@
 import numpy as np
 
+
 class BackendBase:
-    
+
     def __init__(self, name, mpi_rank=0, all_type="float64", gpupos=0, silent=False):
-        
-        self.BACKEND=name
-        self.mpi_rank=mpi_rank
-        self.all_type=all_type
-        self.gpupos=gpupos
-        self.silent=silent
+
+        self.BACKEND = name
+        self.mpi_rank = mpi_rank
+        self.all_type = all_type
+        self.gpupos = gpupos
+        self.silent = silent
         # ---------------------------------------------−---------
         # table use to compute the iso orientation rotation
         self._iso_orient = {}
@@ -101,6 +102,7 @@ class BackendBase:
         return self.bk_reshape(
             self.backend.matmul(self.bk_reshape(x, oshape), lmat), oshape2
         )
+
     def calc_iso_orient(self, norient):
         tmp = np.zeros([norient * norient, norient])
         for i in range(norient):
@@ -188,7 +190,9 @@ class BackendBase:
                     tmp[:, :, k, l_orient] = np.cos(x * k) * np.cos((x.T) * l_orient)
 
             self._fft_2_orient[(norient, nharm, imaginary)] = self.bk_cast(
-                self.bk_constant(tmp.reshape(norient * norient, (1 + nharm) * (1 + nharm)))
+                self.bk_constant(
+                    tmp.reshape(norient * norient, (1 + nharm) * (1 + nharm))
+                )
             )
             self._fft_2_orient_C[(norient, nharm, imaginary)] = self.bk_complex(
                 self._fft_2_orient[(norient, nharm, imaginary)],
@@ -343,7 +347,7 @@ class BackendBase:
                 self._fft_3_orient[(norient, nharm, imaginary)],
                 0 * self._fft_3_orient[(norient, nharm, imaginary)],
             )
-            
+
     # ---------------------------------------------−---------
     # --             BACKEND DEFINITION                    --
     # ---------------------------------------------−---------
@@ -355,7 +359,7 @@ class BackendBase:
 
     def bk_sparse_dense_matmul(self, smat, mat):
         raise NotImplementedError("This is an abstract class.")
-    
+
     def conv2d(self, x, w, strides=[1, 1, 1, 1], padding="SAME"):
         raise NotImplementedError("This is an abstract class.")
 
@@ -379,7 +383,7 @@ class BackendBase:
 
     def bk_flattenR(self, x):
         raise NotImplementedError("This is an abstract class.")
-               
+
     def bk_flatten(self, x):
         raise NotImplementedError("This is an abstract class.")
 
@@ -442,7 +446,7 @@ class BackendBase:
 
     def bk_tensor(self, data):
         raise NotImplementedError("This is an abstract class.")
-        
+
     def bk_shape_tensor(self, shape):
         raise NotImplementedError("This is an abstract class.")
 
@@ -460,7 +464,7 @@ class BackendBase:
 
     def bk_tanh(self, data):
         raise NotImplementedError("This is an abstract class.")
-        
+
     def bk_max(self, data):
         raise NotImplementedError("This is an abstract class.")
 
@@ -499,11 +503,11 @@ class BackendBase:
 
     def bk_fft(self, data):
         raise NotImplementedError("This is an abstract class.")
-            
-    def bk_fftn(self, data,dim=None):
+
+    def bk_fftn(self, data, dim=None):
         raise NotImplementedError("This is an abstract class.")
 
-    def bk_ifftn(self, data,dim=None,norm=None):
+    def bk_ifftn(self, data, dim=None, norm=None):
         raise NotImplementedError("This is an abstract class.")
 
     def bk_rfft(self, data):
@@ -524,32 +528,32 @@ class BackendBase:
     def bk_relu(self, x):
         raise NotImplementedError("This is an abstract class.")
 
-    def bk_clip_by_value(self, x,xmin,xmax):
+    def bk_clip_by_value(self, x, xmin, xmax):
         raise NotImplementedError("This is an abstract class.")
 
     def bk_cast(self, x):
         raise NotImplementedError("This is an abstract class.")
-            
-    def bk_variable(self,x):
+
+    def bk_variable(self, x):
         raise NotImplementedError("This is an abstract class.")
-        
-    def bk_assign(self,x,y):
+
+    def bk_assign(self, x, y):
         raise NotImplementedError("This is an abstract class.")
-            
-    def bk_constant(self,x):
+
+    def bk_constant(self, x):
         raise NotImplementedError("This is an abstract class.")
-            
-    def bk_cos(self,x):
+
+    def bk_cos(self, x):
         raise NotImplementedError("This is an abstract class.")
-        
-    def bk_sin(self,x):
+
+    def bk_sin(self, x):
         raise NotImplementedError("This is an abstract class.")
-        
-    def bk_arctan2(self,c,s):
+
+    def bk_arctan2(self, c, s):
         raise NotImplementedError("This is an abstract class.")
-        
-    def bk_empty(self,list):
+
+    def bk_empty(self, list):
         raise NotImplementedError("This is an abstract class.")
-        
-    def to_numpy(self,x):
+
+    def to_numpy(self, x):
         raise NotImplementedError("This is an abstract class.")

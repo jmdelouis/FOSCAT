@@ -1,15 +1,16 @@
 import sys
 
-import foscat.BkBase as BackendBase
 import numpy as np
 import tensorflow as tf
-        
+
+import foscat.BkBase as BackendBase
+
+
 class BkTensorflow(BackendBase.BackendBase):
-    
+
     def __init__(self, *args, **kwargs):
         # Impose que use_2D=True pour la classe scat
-        super().__init__(name='tensorflow', *args, **kwargs)
-
+        super().__init__(name="tensorflow", *args, **kwargs)
 
         # ===========================================================================
         # INIT
@@ -30,12 +31,14 @@ class BkTensorflow(BackendBase.BackendBase):
             "float32": (self.backend.float32, self.backend.complex64),
             "float64": (self.backend.float64, self.backend.complex128),
         }
-        
+
         if self.all_type in dtype_map:
             self.all_bk_type, self.all_cbk_type = dtype_map[self.all_type]
         else:
-            raise ValueError(f"ERROR INIT foscat: {all_type} should be float32 or float64")
-            
+            raise ValueError(
+                f"ERROR INIT foscat: {all_type} should be float32 or float64"
+            )
+
         if self.mpi_rank == 0:
             if not self.silent:
                 print(
@@ -59,12 +62,10 @@ class BkTensorflow(BackendBase.BackendBase):
                 # Currently, memory growth needs to be the same across GPUs
                 for gpu in gpus:
                     self.backend.config.experimental.set_memory_growth(gpu, True)
-                logical_gpus = (
-                     self.backend.config.experimental.list_logical_devices("GPU")
+                logical_gpus = self.backend.config.experimental.list_logical_devices(
+                    "GPU"
                 )
-                print(
-                    len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs"
-                )
+                print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
                 sys.stdout.flush()
                 self.ngpu = len(logical_gpus)
                 gpuname = logical_gpus[self.gpupos % self.ngpu].name
@@ -92,10 +93,10 @@ class BkTensorflow(BackendBase.BackendBase):
         return self.backend.sparse.sparse_dense_matmul(smat, mat)
 
     # for tensorflow wrapping only
-    def periodic_pad(self,x, pad_height, pad_width):
+    def periodic_pad(self, x, pad_height, pad_width):
         """
         Applies periodic ('wrap') padding to a 4D TensorFlow tensor (N, H, W, C).
-        
+
         Args:
         x (tf.Tensor): Input tensor with shape (batch_size, height, width, channels).
             pad_height (tuple): Tuple (top, bottom) defining the vertical padding size.
@@ -104,23 +105,27 @@ class BkTensorflow(BackendBase.BackendBase):
         Returns:
             tf.Tensor: Tensor with periodic padding applied.
         """
-        #Vertical padding: take slices from bottom and top to wrap around
-        top_pad = x[:, -pad_height:, :, :]    # Top padding from the bottom rows
+        # Vertical padding: take slices from bottom and top to wrap around
+        top_pad = x[:, -pad_height:, :, :]  # Top padding from the bottom rows
         bottom_pad = x[:, :pad_height, :, :]  # Bottom padding from the top rows
-        x_padded = self.backend.concat([top_pad, x, bottom_pad], axis=1)  # Concatenate vertically
+        x_padded = self.backend.concat(
+            [top_pad, x, bottom_pad], axis=1
+        )  # Concatenate vertically
 
-        #Horizontal padding: take slices from right and left to wrap around
-        left_pad = x_padded[:, :, -pad_width:, :]   # Left padding from right columns
-        right_pad = x_padded[:, :, :pad_width, :]   # Right padding from left columns
-        
-        x_padded = self.backend.concat([left_pad, x_padded, right_pad], axis=2)  # Concatenate horizontally
+        # Horizontal padding: take slices from right and left to wrap around
+        left_pad = x_padded[:, :, -pad_width:, :]  # Left padding from right columns
+        right_pad = x_padded[:, :, :pad_width, :]  # Right padding from left columns
+
+        x_padded = self.backend.concat(
+            [left_pad, x_padded, right_pad], axis=2
+        )  # Concatenate horizontally
 
         return x_padded
-    
+
     def conv2d(self, x, w, strides=[1, 1, 1, 1], padding="SAME"):
         kx = w.shape[0]
         ky = w.shape[1]
-        x_padded = self.periodic_pad(x, kx // 2, ky // 2) 
+        x_padded = self.periodic_pad(x, kx // 2, ky // 2)
         return self.backend.nn.conv2d(x_padded, w, strides=strides, padding="VALID")
 
     def conv1d(self, x, w, strides=[1, 1, 1], padding="SAME"):
@@ -133,11 +138,9 @@ class BkTensorflow(BackendBase.BackendBase):
     def bk_threshold(self, x, threshold, greater=True):
 
         return self.backend.cast(x > threshold, x.dtype) * x
-        
 
     def bk_maximum(self, x1, x2):
         return self.backend.maximum(x1, x2)
-        
 
     def bk_device(self, device_name):
         return self.backend.device(device_name)
@@ -153,16 +156,15 @@ class BkTensorflow(BackendBase.BackendBase):
     def bk_flattenR(self, x):
         if self.bk_is_complex(x):
             rr = self.backend.reshape(
-                    self.bk_real(x), [np.prod(np.array(list(x.shape)))]
-                )
+                self.bk_real(x), [np.prod(np.array(list(x.shape)))]
+            )
             ii = self.backend.reshape(
-                    self.bk_imag(x), [np.prod(np.array(list(x.shape)))]
-                )
+                self.bk_imag(x), [np.prod(np.array(list(x.shape)))]
+            )
             return self.bk_concat([rr, ii], axis=0)
         else:
             return self.backend.reshape(x, [np.prod(np.array(list(x.shape)))])
-                
-    
+
     def bk_flatten(self, x):
         return self.backend.flatten(x)
 
@@ -282,7 +284,7 @@ class BkTensorflow(BackendBase.BackendBase):
 
     def bk_tensor(self, data):
         return self.backend.constant(data)
-        
+
     def bk_shape_tensor(self, shape):
         return self.backend.tensor(shape=shape)
 
@@ -320,10 +322,10 @@ class BkTensorflow(BackendBase.BackendBase):
         return self.backend.repeat(data, nn, axis=axis)
 
     def bk_tile(self, data, nn, axis=0):
-        order=[1 for k in data.shape]
-        order[axis]=nn
+        order = [1 for k in data.shape]
+        order[axis] = nn
         return self.backend.tile(data, self.backend.constant(order, tf.int32))
-        
+
     def bk_roll(self, data, nn, axis=0):
         return self.backend.roll(data, nn, axis=axis)
 
@@ -338,12 +340,8 @@ class BkTensorflow(BackendBase.BackendBase):
         if axis is None:
             if data[0].dtype == self.all_cbk_type:
                 ndata = len(data)
-                xr = self.backend.concat(
-                        [self.bk_real(data[k]) for k in range(ndata)]
-                )
-                xi = self.backend.concat(
-                     [self.bk_imag(data[k]) for k in range(ndata)]
-                )
+                xr = self.backend.concat([self.bk_real(data[k]) for k in range(ndata)])
+                xi = self.backend.concat([self.bk_imag(data[k]) for k in range(ndata)])
                 return self.bk_complex(xr, xi)
             else:
                 return self.backend.concat(data)
@@ -351,10 +349,10 @@ class BkTensorflow(BackendBase.BackendBase):
             if data[0].dtype == self.all_cbk_type:
                 ndata = len(data)
                 xr = self.backend.concat(
-                        [self.bk_real(data[k]) for k in range(ndata)], axis=axis
-                    )
+                    [self.bk_real(data[k]) for k in range(ndata)], axis=axis
+                )
                 xi = self.backend.concat(
-                        [self.bk_imag(data[k]) for k in range(ndata)], axis=axis
+                    [self.bk_imag(data[k]) for k in range(ndata)], axis=axis
                 )
                 return self.bk_complex(xr, xi)
             else:
@@ -363,38 +361,42 @@ class BkTensorflow(BackendBase.BackendBase):
     def bk_zeros(self, shape, dtype=None):
         return self.backend.zeros(shape, dtype=dtype)
 
-    def bk_gather(self, data, idx,axis=0):
-        return self.backend.gather(data, idx,axis=axis)
+    def bk_gather(self, data, idx, axis=0):
+        return self.backend.gather(data, idx, axis=axis)
 
     def bk_reverse(self, data, axis=0):
         return self.backend.reverse(data, axis=[axis])
 
     def bk_fft(self, data):
         return self.backend.signal.fft(data)
-    
 
-    def bk_fftn(self, data,dim=None):
-        #Equivalent of torch.fft.fftn(x, dim=dims) in TensorFlow
-        if len(dim)==2:
-            return self.backend.signal.fft2d(self.bk_complex(data, 0*data))
+    def bk_fftn(self, data, dim=None):
+        # Equivalent of torch.fft.fftn(x, dim=dims) in TensorFlow
+        if len(dim) == 2:
+            return self.backend.signal.fft2d(self.bk_complex(data, 0 * data))
         else:
-            return self.backend.signal.fft1d(self.bk_complex(data, 0*data))
+            return self.backend.signal.fft1d(self.bk_complex(data, 0 * data))
 
-    def bk_ifftn(self, data,dim=None,norm=None):
+    def bk_ifftn(self, data, dim=None, norm=None):
         if norm is not None:
-            if len(dim)==2:
-                normalization=self.backend.sqrt(self.backend.cast(data.shape[dim[0]]*data.shape[dim[1]], self.all_cbk_type))
-                return self.backend.signal.ifft2d(data)*normalization
-                    
+            if len(dim) == 2:
+                normalization = self.backend.sqrt(
+                    self.backend.cast(
+                        data.shape[dim[0]] * data.shape[dim[1]], self.all_cbk_type
+                    )
+                )
+                return self.backend.signal.ifft2d(data) * normalization
+
             else:
-                normalization=self.backend.sqrt(self.backend.cast(data.shape[dim[0]], self.all_cbk_type))
-                return self.backend.signal.ifft1d(data)*normalization
+                normalization = self.backend.sqrt(
+                    self.backend.cast(data.shape[dim[0]], self.all_cbk_type)
+                )
+                return self.backend.signal.ifft1d(data) * normalization
         else:
-            if len(dim)==2:
+            if len(dim) == 2:
                 return self.backend.signal.ifft2d(data)
             else:
                 return self.backend.signal.ifft1d(data)
-        
 
     def bk_rfft(self, data):
         return self.backend.signal.rfft(data)
@@ -420,10 +422,10 @@ class BkTensorflow(BackendBase.BackendBase):
         else:
             return self.backend.nn.relu(x)
 
-    def bk_clip_by_value(self, x,xmin,xmax):
+    def bk_clip_by_value(self, x, xmin, xmax):
         if isinstance(x, np.ndarray):
-            x = np.clip(x,xmin,xmax)
-        return self.backend.clip_by_value(x,xmin,xmax)
+            x = np.clip(x, xmin, xmax)
+        return self.backend.clip_by_value(x, xmin, xmax)
 
     def bk_cast(self, x):
         if isinstance(x, np.float64):
@@ -459,30 +461,30 @@ class BkTensorflow(BackendBase.BackendBase):
             out_type = self.all_bk_type
 
         return self.backend.cast(x, out_type)
-            
-    def bk_variable(self,x):
+
+    def bk_variable(self, x):
         return self.backend.Variable(x)
-        
-    def bk_assign(self,x,y):
+
+    def bk_assign(self, x, y):
         x.assign(y)
-            
-    def bk_constant(self,x):
+
+    def bk_constant(self, x):
         return self.backend.constant(x)
-        
-    def bk_cos(self,x):
+
+    def bk_cos(self, x):
         return self.backend.cos(x)
-        
-    def bk_sin(self,x):
+
+    def bk_sin(self, x):
         return self.backend.sin(x)
-        
-    def bk_arctan2(self,c,s):
-        return self.backend.arctan2(c,s)
-        
-    def bk_empty(self,list):
+
+    def bk_arctan2(self, c, s):
+        return self.backend.arctan2(c, s)
+
+    def bk_empty(self, list):
         return self.backend.constant(list)
-        
-    def to_numpy(self,x):
+
+    def to_numpy(self, x):
         if isinstance(x, np.ndarray):
             return x
-        
+
         return x.numpy()

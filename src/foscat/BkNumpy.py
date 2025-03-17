@@ -1,11 +1,13 @@
-import foscat.BkBase as BackendBase
 import numpy as np
 
+import foscat.BkBase as BackendBase
+
+
 class BkNumpy(BackendBase.BackendBase):
-    
+
     def __init__(self, *args, **kwargs):
         # Impose que use_2D=True pour la classe scat
-        super().__init__(name='tensorflow', *args, **kwargs)
+        super().__init__(name="tensorflow", *args, **kwargs)
 
         # ===========================================================================
         # INIT
@@ -33,7 +35,7 @@ class BkNumpy(BackendBase.BackendBase):
             else:
                 print("ERROR INIT FOCUS ", all_type, " should be float32 or float64")
                 return None
-                
+
         # ===========================================================================
         # INIT
 
@@ -49,27 +51,25 @@ class BkNumpy(BackendBase.BackendBase):
     def bk_SparseTensor(self, indice, w, dense_shape=[]):
         return self.scipy.sparse.coo_matrix(
             (w, (indice[:, 0], indice[:, 1])), shape=dense_shape
-            )
+        )
 
     def bk_stack(self, list, axis=0):
         return self.backend.stack(list, axis=axis)
 
     def bk_sparse_dense_matmul(self, smat, mat):
         return smat.dot(mat)
-    
+
     def conv2d(self, x, w, strides=[1, 1, 1, 1], padding="SAME"):
-        res = np.zeros(
-                [x.shape[0], x.shape[1], x.shape[2], w.shape[3]], dtype=x.dtype
-            )
+        res = np.zeros([x.shape[0], x.shape[1], x.shape[2], w.shape[3]], dtype=x.dtype)
         for k in range(w.shape[2]):
             for l_orient in range(w.shape[3]):
                 for j in range(res.shape[0]):
                     tmp = self.scipy.signal.convolve2d(
-                            x[j, :, :, k],
-                            w[:, :, k, l_orient],
-                            mode="same",
-                            boundary="symm",
-                        )
+                        x[j, :, :, k],
+                        w[:, :, k, l_orient],
+                        mode="same",
+                        boundary="symm",
+                    )
                     res[j, :, :, l_orient] += tmp
                     del tmp
         return res
@@ -79,8 +79,8 @@ class BkNumpy(BackendBase.BackendBase):
         for k in range(w.shape[2]):
             for j in range(res.shape[0]):
                 tmp = self.scipy.signal.convolve1d(
-                        x[j, :, k], w[:, k], mode="same", boundary="symm"
-                 )
+                    x[j, :, k], w[:, k], mode="same", boundary="symm"
+                )
                 res[j, :, :] += tmp
                 del tmp
         return res
@@ -114,8 +114,7 @@ class BkNumpy(BackendBase.BackendBase):
             return np.concatenate([x.real.flatten(), x.imag.flatten()], 0)
         else:
             return x.flatten()
-                
-    
+
     def bk_flatten(self, x):
         return x.flatten()
 
@@ -146,7 +145,6 @@ class BkNumpy(BackendBase.BackendBase):
 
     def bk_size(self, data):
         return data.size
-
 
     def bk_reduce_mean(self, data, axis=None):
 
@@ -223,7 +221,7 @@ class BkNumpy(BackendBase.BackendBase):
 
     def bk_tensor(self, data):
         return data
-        
+
     def bk_shape_tensor(self, shape):
         return np.zeros(shape)
 
@@ -284,28 +282,27 @@ class BkNumpy(BackendBase.BackendBase):
     def bk_zeros(self, shape, dtype=None):
         return np.zeros(shape, dtype=dtype)
 
-    def bk_gather(self, data, idx,axis=0):
-        if axis==0:
+    def bk_gather(self, data, idx, axis=0):
+        if axis == 0:
             return data[idx]
-        elif axis==1:
-            return data[:,idx]
-        elif axis==2:
-            return data[:,:,idx]
-        elif axis==3:
-            return data[:,:,:,idx]
-        return data[:,:,:,:,idx]
-        
+        elif axis == 1:
+            return data[:, idx]
+        elif axis == 2:
+            return data[:, :, idx]
+        elif axis == 3:
+            return data[:, :, :, idx]
+        return data[:, :, :, :, idx]
 
     def bk_reverse(self, data, axis=0):
         return np.reverse(data, axis=axis)
 
     def bk_fft(self, data):
         return self.backend.fft.fft(data)
-            
-    def bk_fftn(self, data,dim=None):
+
+    def bk_fftn(self, data, dim=None):
         return self.backend.fft.fftn(data)
 
-    def bk_ifftn(self, data,dim=None,norm=None):
+    def bk_ifftn(self, data, dim=None, norm=None):
         return self.backend.fft.ifftn(data)
 
     def bk_rfft(self, data):
@@ -327,8 +324,8 @@ class BkNumpy(BackendBase.BackendBase):
     def bk_relu(self, x):
         return (x > 0) * x
 
-    def bk_clip_by_value(self, x,xmin,xmax):
-        return self.backend.clip(x,xmin,xmax)
+    def bk_clip_by_value(self, x, xmin, xmax):
+        return self.backend.clip(x, xmin, xmax)
 
     def bk_cast(self, x):
         if isinstance(x, np.float64):
@@ -364,29 +361,29 @@ class BkNumpy(BackendBase.BackendBase):
             out_type = self.all_bk_type
 
         return x.astype(out_type)
-            
-    def bk_variable(self,x):
-            
+
+    def bk_variable(self, x):
+
         return self.bk_cast(x)
-        
-    def bk_assign(self,x,y):
-        x=y
-            
-    def bk_constant(self,x):
-            
+
+    def bk_assign(self, x, y):
+        x = y
+
+    def bk_constant(self, x):
+
         return self.bk_cast(x)
-        
-    def bk_cos(self,x):
+
+    def bk_cos(self, x):
         return self.backend.cos(x)
-        
-    def bk_sin(self,x):
+
+    def bk_sin(self, x):
         return self.backend.sin(x)
-        
-    def bk_arctan2(self,c,s):
-        return self.backend.arctan2(c,s)
-        
-    def bk_empty(self,list):
+
+    def bk_arctan2(self, c, s):
+        return self.backend.arctan2(c, s)
+
+    def bk_empty(self, list):
         return self.backend.empty(list)
-        
-    def to_numpy(self,x):
+
+    def to_numpy(self, x):
         return x
