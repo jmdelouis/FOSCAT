@@ -5,8 +5,6 @@ import healpy as hp
 import numpy as np
 from scipy.interpolate import griddata
 
-import foscat.backend as bk
-
 TMPFILE_VERSION = "V4_0"
 
 
@@ -37,7 +35,7 @@ class FoCUS:
         mpi_rank=0,
     ):
 
-        self.__version__ = "3.7.0"
+        self.__version__ = "3.8.2"
         # P00 coeff for normalization for scat_cov
         self.TMPFILE_VERSION = TMPFILE_VERSION
         self.P1_dic = None
@@ -106,13 +104,34 @@ class FoCUS:
 
         self.all_type = all_type
         self.BACKEND = BACKEND
-        self.backend = bk.foscat_backend(
-            BACKEND,
-            all_type=all_type,
-            mpi_rank=mpi_rank,
-            gpupos=gpupos,
-            silent=self.silent,
-        )
+
+        if BACKEND == "torch":
+            from foscat.BkTorch import BkTorch
+
+            self.backend = BkTorch(
+                all_type=all_type,
+                mpi_rank=mpi_rank,
+                gpupos=gpupos,
+                silent=self.silent,
+            )
+        elif BACKEND == "tensorflow":
+            from foscat.BkTensorflow import BkTensorflow
+
+            self.backend = BkTensorflow(
+                all_type=all_type,
+                mpi_rank=mpi_rank,
+                gpupos=gpupos,
+                silent=self.silent,
+            )
+        else:
+            from foscat.BkNumpy import BkNumpy
+
+            self.backend = BkNumpy(
+                all_type=all_type,
+                mpi_rank=mpi_rank,
+                gpupos=gpupos,
+                silent=self.silent,
+            )
 
         self.all_bk_type = self.backend.all_bk_type
         self.all_cbk_type = self.backend.all_cbk_type
@@ -154,6 +173,9 @@ class FoCUS:
         self.X_CNN = {}
         self.Y_CNN = {}
         self.Z_CNN = {}
+
+        self.filters_set = {}
+        self.edge_masks = {}
 
         wwc = np.zeros([KERNELSZ**2, l_NORIENT]).astype(all_type)
         wws = np.zeros([KERNELSZ**2, l_NORIENT]).astype(all_type)
@@ -271,7 +293,7 @@ class FoCUS:
                 else:
                     wr, wi, ws, widx = self.InitWave(self, lout)
 
-                self.Idx_Neighbours[lout] = 1  # self.backend.constant(widx)
+                self.Idx_Neighbours[lout] = 1  # self.backend.bk_constant(widx)
                 self.ww_Real[lout] = wr
                 self.ww_Imag[lout] = wi
                 self.w_smooth[lout] = ws
@@ -292,13 +314,13 @@ class FoCUS:
                 r = np.sum(np.sqrt(c * c + s * s))
                 c = c / r
                 s = s / r
-                self.ww_RealT[1] = self.backend.constant(
+                self.ww_RealT[1] = self.backend.bk_constant(
                     np.array(c).reshape(xx.shape[0], 1, 1)
                 )
-                self.ww_ImagT[1] = self.backend.constant(
+                self.ww_ImagT[1] = self.backend.bk_constant(
                     np.array(s).reshape(xx.shape[0], 1, 1)
                 )
-                self.ww_SmoothT[1] = self.backend.constant(
+                self.ww_SmoothT[1] = self.backend.bk_constant(
                     np.array(w).reshape(xx.shape[0], 1, 1)
                 )
 
@@ -308,21 +330,21 @@ class FoCUS:
             self.ww_ImagT = {}
             self.ww_SmoothT = {}
 
-            self.ww_SmoothT[1] = self.backend.constant(
+            self.ww_SmoothT[1] = self.backend.bk_constant(
                 self.w_smooth.reshape(KERNELSZ, KERNELSZ, 1, 1)
             )
             www = np.zeros([KERNELSZ, KERNELSZ, NORIENT, NORIENT], dtype=self.all_type)
             for k in range(NORIENT):
                 www[:, :, k, k] = self.w_smooth.reshape(KERNELSZ, KERNELSZ)
-            self.ww_SmoothT[NORIENT] = self.backend.constant(
+            self.ww_SmoothT[NORIENT] = self.backend.bk_constant(
                 www.reshape(KERNELSZ, KERNELSZ, NORIENT, NORIENT)
             )
-            self.ww_RealT[1] = self.backend.constant(
+            self.ww_RealT[1] = self.backend.bk_constant(
                 self.backend.bk_reshape(
                     wwc.astype(self.all_type), [KERNELSZ, KERNELSZ, 1, NORIENT]
                 )
             )
-            self.ww_ImagT[1] = self.backend.constant(
+            self.ww_ImagT[1] = self.backend.bk_constant(
                 self.backend.bk_reshape(
                     wws.astype(self.all_type), [KERNELSZ, KERNELSZ, 1, NORIENT]
                 )
@@ -339,10 +361,10 @@ class FoCUS:
                     )
                 return y
 
-            self.ww_RealT[NORIENT] = self.backend.constant(
+            self.ww_RealT[NORIENT] = self.backend.bk_constant(
                 doorientw(wwc.astype(self.all_type))
             )
-            self.ww_ImagT[NORIENT] = self.backend.constant(
+            self.ww_ImagT[NORIENT] = self.backend.bk_constant(
                 doorientw(wws.astype(self.all_type))
             )
         self.pix_interp_val = {}
@@ -715,7 +737,7 @@ class FoCUS:
     def ud_grade(self, im, j, axis=0):
         rim = im
         for k in range(j):
-            rim = self.smooth(rim, axis=axis)
+            # rim = self.smooth(rim, axis=axis)
             rim = self.ud_grade_2(rim, axis=axis)
         return rim
 
@@ -971,8 +993,8 @@ class FoCUS:
 
                 self.pix_interp_val[lout][nout] = 1
                 self.weight_interp_val[lout][nout] = self.backend.bk_SparseTensor(
-                    self.backend.constant(indice),
-                    self.backend.constant(self.backend.bk_cast(w.flatten())),
+                    self.backend.bk_constant(indice),
+                    self.backend.bk_constant(self.backend.bk_cast(w.flatten())),
                     dense_shape=[12 * nout**2, 12 * lout**2],
                 )
 
@@ -1247,8 +1269,8 @@ class FoCUS:
             wr = np.repeat(wr, odata, 2)
             wi = np.repeat(wi, odata, 2)
 
-        wr = self.backend.bk_cast(self.backend.constant(wr))
-        wi = self.backend.bk_cast(self.backend.constant(wi))
+        wr = self.backend.bk_cast(self.backend.bk_constant(wr))
+        wi = self.backend.bk_cast(self.backend.bk_constant(wi))
 
         tim = self.backend.bk_reshape(self.backend.bk_cast(im), [ndata, npix, odata])
 
@@ -1300,7 +1322,7 @@ class FoCUS:
         if odata > 1:
             w = np.repeat(w, odata, 2)
 
-        w = self.backend.bk_cast(self.backend.constant(w))
+        w = self.backend.bk_cast(self.backend.bk_constant(w))
 
         tim = self.backend.bk_reshape(self.backend.bk_cast(im), [ndata, npix, odata])
 
@@ -1685,18 +1707,18 @@ class FoCUS:
             )
 
             wr = self.backend.bk_SparseTensor(
-                self.backend.constant(tmp),
-                self.backend.constant(self.backend.bk_cast(wr)),
+                self.backend.bk_constant(tmp),
+                self.backend.bk_constant(self.backend.bk_cast(wr)),
                 dense_shape=[12 * nside**2 * self.NORIENT, 12 * nside**2],
             )
             wi = self.backend.bk_SparseTensor(
-                self.backend.constant(tmp),
-                self.backend.constant(self.backend.bk_cast(wi)),
+                self.backend.bk_constant(tmp),
+                self.backend.bk_constant(self.backend.bk_cast(wi)),
                 dense_shape=[12 * nside**2 * self.NORIENT, 12 * nside**2],
             )
             ws = self.backend.bk_SparseTensor(
-                self.backend.constant(tmp2),
-                self.backend.constant(self.backend.bk_cast(ws)),
+                self.backend.bk_constant(tmp2),
+                self.backend.bk_constant(self.backend.bk_cast(ws)),
                 dense_shape=[12 * nside**2, 12 * nside**2],
             )
 
@@ -2290,7 +2312,7 @@ class FoCUS:
                 else:
                     wr, wi, ws, widx = self.InitWave(self, nside)
 
-                self.Idx_Neighbours[nside] = 1  # self.backend.constant(tmp)
+                self.Idx_Neighbours[nside] = 1  # self.backend.bk_constant(tmp)
                 self.ww_Real[nside] = wr
                 self.ww_Imag[nside] = wi
                 self.w_smooth[nside] = ws

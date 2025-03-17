@@ -1,5 +1,3 @@
-import time
-
 import healpy as hp
 import numpy as np
 
@@ -97,13 +95,13 @@ class alm:
             self.ring_th(nside)
             self.ring_ph(nside)
             x = (-1j * np.arange(3 * nside)).reshape(1, 3 * nside)
-            self.matrix_shift_ph[nside] = self.backend.bk_cast(
-                self.backend.bk_exp(x * self.lph[nside].reshape(4 * nside - 1, 1))
+            self.matrix_shift_ph[nside] = self.backend.bk_exp(
+                self.backend.bk_cast(x * self.lph[nside].reshape(4 * nside - 1, 1))
             )
 
             self.lmax = 3 * nside - 1
 
-            ratio_mm = {}
+            # ratio_mm = {}
 
             for m in range(3 * nside):
                 val = np.zeros([self.lmax - m + 1])
@@ -120,18 +118,18 @@ class alm:
                     aval[1] = 2 * m + 1
                     val[1] = val[0] - 0.5 * self.log(2 * m + 1)
 
-                    for l in range(m + 2, self.lmax + 1):
-                        aval[l - m] = (2 * l - 1) / (l - m)
-                        bval[l - m] = (l + m - 1) / (l - m)
-                        val[l - m] = (
-                            val[l - m - 1]
-                            + 0.5 * self.log(l - m)
-                            - 0.5 * self.log(l + m)
+                    for ell in range(m + 2, self.lmax + 1):
+                        aval[ell - m] = (2 * ell - 1) / (ell - m)
+                        bval[ell - m] = (ell + m - 1) / (ell - m)
+                        val[ell - m] = (
+                            val[ell - m - 1]
+                            + 0.5 * self.log(ell - m)
+                            - 0.5 * self.log(ell + m)
                         )
 
-                self.A[nside, m] = self.backend.constant((aval))
-                self.B[nside, m] = self.backend.constant((bval))
-                self.ratio_mm[nside, m] = self.backend.constant(
+                self.A[nside, m] = self.backend.bk_constant(aval)
+                self.B[nside, m] = self.backend.bk_constant(bval)
+                self.ratio_mm[nside, m] = self.backend.bk_constant(
                     np.sqrt(4 * np.pi) * np.expand_dims(np.exp(val), 1)
                 )
             # Calcul de P_{mm}(x)
@@ -141,7 +139,7 @@ class alm:
                 P_mm[m] = 1.0
             for m in range(3 * nside - 1):
                 P_mm[m] = (0.5 - m % 2) * 2 * (1 - x**2) ** (m / 2)
-            self.P_mm[nside] = self.backend.constant(P_mm)
+            self.P_mm[nside] = self.backend.bk_constant(P_mm)
 
     def init_Ys(self, s, nside):
 
@@ -167,8 +165,8 @@ class alm:
                 vnorm = 1 / np.expand_dims(
                     np.sqrt(2 * (np.arange(ell_max - m + 1) + m) + 1), 1
                 )
-                self.Yp[s, nside][m] = iplus[idx] * vnorm
-                self.Ym[s, nside][m] = imoins[idx] * vnorm
+                self.Yp[s, nside][m] = self.backend.bk_cast(iplus[idx] * vnorm + 0j)
+                self.Ym[s, nside][m] = self.backend.bk_cast(imoins[idx] * vnorm + 0j)
 
             del iplus
             del imoins
@@ -224,7 +222,7 @@ class alm:
         result[0] = Pmm
 
         if m == lmax:
-            return result * np.exp(ratio) * np.sqrt(4 * np.pi)
+            return result * np.exp(ratio) * np.sqrt(4 * np.pi) + 0j
 
         # Étape 2 : Calcul de P_{l+1, m}(x)
         result[1] = x * (2 * m + 1) * result[0]
@@ -232,20 +230,23 @@ class alm:
         ratio[1, 0] = ratio[0, 0] - 0.5 * self.log(2 * m + 1)
 
         # Étape 3 : Récurence pour l > m + 1
-        for l in range(m + 2, lmax + 1):
-            result[l - m] = (
-                (2 * l - 1) * x * result[l - m - 1] - (l + m - 1) * result[l - m - 2]
-            ) / (l - m)
-            ratio[l - m, 0] = (
-                0.5 * self.log(l - m) - 0.5 * self.log(l + m) + ratio[l - m - 1, 0]
+        for ell in range(m + 2, lmax + 1):
+            result[ell - m] = (
+                (2 * ell - 1) * x * result[ell - m - 1]
+                - (ell + m - 1) * result[ell - m - 2]
+            ) / (ell - m)
+            ratio[ell - m, 0] = (
+                0.5 * self.log(ell - m)
+                - 0.5 * self.log(ell + m)
+                + ratio[ell - m - 1, 0]
             )
-            if np.max(abs(result[l - m])) > self._limit_range:
-                result[l - m - 1] *= self._limit_range
-                result[l - m] *= self._limit_range
-                ratio[l - m - 1, 0] += self._log_limit_range
-                ratio[l - m, 0] += self._log_limit_range
+            if np.max(abs(result[ell - m])) > self._limit_range:
+                result[ell - m - 1] *= self._limit_range
+                result[ell - m] *= self._limit_range
+                ratio[ell - m - 1, 0] += self._log_limit_range
+                ratio[ell - m, 0] += self._log_limit_range
 
-        return result * np.exp(ratio) * np.sqrt(4 * np.pi)
+        return result * np.exp(ratio) * np.sqrt(4 * np.pi) + 0j
 
     # Calcul des P_{lm}(x) pour tout l inclus dans [m,lmax]
     def compute_legendre_m_old2(self, x, m, lmax, nside):
@@ -265,18 +266,11 @@ class alm:
         result[1] = x * self.A[nside, m][1] * result[0]
 
         # Étape 3 : Récurence pour l > m + 1
-        for l in range(m + 2, lmax + 1):
-            result[l - m] = (
-                self.A[nside, m][l - m] * x * result[l - m - 1]
-                - self.B[nside, m][l - m] * result[l - m - 2]
+        for ell in range(m + 2, lmax + 1):
+            result[ell - m] = (
+                self.A[nside, m][ell - m] * x * result[ell - m - 1]
+                - self.B[nside, m][ell - m] * result[ell - m - 2]
             )
-            """
-            if np.max(abs(result[l-m]))>self._limit_range:
-                result[l-m-1]*=  self._limit_range
-                result[l-m]*=    self._limit_range
-                ratio[l-m-1]+= self._log_limit_range
-                ratio[l-m]+=   self._log_limit_range
-            """
         result = self.backend.bk_reshape(
             self.backend.bk_concat([result[k] for k in range(lmax + 1 - m)], axis=0),
             [lmax + 1 - m, 4 * nside - 1],
@@ -374,19 +368,19 @@ class alm:
             ratio[2, 0] = ratio[1, 0] - self.log(2 * m + 1) / 2
 
             # Étape 3 : Récurence pour l > m + 1
-            for l in range(m + 2, lmax + 1):
-                result[l - m + 1] = (
-                    (2 * l - 1) * co_th * result[l - m]
-                    - (l + m - 1) * result[l - m - 1]
-                ) / (l - m)
-                ratio[l - m + 1, 0] = (self.log(l - m) - self.log(l + m)) / 2 + ratio[
-                    l - m, 0
-                ]
-                if np.max(abs(result[l - m + 1])) > self._limit_range:
-                    result[l - m] *= self._limit_range
-                    result[l - m + 1] *= self._limit_range
-                    ratio[l - m, 0] += self._log_limit_range
-                    ratio[l - m + 1, 0] += self._log_limit_range
+            for ell in range(m + 2, lmax + 1):
+                result[ell - m + 1] = (
+                    (2 * ell - 1) * co_th * result[ell - m]
+                    - (ell + m - 1) * result[ell - m - 1]
+                ) / (ell - m)
+                ratio[ell - m + 1, 0] = (
+                    self.log(ell - m) - self.log(ell + m)
+                ) / 2 + ratio[ell - m, 0]
+                if np.max(abs(result[ell - m + 1])) > self._limit_range:
+                    result[ell - m] *= self._limit_range
+                    result[ell - m + 1] *= self._limit_range
+                    ratio[ell - m, 0] += self._log_limit_range
+                    ratio[ell - m + 1, 0] += self._log_limit_range
 
             ylm = result * np.exp(ratio)
             ylm[1:] *= (
@@ -403,8 +397,8 @@ class alm:
         ) + ell * (ell - 1) * cot_th * cot_th
         b = 2 * m * (ell - 1) * cot_th / si_th
         w = np.zeros([lmax + 1 - m, 1])
-        l = ell[ell > 1]
-        w[ell > 1] = np.sqrt(1 / ((l + 2) * (l + 1) * (l) * (l - 1)))
+        l_ell = ell[ell > 1]
+        w[ell > 1] = np.sqrt(1 / ((l_ell + 2) * (l_ell + 1) * (l_ell) * (l_ell - 1)))
         w = w.reshape(lmax + 1 - m, 1)
 
         alpha_plus = w * (a + b)
@@ -425,13 +419,13 @@ class alm:
         r = self.backend.bk_rfft(val)
         if axis == 0:
             r_inv = self.backend.bk_reverse(
-                self.backend.bk_conjugate(r[1:-1]), axis=axis
+                self.backend.bk_conjugate(r[..., 1:-1]), axis=-1
             )
         else:
             r_inv = self.backend.bk_reverse(
-                self.backend.bk_conjugate(r[:, 1:-1]), axis=axis
+                self.backend.bk_conjugate(r[..., 1:-1]), axis=-1
             )
-        return self.backend.bk_concat([r, r_inv], axis=axis)
+        return self.backend.bk_concat([r, r_inv], axis=axis + 1)
 
     def irfft2fft(self, val, N, axis=0):
         if axis == 0:
@@ -441,6 +435,8 @@ class alm:
 
     def comp_tf(self, im, nside, realfft=False):
 
+        # im is [Nimage,12*nside**2]
+
         self.shift_ph(nside)
         n = 0
 
@@ -449,65 +445,55 @@ class alm:
             N = 4 * (k + 1)
 
             if realfft:
-                tmp = self.rfft2fft(im[n : n + N])
+                tmp = self.rfft2fft(im[:, n : n + N])
             else:
-                tmp = self.backend.bk_fft(im[n : n + N])
+                tmp = self.backend.bk_fft(im[:, n : n + N])
 
-            l_n = tmp.shape[0]
+            l_n = tmp.shape[1]
 
             if l_n < 3 * nside + 1:
                 repeat_n = 3 * nside // l_n + 1
-                tmp = self.backend.bk_tile(tmp, repeat_n, axis=0)
+                tmp = self.backend.bk_tile(tmp, repeat_n, axis=1)
 
-            ft_im.append(tmp[0 : 3 * nside])
+            ft_im.append(tmp[:, None, 0 : 3 * nside])
 
             n += N
-        if nside > 1:
-            result = self.backend.bk_reshape(
-                self.backend.bk_concat(ft_im, axis=0), [nside - 1, 3 * nside]
-            )
 
         N = 4 * nside * (2 * nside + 1)
-        v = self.backend.bk_reshape(im[n : n + N], [2 * nside + 1, 4 * nside])
+        v = self.backend.bk_reshape(
+            im[:, n : n + N], [im.shape[0], 2 * nside + 1, 4 * nside]
+        )
         if realfft:
-            v_fft = self.rfft2fft(v, axis=1)[:, : 3 * nside]
+            v_fft = self.rfft2fft(v, axis=1)[:, :, : 3 * nside]
         else:
-            v_fft = self.backend.bk_fft(v)[:, : 3 * nside]
+            v_fft = self.backend.bk_fft(v)[:, :, : 3 * nside]
 
         n += N
-        if nside > 1:
-            result = self.backend.bk_concat([result, v_fft], axis=0)
-        else:
-            result = v_fft
+
+        ft_im.append(v_fft)
 
         if nside > 1:
-            ft_im = []
             for k in range(nside - 1):
                 N = 4 * (nside - 1 - k)
 
                 if realfft:
-                    tmp = self.rfft2fft(im[n : n + N])[0:l_n]
+                    tmp = self.rfft2fft(im[:, n : n + N])
                 else:
-                    tmp = self.backend.bk_fft(im[n : n + N])[0:l_n]
+                    tmp = self.backend.bk_fft(im[:, n : n + N])
 
-                l_n = tmp.shape[0]
+                l_n = tmp.shape[1]
 
                 if l_n < 3 * nside + 1:
                     repeat_n = 3 * nside // l_n + 1
-                    tmp = self.backend.bk_tile(tmp, repeat_n, axis=0)
+                    tmp = self.backend.bk_tile(tmp, repeat_n, axis=1)
 
-                ft_im.append(tmp[0 : 3 * nside])
+                ft_im.append(tmp[:, None, 0 : 3 * nside])
                 n += N
 
-            lastresult = self.backend.bk_reshape(
-                self.backend.bk_concat(ft_im, axis=0), [nside - 1, 3 * nside]
-            )
-            return (
-                self.backend.bk_concat([result, lastresult], axis=0)
-                * self.matrix_shift_ph[nside]
-            )
-        else:
-            return result * self.matrix_shift_ph[nside]
+        return (
+            self.backend.bk_concat(ft_im, axis=1)
+            * self.matrix_shift_ph[nside][None, :, :]
+        )
 
     def icomp_tf(self, i_im, nside, realfft=False):
 
@@ -565,59 +551,80 @@ class alm:
         else:
             return result
 
-    def anafast(self, im, map2=None, nest=False, spin=2):
+    def anafast(self, im, map2=None, nest=False, spin=2, axes=0):
         """The `anafast` function computes the L1 and L2 norm power spectra.
 
-        Currently, it is not optimized for single-pass computation due to the relatively inefficient computation of \(Y_{lm}\).
+        Currently, it is not optimized for single-pass computation due to the relatively inefficient computation of (Y_{lm}).
         Nonetheless, it utilizes TensorFlow and can be integrated into gradient computations.
 
         Input:
-        - `im`: a vector of size \([12 \times \text{Nside}^2]\) for scalar data, or of size \([2, 12 \times \text{Nside}^2]\) for Q,U polar data,
-        or of size \([3, 12 \times \text{Nside}^2]\) for I,Q,U polar data.
-        - `map2` (optional): a vector of size \([12 \times \text{Nside}^2]\) for scalar data, or of size
-        \([3, 12 \times \text{Nside}^2]\) for polar data. If provided, cross power spectra will be computed.
+        - `im`: a vector of size ([12 \times \text{Nside}^2]) for scalar data, or of size ([2, 12 \times \text{Nside}^2]) for Q,U polar data,
+        or of size ([3, 12 \times \text{Nside}^2]) for I,Q,U polar data.
+        - `map2` (optional): a vector of size ([12 \times \text{Nside}^2]) for scalar data, or of size
+        ([3, 12 \times \text{Nside}^2]) for polar data. If provided, cross power spectra will be computed.
         - `nest=True`: alters the ordering of the input maps.
         - `spin=2` for 1/2 spin data as Q and U. Spin=1 for seep fields
 
         Output:
-        -A tensor of size \([l_{\text{max}} \times (l_{\text{max}}-1)]\) formatted as \([6, \ldots]\),
+        -A tensor of size ([l_{\text{max}} \times (l_{\text{max}}-1)) formatted as ([6, ldots]),
         ordered as TT, EE, BB, TE, EB.TBanafast function computes L1 and L2 norm powerspctra.
 
         """
+        no_input_column = False
+
         i_im = self.backend.bk_cast(im)
         if map2 is not None:
             i_map2 = self.backend.bk_cast(map2)
 
         doT = True
-        if len(i_im.shape) == 1:  # nopol
-            nside = int(np.sqrt(i_im.shape[0] // 12))
+
+        if len(i_im.shape) - axes == 1:  # nopol
+            nside = int(np.sqrt(i_im.shape[axes] // 12))
         else:
-            if i_im.shape[0] == 2:
+            if len(i_im.shape) - axes == 2:
                 doT = False
-            nside = int(np.sqrt(i_im.shape[1] // 12))
+            nside = int(np.sqrt(i_im.shape[axes + 1] // 12))
+        do_all_pol = False
+        if i_im.shape[axes] == 3:
+            do_all_pol = True
 
         self.shift_ph(nside)
 
-        if doT:  # nopol
-            if len(i_im.shape) == 2:  # pol
-                l_im = i_im[0]
-                if map2 is not None:
-                    l_map2 = i_map2[0]
+        if doT or do_all_pol:
+            if len(i_im.shape) == 1 + int(do_all_pol):  # no pol if 1 all pol if 2
+                if do_all_pol:
+                    l_im = i_im[None, 0, ...]
+                    if map2 is not None:
+                        l_map2 = i_map2[None, 0, ...]
+                else:
+                    l_im = i_im[None, ...]
+                    if map2 is not None:
+                        l_map2 = i_map2[None, ...]
+                no_input_column = True
+                N_image = 1
+
             else:
-                l_im = i_im
-                if map2 is not None:
-                    l_map2 = i_map2
+                if do_all_pol:
+                    l_im = i_im[:, 0]
+                    if map2 is not None:
+                        l_map2 = i_map2[:, 0]
+                    N_image = i_im.shape[0]
+
+                else:
+                    l_im = i_im
+                    if map2 is not None:
+                        l_map2 = i_map2
+                    N_image = i_im.shape[0]
 
             if nest:
                 idx = hp.ring2nest(nside, np.arange(12 * nside**2))
-                if len(i_im.shape) == 1:  # nopol
-                    ft_im = self.comp_tf(
-                        self.backend.bk_gather(l_im, idx), nside, realfft=True
+                ft_im = self.comp_tf(
+                    self.backend.bk_gather(l_im, idx, axis=1), nside, realfft=True
+                )
+                if map2 is not None:
+                    ft_im2 = self.comp_tf(
+                        self.backend.bk_gather(l_map2, idx, axis=1), nside, realfft=True
                     )
-                    if map2 is not None:
-                        ft_im2 = self.comp_tf(
-                            self.backend.bk_gather(l_map2, idx), nside, realfft=True
-                        )
             else:
                 ft_im = self.comp_tf(l_im, nside, realfft=True)
                 if map2 is not None:
@@ -630,71 +637,104 @@ class alm:
         lmax = 3 * nside - 1
 
         cl2 = None
-        cl2_L1 = None
-        dt2 = 0
-        dt3 = 0
-        dt4 = 0
-        if len(i_im.shape) == 2:  # nopol
+
+        if not doT:  # polarize case
 
             self.init_Ys(spin, nside)
 
+            if len(i_im.shape) == 2:
+                l_im = i_im[None, :, :]
+                if map2 is not None:
+                    l_map2 = i_map2[None, :, :]
+                no_input_column = True
+                N_image = 1
+            else:
+                l_im = i_im
+                if map2 is not None:
+                    l_map2 = i_map2
+                N_image = i_im.shape[0]
+
             if nest:
                 idx = hp.ring2nest(nside, np.arange(12 * nside**2))
-                l_Q = self.backend.bk_gather(i_im[int(doT)], idx)
-                l_U = self.backend.bk_gather(i_im[1 + int(doT)], idx)
+                l_Q = self.backend.bk_gather(l_im[:, int(do_all_pol)], idx, axis=1)
+                l_U = self.backend.bk_gather(l_im[:, 1 + int(do_all_pol)], idx, axis=1)
                 ft_im_Pp = self.comp_tf(self.backend.bk_complex(l_Q, l_U), nside)
                 ft_im_Pm = self.comp_tf(self.backend.bk_complex(l_Q, -l_U), nside)
                 if map2 is not None:
-                    l_Q = self.backend.bk_gather(i_map2[int(doT)], idx)
-                    l_U = self.backend.bk_gather(i_map2[1 + int(doT)], idx)
+                    l_Q = self.backend.bk_gather(
+                        l_map2[:, int(do_all_pol)], idx, axis=1
+                    )
+                    l_U = self.backend.bk_gather(
+                        l_map2[:, 1 + int(do_all_pol)], idx, axis=1
+                    )
                     ft_im2_Pp = self.comp_tf(self.backend.bk_complex(l_Q, l_U), nside)
                     ft_im2_Pm = self.comp_tf(self.backend.bk_complex(l_Q, -l_U), nside)
             else:
                 ft_im_Pp = self.comp_tf(
-                    self.backend.bk_complex(i_im[int(doT)], i_im[1 + int(doT)]), nside
+                    self.backend.bk_complex(
+                        l_im[:, int(do_all_pol)], l_im[:, 1 + int(do_all_pol)]
+                    ),
+                    nside,
                 )
                 ft_im_Pm = self.comp_tf(
-                    self.backend.bk_complex(i_im[int(doT)], -i_im[1 + int(doT)]), nside
+                    self.backend.bk_complex(
+                        l_im[:, int(do_all_pol)], -l_im[:, 1 + int(do_all_pol)]
+                    ),
+                    nside,
                 )
                 if map2 is not None:
                     ft_im2_Pp = self.comp_tf(
-                        self.backend.bk_complex(i_map2[int(doT)], i_map2[1 + int(doT)]),
+                        self.backend.bk_complex(
+                            l_map2[:, int(do_all_pol)], l_map2[:, 1 + int(do_all_pol)]
+                        ),
                         nside,
                     )
                     ft_im2_Pm = self.comp_tf(
                         self.backend.bk_complex(
-                            i_map2[int(doT)], -i_map2[1 + int(doT)]
+                            l_map2[:, int(doT)], -l_map2[:, 1 + int(do_all_pol)]
                         ),
                         nside,
                     )
 
+        l_cl = []
         for m in range(lmax + 1):
 
-            plm = self.compute_legendre_m(co_th, m, 3 * nside - 1, nside) / (
-                12 * nside**2
+            plm = self.backend.bk_cast(
+                self.compute_legendre_m(co_th, m, 3 * nside - 1, nside)
+                / (12 * nside**2)
             )
 
-            if doT:
-                tmp = self.backend.bk_reduce_sum(plm * ft_im[:, m], 1)
+            if doT or do_all_pol:
+                tmp = self.backend.bk_reduce_sum(
+                    plm[None, :, :] * ft_im[:, None, :, m], 2
+                )
 
                 if map2 is not None:
-                    tmp2 = self.backend.bk_reduce_sum(plm * ft_im2[:, m], 1)
+                    tmp2 = self.backend.bk_reduce_sum(
+                        plm[None, :, :] * ft_im2[:, None, :, m], 2
+                    )
                 else:
                     tmp2 = tmp
 
-            if len(i_im.shape) == 2:  # pol
+            if not doT:  # polarize case
                 plmp = self.Yp[spin, nside][m]
                 plmm = self.Ym[spin, nside][m]
-
-                tmpp = self.backend.bk_reduce_sum(plmp * ft_im_Pp[:, m], 1)
-                tmpm = self.backend.bk_reduce_sum(plmm * ft_im_Pm[:, m], 1)
-
+                tmpp = self.backend.bk_reduce_sum(
+                    plmp[None, :, :] * ft_im_Pp[:, None, :, m], 2
+                )
+                tmpm = self.backend.bk_reduce_sum(
+                    plmm[None, :, :] * ft_im_Pm[:, None, :, m], 2
+                )
                 almE = -(tmpp + tmpm) / 2.0
                 almB = (tmpp - tmpm) / (2j)
 
                 if map2 is not None:
-                    tmpp2 = self.backend.bk_reduce_sum(plmp * ft_im2_Pp[:, m], 1)
-                    tmpm2 = self.backend.bk_reduce_sum(plmm * ft_im2_Pm[:, m], 1)
+                    tmpp2 = self.backend.bk_reduce_sum(
+                        plmp[None, :, :] * ft_im2_Pp[:, None, :, m], 2
+                    )
+                    tmpm2 = self.backend.bk_reduce_sum(
+                        plmm[None, :, :] * ft_im2_Pm[:, None, :, m], 2
+                    )
 
                     almE2 = -(tmpp2 + tmpm2) / 2.0
                     almB2 = (tmpp2 - tmpm2) / (2j)
@@ -702,96 +742,99 @@ class alm:
                     almE2 = almE
                     almB2 = almB
 
-                if doT:
-                    tmpTT = self.backend.bk_real(
-                        (tmp * self.backend.bk_conjugate(tmp2))
-                    )
-                    tmpTE = self.backend.bk_real(
-                        (tmp * self.backend.bk_conjugate(almE2))
-                    )
+                if do_all_pol:
+                    tmpTT = self.backend.bk_real(tmp * self.backend.bk_conjugate(tmp2))
+                    tmpTE = self.backend.bk_real(tmp * self.backend.bk_conjugate(almE2))
                     tmpTB = -self.backend.bk_real(
-                        (tmp * self.backend.bk_conjugate(almB2))
+                        tmp * self.backend.bk_conjugate(almB2)
                     )
 
-                tmpEE = self.backend.bk_real((almE * self.backend.bk_conjugate(almE2)))
-                tmpBB = self.backend.bk_real((almB * self.backend.bk_conjugate(almB2)))
-                tmpEB = -self.backend.bk_real((almE * self.backend.bk_conjugate(almB2)))
+                tmpEE = self.backend.bk_real(almE * self.backend.bk_conjugate(almE2))
+                tmpBB = self.backend.bk_real(almB * self.backend.bk_conjugate(almB2))
+                tmpEB = -self.backend.bk_real(almE * self.backend.bk_conjugate(almB2))
 
                 if map2 is not None:
                     tmpEB = (
                         tmpEB
-                        - self.backend.bk_real(
-                            (almE2 * self.backend.bk_conjugate(almB))
-                        )
+                        - self.backend.bk_real(almE2 * self.backend.bk_conjugate(almB))
                     ) / 2
 
-                    if doT:
+                    if do_all_pol:
                         tmpTE = (
                             tmpTE
                             + self.backend.bk_real(
-                                (tmp2 * self.backend.bk_conjugate(almE))
+                                tmp2 * self.backend.bk_conjugate(almE)
                             )
                         ) / 2
                         tmpTB = (
                             tmpTB
                             - self.backend.bk_real(
-                                (tmp2 * self.backend.bk_conjugate(almB))
+                                tmp2 * self.backend.bk_conjugate(almB)
                             )
                         ) / 2
 
                 if m == 0:
-                    if doT:
-                        l_cl = self.backend.bk_concat(
-                            [tmpTT, tmpEE, tmpBB, tmpTE, tmpEB, tmpTB], 0
-                        )
+                    if do_all_pol:
+                        l_cl.append(tmpTT)
+                        l_cl.append(tmpEE)
+                        l_cl.append(tmpBB)
+                        l_cl.append(tmpTE)
+                        l_cl.append(tmpEB)
+                        l_cl.append(tmpTB)
                     else:
-                        l_cl = self.backend.bk_concat([tmpEE, tmpBB, tmpEB], 0)
+                        l_cl.append(tmpEE)
+                        l_cl.append(tmpBB)
+                        l_cl.append(tmpEB)
+
                 else:
                     offset_tensor = self.backend.bk_zeros(
-                        (m), dtype=self.backend.all_bk_type
+                        (N_image, m), dtype=self.backend.all_bk_type
                     )
-                    if doT:
-                        l_cl = self.backend.bk_concat(
-                            [
-                                self.backend.bk_concat([offset_tensor, tmpTT], axis=0),
-                                self.backend.bk_concat([offset_tensor, tmpEE], axis=0),
-                                self.backend.bk_concat([offset_tensor, tmpBB], axis=0),
-                                self.backend.bk_concat([offset_tensor, tmpTE], axis=0),
-                                self.backend.bk_concat([offset_tensor, tmpEB], axis=0),
-                                self.backend.bk_concat([offset_tensor, tmpTB], axis=0),
-                            ],
-                            axis=0,
-                        )
+                    if do_all_pol:
+                        l_cl.append(offset_tensor)
+                        l_cl.append(2 * tmpTT)
+                        l_cl.append(offset_tensor)
+                        l_cl.append(2 * tmpEE)
+                        l_cl.append(offset_tensor)
+                        l_cl.append(2 * tmpBB)
+                        l_cl.append(offset_tensor)
+                        l_cl.append(2 * tmpTE)
+                        l_cl.append(offset_tensor)
+                        l_cl.append(2 * tmpEB)
+                        l_cl.append(offset_tensor)
+                        l_cl.append(2 * tmpTB)
                     else:
-                        l_cl = self.backend.bk_concat(
-                            [
-                                self.backend.bk_concat([offset_tensor, tmpEE], axis=0),
-                                self.backend.bk_concat([offset_tensor, tmpBB], axis=0),
-                                self.backend.bk_concat([offset_tensor, tmpEB], axis=0),
-                            ],
-                            axis=0,
-                        )
-
-                if doT:
-                    l_cl = self.backend.bk_reshape(l_cl, [6, lmax + 1])
-                else:
-                    l_cl = self.backend.bk_reshape(l_cl, [3, lmax + 1])
+                        l_cl.append(offset_tensor)
+                        l_cl.append(2 * tmpEE)
+                        l_cl.append(offset_tensor)
+                        l_cl.append(2 * tmpBB)
+                        l_cl.append(offset_tensor)
+                        l_cl.append(2 * tmpEB)
             else:
-                tmp = self.backend.bk_real((tmp * self.backend.bk_conjugate(tmp2)))
+                tmp = self.backend.bk_real(tmp * self.backend.bk_conjugate(tmp2))
                 if m == 0:
-                    l_cl = tmp
+                    l_cl.append(tmp)
                 else:
                     offset_tensor = self.backend.bk_zeros(
-                        (m), dtype=self.backend.all_bk_type
+                        (N_image, m), dtype=self.backend.all_bk_type
                     )
-                    l_cl = self.backend.bk_concat([offset_tensor, tmp], axis=0)
+                    l_cl.append(offset_tensor)
+                    l_cl.append(2 * tmp)
 
-            if cl2 is None:
-                cl2 = l_cl
+        l_cl = self.backend.bk_concat(l_cl, 1)
+
+        if doT:
+            cl2 = self.backend.bk_reshape(l_cl, [N_image, lmax + 1, lmax + 1])
+            cl2 = self.backend.bk_reduce_sum(cl2, 1)
+        else:
+            if do_all_pol:
+                cl2 = self.backend.bk_reshape(l_cl, [N_image, lmax + 1, 6, lmax + 1])
             else:
-                cl2 += 2 * l_cl
+                cl2 = self.backend.bk_reshape(l_cl, [N_image, lmax + 1, 3, lmax + 1])
+            cl2 = self.backend.bk_reduce_sum(cl2, 1)
 
-        # cl2=cl2*(4*np.pi) #self.backend.bk_sqrt(self.backend.bk_cast(4*np.pi)) #(2*np.arange(cl2.shape[0])+1)))
+        if no_input_column:
+            cl2 = cl2[0]
 
         cl2_l1 = self.backend.bk_L1(cl2)
 
@@ -800,7 +843,7 @@ class alm:
     def map2alm(self, im, nest=False):
         nside = int(np.sqrt(im.shape[0] // 12))
 
-        ph = self.shift_ph(nside)
+        # ph = self.shift_ph(nside)
 
         if nest:
             idx = hp.ring2nest(nside, np.arange(12 * nside**2))
@@ -865,7 +908,7 @@ class alm:
         return self.backend.bk_reshape(
             self.backend.bk_concat(ft_im, 0), [lmax + 1, 4 * nside - 1]
         )
-
+        """
         if nest:
             idx = hp.ring2nest(nside, np.arange(12 * nside**2))
             ft_im = self.comp_tf(
@@ -891,6 +934,7 @@ class alm:
                 alm = self.backend.bk_concat([alm, tmp], axis=0)
 
         return o_map
+        """
 
     def map2alm_spin(self, im_Q, im_U, spin=2, nest=False):
 
@@ -899,9 +943,9 @@ class alm:
 
         nside = int(np.sqrt(im_Q.shape[0] // 12))
 
-        lth = self.ring_th(nside)
+        # lth = self.ring_th(nside)
 
-        co_th = np.cos(lth)
+        # co_th = np.cos(lth)
 
         if nest:
             idx = hp.ring2nest(nside, np.arange(12 * nside**2))
@@ -915,7 +959,7 @@ class alm:
 
         lmax = 3 * nside - 1
 
-        alm = None
+        # alm = None
         for m in range(lmax + 1):
             # not yet debug use spherical
             # plmp1,plmm1=self.compute_legendre_spin2_m(co_th,si_th,m,3*nside-1)
