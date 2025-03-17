@@ -11,29 +11,29 @@ TMPFILE_VERSION = "V4_0"
 
 class FoCUS:
     def __init__(
-            self,
-            NORIENT=4,
-            LAMBDA=1.2,
-            KERNELSZ=3,
-            slope=1.0,
-            all_type="float32",
-            nstep_max=16,
-            padding="SAME",
-            gpupos=0,
-            mask_thres=None,
-            mask_norm=False,
-            isMPI=False,
-            TEMPLATE_PATH="data",
-            BACKEND="tensorflow",
-            use_2D=False,
-            use_1D=False,
-            return_data=False,
-            JmaxDelta=0,
-            DODIV=False,
-            InitWave=None,
-            silent=True,
-            mpi_size=1,
-            mpi_rank=0,
+        self,
+        NORIENT=4,
+        LAMBDA=1.2,
+        KERNELSZ=3,
+        slope=1.0,
+        all_type="float32",
+        nstep_max=16,
+        padding="SAME",
+        gpupos=0,
+        mask_thres=None,
+        mask_norm=False,
+        isMPI=False,
+        TEMPLATE_PATH="data",
+        BACKEND="tensorflow",
+        use_2D=False,
+        use_1D=False,
+        return_data=False,
+        JmaxDelta=0,
+        DODIV=False,
+        InitWave=None,
+        silent=True,
+        mpi_size=1,
+        mpi_rank=0,
     ):
 
         self.__version__ = "3.8.2"
@@ -45,7 +45,7 @@ class FoCUS:
         self.mask_thres = mask_thres
         self.mask_norm = mask_norm
         self.InitWave = InitWave
-        self.mask_mask=None
+        self.mask_mask = None
         self.mpi_size = mpi_size
         self.mpi_rank = mpi_rank
         self.return_data = return_data
@@ -209,15 +209,27 @@ class FoCUS:
             w_smooth = w_smooth.flatten()
         else:
             for i in range(NORIENT):
-                a = (NORIENT-1-i) / float(NORIENT) * np.pi # get the same angle number than scattering lib
-                if KERNELSZ<5:
-                    xx = (3 / float(KERNELSZ)) * LAMBDA * (x * np.cos(a) + y * np.sin(a))
-                    yy = (3 / float(KERNELSZ)) * LAMBDA * (x * np.sin(a) - y * np.cos(a))
+                a = (
+                    (NORIENT - 1 - i) / float(NORIENT) * np.pi
+                )  # get the same angle number than scattering lib
+                if KERNELSZ < 5:
+                    xx = (
+                        (3 / float(KERNELSZ)) * LAMBDA * (x * np.cos(a) + y * np.sin(a))
+                    )
+                    yy = (
+                        (3 / float(KERNELSZ)) * LAMBDA * (x * np.sin(a) - y * np.cos(a))
+                    )
                 else:
-                    xx = (3 /5) * LAMBDA * (x * np.cos(a) + y * np.sin(a))
-                    yy = (3 /5) * LAMBDA * (x * np.sin(a) - y * np.cos(a))
+                    xx = (3 / 5) * LAMBDA * (x * np.cos(a) + y * np.sin(a))
+                    yy = (3 / 5) * LAMBDA * (x * np.sin(a) - y * np.cos(a))
                 if KERNELSZ == 5:
-                    w_smooth=np.exp(-2*((3.0/float(KERNELSZ)*xx)**2+(3.0/float(KERNELSZ)*yy)**2))
+                    w_smooth = np.exp(
+                        -2
+                        * (
+                            (3.0 / float(KERNELSZ) * xx) ** 2
+                            + (3.0 / float(KERNELSZ) * yy) ** 2
+                        )
+                    )
                 else:
                     w_smooth = np.exp(-0.5 * (xx**2 + yy**2))
                 tmp1 = np.cos(yy * np.pi) * w_smooth
@@ -225,7 +237,7 @@ class FoCUS:
 
                 wwc[:, i] = tmp1.flatten() - tmp1.mean()
                 wws[:, i] = tmp2.flatten() - tmp2.mean()
-                #sigma = np.sqrt((wwc[:, i] ** 2).mean())
+                # sigma = np.sqrt((wwc[:, i] ** 2).mean())
                 sigma = np.mean(w_smooth)
                 wwc[:, i] /= sigma
                 wws[:, i] /= sigma
@@ -239,7 +251,7 @@ class FoCUS:
 
                     wwc[:, NORIENT] = tmp1.flatten() - tmp1.mean()
                     wws[:, NORIENT] = tmp2.flatten() - tmp2.mean()
-                    #sigma = np.sqrt((wwc[:, NORIENT] ** 2).mean())
+                    # sigma = np.sqrt((wwc[:, NORIENT] ** 2).mean())
                     sigma = np.mean(w_smooth)
 
                     wwc[:, NORIENT] /= sigma
@@ -249,13 +261,13 @@ class FoCUS:
 
                     wwc[:, NORIENT + 1] = tmp1.flatten() - tmp1.mean()
                     wws[:, NORIENT + 1] = tmp2.flatten() - tmp2.mean()
-                    #sigma = np.sqrt((wwc[:, NORIENT + 1] ** 2).mean())
+                    # sigma = np.sqrt((wwc[:, NORIENT + 1] ** 2).mean())
                     sigma = np.mean(w_smooth)
                     wwc[:, NORIENT + 1] /= sigma
                     wws[:, NORIENT + 1] /= sigma
 
                 w_smooth = w_smooth.flatten()
-            
+
         if self.use_1D:
             KERNELSZ = 5
 
@@ -1794,14 +1806,14 @@ class FoCUS:
             if self.padding == "VALID":
                 l_mask = l_mask[
                     :,
-                    self.KERNELSZ // 2 : -self.KERNELSZ // 2+1,
-                    self.KERNELSZ // 2 : -self.KERNELSZ // 2+1,
+                    self.KERNELSZ // 2 : -self.KERNELSZ // 2 + 1,
+                    self.KERNELSZ // 2 : -self.KERNELSZ // 2 + 1,
                 ]
                 if shape[axis] != l_mask.shape[1]:
                     l_mask = l_mask[
                         :,
-                        self.KERNELSZ // 2 : -self.KERNELSZ // 2+1,
-                        self.KERNELSZ // 2 : -self.KERNELSZ // 2+1,
+                        self.KERNELSZ // 2 : -self.KERNELSZ // 2 + 1,
+                        self.KERNELSZ // 2 : -self.KERNELSZ // 2 + 1,
                     ]
 
             ichannel = 1
@@ -1868,10 +1880,10 @@ class FoCUS:
             l_mask = self.backend.bk_complex(l_mask, self.backend.bk_cast(0.0 * l_mask))
 
         if self.use_2D:
-            #if self.padding == "VALID":
+            # if self.padding == "VALID":
             mtmp = l_mask
             vtmp = l_x
-            #else:
+            # else:
             #    mtmp = l_mask[:,self.KERNELSZ // 2 : -self.KERNELSZ // 2,self.KERNELSZ // 2 : -self.KERNELSZ // 2,:]
             #    vtmp = l_x[:,self.KERNELSZ // 2 : -self.KERNELSZ // 2,self.KERNELSZ // 2 : -self.KERNELSZ // 2,:]
 
@@ -2707,9 +2719,11 @@ class FoCUS:
     # ---------------------------------------------−---------
     def get_ww(self, nside=1):
         if self.use_2D:
-            
-            return (self.ww_RealT[1].reshape(self.KERNELSZ*self.KERNELSZ,self.NORIENT),
-                    self.ww_ImagT[1].reshape(self.KERNELSZ*self.KERNELSZ,self.NORIENT))
+
+            return (
+                self.ww_RealT[1].reshape(self.KERNELSZ * self.KERNELSZ, self.NORIENT),
+                self.ww_ImagT[1].reshape(self.KERNELSZ * self.KERNELSZ, self.NORIENT),
+            )
         else:
             return (self.ww_Real[nside], self.ww_Imag[nside])
 

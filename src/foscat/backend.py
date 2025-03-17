@@ -44,7 +44,12 @@ class foscat_backend:
 
         if self.BACKEND == "torch":
             import torch
-            self.torch_device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+
+            self.torch_device = (
+                torch.device("cuda")
+                if torch.cuda.is_available()
+                else torch.device("cpu")
+            )
 
             self.BACKEND = self.TORCH
             self.backend = torch
@@ -406,10 +411,10 @@ class foscat_backend:
             return smat.dot(mat)
 
     # for tensorflow wrapping only
-    def periodic_pad(self,x, pad_height, pad_width):
+    def periodic_pad(self, x, pad_height, pad_width):
         """
         Applies periodic ('wrap') padding to a 4D TensorFlow tensor (N, H, W, C).
-        
+
         Args:
         x (tf.Tensor): Input tensor with shape (batch_size, height, width, channels).
             pad_height (tuple): Tuple (top, bottom) defining the vertical padding size.
@@ -418,40 +423,47 @@ class foscat_backend:
         Returns:
             tf.Tensor: Tensor with periodic padding applied.
         """
-        #Vertical padding: take slices from bottom and top to wrap around
-        top_pad = x[:, -pad_height:, :, :]    # Top padding from the bottom rows
+        # Vertical padding: take slices from bottom and top to wrap around
+        top_pad = x[:, -pad_height:, :, :]  # Top padding from the bottom rows
         bottom_pad = x[:, :pad_height, :, :]  # Bottom padding from the top rows
-        x_padded = self.backend.concat([top_pad, x, bottom_pad], axis=1)  # Concatenate vertically
+        x_padded = self.backend.concat(
+            [top_pad, x, bottom_pad], axis=1
+        )  # Concatenate vertically
 
-        #Horizontal padding: take slices from right and left to wrap around
-        left_pad = x_padded[:, :, -pad_width:, :]   # Left padding from right columns
-        right_pad = x_padded[:, :, :pad_width, :]   # Right padding from left columns
-        
-        x_padded = self.backend.concat([left_pad, x_padded, right_pad], axis=2)  # Concatenate horizontally
+        # Horizontal padding: take slices from right and left to wrap around
+        left_pad = x_padded[:, :, -pad_width:, :]  # Left padding from right columns
+        right_pad = x_padded[:, :, :pad_width, :]  # Right padding from left columns
+
+        x_padded = self.backend.concat(
+            [left_pad, x_padded, right_pad], axis=2
+        )  # Concatenate horizontally
 
         return x_padded
-    
+
     def conv2d(self, x, w, strides=[1, 1, 1, 1], padding="SAME"):
         if self.BACKEND == self.TENSORFLOW:
             kx = w.shape[0]
             ky = w.shape[1]
-            x_padded = self.periodic_pad(x, kx // 2, ky // 2) 
+            x_padded = self.periodic_pad(x, kx // 2, ky // 2)
             return self.backend.nn.conv2d(x_padded, w, strides=strides, padding="VALID")
-        
+
         if self.BACKEND == self.TORCH:
             import torch.nn.functional as F
+
             lx = x.permute(0, 3, 1, 2)
-            wx = self.backend.from_numpy(w).to(self.torch_device).permute(3, 2, 0, 1)  # de (5, 5, 1, 4) à (4, 1, 5, 5)
+            wx = (
+                self.backend.from_numpy(w).to(self.torch_device).permute(3, 2, 0, 1)
+            )  # de (5, 5, 1, 4) à (4, 1, 5, 5)
 
             # Calculer le padding symétrique
             kx, ky = w.shape[0], w.shape[1]
-            
+
             # Appliquer le padding
-            x_padded = F.pad(lx, (ky // 2, ky // 2, kx // 2, kx // 2), mode='circular')
+            x_padded = F.pad(lx, (ky // 2, ky // 2, kx // 2, kx // 2), mode="circular")
 
             # Appliquer la convolution
-            return F.conv2d(x_padded, wx, stride=1, padding=0).permute(0,2,3,1)
-        
+            return F.conv2d(x_padded, wx, stride=1, padding=0).permute(0, 2, 3, 1)
+
         if self.BACKEND == self.NUMPY:
             res = np.zeros(
                 [x.shape[0], x.shape[1], x.shape[2], w.shape[3]], dtype=x.dtype
@@ -585,10 +597,10 @@ class foscat_backend:
 
         if self.BACKEND == self.TORCH:
             tmp = self.backend.nn.functional.interpolate(
-                x.permute(0,3,1,2), size=shape, mode="bilinear", align_corners=False
+                x.permute(0, 3, 1, 2), size=shape, mode="bilinear", align_corners=False
             )
-            return self.bk_cast(tmp.permute(0,2,3,1))
-        
+            return self.bk_cast(tmp.permute(0, 2, 3, 1))
+
         if self.BACKEND == self.NUMPY:
             return self.bk_cast(self.backend.image.resize(x, shape, method="bilinear"))
 
@@ -882,7 +894,7 @@ class foscat_backend:
             return self.backend.constant(data).to(self.torch_device)
         if self.BACKEND == self.NUMPY:
             return data
-        
+
     def bk_shape_tensor(self, shape):
         if self.BACKEND == self.TENSORFLOW:
             return self.backend.tensor(shape=shape)
@@ -1102,18 +1114,30 @@ class foscat_backend:
         if self.BACKEND == self.NUMPY:
             return (x > 0) * x
 
-    def bk_clip_by_value(self, x,xmin,xmax):
+    def bk_clip_by_value(self, x, xmin, xmax):
         if isinstance(x, np.ndarray):
-            x = np.clip(x,xmin,xmax)
+            x = np.clip(x, xmin, xmax)
         if self.BACKEND == self.TENSORFLOW:
-            return self.backend.clip_by_value(x,xmin,xmax)
+            return self.backend.clip_by_value(x, xmin, xmax)
         if self.BACKEND == self.TORCH:
-            x = self.backend.tensor(x, dtype=self.backend.float32) if not isinstance(x, self.backend.Tensor) else x
-            xmin = self.backend.tensor(xmin, dtype=self.backend.float32) if not isinstance(xmin, self.backend.Tensor) else xmin
-            xmax = self.backend.tensor(xmax, dtype=self.backend.float32) if not isinstance(xmax, self.backend.Tensor) else xmax
+            x = (
+                self.backend.tensor(x, dtype=self.backend.float32)
+                if not isinstance(x, self.backend.Tensor)
+                else x
+            )
+            xmin = (
+                self.backend.tensor(xmin, dtype=self.backend.float32)
+                if not isinstance(xmin, self.backend.Tensor)
+                else xmin
+            )
+            xmax = (
+                self.backend.tensor(xmax, dtype=self.backend.float32)
+                if not isinstance(xmax, self.backend.Tensor)
+                else xmax
+            )
             return self.backend.clamp(x, min=xmin, max=xmax)
         if self.BACKEND == self.NUMPY:
-            return self.backend.clip(x,xmin,xmax)
+            return self.backend.clip(x, xmin, xmax)
 
     def bk_cast(self, x):
         if isinstance(x, np.float64):
@@ -1185,7 +1209,7 @@ class foscat_backend:
     def to_numpy(self,x):
         if isinstance(x, np.ndarray):
             return x
-        
+
         if self.BACKEND == self.NUMPY:
             return x
         if self.BACKEND == self.TENSORFLOW:
