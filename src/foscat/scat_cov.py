@@ -5124,13 +5124,11 @@ class funct(FOC.FoCUS):
                             )
                         else:
                             P = 1 / (
-                                (
                                     (
                                         S2[:, j3 : j3 + 1, :, None, None]
                                         * S2[:, j2 : j2 + 1, None, :, None]
                                     )
                                     ** (0.5 * pseudo_coef)
-                                )
                             )
                         P = self.backend.bk_complex(P, 0.0 * P)
                     else:
@@ -6081,7 +6079,7 @@ class funct(FOC.FoCUS):
 
             # make the difference withe the reference coordinates
             loss = scat_operator.backend.bk_reduce_mean(
-                scat_operator.backend.bk_square((learn - ref))
+                scat_operator.backend.bk_square(learn - ref)
             )
             return loss
 
@@ -6115,8 +6113,8 @@ class funct(FOC.FoCUS):
         t1 = time.time()
         tmp = {}
         tmp[nstep - 1] = im_target
-        for l in range(nstep - 2, -1, -1):
-            tmp[l] = self.ud_grade_2(tmp[l + 1], axis=1)
+        for ell in range(nstep - 2, -1, -1):
+            tmp[ell] = self.ud_grade_2(tmp[ell + 1], axis=1)
 
         if not self.use_2D and not self.use_1D:
             l_nside = nside // (2 ** (nstep - 1))
