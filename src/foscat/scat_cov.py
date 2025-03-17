@@ -2887,6 +2887,8 @@ class funct(FOC.FoCUS):
                         )  # [Nbatch, Nmask, Norient3]
 
                 if return_data:
+                    if S1 is None:
+                        S1 = {}
                     if out_nside is not None and out_nside < nside_j3:
                         s1 = self.backend.bk_reduce_mean(
                             self.backend.bk_reshape(
@@ -2981,6 +2983,8 @@ class funct(FOC.FoCUS):
                         s2 = self.masked_mean(s2, vmask, axis=1, rank=j3)
 
                 if return_data:
+                    if S2 is None:
+                        S2 = {}
                     if out_nside is not None and out_nside < nside_j3:
                         s2 = self.backend.bk_reduce_mean(
                             self.backend.bk_reshape(
@@ -3026,6 +3030,8 @@ class funct(FOC.FoCUS):
                             MX, vmask, axis=1, rank=j3
                         )  # [Nbatch, Nmask, Norient3]
                 if return_data:
+                    if S1 is None:
+                        S1 = {}
                     if out_nside is not None and out_nside < nside_j3:
                         s1 = self.backend.bk_reduce_mean(
                             self.backend.bk_reshape(
@@ -3414,7 +3420,6 @@ class funct(FOC.FoCUS):
                                 VS4.append(
                                     self.backend.bk_expand_dims(vs4, off_S4)
                                 )  # Add a dimension for NS4
-
                             nside_j1 = nside_j1 // 2
                         nside_j2 = nside_j2 // 2
 

@@ -44,7 +44,9 @@ def _xarray_to_scat_cov(ds):
         if not key.startswith("var_")
     }
     vars_ = {
-        key: var.variable for key, var in ds.data_vars.items() if key.startswith("var_")
+        key.lower().removeprefix("var_"): var.variable
+        for key, var in ds.data_vars.items()
+        if key.startswith("var_")
     }
 
     kwarg_names = {
@@ -56,7 +58,7 @@ def _xarray_to_scat_cov(ds):
     stats_kwargs = {key.lower(): var.data for key, var in stats_.items()}
     stats = sc.scat_cov(**stats_kwargs, **kwargs)
 
-    var_kwargs = {key.lower(): var.data for key, var in vars_.items()}
+    var_kwargs = {key: var.data for key, var in vars_.items()}
     if var_kwargs:
         variances = sc.scat_cov(**var_kwargs, **kwargs)
         return stats, variances
