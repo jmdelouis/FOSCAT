@@ -232,10 +232,13 @@ class alm:
         # Étape 3 : Récurence pour l > m + 1
         for ell in range(m + 2, lmax + 1):
             result[ell - m] = (
-                (2 * ell - 1) * x * result[ell - m - 1] - (ell + m - 1) * result[ell - m - 2]
+                (2 * ell - 1) * x * result[ell - m - 1]
+                - (ell + m - 1) * result[ell - m - 2]
             ) / (ell - m)
             ratio[ell - m, 0] = (
-                0.5 * self.log(ell - m) - 0.5 * self.log(ell + m) + ratio[ell - m - 1, 0]
+                0.5 * self.log(ell - m)
+                - 0.5 * self.log(ell + m)
+                + ratio[ell - m - 1, 0]
             )
             if np.max(abs(result[ell - m])) > self._limit_range:
                 result[ell - m - 1] *= self._limit_range
@@ -370,9 +373,9 @@ class alm:
                     (2 * ell - 1) * co_th * result[ell - m]
                     - (ell + m - 1) * result[ell - m - 1]
                 ) / (ell - m)
-                ratio[ell - m + 1, 0] = (self.log(ell - m) - self.log(ell + m)) / 2 + ratio[
-                    ell - m, 0
-                ]
+                ratio[ell - m + 1, 0] = (
+                    self.log(ell - m) - self.log(ell + m)
+                ) / 2 + ratio[ell - m, 0]
                 if np.max(abs(result[ell - m + 1])) > self._limit_range:
                     result[ell - m] *= self._limit_range
                     result[ell - m + 1] *= self._limit_range
@@ -634,7 +637,7 @@ class alm:
         lmax = 3 * nside - 1
 
         cl2 = None
-        
+
         if not doT:  # polarize case
 
             self.init_Ys(spin, nside)
@@ -740,12 +743,8 @@ class alm:
                     almB2 = almB
 
                 if do_all_pol:
-                    tmpTT = self.backend.bk_real(
-                        tmp * self.backend.bk_conjugate(tmp2)
-                    )
-                    tmpTE = self.backend.bk_real(
-                        tmp * self.backend.bk_conjugate(almE2)
-                    )
+                    tmpTT = self.backend.bk_real(tmp * self.backend.bk_conjugate(tmp2))
+                    tmpTE = self.backend.bk_real(tmp * self.backend.bk_conjugate(almE2))
                     tmpTB = -self.backend.bk_real(
                         tmp * self.backend.bk_conjugate(almB2)
                     )
@@ -757,9 +756,7 @@ class alm:
                 if map2 is not None:
                     tmpEB = (
                         tmpEB
-                        - self.backend.bk_real(
-                            almE2 * self.backend.bk_conjugate(almB)
-                        )
+                        - self.backend.bk_real(almE2 * self.backend.bk_conjugate(almB))
                     ) / 2
 
                     if do_all_pol:
