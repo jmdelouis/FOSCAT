@@ -3700,9 +3700,9 @@ class funct(FOC.FoCUS):
 
         for j in range(J):
 
-            for l in range(L):
+            for ell in range(L):
 
-                theta = (int(L - L / 2 - 1) - l) * np.pi / L
+                theta = (int(L - L / 2 - 1) - ell) * np.pi / L
                 sigma = 0.8 * 2**j
                 xi = 3.0 / 4.0 * np.pi / 2**j
 
@@ -3746,8 +3746,8 @@ class funct(FOC.FoCUS):
                 K = gabi.sum() / gab.sum()
 
                 # Apply the Gaussian
-                filter[j, l] = np.fft.fft2(gabi - K * gab)
-                filter[j, l, 0, 0] = 0.0
+                filter[j, ell] = np.fft.fft2(gabi - K * gab)
+                filter[j, ell, 0, 0] = 0.0
 
         return self.backend.bk_cast(filter)
 
