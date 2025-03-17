@@ -943,7 +943,7 @@ class alm:
 
         nside = int(np.sqrt(im_Q.shape[0] // 12))
 
-        #lth = self.ring_th(nside)
+        # lth = self.ring_th(nside)
 
         # co_th = np.cos(lth)
 
