@@ -240,9 +240,9 @@ class Synthesis:
         grd_mask = self.grd_mask
 
         if grd_mask is not None:
-            g_tot = grd_mask * self.to_numpy(g_tot)
+            g_tot = self.operation.backend.to_numpy(g_tot*grd_mask)
         else:
-            g_tot = self.to_numpy(g_tot)
+            g_tot = self.operation.backend.to_numpy(g_tot)
 
         g_tot[np.isnan(g_tot)] = 0.0
 

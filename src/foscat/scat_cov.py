@@ -2215,7 +2215,7 @@ class scat_cov:
 
 
 class funct(FOC.FoCUS):
-
+        
     def fill(self, im, nullval=hp.UNSEEN):
         if self.use_2D:
             return self.fill_2d(im, nullval=nullval)
@@ -6044,6 +6044,7 @@ class funct(FOC.FoCUS):
         use_variance=False,
         synthesised_N=1,
         input_image=None,
+        grd_mask=None,
         iso_ang=False,
         EVAL_FREQUENCY=100,
         NUM_EPOCHS=300,
@@ -6112,9 +6113,22 @@ class funct(FOC.FoCUS):
 
         t1 = time.time()
         tmp = {}
-        tmp[nstep - 1] = im_target
+        
+        l_grd_mask={}
+        
+        tmp[nstep - 1] = self.backend.bk_cast(im_target)
+        if grd_mask is not None:
+            l_grd_mask[nstep - 1] = self.backend.bk_cast(grd_mask)
+        else:
+            l_grd_mask[nstep - 1] = None
+            
         for ell in range(nstep - 2, -1, -1):
             tmp[ell] = self.ud_grade_2(tmp[ell + 1], axis=1)
+            if grd_mask is not None:
+                l_grd_mask[ell] = self.ud_grade_2(l_grd_mask[ell + 1], axis=1)
+            else:
+                l_grd_mask[ell] = None
+        
 
         if not self.use_2D and not self.use_1D:
             l_nside = nside // (2 ** (nstep - 1))
@@ -6124,11 +6138,11 @@ class funct(FOC.FoCUS):
                 if input_image is None:
                     np.random.seed(seed)
                     if self.use_2D:
-                        imap = np.random.randn(
+                        imap = self.backend.bk_cast(np.random.randn(
                             synthesised_N, tmp[k].shape[1], tmp[k].shape[2]
-                        )
+                        ))
                     else:
-                        imap = np.random.randn(synthesised_N, tmp[k].shape[1])
+                        imap = self.backend.bk_cast(np.random.randn(synthesised_N, tmp[k].shape[1]))
                 else:
                     if self.use_2D:
                         imap = self.backend.bk_reshape(
@@ -6156,7 +6170,10 @@ class funct(FOC.FoCUS):
                     imap = self.up_grade(omap, imap.shape[1] * 2, axis=1)
                 else:
                     imap = self.up_grade(omap, l_nside, axis=1)
-
+            
+            if grd_mask is not None:
+                imap=imap*l_grd_mask[k]+tmp[k]*(1-l_grd_mask[k])
+                
             # compute the coefficients for the target image
             if use_variance:
                 ref, sref = self.scattering_cov(
@@ -6184,7 +6201,7 @@ class funct(FOC.FoCUS):
                 l_nside *= 2
 
             # do the minimization
-            omap = sy.run(imap, EVAL_FREQUENCY=EVAL_FREQUENCY, NUM_EPOCHS=NUM_EPOCHS)
+            omap = sy.run(imap, EVAL_FREQUENCY=EVAL_FREQUENCY, NUM_EPOCHS=NUM_EPOCHS,grd_mask=l_grd_mask[k])
 
         t2 = time.time()
         print("Total computation %.2fs" % (t2 - t1))
