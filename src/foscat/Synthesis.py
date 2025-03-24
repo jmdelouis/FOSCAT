@@ -240,7 +240,7 @@ class Synthesis:
         grd_mask = self.grd_mask
 
         if grd_mask is not None:
-            g_tot = self.operation.backend.to_numpy(g_tot*grd_mask)
+            g_tot = self.operation.backend.to_numpy(g_tot * grd_mask)
         else:
             g_tot = self.operation.backend.to_numpy(g_tot)
 
