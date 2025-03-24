@@ -2331,14 +2331,14 @@ class FoCUS:
                     kernelR = kernelR.to(self.backend.all_bk_type).to(image.device)
                     kernelI = kernelI.to(self.backend.all_bk_type).to(image.device)
                     padding = hc.pad(
-                            cell_ids,
-                            grid_info=grid_info,
-                            ring=5 // 2, #wavelet kernel_size=5 is hard coded
-                            mode="mean",
-                            constant_value=0
-                            )
-                                
-                    if len(ishape)==2:
+                        cell_ids,
+                        grid_info=grid_info,
+                        ring=5 // 2,  # wavelet kernel_size=5 is hard coded
+                        mode="mean",
+                        constant_value=0,
+                    )
+
+                    if len(ishape) == 2:
                         for l in range(ishape[0]):
                             padded_data = padding.apply(image[l], is_torch=True)
                             res[l, :, k] = kernelR.matmul(
@@ -2672,15 +2672,14 @@ class FoCUS:
 
                 kernel = kernel.to(self.backend.all_bk_type).to(image.device)
                 padding = hc.pad(
+                    cell_ids,
+                    grid_info=grid_info,
+                    ring=5 // 2,  # wavelet kernel_size=5 is hard coded
+                    mode="mean",
+                    constant_value=0,
+                )
 
-                            cell_ids,
-                            grid_info=grid_info,
-                            ring=5 // 2, #wavelet kernel_size=5 is hard coded
-                            mode="mean",
-                            constant_value=0
-                            )
-                
-                if len(ishape)==2:
+                if len(ishape) == 2:
                     for l in range(ishape[0]):
                         padded_data = padding.apply(image[l], is_torch=True)
                         res[l] = kernel.matmul(padded_data)
