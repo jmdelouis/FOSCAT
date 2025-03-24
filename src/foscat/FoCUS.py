@@ -272,7 +272,7 @@ class FoCUS:
 
         if self.use_1D:
             KERNELSZ = 5
-                
+
         self.KERNELSZ = KERNELSZ
 
         self.Idx_Neighbours = {}
@@ -742,7 +742,7 @@ class FoCUS:
         return rim
 
     # --------------------------------------------------------
-    def ud_grade_2(self, im, axis=0,cell_ids=None,nside=None):
+    def ud_grade_2(self, im, axis=0, cell_ids=None, nside=None):
 
         if self.use_2D:
             ishape = list(im.shape)
@@ -837,8 +837,8 @@ class FoCUS:
         else:
             shape = list(im.shape)
             if cell_ids is not None:
-                sim,new_cell_ids=self.backend.binned_mean(im,cell_ids)
-                return sim,new_cell_ids
+                sim, new_cell_ids = self.backend.binned_mean(im, cell_ids)
+                return sim, new_cell_ids
 
             lout = int(np.sqrt(shape[axis] // 12))
             if im.__class__ == np.zeros([0]).__class__:
@@ -857,9 +857,12 @@ class FoCUS:
                 if len(shape) > axis:
                     oshape = oshape + shape[axis + 1 :]
 
-            return self.backend.bk_reduce_mean(
-                self.backend.bk_reshape(im, oshape), axis=axis + 1
-            ),None
+            return (
+                self.backend.bk_reduce_mean(
+                    self.backend.bk_reshape(im, oshape), axis=axis + 1
+                ),
+                None,
+            )
 
     # --------------------------------------------------------
     def up_grade(self, im, nout, axis=0, nouty=None):
@@ -2142,7 +2145,7 @@ class FoCUS:
                 return self.backend.bk_reduce_sum(r)
 
     # ---------------------------------------------−---------
-    def convol(self, in_image, axis=0,cell_ids=None,nside=None):
+    def convol(self, in_image, axis=0, cell_ids=None, nside=None):
 
         image = self.backend.bk_cast(in_image)
 
@@ -2308,42 +2311,50 @@ class FoCUS:
 
         else:
             ishape = list(image.shape)
-            
+
             if cell_ids is not None:
                 import healpix_convolution as hc
                 from xdggs.healpix import HealpixInfo
-                
-                res = self.backend.bk_zeros(ishape+[self.NORIENT], dtype=self.backend.all_cbk_type)
-                
-                grid_info = HealpixInfo(level=int(np.log(nside)/np.log(2)),
-                                indexing_scheme="nested")
+
+                res = self.backend.bk_zeros(
+                    ishape + [self.NORIENT], dtype=self.backend.all_cbk_type
+                )
+
+                grid_info = HealpixInfo(
+                    level=int(np.log(nside) / np.log(2)), indexing_scheme="nested"
+                )
 
                 for k in range(self.NORIENT):
-                    kernelR,kernelI = hc.kernels.wavelet_kernel(cell_ids,
-                                        grid_info=grid_info,
-                                        orientation=k,
-                                        is_torch=True)
-                    kernelR=kernelR.to(self.backend.all_bk_type).to(image.device)
-                    kernelI=kernelI.to(self.backend.all_bk_type).to(image.device)
+                    kernelR, kernelI = hc.kernels.wavelet_kernel(
+                        cell_ids, grid_info=grid_info, orientation=k, is_torch=True
+                    )
+                    kernelR = kernelR.to(self.backend.all_bk_type).to(image.device)
+                    kernelI = kernelI.to(self.backend.all_bk_type).to(image.device)
                     padding = hc.pad(
-                            cell_ids,
-                            grid_info=grid_info,
-                            ring=5 // 2, #wavelet kernel_size=5 is hard coded
-                            mode="constant",
-                            constant_value=0
-                            )
-                                
-                    if len(ishape)==2:
+                        cell_ids,
+                        grid_info=grid_info,
+                        ring=5 // 2,  # wavelet kernel_size=5 is hard coded
+                        mode="constant",
+                        constant_value=0,
+                    )
+
+                    if len(ishape) == 2:
                         for l in range(ishape[0]):
-                            padded_data=padding.apply(image[l],is_torch=True)
-                            res[l,:,k]=kernelR.matmul(padded_data)+1J*kernelI.matmul(padded_data)
+                            padded_data = padding.apply(image[l], is_torch=True)
+                            res[l, :, k] = kernelR.matmul(
+                                padded_data
+                            ) + 1j * kernelI.matmul(padded_data)
                     else:
                         for l in range(ishape[0]):
                             for k2 in range(ishape[2]):
-                                padded_data=padding.apply(image[l,:,k2],is_torch=True)
-                                res[l,:,k2,k]=kernelR.matmul(padded_data)+1J*kernelI.matmul(padded_data)
+                                padded_data = padding.apply(
+                                    image[l, :, k2], is_torch=True
+                                )
+                                res[l, :, k2, k] = kernelR.matmul(
+                                    padded_data
+                                ) + 1j * kernelI.matmul(padded_data)
                 return res
-                
+
             nside = int(np.sqrt(image.shape[axis] // 12))
 
             if self.Idx_Neighbours[nside] is None:
@@ -2356,7 +2367,7 @@ class FoCUS:
                 self.ww_Real[nside] = wr
                 self.ww_Imag[nside] = wi
                 self.w_smooth[nside] = ws
-                
+
             l_ww_real = self.ww_Real[nside]
             l_ww_imag = self.ww_Imag[nside]
 
@@ -2513,7 +2524,7 @@ class FoCUS:
         return res
 
     # ---------------------------------------------−---------
-    def smooth(self, in_image, axis=0,cell_ids=None,nside=None):
+    def smooth(self, in_image, axis=0, cell_ids=None, nside=None):
 
         image = self.backend.bk_cast(in_image)
 
@@ -2644,42 +2655,43 @@ class FoCUS:
         else:
 
             ishape = list(image.shape)
-            
+
             if cell_ids is not None:
                 import healpix_convolution as hc
                 from xdggs.healpix import HealpixInfo
-                
-                res = self.backend.bk_zeros(ishape, dtype=self.backend.all_cbk_type)
-                
-                grid_info = HealpixInfo(level=int(np.log(nside)/np.log(2)),
-                                indexing_scheme="nested")
 
-                kernel = hc.kernels.wavelet_smooth_kernel(cell_ids,
-                                        grid_info=grid_info,
-                                        is_torch=True)
-                                        
-                kernel=kernel.to(self.backend.all_bk_type).to(image.device)
+                res = self.backend.bk_zeros(ishape, dtype=self.backend.all_cbk_type)
+
+                grid_info = HealpixInfo(
+                    level=int(np.log(nside) / np.log(2)), indexing_scheme="nested"
+                )
+
+                kernel = hc.kernels.wavelet_smooth_kernel(
+                    cell_ids, grid_info=grid_info, is_torch=True
+                )
+
+                kernel = kernel.to(self.backend.all_bk_type).to(image.device)
                 padding = hc.pad(
-                            cell_ids,
-                            grid_info=grid_info,
-                            ring=5 // 2, #wavelet kernel_size=5 is hard coded
-                            mode="constant",
-                            constant_value=0
-                            )
-                
-                if len(ishape)==2:
+                    cell_ids,
+                    grid_info=grid_info,
+                    ring=5 // 2,  # wavelet kernel_size=5 is hard coded
+                    mode="constant",
+                    constant_value=0,
+                )
+
+                if len(ishape) == 2:
                     for l in range(ishape[0]):
-                        padded_data=padding.apply(image[l],is_torch=True)
-                        res[l]=kernel.matmul(padded_data)
+                        padded_data = padding.apply(image[l], is_torch=True)
+                        res[l] = kernel.matmul(padded_data)
                 else:
                     for l in range(ishape[0]):
                         for k2 in range(ishape[2]):
-                            padded_data=padding.apply(image[l,:,k2],is_torch=True)
-                            res[l,:,k2]=kernel.matmul(padded_data)
+                            padded_data = padding.apply(image[l, :, k2], is_torch=True)
+                            res[l, :, k2] = kernel.matmul(padded_data)
                 return res
-                
+
             nside = int(np.sqrt(image.shape[axis] // 12))
-                
+
             if self.Idx_Neighbours[nside] is None:
 
                 if self.InitWave is None:

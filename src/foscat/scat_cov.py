@@ -2215,7 +2215,7 @@ class scat_cov:
 
 
 class funct(FOC.FoCUS):
-        
+
     def fill(self, im, nullval=hp.UNSEEN):
         if self.use_2D:
             return self.fill_2d(im, nullval=nullval)
@@ -2402,9 +2402,9 @@ class funct(FOC.FoCUS):
             if smooth_scale > 0:
                 for m in range(smooth_scale):
                     if cc.shape[0] > 12:
-                        cc,_ = self.ud_grade_2(self.smooth(cc))
-                        ss,_ = self.ud_grade_2(self.smooth(ss))
-                        
+                        cc, _ = self.ud_grade_2(self.smooth(cc))
+                        ss, _ = self.ud_grade_2(self.smooth(ss))
+
             if cc.shape[0] != tmp.shape[0]:
                 ll_nside = int(np.sqrt(tmp.shape[1] // 12))
                 cc = self.up_grade(cc, ll_nside)
@@ -2474,8 +2474,8 @@ class funct(FOC.FoCUS):
                 if smooth_scale > 0:
                     for m in range(smooth_scale):
                         if cc2.shape[0] > 12:
-                            cc2,_ = self.ud_grade_2(self.smooth(cc2))
-                            ss2,_ = self.ud_grade_2(self.smooth(ss2))
+                            cc2, _ = self.ud_grade_2(self.smooth(cc2))
+                            ss2, _ = self.ud_grade_2(self.smooth(ss2))
 
                 if cc2.shape[0] != sim.shape[1]:
                     ll_nside = int(np.sqrt(sim.shape[1] // 12))
@@ -2511,9 +2511,9 @@ class funct(FOC.FoCUS):
                 cmat2[k] = self.backend.bk_cast(mat2.astype("complex64"))
 
             if k < l_nside - 1:
-                tmp,_ = self.ud_grade_2(tmp, axis=1)
+                tmp, _ = self.ud_grade_2(tmp, axis=1)
                 if image2 is not None:
-                    tmpi2,_ = self.ud_grade_2(tmpi2, axis=1)
+                    tmpi2, _ = self.ud_grade_2(tmpi2, axis=1)
         return cmat, cmat2
 
     def div_norm(self, complex_value, float_value):
@@ -2535,7 +2535,7 @@ class funct(FOC.FoCUS):
         out_nside=None,
         edge=True,
         nside=None,
-        cell_ids=None
+        cell_ids=None,
     ):
         """
         Calculates the scattering correlations for a batch of images. Mean are done over pixels.
@@ -2609,7 +2609,7 @@ class funct(FOC.FoCUS):
         cross = False
         if image2 is not None:
             cross = True
-        l_nside=2**32 # not initialize if 1D or 2D
+        l_nside = 2**32  # not initialize if 1D or 2D
         ### PARAMETERS
         axis = 1
         # determine jmax and nside corresponding to the input map
@@ -2640,7 +2640,7 @@ class funct(FOC.FoCUS):
                 npix = int(im_shape[1])  # Number of pixels
             else:
                 npix = int(im_shape[0])  # Number of pixels
-            
+
             if nside is None:
                 nside = int(np.sqrt(npix // 12))
 
@@ -2697,14 +2697,14 @@ class funct(FOC.FoCUS):
                 I1 = self.up_grade(I1, I1.shape[axis] * 2, axis=axis)
                 if cross:
                     I2 = self.up_grade(I2, I2.shape[axis] * 2, axis=axis)
-                nside=nside*2   
+                nside = nside * 2
             else:
                 I1 = self.up_grade(I1, nside * 2, axis=axis)
                 vmask = self.up_grade(vmask, nside * 2, axis=1)
                 if cross:
                     I2 = self.up_grade(I2, nside * 2, axis=axis)
-            
-                nside=nside*2   
+
+                nside = nside * 2
 
             if self.KERNELSZ > 5 and not self.use_2D:
                 # if the kernel size is bigger than 3 increase the binning before smoothing
@@ -2727,13 +2727,13 @@ class funct(FOC.FoCUS):
                     I1 = self.up_grade(I1, I1.shape[axis] * 2, axis=axis)
                     if cross:
                         I2 = self.up_grade(I2, I2.shape[axis] * 2, axis=axis)
-                    nside=nside*2   
+                    nside = nside * 2
                 else:
                     I1 = self.up_grade(I1, nside * 2, axis=axis)
                     vmask = self.up_grade(vmask, nside * 2, axis=1)
                     if cross:
                         I2 = self.up_grade(I2, nside * 2, axis=axis)
-                    nside=nside*2   
+                    nside = nside * 2
 
         # Normalize the masks because they have different pixel numbers
         # vmask /= self.backend.bk_reduce_sum(vmask, axis=1)[:, None]  # [Nmask, Npix]
@@ -2805,10 +2805,8 @@ class funct(FOC.FoCUS):
         # a remettre comme avant
         M1_dic = {}
         M2_dic = {}
-        
-        cell_ids_j3=cell_ids
-        
-        
+
+        cell_ids_j3 = cell_ids
 
         for j3 in range(Jmax):
 
@@ -2848,7 +2846,9 @@ class funct(FOC.FoCUS):
 
             ####### S1 and S2
             ### Make the convolution I1 * Psi_j3
-            conv1 = self.convol(I1, axis=1,cell_ids=cell_ids_j3,nside=nside_j3)  # [Nbatch, Npix_j3, Norient3]
+            conv1 = self.convol(
+                I1, axis=1, cell_ids=cell_ids_j3, nside=nside_j3
+            )  # [Nbatch, Npix_j3, Norient3]
             if cmat is not None:
                 tmp2 = self.backend.bk_repeat(conv1, self.NORIENT, axis=-1)
                 conv1 = self.backend.bk_reduce_sum(
@@ -2961,7 +2961,9 @@ class funct(FOC.FoCUS):
 
             else:  # Cross
                 ### Make the convolution I2 * Psi_j3
-                conv2 = self.convol(I2, axis=1,cell_ids=cell_ids_j3,nside=nside_j3)  # [Nbatch, Npix_j3, Norient3]
+                conv2 = self.convol(
+                    I2, axis=1, cell_ids=cell_ids_j3, nside=nside_j3
+                )  # [Nbatch, Npix_j3, Norient3]
                 if cmat is not None:
                     tmp2 = self.backend.bk_repeat(conv2, self.NORIENT, axis=-1)
                     conv2 = self.backend.bk_reduce_sum(
@@ -3125,7 +3127,7 @@ class funct(FOC.FoCUS):
                             calc_var=True,
                             cmat2=cmat2,
                             cell_ids=cell_ids_j3,
-                            nside_j2=nside_j2
+                            nside_j2=nside_j2,
                         )  # [Nbatch, Nmask, Norient3, Norient2]
                     else:
                         s3 = self._compute_S3(
@@ -3138,7 +3140,7 @@ class funct(FOC.FoCUS):
                             return_data=return_data,
                             cmat2=cmat2,
                             cell_ids=cell_ids_j3,
-                            nside_j2=nside_j2
+                            nside_j2=nside_j2,
                         )  # [Nbatch, Nmask, Norient3, Norient2]
 
                     if return_data:
@@ -3199,7 +3201,7 @@ class funct(FOC.FoCUS):
                             calc_var=True,
                             cmat2=cmat2,
                             cell_ids=cell_ids_j3,
-                            nside_j2=nside_j2
+                            nside_j2=nside_j2,
                         )
                         s3p, vs3p = self._compute_S3(
                             j2,
@@ -3211,7 +3213,7 @@ class funct(FOC.FoCUS):
                             calc_var=True,
                             cmat2=cmat2,
                             cell_ids=cell_ids_j3,
-                            nside_j2=nside_j2
+                            nside_j2=nside_j2,
                         )
                     else:
                         s3 = self._compute_S3(
@@ -3224,7 +3226,7 @@ class funct(FOC.FoCUS):
                             return_data=return_data,
                             cmat2=cmat2,
                             cell_ids=cell_ids_j3,
-                            nside_j2=nside_j2
+                            nside_j2=nside_j2,
                         )
                         s3p = self._compute_S3(
                             j2,
@@ -3236,7 +3238,7 @@ class funct(FOC.FoCUS):
                             return_data=return_data,
                             cmat2=cmat2,
                             cell_ids=cell_ids_j3,
-                            nside_j2=nside_j2
+                            nside_j2=nside_j2,
                         )
 
                     if return_data:
@@ -3479,42 +3481,50 @@ class funct(FOC.FoCUS):
             ### Image I1,
             # downscale the I1 [Nbatch, Npix_j3]
             if j3 != Jmax - 1:
-                I1 = self.smooth(I1, axis=1,cell_ids=cell_ids_j3,nside=nside_j3)
-                I1,new_cell_ids_j3 = self.ud_grade_2(I1, axis=1,cell_ids=cell_ids_j3,nside=nside_j3)
+                I1 = self.smooth(I1, axis=1, cell_ids=cell_ids_j3, nside=nside_j3)
+                I1, new_cell_ids_j3 = self.ud_grade_2(
+                    I1, axis=1, cell_ids=cell_ids_j3, nside=nside_j3
+                )
 
                 ### Image I2
                 if cross:
-                    I2 = self.smooth(I2, axis=1,cell_ids=cell_ids_j3,nside=nside_j3)
-                    I2,new_cell_ids_j3 = self.ud_grade_2(I2, axis=1,cell_ids=cell_ids_j3,nside=nside_j3)
+                    I2 = self.smooth(I2, axis=1, cell_ids=cell_ids_j3, nside=nside_j3)
+                    I2, new_cell_ids_j3 = self.ud_grade_2(
+                        I2, axis=1, cell_ids=cell_ids_j3, nside=nside_j3
+                    )
 
                 ### Modules
                 for j2 in range(0, j3 + 1):  # j2 =< j3
                     ### Dictionary M1_dic[j2]
                     M1_smooth = self.smooth(
-                        M1_dic[j2], axis=1,cell_ids=cell_ids_j3,nside=nside_j3
+                        M1_dic[j2], axis=1, cell_ids=cell_ids_j3, nside=nside_j3
                     )  # [Nbatch, Npix_j3, Norient3]
-                    M1_dic[j2],new_cell_ids_j2 = self.ud_grade_2(
-                        M1_smooth, axis=1,cell_ids=cell_ids_j3,nside=nside_j3
+                    M1_dic[j2], new_cell_ids_j2 = self.ud_grade_2(
+                        M1_smooth, axis=1, cell_ids=cell_ids_j3, nside=nside_j3
                     )  # [Nbatch, Npix_j3, Norient3]
 
                     ### Dictionary M2_dic[j2]
                     if cross:
                         M2_smooth = self.smooth(
-                            M2_dic[j2], axis=1,cell_ids=cell_ids_j3,nside=nside_j3
+                            M2_dic[j2], axis=1, cell_ids=cell_ids_j3, nside=nside_j3
                         )  # [Nbatch, Npix_j3, Norient3]
-                        M2_dic[j2],new_cell_ids_j2 = self.ud_grade_2(
-                            M2_smooth, axis=1,cell_ids=cell_ids_j3,nside=nside_j3
+                        M2_dic[j2], new_cell_ids_j2 = self.ud_grade_2(
+                            M2_smooth, axis=1, cell_ids=cell_ids_j3, nside=nside_j3
                         )  # [Nbatch, Npix_j3, Norient3]
 
                 ### Mask
-                vmask,new_cell_ids_j3 = self.ud_grade_2(vmask, axis=1,cell_ids=cell_ids_j3,nside=nside_j3)
+                vmask, new_cell_ids_j3 = self.ud_grade_2(
+                    vmask, axis=1, cell_ids=cell_ids_j3, nside=nside_j3
+                )
 
                 if self.mask_thres is not None:
-                    vmask,new_cell_ids_j3 = self.backend.bk_threshold(vmask, self.mask_thres,cell_ids=cell_ids_j3,nside=nside_j3)
+                    vmask, new_cell_ids_j3 = self.backend.bk_threshold(
+                        vmask, self.mask_thres, cell_ids=cell_ids_j3, nside=nside_j3
+                    )
 
                 ### NSIDE_j3
                 nside_j3 = nside_j3 // 2
-                cell_ids_j3=new_cell_ids_j3
+                cell_ids_j3 = new_cell_ids_j3
 
         ### Store P1_dic and P2_dic in self
         if (norm == "auto") and (self.P1_dic is None):
@@ -3615,7 +3625,7 @@ class funct(FOC.FoCUS):
         return_data=False,
         cmat2=None,
         cell_ids=None,
-        nside_j2=None
+        nside_j2=None,
     ):
         """
         Compute the S3 coefficients (auto or cross)
@@ -3629,7 +3639,7 @@ class funct(FOC.FoCUS):
         ### Compute |I1 * Psi_j2| * Psi_j3 = M1_j2 * Psi_j3
         # Warning: M1_dic[j2] is already at j3 resolution [Nbatch, Npix_j3, Norient3]
         MconvPsi = self.convol(
-            M_dic[j2], axis=1,cell_ids=cell_ids,nside=nside_j2
+            M_dic[j2], axis=1, cell_ids=cell_ids, nside=nside_j2
         )  # [Nbatch, Npix_j3, Norient3, Norient2]
         if cmat2 is not None:
             tmp2 = self.backend.bk_repeat(MconvPsi, self.NORIENT, axis=-1)
@@ -6141,22 +6151,21 @@ class funct(FOC.FoCUS):
 
         t1 = time.time()
         tmp = {}
-        
-        l_grd_mask={}
-        
+
+        l_grd_mask = {}
+
         tmp[nstep - 1] = self.backend.bk_cast(im_target)
         if grd_mask is not None:
             l_grd_mask[nstep - 1] = self.backend.bk_cast(grd_mask)
         else:
             l_grd_mask[nstep - 1] = None
-            
+
         for ell in range(nstep - 2, -1, -1):
-            tmp[ell],_ = self.ud_grade_2(tmp[ell + 1], axis=1)
+            tmp[ell], _ = self.ud_grade_2(tmp[ell + 1], axis=1)
             if grd_mask is not None:
-                l_grd_mask[ell],_ = self.ud_grade_2(l_grd_mask[ell + 1], axis=1)
+                l_grd_mask[ell], _ = self.ud_grade_2(l_grd_mask[ell + 1], axis=1)
             else:
                 l_grd_mask[ell] = None
-        
 
         if not self.use_2D and not self.use_1D:
             l_nside = nside // (2 ** (nstep - 1))
@@ -6166,11 +6175,15 @@ class funct(FOC.FoCUS):
                 if input_image is None:
                     np.random.seed(seed)
                     if self.use_2D:
-                        imap = self.backend.bk_cast(np.random.randn(
-                            synthesised_N, tmp[k].shape[1], tmp[k].shape[2]
-                        ))
+                        imap = self.backend.bk_cast(
+                            np.random.randn(
+                                synthesised_N, tmp[k].shape[1], tmp[k].shape[2]
+                            )
+                        )
                     else:
-                        imap = self.backend.bk_cast(np.random.randn(synthesised_N, tmp[k].shape[1]))
+                        imap = self.backend.bk_cast(
+                            np.random.randn(synthesised_N, tmp[k].shape[1])
+                        )
                 else:
                     if self.use_2D:
                         imap = self.backend.bk_reshape(
@@ -6198,10 +6211,10 @@ class funct(FOC.FoCUS):
                     imap = self.up_grade(omap, imap.shape[1] * 2, axis=1)
                 else:
                     imap = self.up_grade(omap, l_nside, axis=1)
-            
+
             if grd_mask is not None:
-                imap=imap*l_grd_mask[k]+tmp[k]*(1-l_grd_mask[k])
-                
+                imap = imap * l_grd_mask[k] + tmp[k] * (1 - l_grd_mask[k])
+
             # compute the coefficients for the target image
             if use_variance:
                 ref, sref = self.scattering_cov(
@@ -6229,7 +6242,12 @@ class funct(FOC.FoCUS):
                 l_nside *= 2
 
             # do the minimization
-            omap = sy.run(imap, EVAL_FREQUENCY=EVAL_FREQUENCY, NUM_EPOCHS=NUM_EPOCHS,grd_mask=l_grd_mask[k])
+            omap = sy.run(
+                imap,
+                EVAL_FREQUENCY=EVAL_FREQUENCY,
+                NUM_EPOCHS=NUM_EPOCHS,
+                grd_mask=l_grd_mask[k],
+            )
 
         t2 = time.time()
         print("Total computation %.2fs" % (t2 - t1))
