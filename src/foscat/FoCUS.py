@@ -2329,7 +2329,7 @@ class FoCUS:
                             cell_ids,
                             grid_info=grid_info,
                             ring=5 // 2, #wavelet kernel_size=5 is hard coded
-                            mode="constant",
+                            mode="mean",
                             constant_value=0
                             )
                                 
@@ -2663,7 +2663,7 @@ class FoCUS:
                             cell_ids,
                             grid_info=grid_info,
                             ring=5 // 2, #wavelet kernel_size=5 is hard coded
-                            mode="constant",
+                            mode="mean",
                             constant_value=0
                             )
                 
