@@ -5,7 +5,6 @@ import torch
 
 import foscat.BkBase as BackendBase
 
-
 class BkTorch(BackendBase.BackendBase):
 
     def __init__(self, *args, **kwargs):
@@ -61,6 +60,64 @@ class BkTorch(BackendBase.BackendBase):
         self.torch_device = (
             torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
         )
+    
+        
+    def binned_mean(self,data,cell_ids):
+        """
+        data: Tensor of shape [B, N, A]
+        I: Tensor of shape [N], integer indices in [0, n_bins)
+        Returns: mean per bin, shape [B, n_bins, A]
+        """
+        groups = (cell_ids // 4)  # [N]
+        
+        unique_groups, I = np.unique(groups, return_inverse=True)
+        
+        n_bins = unique_groups.shape[0]
+        
+        B = data.shape[0]
+
+        counts = torch.bincount(torch.tensor(I).to(data.device))[None,:]
+        
+        I=np.tile(I,B)+np.tile(n_bins*np.arange(B,dtype='int'),data.shape[1])
+        
+        if len(data.shape)==3:
+            A = data.shape[2]
+            I=np.repeat(I,A)*A+np.repeat(np.arange(A,dtype='int'),data.shape[1]*B)
+        
+        I=torch.tensor(I).to(data.device)
+        
+        # Comptage par bin
+        if len(data.shape)==2:
+            sum_per_bin = torch.zeros([B*n_bins],dtype=data.dtype,device=data.device)
+            sum_per_bin=sum_per_bin.scatter_add(0, I, self.bk_reshape(data,B*data.shape[1])).reshape(B,n_bins)
+
+            mean_per_bin = sum_per_bin / counts  # [B, n_bins, A]
+        else:
+            sum_per_bin = torch.zeros([B*n_bins*A],dtype=data.dtype,device=data.device)
+            sum_per_bin=sum_per_bin.scatter_add(0, I, self.bk_reshape(data,B*data.shape[1]*A)).reshape(B,n_bins,A)  # [B, n_bins]
+
+            mean_per_bin = sum_per_bin / counts[:,:,None]  # [B, n_bins, A]
+            
+        return mean_per_bin,unique_groups
+
+
+    def average_by_cell_group(data, cell_ids):
+        """
+        data: tensor of shape [..., N, ...] (ex: [B, N, C])
+        cell_ids: tensor of shape [N]
+        Returns: mean_data of shape [..., G, ...] where G = number of unique cell_ids//4
+        """
+        original_shape = data.shape
+        leading = data.shape[:-2]  # all dims before N
+        N = data.shape[-2]
+        trailing = data.shape[-1:]  # all dims after N
+
+        groups = (cell_ids // 4).long()  # [N]
+        unique_groups, group_indices,counts = torch.unique(groups,
+                return_inverse=True,
+                return_counts=True)
+        
+        return torch.bincount(group_indices,weights=data)/counts,unique_groups
 
     # ---------------------------------------------−---------
     # --             BACKEND DEFINITION                    --
