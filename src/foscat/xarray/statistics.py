@@ -140,7 +140,11 @@ def reference_statistics(
         if set(coord.dims).intersection(other_dims)
     }
 
-    stats = _scat_cov_to_xarray(ref, batch_dim=batch_dim).assign_coords(coords)
+    stats = (
+        _scat_cov_to_xarray(ref, batch_dim=batch_dim)
+        .assign_coords(coords)
+        .assign_attrs({"other_dims": other_dims})
+    )
 
     if sref is not None:
         variances = _scat_cov_to_xarray(sref, batch_dim=batch_dim)
@@ -235,7 +239,11 @@ def cross_statistics(
     }
     coords = coords1 | coords2
 
-    stats = _scat_cov_to_xarray(ref, batch_dim=batch_dim).assign_coords(coords)
+    stats = (
+        _scat_cov_to_xarray(ref, batch_dim=batch_dim)
+        .assign_coords(coords)
+        .assign_attrs({"other_dims": other_dims})
+    )
 
     if sref is not None:
         variances = _scat_cov_to_xarray(sref, batch_dim=batch_dim)
