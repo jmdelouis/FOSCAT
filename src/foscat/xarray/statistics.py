@@ -2,8 +2,6 @@ import xarray as xr
 
 import foscat.scat_cov as sc
 
-backends = {1: "tensorflow", 2: "torch", 3: "numpy"}
-
 
 def _scat_cov_to_xarray(obj, batch_dim="batches"):
     types = xr.Variable("type", ["mean", "variance"])
