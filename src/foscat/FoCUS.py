@@ -749,7 +749,7 @@ class FoCUS:
             if len(ishape) < axis + 2:
                 if not self.silent:
                     print("Use of 2D scat with data that has less than 2D")
-                return None,None
+                return None, None
 
             npix = im.shape[axis]
             npiy = im.shape[axis + 1]
@@ -774,29 +774,40 @@ class FoCUS:
 
             if axis == 0:
                 if len(ishape) == 2:
-                    return self.backend.bk_reshape(res, [npix // 2, npiy // 2]),None
+                    return self.backend.bk_reshape(res, [npix // 2, npiy // 2]), None
                 else:
-                    return self.backend.bk_reshape(
-                        res, [npix // 2, npiy // 2] + ishape[axis + 2 :]
-                    ),None
+                    return (
+                        self.backend.bk_reshape(
+                            res, [npix // 2, npiy // 2] + ishape[axis + 2 :]
+                        ),
+                        None,
+                    )
             else:
                 if len(ishape) == axis + 2:
-                    return self.backend.bk_reshape(
-                        res, ishape[0:axis] + [npix // 2, npiy // 2]
-                    ),None
+                    return (
+                        self.backend.bk_reshape(
+                            res, ishape[0:axis] + [npix // 2, npiy // 2]
+                        ),
+                        None,
+                    )
                 else:
-                    return self.backend.bk_reshape(
-                        res,
-                        ishape[0:axis] + [npix // 2, npiy // 2] + ishape[axis + 2 :],
-                    ),None
+                    return (
+                        self.backend.bk_reshape(
+                            res,
+                            ishape[0:axis]
+                            + [npix // 2, npiy // 2]
+                            + ishape[axis + 2 :],
+                        ),
+                        None,
+                    )
 
-            return self.backend.bk_reshape(res, [npix // 2, npiy // 2]),None
+            return self.backend.bk_reshape(res, [npix // 2, npiy // 2]), None
         elif self.use_1D:
             ishape = list(im.shape)
             if len(ishape) < axis + 1:
                 if not self.silent:
                     print("Use of 1D scat with data that has less than 1D")
-                return None,None
+                return None, None
 
             npix = im.shape[axis]
             odata = 1
@@ -819,20 +830,27 @@ class FoCUS:
 
             if axis == 0:
                 if len(ishape) == 1:
-                    return self.backend.bk_reshape(res, [npix // 2]),None
+                    return self.backend.bk_reshape(res, [npix // 2]), None
                 else:
-                    return self.backend.bk_reshape(
-                        res, [npix // 2] + ishape[axis + 1 :]
-                    ),None
+                    return (
+                        self.backend.bk_reshape(res, [npix // 2] + ishape[axis + 1 :]),
+                        None,
+                    )
             else:
                 if len(ishape) == axis + 1:
-                    return self.backend.bk_reshape(res, ishape[0:axis] + [npix // 2]),None
+                    return (
+                        self.backend.bk_reshape(res, ishape[0:axis] + [npix // 2]),
+                        None,
+                    )
                 else:
-                    return self.backend.bk_reshape(
-                        res, ishape[0:axis] + [npix // 2] + ishape[axis + 1 :]
-                    ),None
+                    return (
+                        self.backend.bk_reshape(
+                            res, ishape[0:axis] + [npix // 2] + ishape[axis + 1 :]
+                        ),
+                        None,
+                    )
 
-            return self.backend.bk_reshape(res, [npix // 2]),None
+            return self.backend.bk_reshape(res, [npix // 2]), None
 
         else:
             shape = list(im.shape)
@@ -857,10 +875,13 @@ class FoCUS:
                 if len(shape) > axis:
                     oshape = oshape + shape[axis + 1 :]
 
-            return self.backend.bk_reduce_mean(
-                        self.backend.bk_reshape(im, oshape), axis=axis + 1
-                    ),None
-            
+            return (
+                self.backend.bk_reduce_mean(
+                    self.backend.bk_reshape(im, oshape), axis=axis + 1
+                ),
+                None,
+            )
+
     # --------------------------------------------------------
     def up_grade(self, im, nout, axis=0, nouty=None):
 
