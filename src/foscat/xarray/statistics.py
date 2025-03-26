@@ -81,8 +81,8 @@ def stack_other_dims(arr, spatial_dim, batch_dim):
 
 def reference_statistics(
     arr,
-    parameters,
     *,
+    parameters,
     spatial_dim="cells",
     variances=False,
     mask=None,
