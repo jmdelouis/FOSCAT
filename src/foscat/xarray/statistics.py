@@ -2,8 +2,6 @@ import xarray as xr
 
 import foscat.scat_cov as sc
 
-backends = {1: "tensorflow", 2: "torch", 3: "numpy"}
-
 
 def _scat_cov_to_xarray(obj, batch_dim="batches"):
     types = xr.Variable("type", ["mean", "variance"])
@@ -32,11 +30,18 @@ def _scat_cov_to_xarray(obj, batch_dim="batches"):
             if values is not None
         },
         coords={"types": types},
-        attrs={"foscat_backend": backends[obj.backend.BACKEND], "use_1d": obj.use_1D},
+        attrs={"foscat_backend": obj.backend.BACKEND, "use_1d": obj.use_1D},
     )
 
 
 def _xarray_to_scat_cov(ds):
+    attrs = ds.attrs.copy()
+    other_dims = attrs.pop("other_dims", [])
+    if not other_dims:
+        ds = ds.expand_dims("batches", axis=0)
+    elif len(other_dims) > 1:
+        ds = ds.stack({"batches": other_dims})
+
     # TODO: use groupby for this instead?
     stats_ = {
         key: var.variable
@@ -53,7 +58,7 @@ def _xarray_to_scat_cov(ds):
         "use_1d": "use_1D",
         "foscat_backend": "backend",
     }
-    kwargs = {kwarg_names.get(key, key): value for key, value in ds.attrs.items()}
+    kwargs = {kwarg_names.get(key, key): value for key, value in attrs.items()}
 
     stats_kwargs = {key.lower(): var.data for key, var in stats_.items()}
     stats = sc.scat_cov(**stats_kwargs, **kwargs)
@@ -81,8 +86,8 @@ def stack_other_dims(arr, spatial_dim, batch_dim):
 
 def reference_statistics(
     arr,
-    parameters,
     *,
+    parameters,
     spatial_dim="cells",
     variances=False,
     mask=None,
@@ -142,7 +147,11 @@ def reference_statistics(
         if set(coord.dims).intersection(other_dims)
     }
 
-    stats = _scat_cov_to_xarray(ref, batch_dim=batch_dim).assign_coords(coords)
+    stats = (
+        _scat_cov_to_xarray(ref, batch_dim=batch_dim)
+        .assign_coords(coords)
+        .assign_attrs({"other_dims": other_dims})
+    )
 
     if sref is not None:
         variances = _scat_cov_to_xarray(sref, batch_dim=batch_dim)
@@ -237,7 +246,11 @@ def cross_statistics(
     }
     coords = coords1 | coords2
 
-    stats = _scat_cov_to_xarray(ref, batch_dim=batch_dim).assign_coords(coords)
+    stats = (
+        _scat_cov_to_xarray(ref, batch_dim=batch_dim)
+        .assign_coords(coords)
+        .assign_attrs({"other_dims": other_dims})
+    )
 
     if sref is not None:
         variances = _scat_cov_to_xarray(sref, batch_dim=batch_dim)
