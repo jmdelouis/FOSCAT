@@ -133,6 +133,8 @@ def reference_statistics(
         "calc_var": variances,
         # "mask": mask,
         "norm": norm,
+        "cell_ids": arr.dggs.coord.data,
+        "nside": arr.dggs.grid_info.nside,
     }
 
     arr_, other_dims, batch_dim = stack_other_dims(arr, spatial_dim, "batches")
@@ -220,6 +222,8 @@ def cross_statistics(
         "calc_var": variances,
         # "mask": mask,
         "norm": norm,
+        "cell_ids": arr1.dggs.coord.data,
+        "nside": arr1.dggs.grid_info.nside,
     }
 
     # will always stack equally
