@@ -1,6 +1,14 @@
+import numpy as np
 import xarray as xr
 
 import foscat.scat_cov as sc
+
+
+def to_numpy(arr):
+    if hasattr(arr, "cpu"):
+        return np.asarray(arr.cpu())
+    else:
+        return arr
 
 
 def _scat_cov_to_xarray(obj, batch_dim="batches"):
@@ -25,7 +33,7 @@ def _scat_cov_to_xarray(obj, batch_dim="batches"):
 
     return xr.Dataset(
         data_vars={
-            name: (dims[name], values)
+            name: (dims[name], to_numpy(values))
             for name, values in data.items()
             if values is not None
         },
