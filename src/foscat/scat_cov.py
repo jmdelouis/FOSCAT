@@ -3107,7 +3107,6 @@ class funct(FOC.FoCUS):
                 M2convPsi_dic = {}
 
             ###### S3
-            nside_j2 = nside_j3
             for j2 in range(0, j3 + 1):  # j2 <= j3
                 if return_data:
                     if S4[j3] is None:
@@ -3127,7 +3126,7 @@ class funct(FOC.FoCUS):
                             calc_var=True,
                             cmat2=cmat2,
                             cell_ids=cell_ids_j3,
-                            nside_j2=nside_j2,
+                            nside_j2=nside_j3,
                         )  # [Nbatch, Nmask, Norient3, Norient2]
                     else:
                         s3 = self._compute_S3(
@@ -3140,20 +3139,20 @@ class funct(FOC.FoCUS):
                             return_data=return_data,
                             cmat2=cmat2,
                             cell_ids=cell_ids_j3,
-                            nside_j2=nside_j2,
+                            nside_j2=nside_j3,
                         )  # [Nbatch, Nmask, Norient3, Norient2]
 
                     if return_data:
                         if S3[j3] is None:
                             S3[j3] = {}
-                        if out_nside is not None and out_nside < nside_j2:
+                        if out_nside is not None and out_nside < nside_j3:
                             s3 = self.backend.bk_reduce_mean(
                                 self.backend.bk_reshape(
                                     s3,
                                     [
                                         s3.shape[0],
                                         12 * out_nside**2,
-                                        (nside_j2 // out_nside) ** 2,
+                                        (nside_j3 // out_nside) ** 2,
                                         s3.shape[2],
                                         s3.shape[3],
                                     ],
@@ -3201,7 +3200,7 @@ class funct(FOC.FoCUS):
                             calc_var=True,
                             cmat2=cmat2,
                             cell_ids=cell_ids_j3,
-                            nside_j2=nside_j2,
+                            nside_j2=nside_j3,
                         )
                         s3p, vs3p = self._compute_S3(
                             j2,
@@ -3213,21 +3212,9 @@ class funct(FOC.FoCUS):
                             calc_var=True,
                             cmat2=cmat2,
                             cell_ids=cell_ids_j3,
-                            nside_j2=nside_j2,
+                            nside_j2=nside_j3,
                         )
                     else:
-                        s3 = self._compute_S3(
-                            j2,
-                            j3,
-                            conv1,
-                            vmask,
-                            M2_dic,
-                            M2convPsi_dic,
-                            return_data=return_data,
-                            cmat2=cmat2,
-                            cell_ids=cell_ids_j3,
-                            nside_j2=nside_j2,
-                        )
                         s3p = self._compute_S3(
                             j2,
                             j3,
@@ -3238,21 +3225,33 @@ class funct(FOC.FoCUS):
                             return_data=return_data,
                             cmat2=cmat2,
                             cell_ids=cell_ids_j3,
-                            nside_j2=nside_j2,
+                            nside_j2=nside_j3,
+                        )
+                        s3 = self._compute_S3(
+                            j2,
+                            j3,
+                            conv1,
+                            vmask,
+                            M2_dic,
+                            M2convPsi_dic,
+                            return_data=return_data,
+                            cmat2=cmat2,
+                            cell_ids=cell_ids_j3,
+                            nside_j2=nside_j3,
                         )
 
                     if return_data:
                         if S3[j3] is None:
                             S3[j3] = {}
                             S3P[j3] = {}
-                        if out_nside is not None and out_nside < nside_j2:
+                        if out_nside is not None and out_nside < nside_j3:
                             s3 = self.backend.bk_reduce_mean(
                                 self.backend.bk_reshape(
                                     s3,
                                     [
                                         s3.shape[0],
                                         12 * out_nside**2,
-                                        (nside_j2 // out_nside) ** 2,
+                                        (nside_j3 // out_nside) ** 2,
                                         s3.shape[2],
                                         s3.shape[3],
                                     ],
@@ -3265,7 +3264,7 @@ class funct(FOC.FoCUS):
                                     [
                                         s3.shape[0],
                                         12 * out_nside**2,
-                                        (nside_j2 // out_nside) ** 2,
+                                        (nside_j3 // out_nside) ** 2,
                                         s3.shape[2],
                                         s3.shape[3],
                                     ],
@@ -3322,7 +3321,6 @@ class funct(FOC.FoCUS):
                             #                                  s3.shape[2]*s3.shape[3]]))
 
                 ##### S4
-                nside_j1 = nside_j2
                 for j1 in range(0, j2 + 1):  # j1 <= j2
                     ### S4_auto = <(|I1 * psi1| * psi3)(|I1 * psi2| * psi3)^*>
                     if not cross:
@@ -3348,14 +3346,14 @@ class funct(FOC.FoCUS):
                         if return_data:
                             if S4[j3][j2] is None:
                                 S4[j3][j2] = {}
-                            if out_nside is not None and out_nside < nside_j1:
+                            if out_nside is not None and out_nside < nside_j3:
                                 s4 = self.backend.bk_reduce_mean(
                                     self.backend.bk_reshape(
                                         s4,
                                         [
                                             s4.shape[0],
                                             12 * out_nside**2,
-                                            (nside_j1 // out_nside) ** 2,
+                                            (nside_j3 // out_nside) ** 2,
                                             s4.shape[2],
                                             s4.shape[3],
                                             s4.shape[4],
@@ -3423,14 +3421,14 @@ class funct(FOC.FoCUS):
                         if return_data:
                             if S4[j3][j2] is None:
                                 S4[j3][j2] = {}
-                            if out_nside is not None and out_nside < nside_j1:
+                            if out_nside is not None and out_nside < nside_j3:
                                 s4 = self.backend.bk_reduce_mean(
                                     self.backend.bk_reshape(
                                         s4,
                                         [
                                             s4.shape[0],
                                             12 * out_nside**2,
-                                            (nside_j1 // out_nside) ** 2,
+                                            (nside_j3 // out_nside) ** 2,
                                             s4.shape[2],
                                             s4.shape[3],
                                             s4.shape[4],
@@ -3474,9 +3472,6 @@ class funct(FOC.FoCUS):
                                     self.backend.bk_expand_dims(vs4, off_S4)
                                 )  # Add a dimension for NS4
 
-                            nside_j1 = nside_j1 // 2
-                        nside_j2 = nside_j2 // 2
-
             ###### Reshape for next iteration on j3
             ### Image I1,
             # downscale the I1 [Nbatch, Npix_j3]
@@ -3511,7 +3506,6 @@ class funct(FOC.FoCUS):
                         M2_dic[j2], new_cell_ids_j2 = self.ud_grade_2(
                             M2_smooth, axis=1, cell_ids=cell_ids_j3, nside=nside_j3
                         )  # [Nbatch, Npix_j3, Norient3]
-
                 ### Mask
                 vmask, new_cell_ids_j3 = self.ud_grade_2(
                     vmask, axis=1, cell_ids=cell_ids_j3, nside=nside_j3
