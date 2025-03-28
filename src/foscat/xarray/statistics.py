@@ -5,7 +5,7 @@ import foscat.scat_cov as sc
 try:
     import torch
 
-    torch.Tensor.__array_namespace__ = torch
+    torch.Tensor.__array_namespace__ = lambda *args, **kwargs: torch
 except ImportError:
     pass
 
