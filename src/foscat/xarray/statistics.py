@@ -2,6 +2,13 @@ import xarray as xr
 
 import foscat.scat_cov as sc
 
+try:
+    import torch
+
+    torch.Tensor.__array_namespace__ = torch
+except ImportError:
+    pass
+
 
 def _scat_cov_to_xarray(obj, batch_dim="batches"):
     types = xr.Variable("type", ["mean", "variance"])
@@ -92,6 +99,7 @@ def reference_statistics(
     variances=False,
     mask=None,
     norm=None,
+    jmax=None,
 ):
     """
     reference statistics for a single image
@@ -125,6 +133,9 @@ def reference_statistics(
         "calc_var": variances,
         # "mask": mask,
         "norm": norm,
+        "cell_ids": arr.dggs.coord.data,
+        "nside": arr.dggs.grid_info.nside,
+        "Jmax": jmax,
     }
 
     arr_, other_dims, batch_dim = stack_other_dims(arr, spatial_dim, "batches")
@@ -212,6 +223,8 @@ def cross_statistics(
         "calc_var": variances,
         # "mask": mask,
         "norm": norm,
+        "cell_ids": arr1.dggs.coord.data,
+        "nside": arr1.dggs.grid_info.nside,
     }
 
     # will always stack equally

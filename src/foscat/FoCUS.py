@@ -35,7 +35,7 @@ class FoCUS:
         mpi_rank=0,
     ):
 
-        self.__version__ = "3.8.2"
+        self.__version__ = "3.9.0"
         # P00 coeff for normalization for scat_cov
         self.TMPFILE_VERSION = TMPFILE_VERSION
         self.P1_dic = None
@@ -742,14 +742,14 @@ class FoCUS:
         return rim
 
     # --------------------------------------------------------
-    def ud_grade_2(self, im, axis=0):
+    def ud_grade_2(self, im, axis=0, cell_ids=None, nside=None):
 
         if self.use_2D:
             ishape = list(im.shape)
             if len(ishape) < axis + 2:
                 if not self.silent:
                     print("Use of 2D scat with data that has less than 2D")
-                return None
+                return None, None
 
             npix = im.shape[axis]
             npiy = im.shape[axis + 1]
@@ -774,29 +774,40 @@ class FoCUS:
 
             if axis == 0:
                 if len(ishape) == 2:
-                    return self.backend.bk_reshape(res, [npix // 2, npiy // 2])
+                    return self.backend.bk_reshape(res, [npix // 2, npiy // 2]), None
                 else:
-                    return self.backend.bk_reshape(
-                        res, [npix // 2, npiy // 2] + ishape[axis + 2 :]
+                    return (
+                        self.backend.bk_reshape(
+                            res, [npix // 2, npiy // 2] + ishape[axis + 2 :]
+                        ),
+                        None,
                     )
             else:
                 if len(ishape) == axis + 2:
-                    return self.backend.bk_reshape(
-                        res, ishape[0:axis] + [npix // 2, npiy // 2]
+                    return (
+                        self.backend.bk_reshape(
+                            res, ishape[0:axis] + [npix // 2, npiy // 2]
+                        ),
+                        None,
                     )
                 else:
-                    return self.backend.bk_reshape(
-                        res,
-                        ishape[0:axis] + [npix // 2, npiy // 2] + ishape[axis + 2 :],
+                    return (
+                        self.backend.bk_reshape(
+                            res,
+                            ishape[0:axis]
+                            + [npix // 2, npiy // 2]
+                            + ishape[axis + 2 :],
+                        ),
+                        None,
                     )
 
-            return self.backend.bk_reshape(res, [npix // 2, npiy // 2])
+            return self.backend.bk_reshape(res, [npix // 2, npiy // 2]), None
         elif self.use_1D:
             ishape = list(im.shape)
             if len(ishape) < axis + 1:
                 if not self.silent:
                     print("Use of 1D scat with data that has less than 1D")
-                return None
+                return None, None
 
             npix = im.shape[axis]
             odata = 1
@@ -819,23 +830,33 @@ class FoCUS:
 
             if axis == 0:
                 if len(ishape) == 1:
-                    return self.backend.bk_reshape(res, [npix // 2])
+                    return self.backend.bk_reshape(res, [npix // 2]), None
                 else:
-                    return self.backend.bk_reshape(
-                        res, [npix // 2] + ishape[axis + 1 :]
+                    return (
+                        self.backend.bk_reshape(res, [npix // 2] + ishape[axis + 1 :]),
+                        None,
                     )
             else:
                 if len(ishape) == axis + 1:
-                    return self.backend.bk_reshape(res, ishape[0:axis] + [npix // 2])
+                    return (
+                        self.backend.bk_reshape(res, ishape[0:axis] + [npix // 2]),
+                        None,
+                    )
                 else:
-                    return self.backend.bk_reshape(
-                        res, ishape[0:axis] + [npix // 2] + ishape[axis + 1 :]
+                    return (
+                        self.backend.bk_reshape(
+                            res, ishape[0:axis] + [npix // 2] + ishape[axis + 1 :]
+                        ),
+                        None,
                     )
 
-            return self.backend.bk_reshape(res, [npix // 2])
+            return self.backend.bk_reshape(res, [npix // 2]), None
 
         else:
             shape = list(im.shape)
+            if cell_ids is not None:
+                sim, new_cell_ids = self.backend.binned_mean(im, cell_ids)
+                return sim, new_cell_ids
 
             lout = int(np.sqrt(shape[axis] // 12))
             if im.__class__ == np.zeros([0]).__class__:
@@ -854,8 +875,11 @@ class FoCUS:
                 if len(shape) > axis:
                     oshape = oshape + shape[axis + 1 :]
 
-            return self.backend.bk_reduce_mean(
-                self.backend.bk_reshape(im, oshape), axis=axis + 1
+            return (
+                self.backend.bk_reduce_mean(
+                    self.backend.bk_reshape(im, oshape), axis=axis + 1
+                ),
+                None,
             )
 
     # --------------------------------------------------------
@@ -2139,7 +2163,7 @@ class FoCUS:
                 return self.backend.bk_reduce_sum(r)
 
     # ---------------------------------------------−---------
-    def convol(self, in_image, axis=0):
+    def convol(self, in_image, axis=0, cell_ids=None, nside=None):
 
         image = self.backend.bk_cast(in_image)
 
@@ -2304,6 +2328,51 @@ class FoCUS:
             return self.backend.bk_reshape(res, in_image.shape + [self.NORIENT])
 
         else:
+            ishape = list(image.shape)
+
+            if cell_ids is not None:
+                import healpix_convolution as hc
+                from xdggs.healpix import HealpixInfo
+
+                res = self.backend.bk_zeros(
+                    ishape + [self.NORIENT], dtype=self.backend.all_cbk_type
+                )
+
+                grid_info = HealpixInfo(
+                    level=int(np.log(nside) / np.log(2)), indexing_scheme="nested"
+                )
+
+                for k in range(self.NORIENT):
+                    kernelR, kernelI = hc.kernels.wavelet_kernel(
+                        cell_ids, grid_info=grid_info, orientation=k, is_torch=True
+                    )
+                    kernelR = kernelR.to(self.backend.all_bk_type).to(image.device)
+                    kernelI = kernelI.to(self.backend.all_bk_type).to(image.device)
+                    padding = hc.pad(
+                        cell_ids,
+                        grid_info=grid_info,
+                        ring=5 // 2,  # wavelet kernel_size=5 is hard coded
+                        mode="mean",
+                        constant_value=0,
+                    )
+
+                    if len(ishape) == 2:
+                        for l in range(ishape[0]):
+                            padded_data = padding.apply(image[l], is_torch=True)
+                            res[l, :, k] = kernelR.matmul(
+                                padded_data
+                            ) + 1j * kernelI.matmul(padded_data)
+                    else:
+                        for l in range(ishape[0]):
+                            for k2 in range(ishape[2]):
+                                padded_data = padding.apply(
+                                    image[l, :, k2], is_torch=True
+                                )
+                                res[l, :, k2, k] = kernelR.matmul(
+                                    padded_data
+                                ) + 1j * kernelI.matmul(padded_data)
+                return res
+
             nside = int(np.sqrt(image.shape[axis] // 12))
 
             if self.Idx_Neighbours[nside] is None:
@@ -2320,7 +2389,6 @@ class FoCUS:
             l_ww_real = self.ww_Real[nside]
             l_ww_imag = self.ww_Imag[nside]
 
-            ishape = list(image.shape)
             odata = 1
             for k in range(axis + 1, len(ishape)):
                 odata = odata * ishape[k]
@@ -2474,7 +2542,7 @@ class FoCUS:
         return res
 
     # ---------------------------------------------−---------
-    def smooth(self, in_image, axis=0):
+    def smooth(self, in_image, axis=0, cell_ids=None, nside=None):
 
         image = self.backend.bk_cast(in_image)
 
@@ -2603,6 +2671,43 @@ class FoCUS:
             return self.backend.bk_reshape(res, in_image.shape)
 
         else:
+
+            ishape = list(image.shape)
+
+            if cell_ids is not None:
+                import healpix_convolution as hc
+                from xdggs.healpix import HealpixInfo
+
+                res = self.backend.bk_zeros(ishape, dtype=self.backend.all_cbk_type)
+
+                grid_info = HealpixInfo(
+                    level=int(np.log(nside) / np.log(2)), indexing_scheme="nested"
+                )
+
+                kernel = hc.kernels.wavelet_smooth_kernel(
+                    cell_ids, grid_info=grid_info, is_torch=True
+                )
+
+                kernel = kernel.to(self.backend.all_bk_type).to(image.device)
+                padding = hc.pad(
+                    cell_ids,
+                    grid_info=grid_info,
+                    ring=5 // 2,  # wavelet kernel_size=5 is hard coded
+                    mode="mean",
+                    constant_value=0,
+                )
+
+                if len(ishape) == 2:
+                    for l in range(ishape[0]):
+                        padded_data = padding.apply(image[l], is_torch=True)
+                        res[l] = kernel.matmul(padded_data)
+                else:
+                    for l in range(ishape[0]):
+                        for k2 in range(ishape[2]):
+                            padded_data = padding.apply(image[l, :, k2], is_torch=True)
+                            res[l, :, k2] = kernel.matmul(padded_data)
+                return res
+
             nside = int(np.sqrt(image.shape[axis] // 12))
 
             if self.Idx_Neighbours[nside] is None:
@@ -2618,7 +2723,6 @@ class FoCUS:
                 self.w_smooth[nside] = ws
 
             l_w_smooth = self.w_smooth[nside]
-            ishape = list(image.shape)
 
             odata = 1
             for k in range(axis + 1, len(ishape)):
