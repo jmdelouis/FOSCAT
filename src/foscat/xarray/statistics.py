@@ -1,14 +1,13 @@
-import numpy as np
 import xarray as xr
 
 import foscat.scat_cov as sc
 
+try:
+    import torch
 
-def to_numpy(arr):
-    if hasattr(arr, "cpu"):
-        return np.asarray(arr.cpu())
-    else:
-        return arr
+    torch.Tensor.__array_namespace__ = torch
+except ImportError:
+    pass
 
 
 def _scat_cov_to_xarray(obj, batch_dim="batches"):
@@ -33,7 +32,7 @@ def _scat_cov_to_xarray(obj, batch_dim="batches"):
 
     return xr.Dataset(
         data_vars={
-            name: (dims[name], to_numpy(values))
+            name: (dims[name], values)
             for name, values in data.items()
             if values is not None
         },
