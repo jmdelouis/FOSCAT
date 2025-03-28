@@ -99,6 +99,7 @@ def reference_statistics(
     variances=False,
     mask=None,
     norm=None,
+    jmax=None,
 ):
     """
     reference statistics for a single image
@@ -134,6 +135,7 @@ def reference_statistics(
         "norm": norm,
         "cell_ids": arr.dggs.coord.data,
         "nside": arr.dggs.grid_info.nside,
+        "Jmax": jmax,
     }
 
     arr_, other_dims, batch_dim = stack_other_dims(arr, spatial_dim, "batches")
