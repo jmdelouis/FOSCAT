@@ -528,7 +528,7 @@ class scat_cov:
             return scat_cov(
                 self.doadd(self.S0, other.S0),
                 self.doadd(self.S2, other.S2),
-                (self.S3 + other.S3),
+                self.doadd(self.S3, other.S3),
                 s4,
                 s1=s1,
                 s3p=s3p,
@@ -683,7 +683,7 @@ class scat_cov:
             return scat_cov(
                 self.dodiv(other.S0, self.S0),
                 self.dodiv(other.S2, self.S2),
-                (other.S3 / self.S3),
+                self.dodiv(other.S3, self.S3),
                 s4,
                 s1=s1,
                 s3p=s3p,
@@ -749,7 +749,7 @@ class scat_cov:
             return scat_cov(
                 self.domin(other.S0, self.S0),
                 self.domin(other.S2, self.S2),
-                (other.S3 - self.S3),
+                self.domin(other.S3, self.S3),
                 s4,
                 s1=s1,
                 s3p=s3p,
@@ -814,7 +814,7 @@ class scat_cov:
             return scat_cov(
                 self.domin(self.S0, other.S0),
                 self.domin(self.S2, other.S2),
-                (self.S3 - other.S3),
+                self.domin(self.S3, other.S3),
                 s4,
                 s1=s1,
                 s3p=s3p,
