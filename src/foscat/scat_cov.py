@@ -498,7 +498,7 @@ class scat_cov:
                 if other.S1 is None:
                     s1 = None
                 else:
-                    s1 = self.doadd(self.S1,other.S1)
+                    s1 = self.doadd(self.S1, other.S1)
             else:
                 s1 = self.S1 + other
 
@@ -656,7 +656,7 @@ class scat_cov:
             s1 = None
         else:
             if isinstance(other, scat_cov):
-                s1 = self.dodiv(other.S1,self.S1)
+                s1 = self.dodiv(other.S1, self.S1)
             else:
                 s1 = other / self.S1
 
@@ -719,7 +719,7 @@ class scat_cov:
                 if other.S1 is None:
                     s1 = None
                 else:
-                    s1 = self.domin(other.S1,self.S1)
+                    s1 = self.domin(other.S1, self.S1)
             else:
                 s1 = other - self.S1
 
@@ -784,7 +784,7 @@ class scat_cov:
                 if other.S1 is None:
                     s1 = None
                 else:
-                    s1 = self.domin(self.S1,other.S1)
+                    s1 = self.domin(self.S1, other.S1)
             else:
                 s1 = self.S1 - other
 
@@ -914,7 +914,7 @@ class scat_cov:
                 if other.S1 is None:
                     s1 = None
                 else:
-                    s1 = self.domult(self.S1 , other.S1)
+                    s1 = self.domult(self.S1, other.S1)
             else:
                 s1 = self.S1 * other
 
