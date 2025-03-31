@@ -177,7 +177,6 @@ class scat_cov:
                     ],
                 )
             ),
-            self.conv2complex(
                 self.backend.bk_reshape(
                     self.S3,
                     [
@@ -188,11 +187,10 @@ class scat_cov:
                         * self.S3.shape[4],
                     ],
                 )
-            ),
+            ,
         ]
         if self.S3P is not None:
             tmp = tmp + [
-                self.conv2complex(
                     self.backend.bk_reshape(
                         self.S3P,
                         [
@@ -203,11 +201,10 @@ class scat_cov:
                             * self.S3.shape[4],
                         ],
                     )
-                )
+                
             ]
 
         tmp = tmp + [
-            self.conv2complex(
                 self.backend.bk_reshape(
                     self.S4,
                     [
@@ -219,7 +216,6 @@ class scat_cov:
                         * self.S4.shape[5],
                     ],
                 )
-            )
         ]
 
         return self.backend.bk_concat(tmp, 1)
@@ -2216,6 +2212,7 @@ class scat_cov:
 
 class funct(FOC.FoCUS):
 
+    
     def fill(self, im, nullval=hp.UNSEEN):
         if self.use_2D:
             return self.fill_2d(im, nullval=nullval)
@@ -3512,8 +3509,8 @@ class funct(FOC.FoCUS):
                 )
 
                 if self.mask_thres is not None:
-                    vmask, new_cell_ids_j3 = self.backend.bk_threshold(
-                        vmask, self.mask_thres, cell_ids=cell_ids_j3, nside=nside_j3
+                    vmask = self.backend.bk_threshold(
+                        vmask, self.mask_thres
                     )
 
                 ### NSIDE_j3
@@ -3854,24 +3851,59 @@ class funct(FOC.FoCUS):
         dy = int(max(8, min(np.ceil(N / 2**j), N // 2)))
         return dx, dy
 
-    def get_edge_masks(self, M, N, J, d0=1):
+    def get_edge_masks(self, M, N, J, d0=1,
+                       in_mask=None,
+                       edge_dx=None,
+                       edge_dy=None):
         """
         This function is strongly inspire by the package https://github.com/SihaoCheng/scattering_transform
         Done by Sihao Cheng and Rudy Morel.
         """
         edge_masks = np.empty((J, M, N))
+        
         X, Y = np.meshgrid(np.arange(M), np.arange(N), indexing="ij")
-        for j in range(J):
-            edge_dx = min(M // 4, 2**j * d0)
-            edge_dy = min(N // 4, 2**j * d0)
-            edge_masks[j] = (
+        if in_mask is not None:
+            from scipy.ndimage import binary_erosion
+            
+        if in_mask is not None:
+            if in_mask.shape[0]!=M or in_mask.shape[0]!=N:
+                l_mask = in_mask.reshape(M,in_mask.shape[0]//M,N,in_mask.shape[1]//N)
+                l_mask = np.sum(np.sum(l_mask,1),2)*(M*N)/(in_mask.shape[0]*in_mask.shape[1])
+            else:
+                l_mask = in_mask
+                
+        if edge_dx is None:
+            for j in range(J):
+                edge_dx = min(M // 4, 2**j * d0)
+                edge_dy = min(N // 4, 2**j * d0)
+                    
+                edge_masks[j] = (
+                    (X >= edge_dx)
+                    * (X < M - edge_dx)
+                    * (Y >= edge_dy)
+                    * (Y < N - edge_dy)
+                )
+                if in_mask is not None:
+                    l_mask = binary_erosion(l_mask, iterations=1+np.max([edge_dx,edge_dy]))
+                    edge_masks[j]*=l_mask
+                
+            edge_masks = edge_masks[:, None, :, :]
+                
+            edge_masks = edge_masks / edge_masks.mean((-2, -1))[:, :, None, None]
+        else:
+            edge_masks = (
                 (X >= edge_dx)
-                * (X <= M - edge_dx)
+                * (X < M - edge_dx)
                 * (Y >= edge_dy)
-                * (Y <= N - edge_dy)
-            )
-        edge_masks = edge_masks[:, None, :, :]
-        edge_masks = edge_masks / edge_masks.mean((-2, -1))[:, :, None, None]
+                * (Y < N - edge_dy)
+                )
+            if in_mask is not None:
+                l_mask = binary_erosion(l_mask, iterations=1+np.max([edge_dx,edge_dy]))
+                edge_masks*=l_mask
+            
+            edge_masks = edge_masks / edge_masks.mean((-2, -1))
+            
+            
         return self.backend.bk_cast(edge_masks)
 
     # ---------------------------------------------------------------------------
@@ -3889,6 +3921,7 @@ class funct(FOC.FoCUS):
         use_ref=False,
         normalization="S2",
         edge=False,
+        in_mask=None,
         pseudo_coef=1,
         get_variance=False,
         ref_sigma=None,
@@ -3957,6 +3990,9 @@ class funct(FOC.FoCUS):
         if S4_criteria is None:
             S4_criteria = "j2>=j1"
 
+        if not edge and in_mask is not None:
+            edge=True
+            
         if self.all_bk_type == "float32":
             C_ONE = np.complex64(1.0)
         else:
@@ -4006,14 +4042,16 @@ class funct(FOC.FoCUS):
 
             J = int(np.log(nside) / np.log(2))  # Number of j scales
 
-        if Jmax is None:
-            Jmax = J  # Number of steps for the loop on scales
-        if Jmax > J:
-            print("==========\n\n")
-            print(
-                "The Jmax you requested is larger than the data size, which may cause problems while computing the scattering transform."
-            )
-            print("\n\n==========")
+            
+        if Jmax is not None:
+            
+            if Jmax > J:
+                print("==========\n\n")
+                print(
+                    "The Jmax you requested is larger than the data size, which may cause problems while computing the scattering transform."
+                )
+                print("\n\n==========")
+            J = Jmax  # Number of steps for the loop on scales
 
         L = self.NORIENT
         norm_factor_S3 = 1.0
@@ -4099,7 +4137,8 @@ class funct(FOC.FoCUS):
             #
             if edge:
                 if (M, N, J) not in self.edge_masks:
-                    self.edge_masks[(M, N, J)] = self.get_edge_masks(M, N, J)
+                    self.edge_masks[(M, N, J)] = self.get_edge_masks(M, N, J,in_mask=in_mask)
+                        
                 edge_mask = self.edge_masks[(M, N, J)]
             else:
                 edge_mask = 1
@@ -4132,7 +4171,7 @@ class funct(FOC.FoCUS):
                         ).abs()
                 else:
                     print("todo")
-
+                
                 S2 = (I1**2 * edge_mask).mean((-2, -1))
                 S1 = (I1 * edge_mask).mean((-2, -1))
 
@@ -4238,8 +4277,21 @@ class funct(FOC.FoCUS):
                 wavelet_f3 = self.cut_high_k_off(filters_set[j3], dx3, dy3)  # L,x,y
                 _, M3, N3 = wavelet_f3.shape
                 wavelet_f3_squared = wavelet_f3**2
-                edge_dx = min(4, int(2**j3 * dx3 * 2 / M))
-                edge_dy = min(4, int(2**j3 * dy3 * 2 / N))
+                if edge is True:
+                    if (M3, N3,J,j3) not in self.edge_masks:
+                        
+                        edge_dx = min(4, int(2**j3 * dx3 * 2 / M))
+                        edge_dy = min(4, int(2**j3 * dy3 * 2 / N))
+                        
+                        self.edge_masks[(M3, N3,J,j3)] = self.get_edge_masks(M3, N3,J,
+                                                                            in_mask=in_mask,
+                                                                            edge_dx=edge_dx,
+                                                                            edge_dy=edge_dy)
+                        
+                    edge_mask = self.edge_masks[(M3, N3,J,j3)]
+                else:
+                    edge_mask=1
+                    
 
                 # a normalization change due to the cutoff of frequency space
                 fft_factor = 1 / (M3 * N3) * (M3 * N3 / M / N) ** 2
@@ -4306,25 +4358,25 @@ class funct(FOC.FoCUS):
                             (
                                 data_small.view(N_image, 1, 1, M3, N3)
                                 * self.backend.bk_conjugate(I12_w3_small)
-                            )[..., edge_dx : M3 - edge_dx, edge_dy : N3 - edge_dy].mean(
+                                * edge_mask[None,None,None,:,:]
+                            ).mean( #[..., edge_dx : M3 - edge_dx, edge_dy : N3 - edge_dy]
                                 (-2, -1)
                             )
                             * fft_factor
                             / norm_factor_S3
                         )
                         if get_variance:
-                            S3_sigma[:, Ndata_S3, :, :] = (
+                            S3_sigma[:, Ndata_S3, :, :] =(
                                 (
                                     data_small.view(N_image, 1, 1, M3, N3)
                                     * self.backend.bk_conjugate(I12_w3_small)
-                                )[
-                                    ..., edge_dx : M3 - edge_dx, edge_dy : N3 - edge_dy
-                                ].std(
+                                    * edge_mask[None,None,None,:,:]
+                                ).std(
                                     (-2, -1)
+                                    )
+                                    * fft_factor
+                                    / norm_factor_S3
                                 )
-                                * fft_factor
-                                / norm_factor_S3
-                            )
                     if data2 is not None:
                         if not edge:
                             S3p[:, Ndata_S3, :, :] = (
@@ -4350,9 +4402,8 @@ class funct(FOC.FoCUS):
                                 (
                                     data2_small.view(N_image2, 1, 1, M3, N3)
                                     * self.backend.bk_conjugate(I12_w3_small)
-                                )[
-                                    ..., edge_dx : M3 - edge_dx, edge_dy : N3 - edge_dy
-                                ].mean(
+                                    * edge_mask[None,None,None,:,:]
+                                ).mean(
                                     (-2, -1)
                                 )
                                 * fft_factor
@@ -4363,11 +4414,8 @@ class funct(FOC.FoCUS):
                                     (
                                         data2_small.view(N_image2, 1, 1, M3, N3)
                                         * self.backend.bk_conjugate(I12_w3_small)
-                                    )[
-                                        ...,
-                                        edge_dx : M3 - edge_dx,
-                                        edge_dy : N3 - edge_dy,
-                                    ].std(
+                                        * edge_mask[None,None,None,:,:]
+                                    ).std(
                                         (-2, -1)
                                     )
                                     * fft_factor
@@ -4438,7 +4486,8 @@ class funct(FOC.FoCUS):
                                                     N_image, 1, L, L, M3, N3
                                                 )
                                             )
-                                        )[..., edge_dx:-edge_dx, edge_dy:-edge_dy].mean(
+                                            * edge_mask[None,None,None,None,:,:]
+                                        ).mean(
                                             (-2, -1)
                                         ) * fft_factor
                                         if get_variance:
@@ -4451,9 +4500,8 @@ class funct(FOC.FoCUS):
                                                         N_image, 1, L, L, M3, N3
                                                     )
                                                 )
-                                            )[
-                                                ..., edge_dx:-edge_dx, edge_dy:-edge_dy
-                                            ].std(
+                                                * edge_mask[None,None,None,None,:,:]
+                                            ).std(
                                                 (-2, -1)
                                             ) * fft_factor
                                     else:
@@ -4468,9 +4516,8 @@ class funct(FOC.FoCUS):
                                                         N_image, L, L, M3, N3
                                                     )
                                                 )
-                                            )[
-                                                ..., edge_dx:-edge_dx, edge_dy:-edge_dy
-                                            ].mean(
+                                                * edge_mask[None,None,None,None,:,:]
+                                            ).mean(
                                                 (-2, -1)
                                             ) * fft_factor
                                             if get_variance:
@@ -4483,11 +4530,8 @@ class funct(FOC.FoCUS):
                                                             N_image, L, L, M3, N3
                                                         )
                                                     )
-                                                )[
-                                                    ...,
-                                                    edge_dx:-edge_dx,
-                                                    edge_dy:-edge_dy,
-                                                ].mean(
+                                                    * edge_mask[None,None,None,None,:,:]
+                                                ).std(
                                                     (-2, -1)
                                                 ) * fft_factor
 
@@ -4820,7 +4864,7 @@ class funct(FOC.FoCUS):
         #
         if edge:
             if (M, N, J) not in self.edge_masks:
-                self.edge_masks[(M, N, J)] = self.get_edge_masks(M, N, J)
+                self.edge_masks[(M, N, J)] = self.get_edge_masks(M, N, J,in_mask=in_mask)
             edge_mask = self.edge_masks[(M, N, J)]
         else:
             edge_mask = 1
@@ -5693,20 +5737,41 @@ class funct(FOC.FoCUS):
             return for_synthesis, ref_sigma
 
         return for_synthesis
-
-    def to_gaussian(self, x):
+        
+    def purge_edge_mask(self):
+        
+        list_edge=[]
+        for k in self.edge_masks:
+            list_edge.append(k)
+        for k in list_edge:
+            del self.edge_masks[k]
+        
+        self.edge_masks={}
+        
+    def to_gaussian(self, x,in_mask=None):
         from scipy.interpolate import interp1d
         from scipy.stats import norm
 
-        idx = np.argsort(x.flatten())
-        p = (np.arange(1, idx.shape[0] + 1) - 0.5) / idx.shape[0]
-        im_target = x.flatten()
-        im_target[idx] = norm.ppf(p)
+        if in_mask is not None:
+            m_idx = np.where(in_mask.flatten()>0)[0]
+            idx = np.argsort(x.flatten()[m_idx])
+            p = norm.ppf((np.arange(1, idx.shape[0] + 1) - 0.5) / idx.shape[0])
+            im_target = x.flatten()
+            im_target[m_idx[idx]] = p
+            
+            self.f_gaussian = interp1d(im_target[m_idx[idx]], x.flatten()[m_idx[idx]], kind="cubic")
+            self.val_min = im_target[m_idx][idx[0]]
+            self.val_max = im_target[m_idx][idx[-1]]
+        else:
+            idx = np.argsort(x.flatten())
+            p = (np.arange(1, idx.shape[0] + 1) - 0.5) / idx.shape[0]
+            im_target = x.flatten()
+            im_target[idx] = norm.ppf(p)
 
-        # Interpolation cubique
-        self.f_gaussian = interp1d(im_target[idx], x.flatten()[idx], kind="cubic")
-        self.val_min = im_target[idx[0]]
-        self.val_max = im_target[idx[-1]]
+            # Interpolation cubique 
+            self.f_gaussian = interp1d(im_target[idx], x.flatten()[idx], kind="cubic")
+            self.val_min = im_target[idx[0]]
+            self.val_max = im_target[idx[-1]]
         return im_target.reshape(x.shape)
 
     def from_gaussian(self, x):
@@ -5980,57 +6045,6 @@ class funct(FOC.FoCUS):
 
         return result
 
-    #    # ---------------------------------------------−---------
-    #    def std(self, list_of_sc):
-    #        n = len(list_of_sc)
-    #        res = list_of_sc[0]
-    #        res2 = list_of_sc[0] * list_of_sc[0]
-    #        for k in range(1, n):
-    #            res = res + list_of_sc[k]
-    #            res2 = res2 + list_of_sc[k] * list_of_sc[k]
-    #
-    #        if res.S1 is None:
-    #            if res.S3P is not None:
-    #                return scat_cov(
-    #                    res.domult(sig.S0, res.S0) * res.domult(sig.S0, res.S0),
-    #                    res.domult(sig.S2, res.S2) * res.domult(sig.S2, res.S2),
-    #                    res.domult(sig.S3, res.S3) * res.domult(sig.S3, res.S3),
-    #                    res.domult(sig.S4, res.S4) * res.domult(sig.S4, res.S4),
-    #                    S3P=res.domult(sig.S3P, res.S3P) * res.domult(sig.S3P, res.S3P),
-    #                    backend=self.backend,
-    #                    use_1D=self.use_1D,
-    #                )
-    #            else:
-    #                return scat_cov(
-    #                    res.domult(sig.S0, res.S0) * res.domult(sig.S0, res.S0),
-    #                    res.domult(sig.S2, res.S2) * res.domult(sig.S2, res.S2),
-    #                    res.domult(sig.S3, res.S3) * res.domult(sig.S3, res.S3),
-    #                    res.domult(sig.S4, res.S4) * res.domult(sig.S4, res.S4),
-    #                    backend=self.backend,
-    #                    use_1D=self.use_1D,
-    #                )
-    #        else:
-    #            if res.S3P is None:
-    #                return scat_cov(
-    #                    res.domult(sig.S0, res.S0) * res.domult(sig.S0, res.S0),
-    #                    res.domult(sig.S2, res.S2) * res.domult(sig.S2, res.S2),
-    #                    res.domult(sig.S3, res.S3) * res.domult(sig.S3, res.S3),
-    #                    res.domult(sig.S4, res.S4) * res.domult(sig.S4, res.S4),
-    #                    S1=res.domult(sig.S1, res.S1) * res.domult(sig.S1, res.S1),
-    #                    S3P=res.domult(sig.S3P, res.S3P) * res.domult(sig.S3P, res.S3P),
-    #                    backend=self.backend,
-    #                )
-    #            else:
-    #                return scat_cov(
-    #                    res.domult(sig.S2, res.S2) * res.domult(sig.S2, res.S2),
-    #                    res.domult(sig.S1, res.S1) * res.domult(sig.S1, res.S1),
-    #                    res.domult(sig.S3, res.S3) * res.domult(sig.S3, res.S3),
-    #                    res.domult(sig.S4, res.S4) * res.domult(sig.S4, res.S4),
-    #                    backend=self.backend,
-    #                    use_1D=self.use_1D,
-    #                )
-    #        return self.NORIENT
-
     @tf_function
     def eval_comp_fast(
         self,
@@ -6068,6 +6082,7 @@ class funct(FOC.FoCUS):
     def synthesis(
         self,
         image_target,
+        reference=None,
         nstep=4,
         seed=1234,
         Jmax=None,
@@ -6077,6 +6092,7 @@ class funct(FOC.FoCUS):
         synthesised_N=1,
         input_image=None,
         grd_mask=None,
+        in_mask=None,
         iso_ang=False,
         EVAL_FREQUENCY=100,
         NUM_EPOCHS=300,
@@ -6086,18 +6102,26 @@ class funct(FOC.FoCUS):
 
         import foscat.Synthesis as synthe
 
+        l_edge=edge
+        if in_mask is not None:
+            l_edge=True
+            
+        if edge:
+            self.purge_edge_mask()
+            
         def The_loss(u, scat_operator, args):
             ref = args[0]
             sref = args[1]
             use_v = args[2]
+            ljmax  = args[3]
 
             # compute scattering covariance of the current synthetised map called u
             if use_v:
                 learn = scat_operator.reduce_mean_batch(
                     scat_operator.scattering_cov(
                         u,
-                        edge=edge,
-                        Jmax=Jmax,
+                        edge=l_edge,
+                        Jmax=ljmax,
                         ref_sigma=sref,
                         use_ref=True,
                         iso_ang=iso_ang,
@@ -6106,7 +6130,40 @@ class funct(FOC.FoCUS):
             else:
                 learn = scat_operator.reduce_mean_batch(
                     scat_operator.scattering_cov(
-                        u, edge=edge, Jmax=Jmax, use_ref=True, iso_ang=iso_ang
+                        u, edge=l_edge, Jmax=ljmax, use_ref=True, iso_ang=iso_ang
+                    )
+                )
+
+            # make the difference withe the reference coordinates
+            loss = scat_operator.backend.bk_reduce_mean(
+                scat_operator.backend.bk_square(learn - ref)
+            )
+            return loss
+        
+        def The_lossX(u, scat_operator, args):
+            ref = args[0]
+            sref = args[1]
+            use_v = args[2]
+            im2   = args[3]
+            ljmax  = args[4]
+
+            # compute scattering covariance of the current synthetised map called u
+            if use_v:
+                learn = scat_operator.reduce_mean_batch(
+                    scat_operator.scattering_cov(
+                        u,
+                        data2=im2,
+                        edge=l_edge,
+                        Jmax=ljmax,
+                        ref_sigma=sref,
+                        use_ref=True,
+                        iso_ang=iso_ang,
+                    )
+                )
+            else:
+                learn = scat_operator.reduce_mean_batch(
+                    scat_operator.scattering_cov(
+                        u, data2=im2,edge=l_edge, Jmax=ljmax, use_ref=True, iso_ang=iso_ang
                     )
                 )
 
@@ -6118,7 +6175,7 @@ class funct(FOC.FoCUS):
 
         if to_gaussian:
             # Change the data histogram to gaussian distribution
-            im_target = self.to_gaussian(image_target)
+            im_target = self.to_gaussian(image_target,in_mask=in_mask)
         else:
             im_target = image_target
 
@@ -6147,20 +6204,59 @@ class funct(FOC.FoCUS):
         tmp = {}
 
         l_grd_mask = {}
+        l_in_mask = {}
+        l_input_image = {}
+        l_ref = {}
+        l_jmax={}
 
         tmp[nstep - 1] = self.backend.bk_cast(im_target)
+        l_jmax[nstep - 1] = Jmax
+        
+        if reference is not None:
+            l_ref[nstep-1] = self.backend.bk_cast(reference)
+        else:
+            l_ref[nstep-1] = None
+            
         if grd_mask is not None:
             l_grd_mask[nstep - 1] = self.backend.bk_cast(grd_mask)
         else:
             l_grd_mask[nstep - 1] = None
+        if in_mask is not None:
+            l_in_mask[nstep - 1] = in_mask
+        else:
+            l_in_mask[nstep - 1] = None
+            
+        if input_image is not None:
+            l_input_image[nstep - 1] = input_image
 
         for ell in range(nstep - 2, -1, -1):
             tmp[ell], _ = self.ud_grade_2(tmp[ell + 1], axis=1)
+            
             if grd_mask is not None:
                 l_grd_mask[ell], _ = self.ud_grade_2(l_grd_mask[ell + 1], axis=1)
             else:
                 l_grd_mask[ell] = None
+                
+            if in_mask is not None:
+                l_in_mask[ell], _ = self.ud_grade_2(l_in_mask[ell + 1])
+                l_in_mask[ell] = self.backend.to_numpy(l_in_mask[ell])
+            else:
+                l_in_mask[ell] = None
+                
+            if input_image is not None:
+                l_input_image[ell], _ = self.ud_grade_2(l_input_image[ell + 1],axis=1)
 
+            if reference is not None:
+                l_ref[ell], _ = self.ud_grade_2(l_ref[ell + 1],axis=1)
+            else:
+                l_ref[ell] = None
+                
+            if l_jmax[ell+1] is None:
+                l_jmax[ell] = None
+            else:
+                l_jmax[ell] = l_jmax[ell+1]-1
+                
+                
         if not self.use_2D and not self.use_1D:
             l_nside = nside // (2 ** (nstep - 1))
 
@@ -6182,7 +6278,7 @@ class funct(FOC.FoCUS):
                     if self.use_2D:
                         imap = self.backend.bk_reshape(
                             self.backend.bk_tile(
-                                self.backend.bk_cast(input_image.flatten()),
+                                self.backend.bk_cast(l_input_image[k].flatten()),
                                 synthesised_N,
                             ),
                             [synthesised_N, tmp[k].shape[1], tmp[k].shape[2]],
@@ -6190,7 +6286,7 @@ class funct(FOC.FoCUS):
                     else:
                         imap = self.backend.bk_reshape(
                             self.backend.bk_tile(
-                                self.backend.bk_cast(input_image.flatten()),
+                                self.backend.bk_cast(l_input_image[k].flatten()),
                                 synthesised_N,
                             ),
                             [synthesised_N, tmp[k].shape[1]],
@@ -6212,17 +6308,36 @@ class funct(FOC.FoCUS):
             # compute the coefficients for the target image
             if use_variance:
                 ref, sref = self.scattering_cov(
-                    tmp[k], get_variance=True, edge=edge, Jmax=Jmax, iso_ang=iso_ang
+                    tmp[k], 
+                    data2=l_ref[k],
+                    get_variance=True, 
+                    edge=l_edge, 
+                    Jmax=l_jmax[k], 
+                    in_mask=l_in_mask[k],
+                    iso_ang=iso_ang
                 )
             else:
-                ref = self.scattering_cov(tmp[k], edge=edge, Jmax=Jmax, iso_ang=iso_ang)
+                ref = self.scattering_cov(
+                    tmp[k], 
+                    data2=l_ref[k],
+                    in_mask=l_in_mask[k],
+                    edge=l_edge, 
+                    Jmax=l_jmax[k], 
+                    iso_ang=iso_ang)
                 sref = ref
 
             # compute the mean of the population does nothing if only one map is given
             ref = self.reduce_mean_batch(ref)
 
-            # define a loss to minimize
-            loss = synthe.Loss(The_loss, self, ref, sref, use_variance)
+            if l_in_mask[k] is not None:
+                self.purge_edge_mask()
+                
+            if l_ref[k] is None:
+                # define a loss to minimize
+                loss = synthe.Loss(The_loss, self, ref, sref, use_variance,l_jmax[k])
+            else:
+                # define a loss to minimize
+                loss = synthe.Loss(The_lossX, self, ref, sref, use_variance,l_ref[k],l_jmax[k])
 
             sy = synthe.Synthesis([loss])
 

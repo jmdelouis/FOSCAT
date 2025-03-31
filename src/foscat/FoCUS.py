@@ -50,6 +50,12 @@ class FoCUS:
         self.return_data = return_data
         self.silent = silent
 
+        self.kernel_smooth = {}
+        self.padding_smooth = {}
+        self.kernelR_conv = {}
+        self.kernelI_conv = {}
+        self.padding_conv = {}
+                
         if not self.silent:
             print("================================================")
             print("          START FOSCAT CONFIGURATION")
@@ -68,9 +74,8 @@ class FoCUS:
                 if not self.silent:
                     print("The directory %s is created")
             except:
-                if not self.silent:
-                    print(
-                        "Impossible to create the directory %s" % (self.TEMPLATE_PATH)
+                print(
+                    "Impossible to create the directory %s" % (self.TEMPLATE_PATH)
                     )
                 return None
 
@@ -81,10 +86,9 @@ class FoCUS:
         self.padding = padding
 
         if JmaxDelta != 0:
-            if not self.silent:
-                print(
+            print(
                     "OPTION JmaxDelta is not avialable anymore after version 3.6.2. Please use Jmax option in eval function"
-                )
+            )
             return None
 
         self.OSTEP = JmaxDelta
@@ -2331,31 +2335,37 @@ class FoCUS:
             ishape = list(image.shape)
 
             if cell_ids is not None:
-                import healpix_convolution as hc
-                from xdggs.healpix import HealpixInfo
+                if cell_ids.shape[0] not in self.padding_conv:
+                    import healpix_convolution as hc
+                    from xdggs.healpix import HealpixInfo
 
-                res = self.backend.bk_zeros(
-                    ishape + [self.NORIENT], dtype=self.backend.all_cbk_type
-                )
+                    res = self.backend.bk_zeros(
+                        ishape + [self.NORIENT], dtype=self.backend.all_cbk_type
+                    )
 
-                grid_info = HealpixInfo(
-                    level=int(np.log(nside) / np.log(2)), indexing_scheme="nested"
-                )
+                    grid_info = HealpixInfo(
+                        level=int(np.log(nside) / np.log(2)), indexing_scheme="nested"
+                    )
+
+                    for k in range(self.NORIENT):
+                        kernelR, kernelI = hc.kernels.wavelet_kernel(
+                            cell_ids, grid_info=grid_info, orientation=k, is_torch=True
+                        )
+                        self.kernelR_conv[(cell_ids.shape[0],k)] = kernelR.to(self.backend.all_bk_type).to(image.device)
+                        self.kernelI_conv[(cell_ids.shape[0],k)] = kernelI.to(self.backend.all_bk_type).to(image.device)
+                        self.padding_conv[(cell_ids.shape[0],k)] = hc.pad(
+                            cell_ids,
+                            grid_info=grid_info,
+                            ring=5 // 2,  # wavelet kernel_size=5 is hard coded
+                            mode="mean",
+                            constant_value=0,
+                        )
 
                 for k in range(self.NORIENT):
-                    kernelR, kernelI = hc.kernels.wavelet_kernel(
-                        cell_ids, grid_info=grid_info, orientation=k, is_torch=True
-                    )
-                    kernelR = kernelR.to(self.backend.all_bk_type).to(image.device)
-                    kernelI = kernelI.to(self.backend.all_bk_type).to(image.device)
-                    padding = hc.pad(
-                        cell_ids,
-                        grid_info=grid_info,
-                        ring=5 // 2,  # wavelet kernel_size=5 is hard coded
-                        mode="mean",
-                        constant_value=0,
-                    )
-
+                    
+                    kernelR = self.kernelR_conv[(cell_ids.shape[0],k)]
+                    kernelI = self.kernelI_conv[(cell_ids.shape[0],k)]
+                    padding = self.padding_conv[(cell_ids.shape[0],k)] 
                     if len(ishape) == 2:
                         for l in range(ishape[0]):
                             padded_data = padding.apply(image[l], is_torch=True)
@@ -2675,28 +2685,33 @@ class FoCUS:
             ishape = list(image.shape)
 
             if cell_ids is not None:
-                import healpix_convolution as hc
-                from xdggs.healpix import HealpixInfo
+                if cell_ids.shape[0] not in self.padding_smooth:
+                    import healpix_convolution as hc
+                    from xdggs.healpix import HealpixInfo
 
+                    grid_info = HealpixInfo(
+                        level=int(np.log(nside) / np.log(2)), indexing_scheme="nested"
+                    )
+
+                    kernel = hc.kernels.wavelet_smooth_kernel(
+                        cell_ids, grid_info=grid_info, is_torch=True
+                    )
+
+                    self.kernel_smooth[cell_ids.shape[0]] = kernel.to(self.backend.all_bk_type).to(image.device)
+                
+                    self.padding_smooth[cell_ids.shape[0]] = hc.pad(
+                        cell_ids,
+                        grid_info=grid_info,
+                        ring=5 // 2,  # wavelet kernel_size=5 is hard coded
+                        mode="mean",
+                        constant_value=0,
+                    )
+
+                kernel=self.kernel_smooth[cell_ids.shape[0]]
+                padding=self.padding_smooth[cell_ids.shape[0]]
+                
                 res = self.backend.bk_zeros(ishape, dtype=self.backend.all_cbk_type)
-
-                grid_info = HealpixInfo(
-                    level=int(np.log(nside) / np.log(2)), indexing_scheme="nested"
-                )
-
-                kernel = hc.kernels.wavelet_smooth_kernel(
-                    cell_ids, grid_info=grid_info, is_torch=True
-                )
-
-                kernel = kernel.to(self.backend.all_bk_type).to(image.device)
-                padding = hc.pad(
-                    cell_ids,
-                    grid_info=grid_info,
-                    ring=5 // 2,  # wavelet kernel_size=5 is hard coded
-                    mode="mean",
-                    constant_value=0,
-                )
-
+                    
                 if len(ishape) == 2:
                     for l in range(ishape[0]):
                         padded_data = padding.apply(image[l], is_torch=True)
