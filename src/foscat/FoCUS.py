@@ -55,7 +55,7 @@ class FoCUS:
         self.kernelR_conv = {}
         self.kernelI_conv = {}
         self.padding_conv = {}
-                
+
         if not self.silent:
             print("================================================")
             print("          START FOSCAT CONFIGURATION")
@@ -74,9 +74,7 @@ class FoCUS:
                 if not self.silent:
                     print("The directory %s is created")
             except:
-                print(
-                    "Impossible to create the directory %s" % (self.TEMPLATE_PATH)
-                    )
+                print("Impossible to create the directory %s" % (self.TEMPLATE_PATH))
                 return None
 
         self.number_of_loss = 0
@@ -87,7 +85,7 @@ class FoCUS:
 
         if JmaxDelta != 0:
             print(
-                    "OPTION JmaxDelta is not avialable anymore after version 3.6.2. Please use Jmax option in eval function"
+                "OPTION JmaxDelta is not avialable anymore after version 3.6.2. Please use Jmax option in eval function"
             )
             return None
 
@@ -2351,9 +2349,13 @@ class FoCUS:
                         kernelR, kernelI = hc.kernels.wavelet_kernel(
                             cell_ids, grid_info=grid_info, orientation=k, is_torch=True
                         )
-                        self.kernelR_conv[(cell_ids.shape[0],k)] = kernelR.to(self.backend.all_bk_type).to(image.device)
-                        self.kernelI_conv[(cell_ids.shape[0],k)] = kernelI.to(self.backend.all_bk_type).to(image.device)
-                        self.padding_conv[(cell_ids.shape[0],k)] = hc.pad(
+                        self.kernelR_conv[(cell_ids.shape[0], k)] = kernelR.to(
+                            self.backend.all_bk_type
+                        ).to(image.device)
+                        self.kernelI_conv[(cell_ids.shape[0], k)] = kernelI.to(
+                            self.backend.all_bk_type
+                        ).to(image.device)
+                        self.padding_conv[(cell_ids.shape[0], k)] = hc.pad(
                             cell_ids,
                             grid_info=grid_info,
                             ring=5 // 2,  # wavelet kernel_size=5 is hard coded
@@ -2362,10 +2364,10 @@ class FoCUS:
                         )
 
                 for k in range(self.NORIENT):
-                    
-                    kernelR = self.kernelR_conv[(cell_ids.shape[0],k)]
-                    kernelI = self.kernelI_conv[(cell_ids.shape[0],k)]
-                    padding = self.padding_conv[(cell_ids.shape[0],k)] 
+
+                    kernelR = self.kernelR_conv[(cell_ids.shape[0], k)]
+                    kernelI = self.kernelI_conv[(cell_ids.shape[0], k)]
+                    padding = self.padding_conv[(cell_ids.shape[0], k)]
                     if len(ishape) == 2:
                         for l in range(ishape[0]):
                             padded_data = padding.apply(image[l], is_torch=True)
@@ -2697,8 +2699,10 @@ class FoCUS:
                         cell_ids, grid_info=grid_info, is_torch=True
                     )
 
-                    self.kernel_smooth[cell_ids.shape[0]] = kernel.to(self.backend.all_bk_type).to(image.device)
-                
+                    self.kernel_smooth[cell_ids.shape[0]] = kernel.to(
+                        self.backend.all_bk_type
+                    ).to(image.device)
+
                     self.padding_smooth[cell_ids.shape[0]] = hc.pad(
                         cell_ids,
                         grid_info=grid_info,
@@ -2707,11 +2711,11 @@ class FoCUS:
                         constant_value=0,
                     )
 
-                kernel=self.kernel_smooth[cell_ids.shape[0]]
-                padding=self.padding_smooth[cell_ids.shape[0]]
-                
+                kernel = self.kernel_smooth[cell_ids.shape[0]]
+                padding = self.padding_smooth[cell_ids.shape[0]]
+
                 res = self.backend.bk_zeros(ishape, dtype=self.backend.all_cbk_type)
-                    
+
                 if len(ishape) == 2:
                     for l in range(ishape[0]):
                         padded_data = padding.apply(image[l], is_torch=True)
