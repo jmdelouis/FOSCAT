@@ -5,9 +5,30 @@ import foscat.scat_cov as sc
 try:
     import torch
 
-    torch.Tensor.__array_namespace__ = torch
+    torch.Tensor.__array_namespace__ = lambda *args, **kwargs: torch
 except ImportError:
     pass
+
+
+def backend_to_dict(backend):
+    prefixed = {f"backend_{k}": v for k, v in backend.to_dict().items()}
+
+    return {"backend": backend.BACKEND} | prefixed
+
+
+def construct_backend(backend, kwargs):
+    if backend == "torch":
+        from foscat.BkTorch import BkTorch
+
+        return BkTorch(**kwargs)
+    elif backend == "tensorflow":
+        from foscat.BkTensorflow import BkTensorflow
+
+        return BkTensorflow(**kwargs)
+    else:
+        from foscat.BkNumpy import BkNumpy
+
+        return BkNumpy(**kwargs)
 
 
 def _scat_cov_to_xarray(obj, batch_dim="batches"):
@@ -29,6 +50,7 @@ def _scat_cov_to_xarray(obj, batch_dim="batches"):
         ],
     }
     data = {name: getattr(obj, name) for name in names}
+    backend_attrs = backend_to_dict(obj.backend)
 
     return xr.Dataset(
         data_vars={
@@ -37,7 +59,7 @@ def _scat_cov_to_xarray(obj, batch_dim="batches"):
             if values is not None
         },
         coords={"types": types},
-        attrs={"foscat_backend": obj.backend.BACKEND, "use_1d": obj.use_1D},
+        attrs=backend_attrs | {"use_1d": obj.use_1D},
     )
 
 
@@ -61,11 +83,20 @@ def _xarray_to_scat_cov(ds):
         if key.startswith("var_")
     }
 
+    backend_kwargs = {
+        k.removeprefix("backend_"): v
+        for k, v in attrs.items()
+        if k.startswith("backend_")
+    }
+    backend_name = attrs.pop("backend")
+    backend = construct_backend(backend_name, backend_kwargs)
+
     kwarg_names = {
         "use_1d": "use_1D",
         "foscat_backend": "backend",
     }
     kwargs = {kwarg_names.get(key, key): value for key, value in attrs.items()}
+    kwargs["backend"] = backend
 
     stats_kwargs = {key.lower(): var.data for key, var in stats_.items()}
     stats = sc.scat_cov(**stats_kwargs, **kwargs)

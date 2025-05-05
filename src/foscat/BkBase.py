@@ -23,6 +23,15 @@ class BackendBase:
         self._fft_3_orient = {}
         self._fft_3_orient_C = {}
 
+    def to_dict(self):
+        return {
+            "name": self.BACKEND,
+            "mpi_rank": self.mpi_rank,
+            "all_type": self.all_type,
+            "gpupos": self.gpupos,
+            "silent": self.silent,
+        }
+
     def iso_mean(self, x, use_2D=False):
         shape = list(x.shape)
 
