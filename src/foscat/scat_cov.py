@@ -3037,12 +3037,13 @@ class funct(FOC.FoCUS):
                         )
                     S2[j3] = s2
                 else:
-                    ### Normalize S2_cross
-                    if norm == "auto":
-                        s2 /= (P1_dic[j3] * P2_dic[j3]) ** 0.5
 
                     ### Store S2_cross as complex [Nbatch, Nmask, NS2, Norient3]
                     s2 = self.backend.bk_real(s2)
+                    
+                    ### Normalize S2_cross
+                    if norm == "auto":
+                        s2 /= (P1_dic[j3] * P2_dic[j3]) ** 0.5
 
                     S2.append(
                         self.backend.bk_expand_dims(s2, off_S2)
@@ -6045,13 +6046,12 @@ class funct(FOC.FoCUS):
         image2=None,
         mask=None,
         norm=None,
-        Auto=True,
         cmat=None,
         cmat2=None,
     ):
 
         res = self.eval(
-            image1, image2=image2, mask=mask, Auto=Auto, cmat=cmat, cmat2=cmat2
+            image1, image2=image2, mask=mask, cmat=cmat, cmat2=cmat2
         )
         return res.S0, res.S2, res.S1, res.S3, res.S4, res.S3P
 
@@ -6061,12 +6061,11 @@ class funct(FOC.FoCUS):
         image2=None,
         mask=None,
         norm=None,
-        Auto=True,
         cmat=None,
         cmat2=None,
     ):
         s0, s2, s1, s3, s4, s3p = self.eval_comp_fast(
-            image1, image2=image2, mask=mask, Auto=Auto, cmat=cmat, cmat2=cmat2
+            image1, image2=image2, mask=mask,  cmat=cmat, cmat2=cmat2
         )
         return scat_cov(
             s0, s2, s3, s4, s1=s1, s3p=s3p, backend=self.backend, use_1D=self.use_1D
@@ -6102,6 +6101,15 @@ class funct(FOC.FoCUS):
         if edge:
             self.purge_edge_mask()
 
+        def The_loss_ref_image(u, scat_operator, args):
+            input_image = args[0]
+            mask = args[1]
+                
+            loss = 1E-3*scat_operator.backend.bk_reduce_mean(
+                scat_operator.backend.bk_square(mask*(input_image - u))
+            )
+            return loss
+            
         def The_loss(u, scat_operator, args):
             ref = args[0]
             sref = args[1]
@@ -6338,8 +6346,16 @@ class funct(FOC.FoCUS):
                 loss = synthe.Loss(
                     The_lossX, self, ref, sref, use_variance, l_ref[k], l_jmax[k]
                 )
-
-            sy = synthe.Synthesis([loss])
+                
+            if input_image is not None:
+                # define a loss to minimize
+                loss_input = synthe.Loss(The_loss_ref_image, self, 
+                    self.backend.bk_cast(l_input_image[k]), 
+                    self.backend.bk_cast(l_in_mask[k]))
+                
+                sy = synthe.Synthesis([loss]) #,loss_input])
+            else:
+                sy = synthe.Synthesis([loss])
 
             # initialize the synthesised map
             if self.use_2D:
