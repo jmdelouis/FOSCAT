@@ -2841,11 +2841,9 @@ class funct(FOC.FoCUS):
             ####### S1 and S2
             ### Make the convolution I1 * Psi_j3
             conv1 = self.convol(
-                I1, axis=1,
-                cell_ids=cell_ids_j3,
-                nside=nside_j3
+                I1, axis=1, cell_ids=cell_ids_j3, nside=nside_j3
             )  # [Nbatch, Norient3 , Npix_j3]
-            
+
             if cmat is not None:
                 tmp2 = self.backend.bk_repeat(conv1, self.NORIENT, axis=-1)
                 conv1 = self.backend.bk_reduce_sum(
@@ -2860,7 +2858,7 @@ class funct(FOC.FoCUS):
             M1_square = conv1 * self.backend.bk_conjugate(
                 conv1
             )  # [Nbatch, Norient3, Npix_j3]
-            
+
             M1 = self.backend.bk_L1(M1_square)  # [Nbatch, Npix_j3, Norient3]
             # Store M1_j3 in a dictionary
             M1_dic[j3] = M1
@@ -2875,15 +2873,10 @@ class funct(FOC.FoCUS):
                 else:
                     if calc_var:
                         s2, vs2 = self.masked_mean(
-                            M1_square,
-                            vmask,
-                            axis=2,
-                            rank=j3,
-                            calc_var=True
+                            M1_square, vmask, axis=2, rank=j3, calc_var=True
                         )
                     else:
-                        s2 = self.masked_mean(M1_square, vmask,
-                                              axis=2, rank=j3)
+                        s2 = self.masked_mean(M1_square, vmask, axis=2, rank=j3)
 
                 if cond_init_P1_dic:
                     # We fill P1_dic with S2 for normalisation of S3 and S4
@@ -3637,7 +3630,7 @@ class funct(FOC.FoCUS):
         MconvPsi = self.convol(
             M_dic[j2], axis=2, cell_ids=cell_ids, nside=nside_j2
         )  # [Nbatch,  Norient2, Norient3, Npix_j3]
-        
+
         if cmat2 is not None:
             tmp2 = self.backend.bk_repeat(MconvPsi, self.NORIENT, axis=-1)
             MconvPsi = self.backend.bk_reduce_sum(
