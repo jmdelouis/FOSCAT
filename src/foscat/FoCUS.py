@@ -2007,7 +2007,7 @@ class FoCUS:
             if axis > 0:
                 oshape = [x.shape[0]]
             else:
-                oshape=[1]
+                oshape = [1]
             oshape = oshape + [mask.shape[0]]
             if axis > 1:
                 oshape = oshape + list(x.shape[1:-1])
