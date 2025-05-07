@@ -1898,7 +1898,7 @@ class FoCUS:
             l_x = self.backend.bk_reshape(x, [ichannel, 1, shape[-1]])
 
         # data=[Nbatch,...,NORIENT[,NORIENT],X[,Y]] => data=[Nbatch,1,...,NORIENT[,NORIENT],X[,Y]]
-        # mask=[Nmask,X[,Y]] => mask=[1,Nmask,X[,Y]]
+        # mask=[Nmask,X[,Y]] => mask=[1,Nmask,....,X[,Y]]
         l_mask = self.backend.bk_expand_dims(l_mask, 0)
 
         if l_x.dtype == self.all_cbk_type:
@@ -2005,8 +2005,12 @@ class FoCUS:
 
             oshape = []
             if axis > 0:
-                oshape = oshape + list(x.shape[0:axis])
+                oshape = [x.shape[0]]
+            else:
+                oshape=[1]
             oshape = oshape + [mask.shape[0]]
+            if axis > 1:
+                oshape = oshape + list(x.shape[1:-1])
 
             if calc_var:
                 if self.backend.bk_is_complex(l_x):
