@@ -2841,8 +2841,11 @@ class funct(FOC.FoCUS):
             ####### S1 and S2
             ### Make the convolution I1 * Psi_j3
             conv1 = self.convol(
-                I1, axis=1, cell_ids=cell_ids_j3, nside=nside_j3
-            )  # [Nbatch, Npix_j3, Norient3]
+                I1, axis=1,
+                cell_ids=cell_ids_j3,
+                nside=nside_j3
+            )  # [Nbatch, Norient3 , Npix_j3]
+            
             if cmat is not None:
                 tmp2 = self.backend.bk_repeat(conv1, self.NORIENT, axis=-1)
                 conv1 = self.backend.bk_reduce_sum(
@@ -2856,7 +2859,8 @@ class funct(FOC.FoCUS):
             ### Take the module M1 = |I1 * Psi_j3|
             M1_square = conv1 * self.backend.bk_conjugate(
                 conv1
-            )  # [Nbatch, Npix_j3, Norient3]
+            )  # [Nbatch, Norient3, Npix_j3]
+            
             M1 = self.backend.bk_L1(M1_square)  # [Nbatch, Npix_j3, Norient3]
             # Store M1_j3 in a dictionary
             M1_dic[j3] = M1
@@ -2871,10 +2875,15 @@ class funct(FOC.FoCUS):
                 else:
                     if calc_var:
                         s2, vs2 = self.masked_mean(
-                            M1_square, vmask, axis=1, rank=j3, calc_var=True
+                            M1_square,
+                            vmask,
+                            axis=2,
+                            rank=j3,
+                            calc_var=True
                         )
                     else:
-                        s2 = self.masked_mean(M1_square, vmask, axis=1, rank=j3)
+                        s2 = self.masked_mean(M1_square, vmask,
+                                              axis=2, rank=j3)
 
                 if cond_init_P1_dic:
                     # We fill P1_dic with S2 for normalisation of S3 and S4
@@ -2890,9 +2899,9 @@ class funct(FOC.FoCUS):
                                 s2,
                                 [
                                     s2.shape[0],
+                                    s2.shape[2],
                                     12 * out_nside**2,
                                     (nside_j3 // out_nside) ** 2,
-                                    s2.shape[2],
                                 ],
                             ),
                             2,
@@ -2918,11 +2927,11 @@ class funct(FOC.FoCUS):
                 else:
                     if calc_var:
                         s1, vs1 = self.masked_mean(
-                            M1, vmask, axis=1, rank=j3, calc_var=True
+                            M1, vmask, axis=2, rank=j3, calc_var=True
                         )  # [Nbatch, Nmask, Norient3]
                     else:
                         s1 = self.masked_mean(
-                            M1, vmask, axis=1, rank=j3
+                            M1, vmask, axis=2, rank=j3
                         )  # [Nbatch, Nmask, Norient3]
 
                 if return_data:
@@ -2932,9 +2941,9 @@ class funct(FOC.FoCUS):
                                 s1,
                                 [
                                     s1.shape[0],
+                                    s1.shape[2],
                                     12 * out_nside**2,
                                     (nside_j3 // out_nside) ** 2,
-                                    s1.shape[2],
                                 ],
                             ),
                             2,
@@ -2956,7 +2965,7 @@ class funct(FOC.FoCUS):
             else:  # Cross
                 ### Make the convolution I2 * Psi_j3
                 conv2 = self.convol(
-                    I2, axis=1, cell_ids=cell_ids_j3, nside=nside_j3
+                    I2, axis=2, cell_ids=cell_ids_j3, nside=nside_j3
                 )  # [Nbatch, Npix_j3, Norient3]
                 if cmat is not None:
                     tmp2 = self.backend.bk_repeat(conv2, self.NORIENT, axis=-1)
@@ -2990,14 +2999,14 @@ class funct(FOC.FoCUS):
                     else:
                         if calc_var:
                             p1, vp1 = self.masked_mean(
-                                M1_square, vmask, axis=1, rank=j3, calc_var=True
+                                M1_square, vmask, axis=2, rank=j3, calc_var=True
                             )  # [Nbatch, Nmask, Norient3]
                             p2, vp2 = self.masked_mean(
-                                M2_square, vmask, axis=1, rank=j3, calc_var=True
+                                M2_square, vmask, axis=2, rank=j3, calc_var=True
                             )  # [Nbatch, Nmask, Norient3]
                         else:
                             p1 = self.masked_mean(
-                                M1_square, vmask, axis=1, rank=j3
+                                M1_square, vmask, axis=2, rank=j3
                             )  # [Nbatch, Nmask, Norient3]
                             p2 = self.masked_mean(
                                 M2_square, vmask, axis=1, rank=j3
@@ -3016,10 +3025,10 @@ class funct(FOC.FoCUS):
                 else:
                     if calc_var:
                         s2, vs2 = self.masked_mean(
-                            s2, vmask, axis=1, rank=j3, calc_var=True
+                            s2, vmask, axis=2, rank=j3, calc_var=True
                         )
                     else:
-                        s2 = self.masked_mean(s2, vmask, axis=1, rank=j3)
+                        s2 = self.masked_mean(s2, vmask, axis=2, rank=j3)
 
                 if return_data:
                     if out_nside is not None and out_nside < nside_j3:
@@ -3028,9 +3037,9 @@ class funct(FOC.FoCUS):
                                 s2,
                                 [
                                     s2.shape[0],
+                                    s2.shape[2],
                                     12 * out_nside**2,
                                     (nside_j3 // out_nside) ** 2,
-                                    s2.shape[2],
                                 ],
                             ),
                             2,
@@ -3061,11 +3070,11 @@ class funct(FOC.FoCUS):
                 else:
                     if calc_var:
                         s1, vs1 = self.masked_mean(
-                            MX, vmask, axis=1, rank=j3, calc_var=True
+                            MX, vmask, axis=2, rank=j3, calc_var=True
                         )  # [Nbatch, Nmask, Norient3]
                     else:
                         s1 = self.masked_mean(
-                            MX, vmask, axis=1, rank=j3
+                            MX, vmask, axis=2, rank=j3
                         )  # [Nbatch, Nmask, Norient3]
                 if return_data:
                     if out_nside is not None and out_nside < nside_j3:
@@ -3074,9 +3083,9 @@ class funct(FOC.FoCUS):
                                 s1,
                                 [
                                     s1.shape[0],
+                                    s1.shape[2],
                                     12 * out_nside**2,
                                     (nside_j3 // out_nside) ** 2,
-                                    s1.shape[2],
                                 ],
                             ),
                             2,
@@ -3487,19 +3496,19 @@ class funct(FOC.FoCUS):
                 for j2 in range(0, j3 + 1):  # j2 =< j3
                     ### Dictionary M1_dic[j2]
                     M1_smooth = self.smooth(
-                        M1_dic[j2], axis=1, cell_ids=cell_ids_j3, nside=nside_j3
+                        M1_dic[j2], axis=2, cell_ids=cell_ids_j3, nside=nside_j3
                     )  # [Nbatch, Npix_j3, Norient3]
                     M1_dic[j2], new_cell_ids_j2 = self.ud_grade_2(
-                        M1_smooth, axis=1, cell_ids=cell_ids_j3, nside=nside_j3
+                        M1_smooth, axis=2, cell_ids=cell_ids_j3, nside=nside_j3
                     )  # [Nbatch, Npix_j3, Norient3]
 
                     ### Dictionary M2_dic[j2]
                     if cross:
                         M2_smooth = self.smooth(
-                            M2_dic[j2], axis=1, cell_ids=cell_ids_j3, nside=nside_j3
+                            M2_dic[j2], axis=2, cell_ids=cell_ids_j3, nside=nside_j3
                         )  # [Nbatch, Npix_j3, Norient3]
                         M2_dic[j2], new_cell_ids_j2 = self.ud_grade_2(
-                            M2_smooth, axis=1, cell_ids=cell_ids_j3, nside=nside_j3
+                            M2_smooth, axis=2, cell_ids=cell_ids_j3, nside=nside_j3
                         )  # [Nbatch, Npix_j3, Norient3]
                 ### Mask
                 vmask, new_cell_ids_j3 = self.ud_grade_2(
@@ -3626,8 +3635,9 @@ class funct(FOC.FoCUS):
         ### Compute |I1 * Psi_j2| * Psi_j3 = M1_j2 * Psi_j3
         # Warning: M1_dic[j2] is already at j3 resolution [Nbatch, Npix_j3, Norient3]
         MconvPsi = self.convol(
-            M_dic[j2], axis=1, cell_ids=cell_ids, nside=nside_j2
-        )  # [Nbatch, Npix_j3, Norient3, Norient2]
+            M_dic[j2], axis=2, cell_ids=cell_ids, nside=nside_j2
+        )  # [Nbatch,  Norient2, Norient3, Npix_j3]
+        
         if cmat2 is not None:
             tmp2 = self.backend.bk_repeat(MconvPsi, self.NORIENT, axis=-1)
             MconvPsi = self.backend.bk_reduce_sum(
@@ -3635,10 +3645,10 @@ class funct(FOC.FoCUS):
                     cmat2[j3][j2] * tmp2,
                     [
                         tmp2.shape[0],
+                        self.NORIENT,
+                        self.NORIENT,
+                        self.NORIENT,
                         cmat2[j3].shape[1],
-                        self.NORIENT,
-                        self.NORIENT,
-                        self.NORIENT,
                     ],
                 ),
                 3,
@@ -3653,22 +3663,21 @@ class funct(FOC.FoCUS):
         if self.use_1D:
             s3 = conv * self.backend.bk_conjugate(MconvPsi)
         else:
-            s3 = self.backend.bk_expand_dims(conv, -1) * self.backend.bk_conjugate(
+            s3 = self.backend.bk_expand_dims(conv, -2) * self.backend.bk_conjugate(
                 MconvPsi
             )  # [Nbatch, Npix_j3, Norient3, Norient2]
-
         ### Apply the mask [Nmask, Npix_j3] and sum over pixels
         if return_data:
             return s3
         else:
             if calc_var:
                 s3, vs3 = self.masked_mean(
-                    s3, vmask, axis=1, rank=j2, calc_var=True
+                    s3, vmask, axis=3, rank=j2, calc_var=True
                 )  # [Nbatch, Nmask, Norient3, Norient2]
                 return s3, vs3
             else:
                 s3 = self.masked_mean(
-                    s3, vmask, axis=1, rank=j2
+                    s3, vmask, axis=3, rank=j2
                 )  # [Nbatch, Nmask, Norient3, Norient2]
             return s3
 
@@ -3696,9 +3705,9 @@ class funct(FOC.FoCUS):
         if self.use_1D:
             s4 = M1 * self.backend.bk_conjugate(M2)
         else:
-            s4 = self.backend.bk_expand_dims(M1, -2) * self.backend.bk_conjugate(
-                self.backend.bk_expand_dims(M2, -1)
-            )  # [Nbatch, Npix_j3, Norient3, Norient2, Norient1]
+            s4 = self.backend.bk_expand_dims(M1, -3) * self.backend.bk_conjugate(
+                self.backend.bk_expand_dims(M2, -2)
+            )  # [Nbatch,  Norient3, Norient2, Norient1,Npix_j3]
 
         ### Apply the mask and sum over pixels
         if return_data:
@@ -3706,12 +3715,12 @@ class funct(FOC.FoCUS):
         else:
             if calc_var:
                 s4, vs4 = self.masked_mean(
-                    s4, vmask, axis=1, rank=j2, calc_var=True
+                    s4, vmask, axis=4, rank=j2, calc_var=True
                 )  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
                 return s4, vs4
             else:
                 s4 = self.masked_mean(
-                    s4, vmask, axis=1, rank=j2
+                    s4, vmask, axis=4, rank=j2
                 )  # [Nbatch, Nmask, Norient3, Norient2, Norient1]
                 return s4
 

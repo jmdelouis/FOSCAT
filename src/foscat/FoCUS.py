@@ -5,7 +5,7 @@ import healpy as hp
 import numpy as np
 from scipy.interpolate import griddata
 
-TMPFILE_VERSION = "V4_0"
+TMPFILE_VERSION = "V5_0"
 
 
 class FoCUS:
@@ -1497,8 +1497,8 @@ class FoCUS:
                         idx = np.where(vnorm > threshold)[0]
 
                         nval = len(idx)
-                        indice[iv : iv + nval, 0] = iii * 4 + l_rotation
-                        indice[iv : iv + nval, 1] = hidx[idx]
+                        indice[iv : iv + nval, 1] = iii + l_rotation*12*nside**2
+                        indice[iv : iv + nval, 0] = hidx[idx]
                         # print([hidx[k] for k in idx])
                         # print(hp.query_disc(nside, [x[iii],y[iii],z[iii]], np.pi/nside,nest=True))
                         normr = np.mean(wresr[idx])
@@ -1735,12 +1735,12 @@ class FoCUS:
             wr = self.backend.bk_SparseTensor(
                 self.backend.bk_constant(tmp),
                 self.backend.bk_constant(self.backend.bk_cast(wr)),
-                dense_shape=[12 * nside**2 * self.NORIENT, 12 * nside**2],
+                dense_shape=[12 * nside**2, self.NORIENT * 12 * nside**2],
             )
             wi = self.backend.bk_SparseTensor(
                 self.backend.bk_constant(tmp),
                 self.backend.bk_constant(self.backend.bk_cast(wi)),
-                dense_shape=[12 * nside**2 * self.NORIENT, 12 * nside**2],
+                dense_shape=[12 * nside**2, self.NORIENT *12 * nside**2],
             )
             ws = self.backend.bk_SparseTensor(
                 self.backend.bk_constant(tmp2),
@@ -1783,7 +1783,7 @@ class FoCUS:
     def masked_mean(self, x, mask, axis=0, rank=0, calc_var=False):
 
         # ==========================================================================
-        # in input data=[Nbatch,...,X[,Y],NORIENT[,NORIENT]]
+        # in input data=[Nbatch,...,NORIENT[,NORIENT],X[,Y]]
         # in input mask=[Nmask,X[,Y]]
         # if self.use_2D :  X[,Y]] = [X,Y]
         # if second level:  NORIENT[,NORIENT]= NORIENT,NORIENT
@@ -1802,6 +1802,7 @@ class FoCUS:
                 ),
                 1,
             )
+            
             if not self.use_2D:
                 l_mask = (
                     12
@@ -1891,18 +1892,14 @@ class FoCUS:
                 )
         else:
             ichannel = 1
-            for i in range(axis):
+            for i in range(len(shape)-1):
                 ichannel *= shape[i]
-            ochannel = 1
-            for i in range(axis + 1, len(shape)):
-                ochannel *= shape[i]
-            l_x = self.backend.bk_reshape(x, [ichannel, 1, shape[axis], ochannel])
+                
+            l_x = self.backend.bk_reshape(x, [ichannel, 1, shape[-1]])
 
-        # data=[Nbatch,...,X[,Y],NORIENT[,NORIENT]] => data=[Nbatch,1,...,X[,Y],NORIENT[,NORIENT]]
+        # data=[Nbatch,...,NORIENT[,NORIENT],X[,Y]] => data=[Nbatch,1,...,NORIENT[,NORIENT],X[,Y]]
         # mask=[Nmask,X[,Y]] => mask=[1,Nmask,X[,Y]]
         l_mask = self.backend.bk_expand_dims(l_mask, 0)
-        # mask=[1,Nmask,X[,Y]] => mask=[1,Nmask,X[,Y],1]
-        l_mask = self.backend.bk_expand_dims(l_mask, -1)
 
         if l_x.dtype == self.all_cbk_type:
             l_mask = self.backend.bk_complex(l_mask, self.backend.bk_cast(0.0 * l_mask))
@@ -2000,9 +1997,9 @@ class FoCUS:
                 return res
 
         else:
-            v1 = self.backend.bk_reduce_sum(l_mask * l_x, axis=2)
-            v2 = self.backend.bk_reduce_sum(l_mask * l_x * l_x, axis=2)
-            vh = self.backend.bk_reduce_sum(l_mask, axis=2)
+            v1 = self.backend.bk_reduce_sum(l_mask * l_x, axis=-1)
+            v2 = self.backend.bk_reduce_sum(l_mask * l_x * l_x, axis=-1)
+            vh = self.backend.bk_reduce_sum(l_mask, axis=-1)
 
             res = v1 / vh
 
@@ -2010,8 +2007,6 @@ class FoCUS:
             if axis > 0:
                 oshape = oshape + list(x.shape[0:axis])
             oshape = oshape + [mask.shape[0]]
-            if axis + 1 < len(x.shape):
-                oshape = oshape + list(x.shape[axis + 1 :])
 
             if calc_var:
                 if self.backend.bk_is_complex(l_x):
@@ -2385,7 +2380,7 @@ class FoCUS:
                                 ) + 1j * kernelI.matmul(padded_data)
                 return res
 
-            nside = int(np.sqrt(image.shape[axis] // 12))
+            nside = int(np.sqrt(image.shape[-1] // 12))
 
             if self.Idx_Neighbours[nside] is None:
                 if self.InitWave is None:
@@ -2401,156 +2396,61 @@ class FoCUS:
             l_ww_real = self.ww_Real[nside]
             l_ww_imag = self.ww_Imag[nside]
 
-            odata = 1
-            for k in range(axis + 1, len(ishape)):
-                odata = odata * ishape[k]
-
-            if axis > 0:
-                ndata = 1
-                for k in range(axis):
+            #always convolve the last dimension
+            
+            ndata = 1
+            if len(ishape)>1:
+                for k in range(len(ishape)-1):
                     ndata = ndata * ishape[k]
-                tim = self.backend.bk_reshape(
-                    self.backend.bk_cast(image), [ndata, 12 * nside**2, odata]
+            tim = self.backend.bk_reshape(
+                self.backend.bk_cast(image), [ndata,12*nside*nside]
+            )
+                
+            if tim.dtype == self.all_cbk_type:
+                rr1 = self.backend.bk_reshape(
+                    self.backend.bk_sparse_dense_matmul(
+                        self.backend.bk_real(tim),l_ww_real, 
+                    ),
+                    [ndata, self.NORIENT, 12 * nside**2],
                 )
-                if tim.dtype == self.all_cbk_type:
-                    rr1 = self.backend.bk_reshape(
-                        self.backend.bk_sparse_dense_matmul(
-                            l_ww_real, self.backend.bk_real(tim[0])
-                        ),
-                        [1, 12 * nside**2, self.NORIENT, odata],
-                    )
-                    ii1 = self.backend.bk_reshape(
-                        self.backend.bk_sparse_dense_matmul(
-                            l_ww_imag, self.backend.bk_real(tim[0])
-                        ),
-                        [1, 12 * nside**2, self.NORIENT, odata],
-                    )
-                    rr2 = self.backend.bk_reshape(
-                        self.backend.bk_sparse_dense_matmul(
-                            l_ww_real, self.backend.bk_imag(tim[0])
-                        ),
-                        [1, 12 * nside**2, self.NORIENT, odata],
-                    )
-                    ii2 = self.backend.bk_reshape(
-                        self.backend.bk_sparse_dense_matmul(
-                            l_ww_imag, self.backend.bk_imag(tim[0])
-                        ),
-                        [1, 12 * nside**2, self.NORIENT, odata],
-                    )
-                    res = self.backend.bk_complex(rr1 - ii2, ii1 + rr2)
-                else:
-                    rr = self.backend.bk_reshape(
-                        self.backend.bk_sparse_dense_matmul(l_ww_real, tim[0]),
-                        [1, 12 * nside**2, self.NORIENT, odata],
-                    )
-                    ii = self.backend.bk_reshape(
-                        self.backend.bk_sparse_dense_matmul(l_ww_imag, tim[0]),
-                        [1, 12 * nside**2, self.NORIENT, odata],
-                    )
-                    res = self.backend.bk_complex(rr, ii)
-
-                for k in range(1, ndata):
-                    if tim.dtype == self.all_cbk_type:
-                        rr1 = self.backend.bk_reshape(
-                            self.backend.bk_sparse_dense_matmul(
-                                l_ww_real, self.backend.bk_real(tim[k])
-                            ),
-                            [1, 12 * nside**2, self.NORIENT, odata],
-                        )
-                        ii1 = self.backend.bk_reshape(
-                            self.backend.bk_sparse_dense_matmul(
-                                l_ww_imag, self.backend.bk_real(tim[k])
-                            ),
-                            [1, 12 * nside**2, self.NORIENT, odata],
-                        )
-                        rr2 = self.backend.bk_reshape(
-                            self.backend.bk_sparse_dense_matmul(
-                                l_ww_real, self.backend.bk_imag(tim[k])
-                            ),
-                            [1, 12 * nside**2, self.NORIENT, odata],
-                        )
-                        ii2 = self.backend.bk_reshape(
-                            self.backend.bk_sparse_dense_matmul(
-                                l_ww_imag, self.backend.bk_imag(tim[k])
-                            ),
-                            [1, 12 * nside**2, self.NORIENT, odata],
-                        )
-                        res = self.backend.bk_concat(
-                            [res, self.backend.bk_complex(rr1 - ii2, ii1 + rr2)], 0
-                        )
-                    else:
-                        rr = self.backend.bk_reshape(
-                            self.backend.bk_sparse_dense_matmul(l_ww_real, tim[k]),
-                            [1, 12 * nside**2, self.NORIENT, odata],
-                        )
-                        ii = self.backend.bk_reshape(
-                            self.backend.bk_sparse_dense_matmul(l_ww_imag, tim[k]),
-                            [1, 12 * nside**2, self.NORIENT, odata],
-                        )
-                        res = self.backend.bk_concat(
-                            [res, self.backend.bk_complex(rr, ii)], 0
-                        )
-
-                if len(ishape) == axis + 1:
-                    return self.backend.bk_reshape(
-                        res, ishape[0:axis] + [12 * nside**2, self.NORIENT]
-                    )
-                else:
-                    return self.backend.bk_reshape(
-                        res,
-                        ishape[0:axis]
-                        + [12 * nside**2]
-                        + ishape[axis + 1 :]
-                        + [self.NORIENT],
-                    )
-
-            if axis == 0:
-                tim = self.backend.bk_reshape(
-                    self.backend.bk_cast(image), [12 * nside**2, odata]
+                ii1 = self.backend.bk_reshape(
+                    self.backend.bk_sparse_dense_matmul(
+                        self.backend.bk_real(tim),l_ww_imag, 
+                    ),
+                    [ndata, self.NORIENT, 12 * nside**2],
                 )
-                if tim.dtype == self.all_cbk_type:
-                    rr1 = self.backend.bk_reshape(
-                        self.backend.bk_sparse_dense_matmul(
-                            l_ww_real, self.backend.bk_real(tim)
+                rr2 = self.backend.bk_reshape(
+                    self.backend.bk_sparse_dense_matmul(
+                        self.backend.bk_imag(tim),l_ww_real, 
+                    ),
+                    [ndata, self.NORIENT, 12 * nside**2],
+                )
+                ii2 = self.backend.bk_reshape(
+                    self.backend.bk_sparse_dense_matmul(
+                         self.backend.bk_imag(tim),l_ww_imag,
                         ),
-                        [12 * nside**2, self.NORIENT, odata],
+                    [ndata, self.NORIENT, 12 * nside**2],
+                )
+                res = self.backend.bk_complex(rr1 - ii2, ii1 + rr2)
+            else:
+                rr = self.backend.bk_reshape(
+                    self.backend.bk_sparse_dense_matmul(tim,l_ww_real),
+                    [ndata, self.NORIENT, 12 * nside**2],
+                )
+                ii = self.backend.bk_reshape(
+                    self.backend.bk_sparse_dense_matmul(tim,l_ww_imag),
+                    [ndata, self.NORIENT, 12 * nside**2],
+                )
+                res = self.backend.bk_complex(rr, ii)
+            if len(ishape) >1:
+                return self.backend.bk_reshape(
+                    res, ishape[0:-1] + [self.NORIENT,12 * nside**2]
+                )
+            else:
+                return self.backend.bk_reshape(
+                    res,[self.NORIENT,12 * nside**2]
                     )
-                    ii1 = self.backend.bk_reshape(
-                        self.backend.bk_sparse_dense_matmul(
-                            l_ww_imag, self.backend.bk_real(tim)
-                        ),
-                        [12 * nside**2, self.NORIENT, odata],
-                    )
-                    rr2 = self.backend.bk_reshape(
-                        self.backend.bk_sparse_dense_matmul(
-                            l_ww_real, self.backend.bk_imag(tim)
-                        ),
-                        [12 * nside**2, self.NORIENT, odata],
-                    )
-                    ii2 = self.backend.bk_reshape(
-                        self.backend.bk_sparse_dense_matmul(
-                            l_ww_imag, self.backend.bk_imag(tim)
-                        ),
-                        [12 * nside**2, self.NORIENT, odata],
-                    )
-                    res = self.backend.bk_complex(rr1 - ii2, ii1 + rr2)
-                else:
-                    rr = self.backend.bk_reshape(
-                        self.backend.bk_sparse_dense_matmul(l_ww_real, tim),
-                        [12 * nside**2, self.NORIENT, odata],
-                    )
-                    ii = self.backend.bk_reshape(
-                        self.backend.bk_sparse_dense_matmul(l_ww_imag, tim),
-                        [12 * nside**2, self.NORIENT, odata],
-                    )
-                    res = self.backend.bk_complex(rr, ii)
 
-                if len(ishape) == 1:
-                    return self.backend.bk_reshape(res, [12 * nside**2, self.NORIENT])
-                else:
-                    return self.backend.bk_reshape(
-                        res, [12 * nside**2] + ishape[axis + 1 :] + [self.NORIENT]
-                    )
         return res
 
     # ---------------------------------------------−---------
@@ -2727,7 +2627,7 @@ class FoCUS:
                             res[l, :, k2] = kernel.matmul(padded_data)
                 return res
 
-            nside = int(np.sqrt(image.shape[axis] // 12))
+            nside = int(np.sqrt(image.shape[-1] // 12))
 
             if self.Idx_Neighbours[nside] is None:
 
@@ -2744,92 +2644,26 @@ class FoCUS:
             l_w_smooth = self.w_smooth[nside]
 
             odata = 1
-            for k in range(axis + 1, len(ishape)):
+            for k in range(0, len(ishape)-1):
                 odata = odata * ishape[k]
 
-            if axis == 0:
-                tim = self.backend.bk_reshape(image, [12 * nside**2, odata])
-                if tim.dtype == self.all_cbk_type:
-                    rr = self.backend.bk_sparse_dense_matmul(
-                        l_w_smooth, self.backend.bk_real(tim)
-                    )
-                    ri = self.backend.bk_sparse_dense_matmul(
-                        l_w_smooth, self.backend.bk_imag(tim)
-                    )
-                    res = self.backend.bk_complex(rr, ri)
-                else:
-                    res = self.backend.bk_sparse_dense_matmul(l_w_smooth, tim)
-                if len(ishape) == 1:
-                    return self.backend.bk_reshape(res, [12 * nside**2])
-                else:
-                    return self.backend.bk_reshape(
-                        res, [12 * nside**2] + ishape[axis + 1 :]
-                    )
-
-            if axis > 0:
-                ndata = ishape[0]
-                for k in range(1, axis):
-                    ndata = ndata * ishape[k]
-                tim = self.backend.bk_reshape(image, [ndata, 12 * nside**2, odata])
-                if tim.dtype == self.all_cbk_type:
-                    rr = self.backend.bk_reshape(
-                        self.backend.bk_sparse_dense_matmul(
-                            l_w_smooth, self.backend.bk_real(tim[0])
-                        ),
-                        [1, 12 * nside**2, odata],
-                    )
-                    ri = self.backend.bk_reshape(
-                        self.backend.bk_sparse_dense_matmul(
-                            l_w_smooth, self.backend.bk_imag(tim[0])
-                        ),
-                        [1, 12 * nside**2, odata],
-                    )
-                    res = self.backend.bk_complex(rr, ri)
-                else:
-                    res = self.backend.bk_reshape(
-                        self.backend.bk_sparse_dense_matmul(l_w_smooth, tim[0]),
-                        [1, 12 * nside**2, odata],
-                    )
-
-                for k in range(1, ndata):
-                    if tim.dtype == self.all_cbk_type:
-                        rr = self.backend.bk_reshape(
-                            self.backend.bk_sparse_dense_matmul(
-                                l_w_smooth, self.backend.bk_real(tim[k])
-                            ),
-                            [1, 12 * nside**2, odata],
-                        )
-                        ri = self.backend.bk_reshape(
-                            self.backend.bk_sparse_dense_matmul(
-                                l_w_smooth, self.backend.bk_imag(tim[k])
-                            ),
-                            [1, 12 * nside**2, odata],
-                        )
-                        res = self.backend.bk_concat(
-                            [res, self.backend.bk_complex(rr, ri)], 0
-                        )
-                    else:
-                        res = self.backend.bk_concat(
-                            [
-                                res,
-                                self.backend.bk_reshape(
-                                    self.backend.bk_sparse_dense_matmul(
-                                        l_w_smooth, tim[k]
-                                    ),
-                                    [1, 12 * nside**2, odata],
-                                ),
-                            ],
-                            0,
-                        )
-
-                if len(ishape) == axis + 1:
-                    return self.backend.bk_reshape(
-                        res, ishape[0:axis] + [12 * nside**2]
-                    )
-                else:
-                    return self.backend.bk_reshape(
-                        res, ishape[0:axis] + [12 * nside**2] + ishape[axis + 1 :]
-                    )
+            tim = self.backend.bk_reshape(image, [odata, 12 * nside**2])
+            if tim.dtype == self.all_cbk_type:
+                rr = self.backend.bk_sparse_dense_matmul(
+                    self.backend.bk_real(tim),l_w_smooth
+                )
+                ri = self.backend.bk_sparse_dense_matmul(
+                    self.backend.bk_imag(tim),l_w_smooth
+                )
+                res = self.backend.bk_complex(rr, ri)
+            else:
+                res = self.backend.bk_sparse_dense_matmul( tim, l_w_smooth)
+            if len(ishape) == 1:
+                return self.backend.bk_reshape(res, [12 * nside**2])
+            else:
+                return self.backend.bk_reshape(
+                    res, ishape[0:-1]+[12 * nside**2]
+                )
 
         return res
 
