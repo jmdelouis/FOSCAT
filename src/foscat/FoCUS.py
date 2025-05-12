@@ -1474,8 +1474,8 @@ class FoCUS:
                     )
                     idx = np.where((ww**2) > threshold)[0]
                     nval2 = len(idx)
-                    indice2[iv2 : iv2 + nval2, 0] = iii
-                    indice2[iv2 : iv2 + nval2, 1] = hidx[idx]
+                    indice2[iv2 : iv2 + nval2, 1] = iii
+                    indice2[iv2 : iv2 + nval2, 0] = hidx[idx]
                     wwav[iv2 : iv2 + nval2] = ww[idx] / np.sum(ww[idx])
                     iv2 += nval2
 
