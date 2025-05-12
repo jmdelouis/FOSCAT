@@ -2877,7 +2877,7 @@ class funct(FOC.FoCUS):
                         )
                     else:
                         s2 = self.masked_mean(M1_square, vmask, axis=2, rank=j3)
-                
+
                 if cond_init_P1_dic:
                     # We fill P1_dic with S2 for normalisation of S3 and S4
                     P1_dic[j3] = self.backend.bk_real(s2)  # [Nbatch, Nmask, Norient3]
