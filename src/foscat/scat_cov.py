@@ -3698,8 +3698,8 @@ class funct(FOC.FoCUS):
         if self.use_1D:
             s4 = M1 * self.backend.bk_conjugate(M2)
         else:
-            s4 = self.backend.bk_expand_dims(M1, -3) * self.backend.bk_conjugate(
-                self.backend.bk_expand_dims(M2, -2)
+            s4 = self.backend.bk_expand_dims(M2, -2) * self.backend.bk_conjugate(
+                self.backend.bk_expand_dims(M1, -3)
             )  # [Nbatch,  Norient3, Norient2, Norient1,Npix_j3]
 
         ### Apply the mask and sum over pixels
