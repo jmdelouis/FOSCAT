@@ -2877,7 +2877,7 @@ class funct(FOC.FoCUS):
                         )
                     else:
                         s2 = self.masked_mean(M1_square, vmask, axis=2, rank=j3)
-
+                
                 if cond_init_P1_dic:
                     # We fill P1_dic with S2 for normalisation of S3 and S4
                     P1_dic[j3] = self.backend.bk_real(s2)  # [Nbatch, Nmask, Norient3]
@@ -3626,10 +3626,10 @@ class funct(FOC.FoCUS):
         cs3, ss3: real and imag parts of S3 coeff
         """
         ### Compute |I1 * Psi_j2| * Psi_j3 = M1_j2 * Psi_j3
-        # Warning: M1_dic[j2] is already at j3 resolution [Nbatch, Npix_j3, Norient3]
+        # Warning: M1_dic[j2] is already at j3 resolution [Nbatch, Norient3, Npix_j3]
         MconvPsi = self.convol(
             M_dic[j2], axis=2, cell_ids=cell_ids, nside=nside_j2
-        )  # [Nbatch,  Norient2, Norient3, Npix_j3]
+        )  # [Nbatch,   Norient3, Norient2, Npix_j3]
 
         if cmat2 is not None:
             tmp2 = self.backend.bk_repeat(MconvPsi, self.NORIENT, axis=-1)
@@ -3648,17 +3648,17 @@ class funct(FOC.FoCUS):
             )
 
         # Store it so we can use it in S4 computation
-        MconvPsi_dic[j2] = MconvPsi  # [Nbatch, Npix_j3, Norient3, Norient2]
+        MconvPsi_dic[j2] = MconvPsi  # [Nbatch, Norient3, Norient2, Npix_j3]
 
         ### Compute the product (I2 * Psi)_j3 x (M1_j2 * Psi_j3)^*
         # z_1 x z_2^* = (a1a2 + b1b2) + i(b1a2 - a1b2)
-        # cconv, sconv are [Nbatch, Npix_j3, Norient3]
+        # cconv, sconv are [Nbatch, Norient3, Npix_j3]
         if self.use_1D:
             s3 = conv * self.backend.bk_conjugate(MconvPsi)
         else:
-            s3 = self.backend.bk_expand_dims(conv, -2) * self.backend.bk_conjugate(
+            s3 = self.backend.bk_expand_dims(conv, -3) * self.backend.bk_conjugate(
                 MconvPsi
-            )  # [Nbatch, Npix_j3, Norient3, Norient2]
+            )  # [Nbatch, Norient3, Norient2, Npix_j3]
         ### Apply the mask [Nmask, Npix_j3] and sum over pixels
         if return_data:
             return s3
