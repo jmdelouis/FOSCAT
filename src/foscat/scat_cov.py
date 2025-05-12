@@ -3685,11 +3685,11 @@ class funct(FOC.FoCUS):
         return_data=False,
     ):
         #### Simplify notations
-        M1 = M1convPsi_dic[j1]  # [Nbatch, Npix_j3, Norient3, Norient1]
+        M1 = M1convPsi_dic[j1]  # [Nbatch, Norient3, Norient1, Npix_j3]
 
         # Auto or Cross coefficients
         if M2convPsi_dic is None:  # Auto
-            M2 = M1convPsi_dic[j2]  # [Nbatch, Npix_j3, Norient3, Norient2]
+            M2 = M1convPsi_dic[j2]  # [Nbatch, Norient3, Norient2, Npix_j3]
         else:  # Cross
             M2 = M2convPsi_dic[j2]
 
