@@ -2379,11 +2379,11 @@ class funct(FOC.FoCUS):
             # instead of difference between "opposite" channels use weighted average
             # of cosine and sine contributions using all channels
             angles = self.backend.bk_cast(
-                (2 * np.pi * np.arange(self.NORIENT) / self.NORIENT).reshape(
+                (2 * np.pi * np.arange(self.NORIENT)/self.NORIENT).reshape(
                     1, self.NORIENT, 1
                 )
             )  # shape: (NORIENT,)
-
+            print(angles.shape)
             # we use cosines and sines as weights for sim
             weighted_cos = self.backend.bk_reduce_mean(
                 sim * self.backend.bk_cos(angles), axis=-2
