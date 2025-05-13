@@ -2425,12 +2425,13 @@ class funct(FOC.FoCUS):
             w1 = np.sin(delta * np.pi / 2) ** 2
 
             # build rotation matrix
-            mat = np.zeros([self.NORIENT * self.NORIENT, sim.shape[1]])
-            lidx = np.arange(sim.shape[1])
+            mat = np.zeros([self.NORIENT * self.NORIENT, sim.shape[2]])
+            lidx = np.arange(sim.shape[2])
             for ell in range(self.NORIENT):
                 # Instead of simple linear weights, we use the cosine weights w0 and w1.
                 col0 = self.NORIENT * ((ell + iph) % self.NORIENT) + ell
                 col1 = self.NORIENT * ((ell + iph + 1) % self.NORIENT) + ell
+                print(col0.shape,lidx.shape)
                 mat[col0, lidx] = w0
                 mat[col1, lidx] = w1
 
