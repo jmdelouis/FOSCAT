@@ -2373,21 +2373,23 @@ class funct(FOC.FoCUS):
                 )
             else:
                 sim = self.backend.bk_abs(self.convol(tmp, axis=1))
-
+            
+            print('sim shape',sim.shape)
+            
             # instead of difference between "opposite" channels use weighted average
             # of cosine and sine contributions using all channels
             angles = self.backend.bk_cast(
                 (2 * np.pi * np.arange(self.NORIENT) / self.NORIENT).reshape(
-                    1, 1, self.NORIENT
+                    1, self.NORIENT, 1
                 )
             )  # shape: (NORIENT,)
 
             # we use cosines and sines as weights for sim
             weighted_cos = self.backend.bk_reduce_mean(
-                sim * self.backend.bk_cos(angles), axis=-1
+                sim * self.backend.bk_cos(angles), axis=-2
             )
             weighted_sin = self.backend.bk_reduce_mean(
-                sim * self.backend.bk_sin(angles), axis=-1
+                sim * self.backend.bk_sin(angles), axis=-2
             )
             # For simplicity, take first element of the batch
             cc = weighted_cos[0]
@@ -2423,43 +2425,43 @@ class funct(FOC.FoCUS):
             w1 = np.sin(delta * np.pi / 2) ** 2
 
             # build rotation matrix
-            mat = np.zeros([sim.shape[1], self.NORIENT * self.NORIENT])
+            mat = np.zeros([self.NORIENT * self.NORIENT,sim.shape[1]])
             lidx = np.arange(sim.shape[1])
             for ell in range(self.NORIENT):
                 # Instead of simple linear weights, we use the cosine weights w0 and w1.
                 col0 = self.NORIENT * ((ell + iph) % self.NORIENT) + ell
                 col1 = self.NORIENT * ((ell + iph + 1) % self.NORIENT) + ell
-                mat[lidx, col0] = w0
-                mat[lidx, col1] = w1
+                mat[col0,lidx] = w0
+                mat[col1,lidx] = w1
 
             cmat[k] = self.backend.bk_cast(mat.astype("complex64"))
 
             # do same modifications for mat2
             mat2 = np.zeros(
-                [k + 1, sim.shape[1], self.NORIENT, self.NORIENT * self.NORIENT]
+                [k + 1, self.NORIENT, self.NORIENT * self.NORIENT, sim.shape[1]]
             )
 
             for k2 in range(k + 1):
-                tmp2 = self.backend.bk_repeat(sim, self.NORIENT, axis=-1)
+                tmp2 = self.backend.bk_tile(sim, self.NORIENT, axis=-1)
 
                 sim2 = self.backend.bk_reduce_sum(
                     self.backend.bk_reshape(
                         self.backend.bk_cast(
-                            mat.reshape(1, mat.shape[0], self.NORIENT * self.NORIENT)
+                            mat.reshape(1, self.NORIENT * self.NORIENT, mat.shape[0])
                         )
                         * tmp2,
-                        [sim.shape[0], cmat[k].shape[0], self.NORIENT, self.NORIENT],
+                        [  self.NORIENT, self.NORIENT, cmat[k].shape[0], sim.shape[0]],
                     ),
-                    2,
+                    0,
                 )
 
-                sim2 = self.backend.bk_abs(self.convol(sim2, axis=1))
+                sim2 = self.backend.bk_abs(self.convol(sim2, axis=-1))
 
                 weighted_cos2 = self.backend.bk_reduce_mean(
-                    sim2 * self.backend.bk_cos(angles), axis=-1
+                    sim2 * self.backend.bk_cos(angles), axis=-2
                 )
                 weighted_sin2 = self.backend.bk_reduce_mean(
-                    sim2 * self.backend.bk_sin(angles), axis=-1
+                    sim2 * self.backend.bk_sin(angles), axis=-2
                 )
 
                 cc2 = weighted_cos2[0]
@@ -2500,8 +2502,8 @@ class funct(FOC.FoCUS):
                         col1 = (
                             self.NORIENT * ((ell + iph2[:, m] + 1) % self.NORIENT) + ell
                         )
-                        mat2[k2, lidx, m, col0] = w0_2[:, m]
-                        mat2[k2, lidx, m, col1] = w1_2[:, m]
+                        mat2[k2, m, col0, lidx] = w0_2[:, m]
+                        mat2[k2, m, col1, lidx] = w1_2[:, m]
                 cmat2[k] = self.backend.bk_cast(mat2.astype("complex64"))
 
             if k < l_nside - 1:
