@@ -2431,7 +2431,7 @@ class funct(FOC.FoCUS):
                 # Instead of simple linear weights, we use the cosine weights w0 and w1.
                 col0 = self.NORIENT * ((ell + iph) % self.NORIENT) + ell
                 col1 = self.NORIENT * ((ell + iph + 1) % self.NORIENT) + ell
-                print(col0.shape,lidx.shape)
+                print(col0.shape, lidx.shape)
                 mat[col0, lidx] = w0
                 mat[col1, lidx] = w1
 
