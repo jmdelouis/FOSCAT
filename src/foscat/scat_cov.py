@@ -2373,9 +2373,9 @@ class funct(FOC.FoCUS):
                 )
             else:
                 sim = self.backend.bk_abs(self.convol(tmp, axis=1))
-            
-            print('sim shape',sim.shape)
-            
+
+            print("sim shape", sim.shape)
+
             # instead of difference between "opposite" channels use weighted average
             # of cosine and sine contributions using all channels
             angles = self.backend.bk_cast(
@@ -2425,14 +2425,14 @@ class funct(FOC.FoCUS):
             w1 = np.sin(delta * np.pi / 2) ** 2
 
             # build rotation matrix
-            mat = np.zeros([self.NORIENT * self.NORIENT,sim.shape[1]])
+            mat = np.zeros([self.NORIENT * self.NORIENT, sim.shape[1]])
             lidx = np.arange(sim.shape[1])
             for ell in range(self.NORIENT):
                 # Instead of simple linear weights, we use the cosine weights w0 and w1.
                 col0 = self.NORIENT * ((ell + iph) % self.NORIENT) + ell
                 col1 = self.NORIENT * ((ell + iph + 1) % self.NORIENT) + ell
-                mat[col0,lidx] = w0
-                mat[col1,lidx] = w1
+                mat[col0, lidx] = w0
+                mat[col1, lidx] = w1
 
             cmat[k] = self.backend.bk_cast(mat.astype("complex64"))
 
@@ -2450,7 +2450,7 @@ class funct(FOC.FoCUS):
                             mat.reshape(1, self.NORIENT * self.NORIENT, mat.shape[0])
                         )
                         * tmp2,
-                        [  self.NORIENT, self.NORIENT, cmat[k].shape[0], sim.shape[0]],
+                        [self.NORIENT, self.NORIENT, cmat[k].shape[0], sim.shape[0]],
                     ),
                     0,
                 )
