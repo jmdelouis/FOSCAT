@@ -2431,7 +2431,6 @@ class funct(FOC.FoCUS):
                 # Instead of simple linear weights, we use the cosine weights w0 and w1.
                 col0 = self.NORIENT * ((ell + iph) % self.NORIENT) + ell
                 col1 = self.NORIENT * ((ell + iph + 1) % self.NORIENT) + ell
-                print(col0.shape,lidx.shape)
                 mat[col0, lidx] = w0
                 mat[col1, lidx] = w1
 
@@ -2439,7 +2438,7 @@ class funct(FOC.FoCUS):
 
             # do same modifications for mat2
             mat2 = np.zeros(
-                [k + 1, self.NORIENT, self.NORIENT * self.NORIENT, sim.shape[1]]
+                [k + 1, self.NORIENT, self.NORIENT * self.NORIENT, sim.shape[2]]
             )
 
             for k2 in range(k + 1):
