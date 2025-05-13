@@ -2431,7 +2431,7 @@ class funct(FOC.FoCUS):
                 # Instead of simple linear weights, we use the cosine weights w0 and w1.
                 col0 = self.NORIENT * ((ell + iph) % self.NORIENT) + ell
                 col1 = self.NORIENT * ((ell + iph + 1) % self.NORIENT) + ell
-                
+
                 mat[col0, lidx] = w0
                 mat[col1, lidx] = w1
 
@@ -2496,7 +2496,7 @@ class funct(FOC.FoCUS):
                 w0_2 = np.cos(delta2 * np.pi / 2) ** 2
                 w1_2 = np.sin(delta2 * np.pi / 2) ** 2
                 lidx = np.arange(sim.shape[1])
-                
+
                 for m in range(self.NORIENT):
                     for ell in range(self.NORIENT):
                         col0 = self.NORIENT * ((ell + iph2[:, m]) % self.NORIENT) + ell
