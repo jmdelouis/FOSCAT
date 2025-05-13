@@ -2444,14 +2444,14 @@ class funct(FOC.FoCUS):
 
             for k2 in range(k + 1):
                 tmp2 = self.backend.bk_tile(sim, self.NORIENT, axis=-2)
-                
+
                 sim2 = self.backend.bk_reduce_sum(
                     self.backend.bk_reshape(
                         self.backend.bk_cast(
                             mat.reshape(1, self.NORIENT * self.NORIENT, mat.shape[1])
                         )
                         * tmp2,
-                        [sim.shape[0],self.NORIENT, self.NORIENT, mat.shape[1]],
+                        [sim.shape[0], self.NORIENT, self.NORIENT, mat.shape[1]],
                     ),
                     0,
                 )
