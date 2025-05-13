@@ -2441,7 +2441,7 @@ class funct(FOC.FoCUS):
             mat2 = np.zeros(
                 [k + 1, self.NORIENT, self.NORIENT * self.NORIENT, sim.shape[2]]
             )
-            print(mat2.shape)
+            print(mat2.shape,mat.shape)
             for k2 in range(k + 1):
                 tmp2 = self.backend.bk_tile(sim, self.NORIENT, axis=-2)
 
