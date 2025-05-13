@@ -2449,10 +2449,10 @@ class funct(FOC.FoCUS):
                 sim2 = self.backend.bk_reduce_sum(
                     self.backend.bk_reshape(
                         self.backend.bk_cast(
-                            mat.reshape(1, self.NORIENT * self.NORIENT, mat.shape[0])
+                            mat.reshape(1, self.NORIENT * self.NORIENT, mat.shape[1])
                         )
                         * tmp2,
-                        [self.NORIENT, self.NORIENT, cmat[k].shape[0], sim.shape[0]],
+                        [self.NORIENT, self.NORIENT, cmat[k].shape[0], sim.shape[1]],
                     ),
                     0,
                 )
