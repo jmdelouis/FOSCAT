@@ -2444,7 +2444,6 @@ class funct(FOC.FoCUS):
 
             for k2 in range(k + 1):
                 tmp2 = self.backend.bk_repeat(sim, self.NORIENT, axis=-2)
-                
                 sim2 = self.backend.bk_reduce_sum(
                     self.backend.bk_reshape(
                         self.backend.bk_cast(
