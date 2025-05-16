@@ -2492,6 +2492,7 @@ class funct(FOC.FoCUS):
                 delta2 = phase2_scaled - iph2
                 w0_2 = np.cos(delta2 * np.pi / 2) ** 2
                 w1_2 = np.sin(delta2 * np.pi / 2) ** 2
+                print(w0_2.shape)
                 lidx = np.arange(sim.shape[2])
                 
                 for m in range(self.NORIENT):
