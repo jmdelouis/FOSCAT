@@ -2492,8 +2492,6 @@ class funct(FOC.FoCUS):
                 delta2 = phase2_scaled - iph2
                 w0_2 = np.cos(delta2 * np.pi / 2) ** 2
                 w1_2 = np.sin(delta2 * np.pi / 2) ** 2
-                print(w0_2.shape)
-                lidx = np.arange(sim.shape[2])
 
                 for m in range(self.NORIENT):
                     for ell in range(self.NORIENT):
@@ -2501,8 +2499,8 @@ class funct(FOC.FoCUS):
                         col1 = (
                             self.NORIENT * ((ell + iph2[:, m] + 1) % self.NORIENT) + ell
                         )
-                        mat2[k2, col0, m, lidx] = w0_2[:, m]
-                        mat2[k2, col1, m, lidx] = w1_2[:, m]
+                        mat2[k2, col0, m] = w0_2[m]
+                        mat2[k2, col1, m] = w1_2[m]
                 cmat2[k] = self.backend.bk_cast(mat2.astype("complex64"))
 
             if k < l_nside - 1:
