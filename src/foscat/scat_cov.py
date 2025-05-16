@@ -2443,15 +2443,20 @@ class funct(FOC.FoCUS):
             )
 
             for k2 in range(k + 1):
+<<<<<<< HEAD
                 tmp2 = self.backend.bk_repeat(sim, self.NORIENT, axis=-2)
                 
+=======
+                tmp2 = self.backend.bk_tile(sim, self.NORIENT, axis=-2)
+
+>>>>>>> 29a3764dad0727ee78584a3d49ae181e19af585c
                 sim2 = self.backend.bk_reduce_sum(
                     self.backend.bk_reshape(
                         self.backend.bk_cast(
                             mat.reshape(1, self.NORIENT * self.NORIENT, mat.shape[1])
                         )
                         * tmp2,
-                        [sim.shape[0],self.NORIENT, self.NORIENT, mat.shape[1]],
+                        [sim.shape[0], self.NORIENT, self.NORIENT, mat.shape[1]],
                     ),
                     1,
                 )
