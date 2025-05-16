@@ -2439,7 +2439,7 @@ class funct(FOC.FoCUS):
 
             # do same modifications for mat2
             mat2 = np.zeros(
-                [k + 1, self.NORIENT, self.NORIENT * self.NORIENT, sim.shape[2]]
+                [k + 1,  self.NORIENT * self.NORIENT, self.NORIENT, sim.shape[2]]
             )
 
             for k2 in range(k + 1):
@@ -2502,8 +2502,8 @@ class funct(FOC.FoCUS):
                         col1 = (
                             self.NORIENT * ((ell + iph2[:, m] + 1) % self.NORIENT) + ell
                         )
-                        mat2[k2, m, col0, lidx] = w0_2[:, m]
-                        mat2[k2, m, col1, lidx] = w1_2[:, m]
+                        mat2[k2, col0, m, lidx] = w0_2[:, m]
+                        mat2[k2, col1, m, lidx] = w1_2[:, m]
                 cmat2[k] = self.backend.bk_cast(mat2.astype("complex64"))
 
             if k < l_nside - 1:
