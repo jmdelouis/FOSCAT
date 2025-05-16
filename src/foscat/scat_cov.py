@@ -2443,7 +2443,7 @@ class funct(FOC.FoCUS):
             )
 
             for k2 in range(k + 1):
-                tmp2 = self.backend.bk_tile(sim, self.NORIENT, axis=-2)
+                tmp2 = self.backend.bk_repeat(sim, self.NORIENT, axis=-2)
                 
                 sim2 = self.backend.bk_reduce_sum(
                     self.backend.bk_reshape(
@@ -2453,7 +2453,7 @@ class funct(FOC.FoCUS):
                         * tmp2,
                         [sim.shape[0],self.NORIENT, self.NORIENT, mat.shape[1]],
                     ),
-                    0,
+                    1,
                 )
 
                 sim2 = self.backend.bk_abs(self.convol(sim2, axis=-1))
