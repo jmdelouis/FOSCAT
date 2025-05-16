@@ -2439,7 +2439,7 @@ class funct(FOC.FoCUS):
 
             # do same modifications for mat2
             mat2 = np.zeros(
-                [k + 1,  self.NORIENT * self.NORIENT, self.NORIENT, sim.shape[2]]
+                [k + 1, self.NORIENT * self.NORIENT, self.NORIENT, sim.shape[2]]
             )
 
             for k2 in range(k + 1):
