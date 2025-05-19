@@ -2454,9 +2454,9 @@ class funct(FOC.FoCUS):
                         * tmp2,
                         [sim.shape[0], self.NORIENT, self.NORIENT, mat.shape[1]],
                     ),
-                    2,
+                    1,
                 )
-                np.save("sim2_%d.npy" % (k2), sim2.numpy())
+                
                 sim2 = self.backend.bk_abs(self.convol(sim2, axis=-1))
                 np.save("sim22_%d.npy" % (k2), sim2.numpy())
 
@@ -2467,6 +2467,9 @@ class funct(FOC.FoCUS):
                     sim2 * self.backend.bk_sin(angles), axis=-2
                 )
 
+                np.save("weighted_cos2_%d.npy" % (k2), weighted_cos2.numpy())
+                np.save("angles_%d.npy" % (k2), angles.numpy())
+                
                 cc2 = weighted_cos2[0]
                 ss2 = weighted_sin2[0]
 
