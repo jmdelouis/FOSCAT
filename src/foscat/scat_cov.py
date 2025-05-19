@@ -2442,8 +2442,8 @@ class funct(FOC.FoCUS):
 
             for k2 in range(k + 1):
 
-                tmp2 = self.backend.bk_tile(sim, self.NORIENT, axis=-2)
-                print(tmp2.shape, sim.shape)
+                tmp2 = self.backend.bk_repeat(sim, self.NORIENT, axis=-2)
+                np.save('tmp2_%d.npy'%(k2),tmp2.numpy())
                 sim2 = self.backend.bk_reduce_sum(
                     self.backend.bk_reshape(
                         self.backend.bk_cast(
