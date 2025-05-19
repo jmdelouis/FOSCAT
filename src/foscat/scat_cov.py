@@ -2457,7 +2457,7 @@ class funct(FOC.FoCUS):
 
                 sim2 = self.backend.bk_abs(self.convol(sim2, axis=-1))
 
-                angles = self.backend.bk_reshape(angles, [1, self.NORIENT, 1, 1])
+                angles=self.backend.bk_reshape(angles,[1,self.NORIENT,1,1])
                 weighted_cos2 = self.backend.bk_reduce_mean(
                     sim2 * self.backend.bk_cos(angles), axis=1
                 )
@@ -2471,15 +2471,16 @@ class funct(FOC.FoCUS):
                 ss2 = weighted_sin2[0]
 
                 if smooth_scale > 0:
+                    print('ici')
                     for m in range(smooth_scale):
-                        if cc2.shape[0] > 12:
-                            cc2, _ = self.ud_grade_2(self.smooth(cc2, axis=1), axis=1)
-                            ss2, _ = self.ud_grade_2(self.smooth(ss2, axis=1), axis=1)
+                        if cc2.shape[1] > 12:
+                            cc2, _ = self.ud_grade_2(self.smooth(cc2,axis=1),axis=1)
+                            ss2, _ = self.ud_grade_2(self.smooth(ss2,axis=1),axis=1)
 
-                if cc2.shape[0] != sim.shape[1]:
-                    ll_nside = int(np.sqrt(sim.shape[1] // 12))
-                    cc2 = self.up_grade(cc2, ll_nside, axis=1)
-                    ss2 = self.up_grade(ss2, ll_nside, axis=1)
+                if cc2.shape[1] != sim.shape[2]:
+                    ll_nside = int(np.sqrt(sim.shape[2] // 12))
+                    cc2 = self.up_grade(cc2, ll_nside,axis=1)
+                    ss2 = self.up_grade(ss2, ll_nside,axis=1)
 
                 np.save("cc2_%d.npy" % (k2), cc2.numpy())
 
