@@ -2441,8 +2441,9 @@ class funct(FOC.FoCUS):
             )
 
             for k2 in range(k + 1):
-                tmp2 = self.backend.bk_tile(sim, self.NORIENT, axis=-1)
-
+                
+                tmp2 = self.backend.bk_tile(sim, self.NORIENT, axis=-2)
+                print(tmp2.shape,sim.shape)
                 sim2 = self.backend.bk_reduce_sum(
                     self.backend.bk_reshape(
                         self.backend.bk_cast(
@@ -2457,10 +2458,10 @@ class funct(FOC.FoCUS):
                 sim2 = self.backend.bk_abs(self.convol(sim2, axis=-1))
 
                 weighted_cos2 = self.backend.bk_reduce_mean(
-                    sim2 * self.backend.bk_cos(angles), axis=-2
+                    sim2 * self.backend.bk_cos(angles), axis=-3
                 )
                 weighted_sin2 = self.backend.bk_reduce_mean(
-                    sim2 * self.backend.bk_sin(angles), axis=-2
+                    sim2 * self.backend.bk_sin(angles), axis=-3
                 )
 
                 cc2 = weighted_cos2[0]
