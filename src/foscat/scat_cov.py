@@ -2500,14 +2500,11 @@ class funct(FOC.FoCUS):
                 for m in range(self.NORIENT):
                     for ell in range(self.NORIENT):
                         col0 = self.NORIENT * ((ell + iph2[m]) % self.NORIENT) + ell
-                        col1 = (
-                            self.NORIENT * ((ell + iph2[m] + 1) % self.NORIENT) + ell
-                        )
-                        mat2[k2, col0, m,lidx] = w0_2[m,lidx]
-                        mat2[k2, col1, m,lidx] = w1_2[m,lidx]
-                        
+                        col1 = self.NORIENT * ((ell + iph2[m] + 1) % self.NORIENT) + ell
+                        mat2[k2, col0, m, lidx] = w0_2[m, lidx]
+                        mat2[k2, col1, m, lidx] = w1_2[m, lidx]
+
                 cmat2[k] = self.backend.bk_cast(mat2.astype("complex64"))
-                
 
             if k < l_nside - 1:
                 tmp, _ = self.ud_grade_2(tmp, axis=1)
