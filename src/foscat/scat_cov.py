@@ -2465,13 +2465,10 @@ class funct(FOC.FoCUS):
                     sim2 * self.backend.bk_sin(angles), axis=1
                 )
 
-                np.save("weighted_cos2_%d.npy" % (k2), weighted_cos2.numpy())
-
                 cc2 = weighted_cos2[0]
                 ss2 = weighted_sin2[0]
 
                 if smooth_scale > 0:
-                    print("ici")
                     for m in range(smooth_scale):
                         if cc2.shape[1] > 12:
                             cc2, _ = self.ud_grade_2(self.smooth(cc2, axis=1), axis=1)
@@ -2481,8 +2478,6 @@ class funct(FOC.FoCUS):
                     ll_nside = int(np.sqrt(sim.shape[2] // 12))
                     cc2 = self.up_grade(cc2, ll_nside, axis=1)
                     ss2 = self.up_grade(ss2, ll_nside, axis=1)
-
-                np.save("cc2_%d.npy" % (k2), cc2.numpy())
 
                 if self.BACKEND == "numpy":
                     phase2 = np.fmod(np.arctan2(ss2, cc2) + 2 * np.pi, 2 * np.pi)
@@ -2500,18 +2495,19 @@ class funct(FOC.FoCUS):
                 delta2 = phase2_scaled - iph2
                 w0_2 = np.cos(delta2 * np.pi / 2) ** 2
                 w1_2 = np.sin(delta2 * np.pi / 2) ** 2
-
-                np.save("phase2_%d.npy" % (k2), phase2_scaled)
+                lidx = np.arange(sim.shape[2])
 
                 for m in range(self.NORIENT):
                     for ell in range(self.NORIENT):
-                        col0 = self.NORIENT * ((ell + iph2[:, m]) % self.NORIENT) + ell
+                        col0 = self.NORIENT * ((ell + iph2[m]) % self.NORIENT) + ell
                         col1 = (
-                            self.NORIENT * ((ell + iph2[:, m] + 1) % self.NORIENT) + ell
+                            self.NORIENT * ((ell + iph2[m] + 1) % self.NORIENT) + ell
                         )
-                        mat2[k2, col0, m] = w0_2[m]
-                        mat2[k2, col1, m] = w1_2[m]
+                        mat2[k2, col0, m,lidx] = w0_2[m,lidx]
+                        mat2[k2, col1, m,lidx] = w1_2[m,lidx]
+                        
                 cmat2[k] = self.backend.bk_cast(mat2.astype("complex64"))
+                
 
             if k < l_nside - 1:
                 tmp, _ = self.ud_grade_2(tmp, axis=1)
