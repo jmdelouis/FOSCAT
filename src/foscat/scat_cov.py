@@ -2444,8 +2444,6 @@ class funct(FOC.FoCUS):
 
                 tmp2 = self.backend.bk_repeat(sim, self.NORIENT, axis=1)
 
-                np.save("tmp2_%d.npy" % (k2), tmp2.numpy())
-
                 sim2 = self.backend.bk_reduce_sum(
                     self.backend.bk_reshape(
                         self.backend.bk_cast(
@@ -2458,17 +2456,16 @@ class funct(FOC.FoCUS):
                 )
 
                 sim2 = self.backend.bk_abs(self.convol(sim2, axis=-1))
-                np.save("sim22_%d.npy" % (k2), sim2.numpy())
 
+                angles=self.backend.bk_reshape(angles,[1,self.NORIENT,1,1])
                 weighted_cos2 = self.backend.bk_reduce_mean(
-                    sim2 * self.backend.bk_cos(angles), axis=-2
+                    sim2 * self.backend.bk_cos(angles), axis=1
                 )
                 weighted_sin2 = self.backend.bk_reduce_mean(
-                    sim2 * self.backend.bk_sin(angles), axis=-2
+                    sim2 * self.backend.bk_sin(angles), axis=1
                 )
 
                 np.save("weighted_cos2_%d.npy" % (k2), weighted_cos2.numpy())
-                np.save("angles_%d.npy" % (k2), angles.numpy())
 
                 cc2 = weighted_cos2[0]
                 ss2 = weighted_sin2[0]
@@ -2476,14 +2473,16 @@ class funct(FOC.FoCUS):
                 if smooth_scale > 0:
                     for m in range(smooth_scale):
                         if cc2.shape[0] > 12:
-                            cc2, _ = self.ud_grade_2(self.smooth(cc2))
-                            ss2, _ = self.ud_grade_2(self.smooth(ss2))
+                            cc2, _ = self.ud_grade_2(self.smooth(cc2,axis=1),axis=1)
+                            ss2, _ = self.ud_grade_2(self.smooth(ss2,axis=1),axis=1)
 
                 if cc2.shape[0] != sim.shape[1]:
                     ll_nside = int(np.sqrt(sim.shape[1] // 12))
-                    cc2 = self.up_grade(cc2, ll_nside)
-                    ss2 = self.up_grade(ss2, ll_nside)
+                    cc2 = self.up_grade(cc2, ll_nside,axis=1)
+                    ss2 = self.up_grade(ss2, ll_nside,axis=1)
 
+                np.save("cc2_%d.npy" % (k2), cc2.numpy())
+                
                 if self.BACKEND == "numpy":
                     phase2 = np.fmod(np.arctan2(ss2, cc2) + 2 * np.pi, 2 * np.pi)
                 else:
@@ -2500,6 +2499,8 @@ class funct(FOC.FoCUS):
                 delta2 = phase2_scaled - iph2
                 w0_2 = np.cos(delta2 * np.pi / 2) ** 2
                 w1_2 = np.sin(delta2 * np.pi / 2) ** 2
+
+                np.save("phase2_%d.npy" % (k2), phase2_scaled)
 
                 for m in range(self.NORIENT):
                     for ell in range(self.NORIENT):
