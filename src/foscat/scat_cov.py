@@ -2452,16 +2452,16 @@ class funct(FOC.FoCUS):
                         * tmp2,
                         [sim.shape[0], self.NORIENT, self.NORIENT, mat.shape[1]],
                     ),
-                    1,
+                    2,
                 )
 
                 sim2 = self.backend.bk_abs(self.convol(sim2, axis=-1))
 
                 weighted_cos2 = self.backend.bk_reduce_mean(
-                    sim2 * self.backend.bk_cos(angles), axis=-3
+                    sim2 * self.backend.bk_cos(angles), axis=-2
                 )
                 weighted_sin2 = self.backend.bk_reduce_mean(
-                    sim2 * self.backend.bk_sin(angles), axis=-3
+                    sim2 * self.backend.bk_sin(angles), axis=-2
                 )
 
                 cc2 = weighted_cos2[0]
