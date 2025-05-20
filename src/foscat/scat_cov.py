@@ -3008,7 +3008,7 @@ class funct(FOC.FoCUS):
                                 M1_square, vmask, axis=2, rank=j3
                             )  # [Nbatch, Nmask, Norient3]
                             p2 = self.masked_mean(
-                                M2_square, vmask, axis=1, rank=j3
+                                M2_square, vmask, axis=2, rank=j3
                             )  # [Nbatch, Nmask, Norient3]
                     # We fill P1_dic with S2 for normalisation of S3 and S4
                     P1_dic[j3] = self.backend.bk_real(p1)  # [Nbatch, Nmask, Norient3]
