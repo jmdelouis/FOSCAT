@@ -2973,9 +2973,9 @@ class funct(FOC.FoCUS):
                             cmat[j3] * tmp2,
                             [
                                 tmp2.shape[0],
-                                cmat[j3].shape[0],
                                 self.NORIENT,
                                 self.NORIENT,
+                                cmat[j3].shape[2],
                             ],
                         ),
                         1,
