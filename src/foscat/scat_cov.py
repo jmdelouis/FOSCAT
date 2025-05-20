@@ -2967,7 +2967,7 @@ class funct(FOC.FoCUS):
                     I2, axis=2, cell_ids=cell_ids_j3, nside=nside_j3
                 )  # [Nbatch, Npix_j3, Norient3]
                 if cmat is not None:
-                    tmp2 = self.backend.bk_repeat(conv2, self.NORIENT, axis=-1)
+                    tmp2 = self.backend.bk_repeat(conv2, self.NORIENT, axis=-2)
                     conv2 = self.backend.bk_reduce_sum(
                         self.backend.bk_reshape(
                             cmat[j3] * tmp2,
