@@ -2857,7 +2857,7 @@ class funct(FOC.FoCUS):
                         cmat[j3] * tmp2,
                         [tmp2.shape[0], self.NORIENT, self.NORIENT, cmat[j3].shape[2]],
                     ),
-                    2,
+                    1,
                 )
 
             ### Take the module M1 = |I1 * Psi_j3|
@@ -3650,7 +3650,7 @@ class funct(FOC.FoCUS):
                         cmat2[j3][j2].shape[3],
                     ],
                 ),
-                3,
+                1,
             )
 
         # Store it so we can use it in S4 computation
