@@ -2978,7 +2978,7 @@ class funct(FOC.FoCUS):
                                 self.NORIENT,
                             ],
                         ),
-                        2,
+                        1,
                     )
                 ### Take the module M2 = |I2 * Psi_j3|
                 M2_square = conv2 * self.backend.bk_conjugate(
