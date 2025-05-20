@@ -2433,7 +2433,7 @@ class funct(FOC.FoCUS):
                 mat[col0, lidx] = w0
                 mat[col1, lidx] = w1
 
-            cmat[k] = self.backend.bk_cast(mat.astype("complex64"))
+            cmat[k] = self.backend.bk_cast(mat[None,...].astype("complex64"))
 
             # do same modifications for mat2
             mat2 = np.zeros(
@@ -2504,7 +2504,7 @@ class funct(FOC.FoCUS):
                         mat2[k2, col0, m, lidx] = w0_2[m, lidx]
                         mat2[k2, col1, m, lidx] = w1_2[m, lidx]
 
-                cmat2[k] = self.backend.bk_cast(mat2.astype("complex64"))
+                cmat2[k] = self.backend.bk_cast(mat2[0:k+1,None,...].astype("complex64"))
 
             if k < l_nside - 1:
                 tmp, _ = self.ud_grade_2(tmp, axis=1)
@@ -2847,11 +2847,13 @@ class funct(FOC.FoCUS):
             )  # [Nbatch, Norient3 , Npix_j3]
 
             if cmat is not None:
-                tmp2 = self.backend.bk_repeat(conv1, self.NORIENT, axis=-1)
+                
+                tmp2 = self.backend.bk_repeat(conv1, self.NORIENT, axis=-2)
+                
                 conv1 = self.backend.bk_reduce_sum(
                     self.backend.bk_reshape(
                         cmat[j3] * tmp2,
-                        [tmp2.shape[0], cmat[j3].shape[0], self.NORIENT, self.NORIENT],
+                        [tmp2.shape[0], self.NORIENT, self.NORIENT, cmat[j3].shape[2]],
                     ),
                     2,
                 )
@@ -3634,7 +3636,7 @@ class funct(FOC.FoCUS):
         )  # [Nbatch,   Norient3, Norient2, Npix_j3]
 
         if cmat2 is not None:
-            tmp2 = self.backend.bk_repeat(MconvPsi, self.NORIENT, axis=-1)
+            tmp2 = self.backend.bk_repeat(MconvPsi, self.NORIENT, axis=-3)
             MconvPsi = self.backend.bk_reduce_sum(
                 self.backend.bk_reshape(
                     cmat2[j3][j2] * tmp2,
@@ -3643,7 +3645,7 @@ class funct(FOC.FoCUS):
                         self.NORIENT,
                         self.NORIENT,
                         self.NORIENT,
-                        cmat2[j3].shape[1],
+                        cmat2[j3][j2].shape[3],
                     ],
                 ),
                 3,
