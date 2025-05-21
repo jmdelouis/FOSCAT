@@ -1533,7 +1533,9 @@ class FoCUS:
                         normi = np.mean(wresi[idx])
 
                         val = wresr[idx] - normr + 1j * (wresi[idx] - normi)
-                        val = val / abs(val).sum()
+                        r=abs(val).sum()
+                        if r>0:
+                            val = val / r
 
                         wav[iv : iv + nval] = val
                         iv += nval
