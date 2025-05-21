@@ -141,16 +141,21 @@ class BkTensorflow(BackendBase.BackendBase):
 
         # Step 2: build I_tiled with batch + channel offsets
         I_tiled = tf.tile(I[None, :], [A, 1])  # shape [, N]
-
+        
         # Offset index to flatten across [A, n_bins]
         batch_channel_offsets = tf.range(A)[:, None] * n_bins
-        I_offset = I_tiled + batch_channel_offsets  # shape [A, N]
+        I_offset = I_tiled + batch_channel_offsets  # shape [A, N]]
+        print(A,I_offset.shape,data.shape,I.shape,
+            np.bincount(I.numpy()).min(),
+            np.bincount(I.numpy()).max(),
+            np.bincount(I_offset.numpy().flatten()).min(),
+            np.bincount(I_offset.numpy().flatten()).max())
 
         # Step 3: flatten data to shape [A, N]
         data_reshaped = tf.reshape(data, [A, N])  # shape [A, N]
 
         # Flatten all for scatter_nd
-        indices = tf.reshape(I_tiled, [-1])  # [A*N]
+        indices = tf.reshape(I_offset, [-1])  # [A*N]
         values = tf.reshape(data_reshaped, [-1])  # [A*N]
 
         # Prepare for scatter: indices → [A*N, 1]
@@ -172,6 +177,7 @@ class BkTensorflow(BackendBase.BackendBase):
         # Step 6: mean
         mean_per_bin = sum_per_bin / counts  # [B, A, n_bins]
 
+        print(mean_per_bin.numpy().sum(),counts.numpy().min(),counts.numpy().max())
         return mean_per_bin, unique_groups
 
     def conv2d(self, x, w, strides=[1, 1, 1, 1], padding="SAME"):
