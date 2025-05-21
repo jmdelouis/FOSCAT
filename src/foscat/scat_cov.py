@@ -2847,6 +2847,7 @@ class funct(FOC.FoCUS):
             conv1 = self.convol(
                 I1, axis=1, cell_ids=cell_ids_j3, nside=nside_j3
             )  # [Nbatch, Norient3 , Npix_j3]
+            print("C1,I1 ", np.max(M1.numpy(), 2), M1.shape)
 
             if cmat is not None:
 
