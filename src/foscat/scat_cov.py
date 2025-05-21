@@ -3483,11 +3483,11 @@ class funct(FOC.FoCUS):
             # downscale the I1 [Nbatch, Npix_j3]
             if j3 != Jmax - 1:
                 I1 = self.smooth(I1, axis=1, cell_ids=cell_ids_j3, nside=nside_j3)
-                print('Smooth ',np.max(I1.numpy(),1))
+                print("Smooth ", np.max(I1.numpy(), 1))
                 I1, new_cell_ids_j3 = self.ud_grade_2(
                     I1, axis=1, cell_ids=cell_ids_j3, nside=nside_j3
                 )
-                print('Downgrade ',np.max(I1.numpy(),1))
+                print("Downgrade ", np.max(I1.numpy(), 1))
 
                 ### Image I2
                 if cross:
