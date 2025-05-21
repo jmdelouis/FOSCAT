@@ -150,8 +150,8 @@ class BkTensorflow(BackendBase.BackendBase):
         data_reshaped = tf.reshape(data, [A, N])  # shape [A, N]
 
         # Flatten all for scatter_nd
-        indices = tf.reshape(I_offset, [-1])  # [B*A*N]
-        values = tf.reshape(data_reshaped, [-1])  # [B*A*N]
+        indices = tf.reshape(I_tiled, [-1])  # [A*N]
+        values = tf.reshape(data_reshaped, [-1])  # [A*N]
 
         # Prepare for scatter: indices → [A*N, 1]
         scatter_indices = tf.expand_dims(indices, axis=1)
