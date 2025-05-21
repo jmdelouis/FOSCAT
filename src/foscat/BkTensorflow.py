@@ -172,7 +172,7 @@ class BkTensorflow(BackendBase.BackendBase):
 
         # Step 6: mean
         mean_per_bin = sum_per_bin / counts  # [B, A, n_bins]
-        
+
         return mean_per_bin, unique_groups
 
     def conv2d(self, x, w, strides=[1, 1, 1, 1], padding="SAME"):
