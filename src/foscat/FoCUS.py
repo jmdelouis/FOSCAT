@@ -1384,13 +1384,18 @@ class FoCUS:
         return res
 
     # ---------------------------------------------−---------
-    def init_index(self, nside, kernel=-1):
+    def init_index(self, nside, kernel=-1, cell_ids=None):
 
         if kernel == -1:
             l_kernel = self.KERNELSZ
         else:
             l_kernel = kernel
-
+        
+        if cell_ids is not None:
+            ncell = cell_ids.shape[0]
+        else:
+            ncell = 12*nside*nside
+            
         try:
             if self.use_2D:
                 tmp = np.load(
@@ -1405,7 +1410,7 @@ class FoCUS:
                         TMPFILE_VERSION,
                         l_kernel**2,
                         self.NORIENT,
-                        nside,
+                        nside+int(cell_ids==None), #if cell_ids computes the index
                     )
                 )
         except:
@@ -1426,36 +1431,59 @@ class FoCUS:
                     pw2 = 0.25
                     threshold = 4e-5
 
-                th, ph = hp.pix2ang(nside, np.arange(12 * nside**2), nest=True)
-                x, y, z = hp.pix2vec(nside, np.arange(12 * nside**2), nest=True)
+                if cell_ids is not None:
+                    
+                    th, ph = hp.pix2ang(nside, cell_ids, nest=True)
+                    x, y, z = hp.pix2vec(nside, cell_ids, nest=True)
 
-                t, p = hp.pix2ang(nside, np.arange(12 * nside * nside), nest=True)
-                phi = [p[k] / np.pi * 180 for k in range(12 * nside * nside)]
-                thi = [t[k] / np.pi * 180 for k in range(12 * nside * nside)]
+                    t, p = hp.pix2ang(nside, cell_ids, nest=True)
+                    phi = [p[k] / np.pi * 180 for k in range(ncell)]
+                    thi = [t[k] / np.pi * 180 for k in range(ncell)]
 
-                indice2 = np.zeros([12 * nside * nside * 64, 2], dtype="int")
-                indice = np.zeros(
-                    [12 * nside * nside * 64 * self.NORIENT, 2], dtype="int"
-                )
-                wav = np.zeros(
-                    [12 * nside * nside * 64 * self.NORIENT], dtype="complex"
-                )
-                wwav = np.zeros([12 * nside * nside * 64 * self.NORIENT], dtype="float")
+                    indice2 = np.zeros([ncell * 64, 2], dtype="int")
+                    indice = np.zeros(
+                        [ncell * 64 * self.NORIENT, 2], dtype="int"
+                    )
+                    wav = np.zeros(
+                        [ncell * 64 * self.NORIENT], dtype="complex"
+                    )
+                    wwav = np.zeros([ncell * 64 * self.NORIENT], dtype="float")
 
+                else:
+                    
+                    th, ph = hp.pix2ang(nside, np.arange(12 * nside**2), nest=True)
+                    x, y, z = hp.pix2vec(nside, np.arange(12 * nside**2), nest=True)
+
+                    t, p = hp.pix2ang(nside, np.arange(12 * nside * nside), nest=True)
+                    phi = [p[k] / np.pi * 180 for k in range(12 * nside * nside)]
+                    thi = [t[k] / np.pi * 180 for k in range(12 * nside * nside)]
+
+                    indice2 = np.zeros([12 * nside * nside * 64, 2], dtype="int")
+                    indice = np.zeros(
+                        [12 * nside * nside * 64 * self.NORIENT, 2], dtype="int"
+                    )
+                    wav = np.zeros(
+                        [12 * nside * nside * 64 * self.NORIENT], dtype="complex"
+                    )
+                    wwav = np.zeros([12 * nside * nside * 64 * self.NORIENT], dtype="float")
                 iv = 0
                 iv2 = 0
-                for iii in range(12 * nside * nside):
+                
+                for iii in range(ncell):
+                    if cell_ids is None:
+                        if iii % (nside * nside) == nside * nside - 1:
+                            if not self.silent:
+                                print(
+                                    "Pre-compute nside=%6d %.2f%%"
+                                    % (nside, 100 * iii / (12 * nside * nside))
+                                )
 
-                    if iii % (nside * nside) == nside * nside - 1:
-                        if not self.silent:
-                            print(
-                                "Pre-compute nside=%6d %.2f%%"
-                                % (nside, 100 * iii / (12 * nside * nside))
-                            )
-
-                    hidx = hp.query_disc(
-                        nside, [x[iii], y[iii], z[iii]], 2 * np.pi / nside, nest=True
-                    )
+                    if cell_ids is not None:
+                        hidx = np.where((x-x[iii])**2+(y-y[iii])**2+(z-z[iii])**2<(2 * np.pi / nside)**2)[0]
+                    else:
+                        hidx = hp.query_disc(
+                            nside, [x[iii], y[iii], z[iii]], 2 * np.pi / nside, nest=True
+                        )
 
                     R = hp.Rotator(rot=[phi[iii], -thi[iii]], eulertype="ZYZ")
 
@@ -1497,7 +1525,7 @@ class FoCUS:
                         idx = np.where(vnorm > threshold)[0]
 
                         nval = len(idx)
-                        indice[iv : iv + nval, 1] = iii + l_rotation * 12 * nside**2
+                        indice[iv : iv + nval, 1] = iii + l_rotation * ncell
                         indice[iv : iv + nval, 0] = hidx[idx]
                         # print([hidx[k] for k in idx])
                         # print(hp.query_disc(nside, [x[iii],y[iii],z[iii]], np.pi/nside,nest=True))
@@ -1609,34 +1637,91 @@ class FoCUS:
                 wav=w.flatten()
                 wwav=wwav.flatten()
                 """
-                if not self.silent:
-                    print(
-                        "Write FOSCAT_%s_W%d_%d_%d_PIDX.npy"
-                        % (TMPFILE_VERSION, self.KERNELSZ**2, self.NORIENT, nside)
+                if cell_ids is None:
+                    if not self.silent:
+                        print(
+                            "Write FOSCAT_%s_W%d_%d_%d_PIDX.npy"
+                            % (TMPFILE_VERSION, self.KERNELSZ**2, self.NORIENT, nside)
+                        )
+                    np.save(
+                        "%s/FOSCAT_%s_W%d_%d_%d_PIDX.npy"
+                        % (
+                            self.TEMPLATE_PATH,
+                            TMPFILE_VERSION,
+                            self.KERNELSZ**2,
+                            self.NORIENT,
+                            nside,
+                        ),
+                        indice,
                     )
-                np.save(
-                    "%s/FOSCAT_%s_W%d_%d_%d_PIDX.npy"
-                    % (
-                        self.TEMPLATE_PATH,
-                        TMPFILE_VERSION,
-                        self.KERNELSZ**2,
-                        self.NORIENT,
-                        nside,
-                    ),
-                    indice,
-                )
-                np.save(
-                    "%s/FOSCAT_%s_W%d_%d_%d_WAVE.npy"
-                    % (
-                        self.TEMPLATE_PATH,
-                        TMPFILE_VERSION,
-                        self.KERNELSZ**2,
-                        self.NORIENT,
-                        nside,
-                    ),
-                    wav,
-                )
-                np.save(
+                    np.save(
+                        "%s/FOSCAT_%s_W%d_%d_%d_WAVE.npy"
+                        % (
+                            self.TEMPLATE_PATH,
+                            TMPFILE_VERSION,
+                            self.KERNELSZ**2,
+                            self.NORIENT,
+                            nside,
+                        ),
+                        wav,
+                    )
+                    np.save(
+                        "%s/FOSCAT_%s_W%d_%d_%d_PIDX2.npy"
+                        % (
+                            self.TEMPLATE_PATH,
+                            TMPFILE_VERSION,
+                            self.KERNELSZ**2,
+                            self.NORIENT,
+                            nside,
+                        ),
+                        indice2,
+                    )
+                    np.save(
+                        "%s/FOSCAT_%s_W%d_%d_%d_SMOO.npy"
+                        % (
+                            self.TEMPLATE_PATH,
+                            TMPFILE_VERSION,
+                            self.KERNELSZ**2,
+                            self.NORIENT,
+                            nside,
+                        ),
+                        wwav,
+                    )
+            if self.use_2D:
+                    if l_kernel**2 == 9:
+                        if self.rank == 0:
+                            self.comp_idx_w9(nside)
+                    elif l_kernel**2 == 25:
+                        if self.rank == 0:
+                            self.comp_idx_w25(nside)
+                    else:
+                        if self.rank == 0:
+                            if not self.silent:
+                                print(
+                                    "Only 3x3 and 5x5 kernel have been developped for Healpix and you ask for %dx%d"
+                                    % (self.KERNELSZ, self.KERNELSZ)
+                                )
+                            return None
+        
+        if cell_ids is None:
+            self.barrier()
+            if self.use_2D:
+                    tmp = np.load(
+                        "%s/W%d_%s_%d_IDX.npy"
+                        % (self.TEMPLATE_PATH, l_kernel**2, TMPFILE_VERSION, nside)
+                    )
+            else:
+                    tmp = np.load(
+                        "%s/FOSCAT_%s_W%d_%d_%d_PIDX.npy"
+                        % (
+                            self.TEMPLATE_PATH,
+                            TMPFILE_VERSION,
+                            self.KERNELSZ**2,
+                            self.NORIENT,
+                            nside,
+                        )
+                    )
+            tmp2 = np.load(
                     "%s/FOSCAT_%s_W%d_%d_%d_PIDX2.npy"
                     % (
                         self.TEMPLATE_PATH,
@@ -1644,10 +1729,29 @@ class FoCUS:
                         self.KERNELSZ**2,
                         self.NORIENT,
                         nside,
-                    ),
-                    indice2,
+                    )
                 )
-                np.save(
+            wr = np.load(
+                    "%s/FOSCAT_%s_W%d_%d_%d_WAVE.npy"
+                    % (
+                        self.TEMPLATE_PATH,
+                        TMPFILE_VERSION,
+                        self.KERNELSZ**2,
+                        self.NORIENT,
+                        nside,
+                    )
+                ).real
+            wi = np.load(
+                    "%s/FOSCAT_%s_W%d_%d_%d_WAVE.npy"
+                    % (
+                        self.TEMPLATE_PATH,
+                        TMPFILE_VERSION,
+                        self.KERNELSZ**2,
+                        self.NORIENT,
+                        nside,
+                    )
+                ).imag
+            ws = self.slope * np.load(
                     "%s/FOSCAT_%s_W%d_%d_%d_SMOO.npy"
                     % (
                         self.TEMPLATE_PATH,
@@ -1655,97 +1759,29 @@ class FoCUS:
                         self.KERNELSZ**2,
                         self.NORIENT,
                         nside,
-                    ),
-                    wwav,
+                    )
                 )
-            else:
-                if l_kernel**2 == 9:
-                    if self.rank == 0:
-                        self.comp_idx_w9(nside)
-                elif l_kernel**2 == 25:
-                    if self.rank == 0:
-                        self.comp_idx_w25(nside)
-                else:
-                    if self.rank == 0:
-                        if not self.silent:
-                            print(
-                                "Only 3x3 and 5x5 kernel have been developped for Healpix and you ask for %dx%d"
-                                % (self.KERNELSZ, self.KERNELSZ)
-                            )
-                        return None
-
-        self.barrier()
-        if self.use_2D:
-            tmp = np.load(
-                "%s/W%d_%s_%d_IDX.npy"
-                % (self.TEMPLATE_PATH, l_kernel**2, TMPFILE_VERSION, nside)
-            )
         else:
-            tmp = np.load(
-                "%s/FOSCAT_%s_W%d_%d_%d_PIDX.npy"
-                % (
-                    self.TEMPLATE_PATH,
-                    TMPFILE_VERSION,
-                    self.KERNELSZ**2,
-                    self.NORIENT,
-                    nside,
-                )
-            )
-            tmp2 = np.load(
-                "%s/FOSCAT_%s_W%d_%d_%d_PIDX2.npy"
-                % (
-                    self.TEMPLATE_PATH,
-                    TMPFILE_VERSION,
-                    self.KERNELSZ**2,
-                    self.NORIENT,
-                    nside,
-                )
-            )
-            wr = np.load(
-                "%s/FOSCAT_%s_W%d_%d_%d_WAVE.npy"
-                % (
-                    self.TEMPLATE_PATH,
-                    TMPFILE_VERSION,
-                    self.KERNELSZ**2,
-                    self.NORIENT,
-                    nside,
-                )
-            ).real
-            wi = np.load(
-                "%s/FOSCAT_%s_W%d_%d_%d_WAVE.npy"
-                % (
-                    self.TEMPLATE_PATH,
-                    TMPFILE_VERSION,
-                    self.KERNELSZ**2,
-                    self.NORIENT,
-                    nside,
-                )
-            ).imag
-            ws = self.slope * np.load(
-                "%s/FOSCAT_%s_W%d_%d_%d_SMOO.npy"
-                % (
-                    self.TEMPLATE_PATH,
-                    TMPFILE_VERSION,
-                    self.KERNELSZ**2,
-                    self.NORIENT,
-                    nside,
-                )
-            )
+            tmp=indice
+            tmp2=indice2
+            wr=wav.real
+            wi=wav.imag
+            ws=self.slope * wwav
 
-            wr = self.backend.bk_SparseTensor(
+        wr = self.backend.bk_SparseTensor(
                 self.backend.bk_constant(tmp),
                 self.backend.bk_constant(self.backend.bk_cast(wr)),
-                dense_shape=[12 * nside**2, self.NORIENT * 12 * nside**2],
+                dense_shape=[ncell, self.NORIENT * ncell],
             )
-            wi = self.backend.bk_SparseTensor(
+        wi = self.backend.bk_SparseTensor(
                 self.backend.bk_constant(tmp),
                 self.backend.bk_constant(self.backend.bk_cast(wi)),
-                dense_shape=[12 * nside**2, self.NORIENT * 12 * nside**2],
+                dense_shape=[ncell, self.NORIENT * ncell],
             )
-            ws = self.backend.bk_SparseTensor(
+        ws = self.backend.bk_SparseTensor(
                 self.backend.bk_constant(tmp2),
                 self.backend.bk_constant(self.backend.bk_cast(ws)),
-                dense_shape=[12 * nside**2, 12 * nside**2],
+                dense_shape=[ncell, ncell],
             )
 
         if kernel == -1:
@@ -2330,14 +2366,15 @@ class FoCUS:
 
         else:
             ishape = list(image.shape)
-
+            '''
             if cell_ids is not None:
                 if cell_ids.shape[0] not in self.padding_conv:
+                    print(image.shape,cell_ids.shape)
                     import healpix_convolution as hc
                     from xdggs.healpix import HealpixInfo
 
                     res = self.backend.bk_zeros(
-                        ishape + [self.NORIENT], dtype=self.backend.all_cbk_type
+                        ishape[0:-1] + [self.NORIENT]+ishape[-1], dtype=self.backend.all_cbk_type
                     )
 
                     grid_info = HealpixInfo(
@@ -2383,14 +2420,15 @@ class FoCUS:
                                     padded_data
                                 ) + 1j * kernelI.matmul(padded_data)
                 return res
-
-            nside = int(np.sqrt(image.shape[-1] // 12))
+            '''
+            if nside is None:
+                nside = int(np.sqrt(image.shape[-1] // 12))
 
             if self.Idx_Neighbours[nside] is None:
                 if self.InitWave is None:
-                    wr, wi, ws, widx = self.init_index(nside)
+                    wr, wi, ws, widx = self.init_index(nside,cell_ids=cell_ids)
                 else:
-                    wr, wi, ws, widx = self.InitWave(self, nside)
+                    wr, wi, ws, widx = self.InitWave(nside,cell_ids=cell_ids)
 
                 self.Idx_Neighbours[nside] = 1  # self.backend.bk_constant(tmp)
                 self.ww_Real[nside] = wr
@@ -2407,7 +2445,7 @@ class FoCUS:
                 for k in range(len(ishape) - 1):
                     ndata = ndata * ishape[k]
             tim = self.backend.bk_reshape(
-                self.backend.bk_cast(image), [ndata, 12 * nside * nside]
+                self.backend.bk_cast(image), [ndata, ishape[-1]]
             )
 
             if tim.dtype == self.all_cbk_type:
@@ -2416,46 +2454,46 @@ class FoCUS:
                         self.backend.bk_real(tim),
                         l_ww_real,
                     ),
-                    [ndata, self.NORIENT, 12 * nside**2],
+                    [ndata, self.NORIENT, ishape[-1]],
                 )
                 ii1 = self.backend.bk_reshape(
                     self.backend.bk_sparse_dense_matmul(
                         self.backend.bk_real(tim),
                         l_ww_imag,
                     ),
-                    [ndata, self.NORIENT, 12 * nside**2],
+                    [ndata, self.NORIENT, ishape[-1]],
                 )
                 rr2 = self.backend.bk_reshape(
                     self.backend.bk_sparse_dense_matmul(
                         self.backend.bk_imag(tim),
                         l_ww_real,
                     ),
-                    [ndata, self.NORIENT, 12 * nside**2],
+                    [ndata, self.NORIENT, ishape[-1]],
                 )
                 ii2 = self.backend.bk_reshape(
                     self.backend.bk_sparse_dense_matmul(
                         self.backend.bk_imag(tim),
                         l_ww_imag,
                     ),
-                    [ndata, self.NORIENT, 12 * nside**2],
+                    [ndata, self.NORIENT, ishape[-1]],
                 )
                 res = self.backend.bk_complex(rr1 - ii2, ii1 + rr2)
             else:
                 rr = self.backend.bk_reshape(
                     self.backend.bk_sparse_dense_matmul(tim, l_ww_real),
-                    [ndata, self.NORIENT, 12 * nside**2],
+                    [ndata, self.NORIENT, ishape[-1]],
                 )
                 ii = self.backend.bk_reshape(
                     self.backend.bk_sparse_dense_matmul(tim, l_ww_imag),
-                    [ndata, self.NORIENT, 12 * nside**2],
+                    [ndata, self.NORIENT, ishape[-1]],
                 )
                 res = self.backend.bk_complex(rr, ii)
             if len(ishape) > 1:
                 return self.backend.bk_reshape(
-                    res, ishape[0:-1] + [self.NORIENT, 12 * nside**2]
+                    res, ishape[0:-1] + [self.NORIENT, ishape[-1]]
                 )
             else:
-                return self.backend.bk_reshape(res, [self.NORIENT, 12 * nside**2])
+                return self.backend.bk_reshape(res, [self.NORIENT, ishape[-1]])
 
         return res
 
@@ -2591,7 +2629,7 @@ class FoCUS:
         else:
 
             ishape = list(image.shape)
-
+            '''
             if cell_ids is not None:
                 if cell_ids.shape[0] not in self.padding_smooth:
                     import healpix_convolution as hc
@@ -2632,15 +2670,16 @@ class FoCUS:
                             padded_data = padding.apply(image[l, :, k2], is_torch=True)
                             res[l, :, k2] = kernel.matmul(padded_data)
                 return res
-
-            nside = int(np.sqrt(image.shape[-1] // 12))
+            '''
+            if nside is None:
+                nside = int(np.sqrt(image.shape[-1] // 12))
 
             if self.Idx_Neighbours[nside] is None:
 
                 if self.InitWave is None:
-                    wr, wi, ws, widx = self.init_index(nside)
+                    wr, wi, ws, widx = self.init_index(nside,cell_ids=cell_ids)
                 else:
-                    wr, wi, ws, widx = self.InitWave(self, nside)
+                    wr, wi, ws, widx = self.InitWave(self, nside,cell_ids=cell_ids)
 
                 self.Idx_Neighbours[nside] = 1
                 self.ww_Real[nside] = wr
@@ -2653,7 +2692,7 @@ class FoCUS:
             for k in range(0, len(ishape) - 1):
                 odata = odata * ishape[k]
 
-            tim = self.backend.bk_reshape(image, [odata, 12 * nside**2])
+            tim = self.backend.bk_reshape(image, [odata, ishape[-1]])
             if tim.dtype == self.all_cbk_type:
                 rr = self.backend.bk_sparse_dense_matmul(
                     self.backend.bk_real(tim), l_w_smooth
@@ -2665,9 +2704,9 @@ class FoCUS:
             else:
                 res = self.backend.bk_sparse_dense_matmul(tim, l_w_smooth)
             if len(ishape) == 1:
-                return self.backend.bk_reshape(res, [12 * nside**2])
+                return self.backend.bk_reshape(res, [ishape[-1]])
             else:
-                return self.backend.bk_reshape(res, ishape[0:-1] + [12 * nside**2])
+                return self.backend.bk_reshape(res, ishape[0:-1] + [ishape[-1]])
 
         return res
 
