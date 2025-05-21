@@ -153,15 +153,15 @@ class BkTensorflow(BackendBase.BackendBase):
         indices = tf.reshape(I_offset, [-1])  # [A*N]
         values = tf.reshape(data_reshaped, [-1])  # [A*N]
 
-        '''
+        """
         # Prepare for scatter: indices → [A*N, 1]
         scatter_indices = tf.expand_dims(indices, axis=1)
         scatter_indices = tf.cast(scatter_indices, tf.int64)
-        '''
+        """
         total_bins = A * n_bins
 
         # Step 4: sum per bin
-        sum_per_bin = tf.math.unsorted_segment_sum(values,indices,total_bins)
+        sum_per_bin = tf.math.unsorted_segment_sum(values, indices, total_bins)
         sum_per_bin = tf.reshape(sum_per_bin, ishape[0:-1] + [n_bins])  # [A, n_bins]
 
         # Step 5: count per bin (same indices)
@@ -172,7 +172,7 @@ class BkTensorflow(BackendBase.BackendBase):
 
         # Step 6: mean
         mean_per_bin = sum_per_bin / counts  # [B, A, n_bins]
-
+        
         return mean_per_bin, unique_groups
 
     def conv2d(self, x, w, strides=[1, 1, 1, 1], padding="SAME"):
