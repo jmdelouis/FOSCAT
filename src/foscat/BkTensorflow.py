@@ -165,10 +165,11 @@ class BkTensorflow(BackendBase.BackendBase):
         sum_per_bin = tf.reshape(sum_per_bin, ishape[0:-1] + [n_bins])  # [A, n_bins]
 
         # Step 5: count per bin (same indices)
-        counts = tf.math.bincount(indices, minlength=total_bins, maxlength=total_bins)
+        counts = tf.math.unsorted_segment_sum(1.0+0*values, indices, total_bins)
+        #counts = tf.math.bincount(indices, minlength=total_bins, maxlength=total_bins)
         counts = tf.reshape(counts, ishape[0:-1] + [n_bins])
-        counts = tf.maximum(counts, 1)  # Avoid division by zero
-        counts = tf.cast(counts, dtype=data.dtype)
+        #counts = tf.maximum(counts, 1)  # Avoid division by zero
+        #counts = tf.cast(counts, dtype=data.dtype)
 
         # Step 6: mean
         mean_per_bin = sum_per_bin / counts  # [B, A, n_bins]
