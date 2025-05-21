@@ -2933,7 +2933,7 @@ class funct(FOC.FoCUS):
                             M1, vmask, axis=2, rank=j3
                         )  # [Nbatch, Nmask, Norient3]
 
-                print('M1 ',np.max(M1.numpy(), 2), M1.shape)
+                print("M1 ", np.max(M1.numpy(), 2), M1.shape)
                 if return_data:
                     if out_nside is not None and out_nside < nside_j3:
                         s1 = self.backend.bk_reduce_mean(
