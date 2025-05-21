@@ -122,26 +122,26 @@ class BkTensorflow(BackendBase.BackendBase):
 
         return x_padded
 
-    def binned_mean(self,data, cell_ids):
+    def binned_mean(self, data, cell_ids):
         """
         data: Tensor of shape [..., N] (float32 or float64)
         cell_ids: Tensor of shape [N], int indices in [0, n_bins)
         Returns: mean per bin, shape [..., n_bins]
         """
-        ishape=list(data.shape)
+        ishape = list(data.shape)
         A = 1
-        for k in range(len(ishape)-1):
-            A*=ishape[k]
+        for k in range(len(ishape) - 1):
+            A *= ishape[k]
         N = tf.shape(data)[-1]
 
         # Step 1: group indices
         groups = tf.math.floordiv(cell_ids, 4)  # [N]
-        unique_groups, I = tf.unique(groups)   # I: [N]
+        unique_groups, I = tf.unique(groups)  # I: [N]
         n_bins = tf.shape(unique_groups)[0]
 
         # Step 2: build I_tiled with batch + channel offsets
         I_tiled = tf.tile(I[None, :], [A, 1])  # shape [, N]
-        
+
         # Offset index to flatten across [A, n_bins]
         batch_channel_offsets = tf.range(A)[:, None] * n_bins
         I_offset = I_tiled + batch_channel_offsets  # shape [A, N]
@@ -161,19 +161,19 @@ class BkTensorflow(BackendBase.BackendBase):
 
         # Step 4: sum per bin
         sum_per_bin = tf.scatter_nd(scatter_indices, values, [total_bins])
-        sum_per_bin = tf.reshape(sum_per_bin,ishape[0:-1]+[n_bins])  # [A, n_bins]
+        sum_per_bin = tf.reshape(sum_per_bin, ishape[0:-1] + [n_bins])  # [A, n_bins]
 
         # Step 5: count per bin (same indices)
         counts = tf.math.bincount(indices, minlength=total_bins, maxlength=total_bins)
-        counts = tf.reshape(counts, ishape[0:-1]+[n_bins])
-        #counts = tf.maximum(counts, 1.0)  # Avoid division by zero
-        counts = tf.cast(counts,dtype=data.dtype)
+        counts = tf.reshape(counts, ishape[0:-1] + [n_bins])
+        # counts = tf.maximum(counts, 1.0)  # Avoid division by zero
+        counts = tf.cast(counts, dtype=data.dtype)
 
         # Step 6: mean
         mean_per_bin = sum_per_bin / counts  # [B, A, n_bins]
 
         return mean_per_bin, unique_groups
-        
+
     def conv2d(self, x, w, strides=[1, 1, 1, 1], padding="SAME"):
         kx = w.shape[0]
         ky = w.shape[1]

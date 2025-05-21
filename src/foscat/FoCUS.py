@@ -1390,12 +1390,12 @@ class FoCUS:
             l_kernel = self.KERNELSZ
         else:
             l_kernel = kernel
-        
+
         if cell_ids is not None:
             ncell = cell_ids.shape[0]
         else:
-            ncell = 12*nside*nside
-            
+            ncell = 12 * nside * nside
+
         try:
             if self.use_2D:
                 tmp = np.load(
@@ -1410,7 +1410,7 @@ class FoCUS:
                         TMPFILE_VERSION,
                         l_kernel**2,
                         self.NORIENT,
-                        nside+int(cell_ids==None), #if cell_ids computes the index
+                        nside + int(cell_ids == None),  # if cell_ids computes the index
                     )
                 )
         except:
@@ -1432,7 +1432,7 @@ class FoCUS:
                     threshold = 4e-5
 
                 if cell_ids is not None:
-                    
+
                     th, ph = hp.pix2ang(nside, cell_ids, nest=True)
                     x, y, z = hp.pix2vec(nside, cell_ids, nest=True)
 
@@ -1441,16 +1441,12 @@ class FoCUS:
                     thi = [t[k] / np.pi * 180 for k in range(ncell)]
 
                     indice2 = np.zeros([ncell * 64, 2], dtype="int")
-                    indice = np.zeros(
-                        [ncell * 64 * self.NORIENT, 2], dtype="int"
-                    )
-                    wav = np.zeros(
-                        [ncell * 64 * self.NORIENT], dtype="complex"
-                    )
+                    indice = np.zeros([ncell * 64 * self.NORIENT, 2], dtype="int")
+                    wav = np.zeros([ncell * 64 * self.NORIENT], dtype="complex")
                     wwav = np.zeros([ncell * 64 * self.NORIENT], dtype="float")
 
                 else:
-                    
+
                     th, ph = hp.pix2ang(nside, np.arange(12 * nside**2), nest=True)
                     x, y, z = hp.pix2vec(nside, np.arange(12 * nside**2), nest=True)
 
@@ -1465,10 +1461,12 @@ class FoCUS:
                     wav = np.zeros(
                         [12 * nside * nside * 64 * self.NORIENT], dtype="complex"
                     )
-                    wwav = np.zeros([12 * nside * nside * 64 * self.NORIENT], dtype="float")
+                    wwav = np.zeros(
+                        [12 * nside * nside * 64 * self.NORIENT], dtype="float"
+                    )
                 iv = 0
                 iv2 = 0
-                
+
                 for iii in range(ncell):
                     if cell_ids is None:
                         if iii % (nside * nside) == nside * nside - 1:
@@ -1479,10 +1477,16 @@ class FoCUS:
                                 )
 
                     if cell_ids is not None:
-                        hidx = np.where((x-x[iii])**2+(y-y[iii])**2+(z-z[iii])**2<(2 * np.pi / nside)**2)[0]
+                        hidx = np.where(
+                            (x - x[iii]) ** 2 + (y - y[iii]) ** 2 + (z - z[iii]) ** 2
+                            < (2 * np.pi / nside) ** 2
+                        )[0]
                     else:
                         hidx = hp.query_disc(
-                            nside, [x[iii], y[iii], z[iii]], 2 * np.pi / nside, nest=True
+                            nside,
+                            [x[iii], y[iii], z[iii]],
+                            2 * np.pi / nside,
+                            nest=True,
                         )
 
                     R = hp.Rotator(rot=[phi[iii], -thi[iii]], eulertype="ZYZ")
@@ -1688,101 +1692,101 @@ class FoCUS:
                         wwav,
                     )
             if self.use_2D:
-                    if l_kernel**2 == 9:
-                        if self.rank == 0:
-                            self.comp_idx_w9(nside)
-                    elif l_kernel**2 == 25:
-                        if self.rank == 0:
-                            self.comp_idx_w25(nside)
-                    else:
-                        if self.rank == 0:
-                            if not self.silent:
-                                print(
-                                    "Only 3x3 and 5x5 kernel have been developped for Healpix and you ask for %dx%d"
-                                    % (self.KERNELSZ, self.KERNELSZ)
-                                )
-                            return None
-        
+                if l_kernel**2 == 9:
+                    if self.rank == 0:
+                        self.comp_idx_w9(nside)
+                elif l_kernel**2 == 25:
+                    if self.rank == 0:
+                        self.comp_idx_w25(nside)
+                else:
+                    if self.rank == 0:
+                        if not self.silent:
+                            print(
+                                "Only 3x3 and 5x5 kernel have been developped for Healpix and you ask for %dx%d"
+                                % (self.KERNELSZ, self.KERNELSZ)
+                            )
+                        return None
+
         if cell_ids is None:
             self.barrier()
             if self.use_2D:
-                    tmp = np.load(
-                        "%s/W%d_%s_%d_IDX.npy"
-                        % (self.TEMPLATE_PATH, l_kernel**2, TMPFILE_VERSION, nside)
-                    )
+                tmp = np.load(
+                    "%s/W%d_%s_%d_IDX.npy"
+                    % (self.TEMPLATE_PATH, l_kernel**2, TMPFILE_VERSION, nside)
+                )
             else:
-                    tmp = np.load(
-                        "%s/FOSCAT_%s_W%d_%d_%d_PIDX.npy"
-                        % (
-                            self.TEMPLATE_PATH,
-                            TMPFILE_VERSION,
-                            self.KERNELSZ**2,
-                            self.NORIENT,
-                            nside,
-                        )
+                tmp = np.load(
+                    "%s/FOSCAT_%s_W%d_%d_%d_PIDX.npy"
+                    % (
+                        self.TEMPLATE_PATH,
+                        TMPFILE_VERSION,
+                        self.KERNELSZ**2,
+                        self.NORIENT,
+                        nside,
                     )
+                )
             tmp2 = np.load(
-                    "%s/FOSCAT_%s_W%d_%d_%d_PIDX2.npy"
-                    % (
-                        self.TEMPLATE_PATH,
-                        TMPFILE_VERSION,
-                        self.KERNELSZ**2,
-                        self.NORIENT,
-                        nside,
-                    )
+                "%s/FOSCAT_%s_W%d_%d_%d_PIDX2.npy"
+                % (
+                    self.TEMPLATE_PATH,
+                    TMPFILE_VERSION,
+                    self.KERNELSZ**2,
+                    self.NORIENT,
+                    nside,
                 )
+            )
             wr = np.load(
-                    "%s/FOSCAT_%s_W%d_%d_%d_WAVE.npy"
-                    % (
-                        self.TEMPLATE_PATH,
-                        TMPFILE_VERSION,
-                        self.KERNELSZ**2,
-                        self.NORIENT,
-                        nside,
-                    )
-                ).real
-            wi = np.load(
-                    "%s/FOSCAT_%s_W%d_%d_%d_WAVE.npy"
-                    % (
-                        self.TEMPLATE_PATH,
-                        TMPFILE_VERSION,
-                        self.KERNELSZ**2,
-                        self.NORIENT,
-                        nside,
-                    )
-                ).imag
-            ws = self.slope * np.load(
-                    "%s/FOSCAT_%s_W%d_%d_%d_SMOO.npy"
-                    % (
-                        self.TEMPLATE_PATH,
-                        TMPFILE_VERSION,
-                        self.KERNELSZ**2,
-                        self.NORIENT,
-                        nside,
-                    )
+                "%s/FOSCAT_%s_W%d_%d_%d_WAVE.npy"
+                % (
+                    self.TEMPLATE_PATH,
+                    TMPFILE_VERSION,
+                    self.KERNELSZ**2,
+                    self.NORIENT,
+                    nside,
                 )
+            ).real
+            wi = np.load(
+                "%s/FOSCAT_%s_W%d_%d_%d_WAVE.npy"
+                % (
+                    self.TEMPLATE_PATH,
+                    TMPFILE_VERSION,
+                    self.KERNELSZ**2,
+                    self.NORIENT,
+                    nside,
+                )
+            ).imag
+            ws = self.slope * np.load(
+                "%s/FOSCAT_%s_W%d_%d_%d_SMOO.npy"
+                % (
+                    self.TEMPLATE_PATH,
+                    TMPFILE_VERSION,
+                    self.KERNELSZ**2,
+                    self.NORIENT,
+                    nside,
+                )
+            )
         else:
-            tmp=indice
-            tmp2=indice2
-            wr=wav.real
-            wi=wav.imag
-            ws=self.slope * wwav
+            tmp = indice
+            tmp2 = indice2
+            wr = wav.real
+            wi = wav.imag
+            ws = self.slope * wwav
 
         wr = self.backend.bk_SparseTensor(
-                self.backend.bk_constant(tmp),
-                self.backend.bk_constant(self.backend.bk_cast(wr)),
-                dense_shape=[ncell, self.NORIENT * ncell],
-            )
+            self.backend.bk_constant(tmp),
+            self.backend.bk_constant(self.backend.bk_cast(wr)),
+            dense_shape=[ncell, self.NORIENT * ncell],
+        )
         wi = self.backend.bk_SparseTensor(
-                self.backend.bk_constant(tmp),
-                self.backend.bk_constant(self.backend.bk_cast(wi)),
-                dense_shape=[ncell, self.NORIENT * ncell],
-            )
+            self.backend.bk_constant(tmp),
+            self.backend.bk_constant(self.backend.bk_cast(wi)),
+            dense_shape=[ncell, self.NORIENT * ncell],
+        )
         ws = self.backend.bk_SparseTensor(
-                self.backend.bk_constant(tmp2),
-                self.backend.bk_constant(self.backend.bk_cast(ws)),
-                dense_shape=[ncell, ncell],
-            )
+            self.backend.bk_constant(tmp2),
+            self.backend.bk_constant(self.backend.bk_cast(ws)),
+            dense_shape=[ncell, ncell],
+        )
 
         if kernel == -1:
             self.Idx_Neighbours[nside] = tmp
@@ -2366,7 +2370,7 @@ class FoCUS:
 
         else:
             ishape = list(image.shape)
-            '''
+            """
             if cell_ids is not None:
                 if cell_ids.shape[0] not in self.padding_conv:
                     print(image.shape,cell_ids.shape)
@@ -2420,15 +2424,15 @@ class FoCUS:
                                     padded_data
                                 ) + 1j * kernelI.matmul(padded_data)
                 return res
-            '''
+            """
             if nside is None:
                 nside = int(np.sqrt(image.shape[-1] // 12))
 
             if self.Idx_Neighbours[nside] is None:
                 if self.InitWave is None:
-                    wr, wi, ws, widx = self.init_index(nside,cell_ids=cell_ids)
+                    wr, wi, ws, widx = self.init_index(nside, cell_ids=cell_ids)
                 else:
-                    wr, wi, ws, widx = self.InitWave(nside,cell_ids=cell_ids)
+                    wr, wi, ws, widx = self.InitWave(nside, cell_ids=cell_ids)
 
                 self.Idx_Neighbours[nside] = 1  # self.backend.bk_constant(tmp)
                 self.ww_Real[nside] = wr
@@ -2629,7 +2633,7 @@ class FoCUS:
         else:
 
             ishape = list(image.shape)
-            '''
+            """
             if cell_ids is not None:
                 if cell_ids.shape[0] not in self.padding_smooth:
                     import healpix_convolution as hc
@@ -2670,16 +2674,16 @@ class FoCUS:
                             padded_data = padding.apply(image[l, :, k2], is_torch=True)
                             res[l, :, k2] = kernel.matmul(padded_data)
                 return res
-            '''
+            """
             if nside is None:
                 nside = int(np.sqrt(image.shape[-1] // 12))
 
             if self.Idx_Neighbours[nside] is None:
 
                 if self.InitWave is None:
-                    wr, wi, ws, widx = self.init_index(nside,cell_ids=cell_ids)
+                    wr, wi, ws, widx = self.init_index(nside, cell_ids=cell_ids)
                 else:
-                    wr, wi, ws, widx = self.InitWave(self, nside,cell_ids=cell_ids)
+                    wr, wi, ws, widx = self.InitWave(self, nside, cell_ids=cell_ids)
 
                 self.Idx_Neighbours[nside] = 1
                 self.ww_Real[nside] = wr
