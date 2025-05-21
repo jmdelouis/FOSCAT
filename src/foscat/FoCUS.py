@@ -1538,6 +1538,7 @@ class FoCUS:
 
                         val = wresr[idx] - normr + 1j * (wresi[idx] - normi)
                         r=abs(val).sum()
+                        
                         if r>0:
                             val = val / r
 
