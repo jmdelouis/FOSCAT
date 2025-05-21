@@ -2847,7 +2847,8 @@ class funct(FOC.FoCUS):
             conv1 = self.convol(
                 I1, axis=1, cell_ids=cell_ids_j3, nside=nside_j3
             )  # [Nbatch, Norient3 , Npix_j3]
-            print("C1,I1 ", np.max(conv1.numpy(), 2), np.max(I1.numpy(), 1))
+            print("C1 ", np.max(conv1.numpy(), 2))
+            print("I1 ", np.max(I1.numpy(), 1))
 
             if cmat is not None:
 
@@ -3482,9 +3483,11 @@ class funct(FOC.FoCUS):
             # downscale the I1 [Nbatch, Npix_j3]
             if j3 != Jmax - 1:
                 I1 = self.smooth(I1, axis=1, cell_ids=cell_ids_j3, nside=nside_j3)
+                print('Smooth ',np.max(I1.numpy(),1))
                 I1, new_cell_ids_j3 = self.ud_grade_2(
                     I1, axis=1, cell_ids=cell_ids_j3, nside=nside_j3
                 )
+                print('Downgrade ',np.max(I1.numpy(),1))
 
                 ### Image I2
                 if cross:
