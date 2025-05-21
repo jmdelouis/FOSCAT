@@ -167,7 +167,7 @@ class BkTensorflow(BackendBase.BackendBase):
         # Step 5: count per bin (same indices)
         counts = tf.math.bincount(indices, minlength=total_bins, maxlength=total_bins)
         counts = tf.reshape(counts, ishape[0:-1] + [n_bins])
-        # counts = tf.maximum(counts, 1.0)  # Avoid division by zero
+        counts = tf.maximum(counts, 1.0)  # Avoid division by zero
         counts = tf.cast(counts, dtype=data.dtype)
 
         # Step 6: mean
