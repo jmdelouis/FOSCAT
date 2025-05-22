@@ -62,55 +62,66 @@ class BkTorch(BackendBase.BackendBase):
             torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
         )
 
+    import torch
+
     def binned_mean(self, data, cell_ids):
         """
-        data: Tensor of shape [B, N, A]
-        I: Tensor of shape [N], integer indices in [0, n_bins)
-        Returns: mean per bin, shape [B, n_bins, A]
+        Compute the mean over groups of 4 nested HEALPix cells (nside → nside/2).
+        
+        Args:
+            data (torch.Tensor): Tensor of shape [..., N], where N is the number of HEALPix cells.
+            cell_ids (torch.LongTensor): Tensor of shape [N], with cell indices (nested ordering).
+        
+        Returns:
+            torch.Tensor: Tensor of shape [..., n_bins], with averaged values per group of 4 cells.
         """
-        groups = cell_ids // 4  # [N]
-
-        unique_groups, I = np.unique(groups, return_inverse=True)
-
+        if isinstance(data, np.ndarray):
+            data = torch.from_numpy(data).to(dtype=torch.float32,device=self.torch_device)
+        if isinstance(cell_ids, np.ndarray):
+            cell_ids = torch.from_numpy(cell_ids).to(dtype=torch.long,device=self.torch_device)
+            
+        # Compute supercell ids by grouping 4 nested cells together
+        groups = cell_ids // 4
+        
+        # Get unique group ids and inverse mapping
+        unique_groups, inverse_indices = torch.unique(groups, return_inverse=True)
         n_bins = unique_groups.shape[0]
 
-        B = data.shape[0]
+        # Flatten all leading dimensions into a single batch dimension
+        original_shape = data.shape[:-1]
+        N = data.shape[-1]
+        data_flat = data.reshape(-1, N)  # Shape: [B, N]
 
-        counts = torch.bincount(torch.tensor(I).to(data.device))[None, :]
+        # Prepare to compute sums using scatter_add
+        B = data_flat.shape[0]
+        
+        # Repeat inverse indices for each batch element
+        idx = inverse_indices.repeat(B, 1)  # Shape: [B, N]
 
-        I = np.tile(I, B) + np.tile(n_bins * np.arange(B, dtype="int"), data.shape[1])
+        # Offset indices to simulate a per-batch scatter into [B * n_bins]
+        batch_offsets = torch.arange(B, device=data.device).unsqueeze(1) * n_bins
+        idx_offset = idx + batch_offsets  # Shape: [B, N]
+        
+        # Flatten everything for scatter
+        idx_offset_flat = idx_offset.flatten()
+        data_flat_flat = data_flat.flatten()
 
-        if len(data.shape) == 3:
-            A = data.shape[2]
-            I = np.repeat(I, A) * A + np.repeat(
-                np.arange(A, dtype="int"), data.shape[1] * B
-            )
+        # Accumulate sums per bin
+        out = torch.zeros(B * n_bins, dtype=data.dtype, device=data.device)
+        out = out.scatter_add(0, idx_offset_flat, data_flat_flat)
 
-        I = torch.tensor(I).to(data.device)
+        # Count number of elements per bin (to compute mean)
+        ones = torch.ones_like(data_flat_flat)
+        counts = torch.zeros(B * n_bins, dtype=data.dtype, device=data.device)
+        counts = counts.scatter_add(0, idx_offset_flat, ones)
 
-        # Comptage par bin
-        if len(data.shape) == 2:
-            sum_per_bin = torch.zeros(
-                [B * n_bins], dtype=data.dtype, device=data.device
-            )
-            sum_per_bin = sum_per_bin.scatter_add(
-                0, I, self.bk_reshape(data, B * data.shape[1])
-            ).reshape(B, n_bins)
+        # Compute mean
+        mean = out / counts  # Shape: [B * n_bins]
+        mean = mean.view(B, n_bins)
 
-            mean_per_bin = sum_per_bin / counts  # [B, n_bins, A]
-        else:
-            sum_per_bin = torch.zeros(
-                [B * n_bins * A], dtype=data.dtype, device=data.device
-            )
-            sum_per_bin = sum_per_bin.scatter_add(
-                0, I, self.bk_reshape(data, B * data.shape[1] * A)
-            ).reshape(
-                B, n_bins, A
-            )  # [B, n_bins]
+        # Restore original leading dimensions
+        return mean.view(*original_shape, n_bins), unique_groups
 
-            mean_per_bin = sum_per_bin / counts[:, :, None]  # [B, n_bins, A]
-
-        return mean_per_bin, unique_groups
 
     def average_by_cell_group(data, cell_ids):
         """

@@ -1403,16 +1403,29 @@ class FoCUS:
                     % (self.TEMPLATE_PATH, l_kernel**2, TMPFILE_VERSION, nside)
                 )
             else:
-                tmp = np.load(
-                    "%s/FOSCAT_%s_W%d_%d_%d_PIDX.npy"
-                    % (
-                        self.TEMPLATE_PATH,
-                        TMPFILE_VERSION,
-                        l_kernel**2,
-                        self.NORIENT,
-                        nside + int(cell_ids == None),  # if cell_ids computes the index
+                if cell_ids is not None:
+                    tmp = np.load(
+                        "%s/XXXX_%s_W%d_%d_%d_PIDX.npy"  #can not work
+                        % (
+                            self.TEMPLATE_PATH,
+                            TMPFILE_VERSION,
+                            l_kernel**2,
+                            self.NORIENT,
+                            nside,  # if cell_ids computes the index
+                        )
                     )
-                )
+
+                else:
+                    tmp = np.load(
+                        "%s/FOSCAT_%s_W%d_%d_%d_PIDX.npy"
+                        % (
+                            self.TEMPLATE_PATH,
+                            TMPFILE_VERSION,
+                            l_kernel**2,
+                            self.NORIENT,
+                            nside,  # if cell_ids computes the index
+                        )
+                    )
         except:
             if not self.use_2D:
 
@@ -1432,7 +1445,8 @@ class FoCUS:
                     threshold = 4e-5
 
                 if cell_ids is not None:
-
+                    if not isinstance(cell_ids, np.ndarray):
+                        cell_ids=self.backend.to_numpy(cell_ids)
                     th, ph = hp.pix2ang(nside, cell_ids, nest=True)
                     x, y, z = hp.pix2vec(nside, cell_ids, nest=True)
 
