@@ -1405,7 +1405,7 @@ class FoCUS:
             else:
                 if cell_ids is not None:
                     tmp = np.load(
-                        "%s/XXXX_%s_W%d_%d_%d_PIDX.npy"  #can not work
+                        "%s/XXXX_%s_W%d_%d_%d_PIDX.npy"  # can not work
                         % (
                             self.TEMPLATE_PATH,
                             TMPFILE_VERSION,
@@ -1446,7 +1446,7 @@ class FoCUS:
 
                 if cell_ids is not None:
                     if not isinstance(cell_ids, np.ndarray):
-                        cell_ids=self.backend.to_numpy(cell_ids)
+                        cell_ids = self.backend.to_numpy(cell_ids)
                     th, ph = hp.pix2ang(nside, cell_ids, nest=True)
                     x, y, z = hp.pix2vec(nside, cell_ids, nest=True)
 

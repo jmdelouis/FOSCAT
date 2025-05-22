@@ -67,22 +67,26 @@ class BkTorch(BackendBase.BackendBase):
     def binned_mean(self, data, cell_ids):
         """
         Compute the mean over groups of 4 nested HEALPix cells (nside → nside/2).
-        
+
         Args:
             data (torch.Tensor): Tensor of shape [..., N], where N is the number of HEALPix cells.
             cell_ids (torch.LongTensor): Tensor of shape [N], with cell indices (nested ordering).
-        
+
         Returns:
             torch.Tensor: Tensor of shape [..., n_bins], with averaged values per group of 4 cells.
         """
         if isinstance(data, np.ndarray):
-            data = torch.from_numpy(data).to(dtype=torch.float32,device=self.torch_device)
+            data = torch.from_numpy(data).to(
+                dtype=torch.float32, device=self.torch_device
+            )
         if isinstance(cell_ids, np.ndarray):
-            cell_ids = torch.from_numpy(cell_ids).to(dtype=torch.long,device=self.torch_device)
-            
+            cell_ids = torch.from_numpy(cell_ids).to(
+                dtype=torch.long, device=self.torch_device
+            )
+
         # Compute supercell ids by grouping 4 nested cells together
         groups = cell_ids // 4
-        
+
         # Get unique group ids and inverse mapping
         unique_groups, inverse_indices = torch.unique(groups, return_inverse=True)
         n_bins = unique_groups.shape[0]
@@ -94,14 +98,14 @@ class BkTorch(BackendBase.BackendBase):
 
         # Prepare to compute sums using scatter_add
         B = data_flat.shape[0]
-        
+
         # Repeat inverse indices for each batch element
         idx = inverse_indices.repeat(B, 1)  # Shape: [B, N]
 
         # Offset indices to simulate a per-batch scatter into [B * n_bins]
         batch_offsets = torch.arange(B, device=data.device).unsqueeze(1) * n_bins
         idx_offset = idx + batch_offsets  # Shape: [B, N]
-        
+
         # Flatten everything for scatter
         idx_offset_flat = idx_offset.flatten()
         data_flat_flat = data_flat.flatten()
@@ -121,7 +125,6 @@ class BkTorch(BackendBase.BackendBase):
 
         # Restore original leading dimensions
         return mean.view(*original_shape, n_bins), unique_groups
-
 
     def average_by_cell_group(data, cell_ids):
         """
