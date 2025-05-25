@@ -68,7 +68,7 @@ class BkTensorflow(BackendBase.BackendBase):
                 print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
                 sys.stdout.flush()
                 self.ngpu = len(logical_gpus)
-                if self.ngpu>0:
+                if self.ngpu > 0:
                     gpuname = logical_gpus[self.gpupos % self.ngpu].name
                     self.gpulist = {}
                     for i in range(self.ngpu):
@@ -209,10 +209,14 @@ class BkTensorflow(BackendBase.BackendBase):
         # Apply 'reflect' padding manually
         pad_x = wx // 2
         pad_y = wy // 2
-        x_padded = tf.pad(x, [[0, 0], [pad_x, pad_x], [pad_y, pad_y], [0, 0]], mode='REFLECT')
+        x_padded = tf.pad(
+            x, [[0, 0], [pad_x, pad_x], [pad_y, pad_y], [0, 0]], mode="REFLECT"
+        )
 
         # Perform convolution
-        y = tf.nn.conv2d(x_padded, w, strides=[1, 1, 1, 1], padding='VALID')  # [B, Nx, Ny, O_c]
+        y = tf.nn.conv2d(
+            x_padded, w, strides=[1, 1, 1, 1], padding="VALID"
+        )  # [B, Nx, Ny, O_c]
 
         # Transpose back to match original format: [..., O_c, Nx, Ny]
         y = tf.transpose(y, [0, 3, 1, 2])  # [B, O_c, Nx, Ny]

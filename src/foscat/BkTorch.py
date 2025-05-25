@@ -4,7 +4,6 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-
 import foscat.BkBase as BackendBase
 
 
@@ -187,7 +186,7 @@ class BkTorch(BackendBase.BackendBase):
         pad_y = wy // 2
 
         # Reflective padding to reduce edge artifacts
-        x_padded = F.pad(x, (pad_y, pad_y, pad_x, pad_x), mode='reflect')
+        x_padded = F.pad(x, (pad_y, pad_y, pad_x, pad_x), mode="reflect")
 
         # Apply convolution
         y = F.conv2d(x_padded, w)  # [B, O_c, Nx, Ny]
@@ -196,7 +195,6 @@ class BkTorch(BackendBase.BackendBase):
         y = y.reshape(*leading_dims, O_c, Nx, Ny)
 
         return y
-
 
     def conv1d(self, x, w, strides=[1, 1, 1], padding="SAME"):
         # to be written!!!
