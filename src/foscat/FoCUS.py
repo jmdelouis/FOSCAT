@@ -179,8 +179,8 @@ class FoCUS:
         self.filters_set = {}
         self.edge_masks = {}
 
-        wwc = np.zeros([KERNELSZ**2, l_NORIENT]).astype(all_type)
-        wws = np.zeros([KERNELSZ**2, l_NORIENT]).astype(all_type)
+        wwc = np.zeros([l_NORIENT,KERNELSZ**2]).astype(all_type)
+        wws = np.zeros([l_NORIENT,KERNELSZ**2]).astype(all_type)
 
         x = np.repeat(np.arange(KERNELSZ) - KERNELSZ // 2, KERNELSZ).reshape(
             KERNELSZ, KERNELSZ
@@ -203,12 +203,12 @@ class FoCUS:
                     -0.5 * (xx**2 + yy**2)
                 )
 
-            wwc[:, 0] = tmp.flatten() - tmp.mean()
+            wwc[0] = tmp.flatten() - tmp.mean()
             tmp = 0 * w_smooth
-            wws[:, 0] = tmp.flatten()
+            wws[0] = tmp.flatten()
             sigma = np.sqrt((wwc[:, 0] ** 2).mean())
-            wwc[:, 0] /= sigma
-            wws[:, 0] /= sigma
+            wwc[0] /= sigma
+            wws[0] /= sigma
 
             w_smooth = w_smooth.flatten()
         else:
@@ -239,12 +239,12 @@ class FoCUS:
                 tmp1 = np.cos(yy * np.pi) * w_smooth
                 tmp2 = np.sin(yy * np.pi) * w_smooth
 
-                wwc[:, i] = tmp1.flatten() - tmp1.mean()
-                wws[:, i] = tmp2.flatten() - tmp2.mean()
+                wwc[i] = tmp1.flatten() - tmp1.mean()
+                wws[i] = tmp2.flatten() - tmp2.mean()
                 # sigma = np.sqrt((wwc[:, i] ** 2).mean())
                 sigma = np.mean(w_smooth)
-                wwc[:, i] /= sigma
-                wws[:, i] /= sigma
+                wwc[i] /= sigma
+                wws[i] /= sigma
 
                 if DODIV and i == 0:
                     r = xx**2 + yy**2
@@ -253,22 +253,22 @@ class FoCUS:
                     tmp1 = r * np.cos(2 * theta) * w_smooth
                     tmp2 = r * np.sin(2 * theta) * w_smooth
 
-                    wwc[:, NORIENT] = tmp1.flatten() - tmp1.mean()
-                    wws[:, NORIENT] = tmp2.flatten() - tmp2.mean()
+                    wwc[NORIENT] = tmp1.flatten() - tmp1.mean()
+                    wws[NORIENT] = tmp2.flatten() - tmp2.mean()
                     # sigma = np.sqrt((wwc[:, NORIENT] ** 2).mean())
                     sigma = np.mean(w_smooth)
 
-                    wwc[:, NORIENT] /= sigma
-                    wws[:, NORIENT] /= sigma
+                    wwc[NORIENT] /= sigma
+                    wws[NORIENT] /= sigma
                     tmp1 = r * np.cos(2 * theta + np.pi)
                     tmp2 = r * np.sin(2 * theta + np.pi)
 
-                    wwc[:, NORIENT + 1] = tmp1.flatten() - tmp1.mean()
-                    wws[:, NORIENT + 1] = tmp2.flatten() - tmp2.mean()
+                    wwc[NORIENT + 1] = tmp1.flatten() - tmp1.mean()
+                    wws[NORIENT + 1] = tmp2.flatten() - tmp2.mean()
                     # sigma = np.sqrt((wwc[:, NORIENT + 1] ** 2).mean())
                     sigma = np.mean(w_smooth)
-                    wwc[:, NORIENT + 1] /= sigma
-                    wws[:, NORIENT + 1] /= sigma
+                    wwc[NORIENT + 1] /= sigma
+                    wws[NORIENT + 1] /= sigma
 
                 w_smooth = w_smooth.flatten()
 
@@ -317,13 +317,13 @@ class FoCUS:
                 c = c / r
                 s = s / r
                 self.ww_RealT[1] = self.backend.bk_constant(
-                    np.array(c).reshape(xx.shape[0], 1, 1)
+                    np.array(c).reshape(1,1,xx.shape[0])
                 )
                 self.ww_ImagT[1] = self.backend.bk_constant(
-                    np.array(s).reshape(xx.shape[0], 1, 1)
+                    np.array(s).reshape(1,1,xx.shape[0])
                 )
                 self.ww_SmoothT[1] = self.backend.bk_constant(
-                    np.array(w).reshape(xx.shape[0], 1, 1)
+                    np.array(w).reshape(1,1,xx.shape[0])
                 )
 
         else:
@@ -333,22 +333,18 @@ class FoCUS:
             self.ww_SmoothT = {}
 
             self.ww_SmoothT[1] = self.backend.bk_constant(
-                self.w_smooth.reshape(KERNELSZ, KERNELSZ, 1, 1)
-            )
-            www = np.zeros([KERNELSZ, KERNELSZ, NORIENT, NORIENT], dtype=self.all_type)
-            for k in range(NORIENT):
-                www[:, :, k, k] = self.w_smooth.reshape(KERNELSZ, KERNELSZ)
-            self.ww_SmoothT[NORIENT] = self.backend.bk_constant(
-                www.reshape(KERNELSZ, KERNELSZ, NORIENT, NORIENT)
+                self.w_smooth.reshape(1,KERNELSZ, KERNELSZ)
             )
             self.ww_RealT[1] = self.backend.bk_constant(
                 self.backend.bk_reshape(
-                    wwc.astype(self.all_type), [KERNELSZ, KERNELSZ, 1, NORIENT]
+                    wwc.astype(self.all_type), 
+                    [NORIENT, KERNELSZ, KERNELSZ ]
                 )
             )
             self.ww_ImagT[1] = self.backend.bk_constant(
                 self.backend.bk_reshape(
-                    wws.astype(self.all_type), [KERNELSZ, KERNELSZ, 1, NORIENT]
+                    wws.astype(self.all_type), 
+                    [NORIENT, KERNELSZ, KERNELSZ ]
                 )
             )
 
@@ -1903,13 +1899,11 @@ class FoCUS:
                     ]
 
             ichannel = 1
-            for i in range(axis):
+            for i in range(1,len(shape)-2):
                 ichannel *= shape[i]
-            ochannel = 1
-            for i in range(axis + 2, len(shape)):
-                ochannel *= shape[i]
+            
             l_x = self.backend.bk_reshape(
-                x, [ichannel, 1, shape[axis], shape[axis + 1], ochannel]
+                x, [shape[0], 1, ichannel, shape[-2], shape[-1]]
             )
 
             if self.padding == "VALID":
@@ -1970,21 +1964,21 @@ class FoCUS:
             #    vtmp = l_x[:,self.KERNELSZ // 2 : -self.KERNELSZ // 2,self.KERNELSZ // 2 : -self.KERNELSZ // 2,:]
 
             v1 = self.backend.bk_reduce_sum(
-                self.backend.bk_reduce_sum(mtmp * vtmp, axis=2), 2
+                self.backend.bk_reduce_sum(mtmp * vtmp, axis=-1), -1
             )
             v2 = self.backend.bk_reduce_sum(
-                self.backend.bk_reduce_sum(mtmp * vtmp * vtmp, axis=2), 2
+                self.backend.bk_reduce_sum(mtmp * vtmp * vtmp, axis=-1), -1
             )
-            vh = self.backend.bk_reduce_sum(self.backend.bk_reduce_sum(mtmp, axis=2), 2)
+            vh = self.backend.bk_reduce_sum(self.backend.bk_reduce_sum(mtmp, axis=-1), -1)
 
             res = v1 / vh
 
-            oshape = []
+            oshape = [x.shape[0]]+ [mask.shape[0]]
             if axis > 0:
-                oshape = oshape + list(x.shape[0:axis])
-            oshape = oshape + [mask.shape[0]]
-            if axis + 1 < len(x.shape):
-                oshape = oshape + list(x.shape[axis + 2 :])
+                oshape = oshape + list(x.shape[1:axis])
+            
+            if len(x.shape[axis:-2])>0:
+                oshape = oshape + list(x.shape[axis:-2])
 
             if calc_var:
                 if self.backend.bk_is_complex(vtmp):
@@ -2232,86 +2226,52 @@ class FoCUS:
                     print("Use of 2D scat with data that has less than 2D")
                 return None
 
-            npix = ishape[axis]
-            npiy = ishape[axis + 1]
-            odata = 1
-            if len(ishape) > axis + 2:
-                for k in range(axis + 2, len(ishape)):
-                    odata = odata * ishape[k]
+            npix = ishape[-2]
+            npiy = ishape[-1]
 
             ndata = 1
-            for k in range(axis):
+            for k in range(len(ishape)-2):
                 ndata = ndata * ishape[k]
 
             tim = self.backend.bk_reshape(
-                self.backend.bk_cast(in_image), [ndata, npix, npiy, odata]
+                self.backend.bk_cast(in_image), [ndata, npix, npiy]
             )
 
             if self.backend.bk_is_complex(tim):
                 rr1 = self.backend.conv2d(
                     self.backend.bk_real(tim),
-                    self.ww_RealT[odata],
-                    strides=[1, 1, 1, 1],
-                    padding=self.padding,
+                    self.ww_RealT[1]
                 )
                 ii1 = self.backend.conv2d(
                     self.backend.bk_real(tim),
-                    self.ww_ImagT[odata],
-                    strides=[1, 1, 1, 1],
-                    padding=self.padding,
+                    self.ww_ImagT[1]
                 )
                 rr2 = self.backend.conv2d(
                     self.backend.bk_imag(tim),
-                    self.ww_RealT[odata],
-                    strides=[1, 1, 1, 1],
-                    padding=self.padding,
+                    self.ww_RealT[1]
                 )
                 ii2 = self.backend.conv2d(
                     self.backend.bk_imag(tim),
-                    self.ww_ImagT[odata],
-                    strides=[1, 1, 1, 1],
-                    padding=self.padding,
+                    self.ww_ImagT[1]
                 )
                 res = self.backend.bk_complex(rr1 - ii2, ii1 + rr2)
             else:
                 rr = self.backend.conv2d(
                     tim,
-                    self.ww_RealT[odata],
-                    strides=[1, 1, 1, 1],
-                    padding=self.padding,
+                    self.ww_RealT[1]
                 )
                 ii = self.backend.conv2d(
                     tim,
-                    self.ww_ImagT[odata],
-                    strides=[1, 1, 1, 1],
-                    padding=self.padding,
+                    self.ww_ImagT[1]
                 )
                 res = self.backend.bk_complex(rr, ii)
 
-            if axis == 0:
-                if len(ishape) == 2:
-                    return self.backend.bk_reshape(
-                        res, [res.shape[1], res.shape[2], self.NORIENT]
-                    )
-                else:
-                    return self.backend.bk_reshape(
+            return self.backend.bk_reshape(
                         res,
-                        [res.shape[1], res.shape[2], self.NORIENT] + ishape[axis + 2 :],
-                    )
-            else:
-                if len(ishape) == axis + 2:
-                    return self.backend.bk_reshape(
-                        res, ishape[0:axis] + [res.shape[1], res.shape[2], self.NORIENT]
-                    )
-                else:
-                    return self.backend.bk_reshape(
-                        res,
-                        ishape[0:axis]
-                        + [res.shape[1], res.shape[2], self.NORIENT]
-                        + ishape[axis + 2 :],
+                        ishape[0:-2]
+                        + [self.NORIENT,npix,npiy]
                     )
 
-            return self.backend.bk_reshape(res, in_image.shape + [self.NORIENT])
         elif self.use_1D:
             ishape = list(in_image.shape)
             if len(ishape) < axis + 1:
@@ -2543,52 +2503,29 @@ class FoCUS:
                 ndata = ndata * ishape[k]
 
             tim = self.backend.bk_reshape(
-                self.backend.bk_cast(in_image), [ndata, npix, npiy, odata]
+                self.backend.bk_cast(in_image), [ndata, npix, npiy]
             )
 
             if self.backend.bk_is_complex(tim):
                 rr = self.backend.conv2d(
                     self.backend.bk_real(tim),
-                    self.ww_SmoothT[odata],
-                    strides=[1, 1, 1, 1],
-                    padding=self.padding,
+                    self.ww_SmoothT[1]
                 )
                 ii = self.backend.conv2d(
                     self.backend.bk_imag(tim),
-                    self.ww_SmoothT[odata],
-                    strides=[1, 1, 1, 1],
-                    padding=self.padding,
+                    self.ww_SmoothT[1]
                 )
                 res = self.backend.bk_complex(rr, ii)
             else:
                 res = self.backend.conv2d(
                     tim,
-                    self.ww_SmoothT[odata],
-                    strides=[1, 1, 1, 1],
-                    padding=self.padding,
+                    self.ww_SmoothT[1]
                 )
 
-            if axis == 0:
-                if len(ishape) == 2:
-                    return self.backend.bk_reshape(res, [res.shape[1], res.shape[2]])
-                else:
-                    return self.backend.bk_reshape(
-                        res, [res.shape[1], res.shape[2]] + ishape[axis + 2 :]
+            return self.backend.bk_reshape(
+                        res, ishape
                     )
-            else:
-                if len(ishape) == axis + 2:
-                    return self.backend.bk_reshape(
-                        res, ishape[0:axis] + [res.shape[1], res.shape[2]]
-                    )
-                else:
-                    return self.backend.bk_reshape(
-                        res,
-                        ishape[0:axis]
-                        + [res.shape[1], res.shape[2]]
-                        + ishape[axis + 2 :],
-                    )
-
-            return self.backend.bk_reshape(res, in_image.shape)
+                    
         elif self.use_1D:
 
             ishape = list(in_image.shape)

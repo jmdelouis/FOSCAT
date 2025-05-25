@@ -2,6 +2,8 @@ import sys
 
 import numpy as np
 import torch
+import torch.nn.functional as F
+
 
 import foscat.BkBase as BackendBase
 
@@ -160,20 +162,41 @@ class BkTorch(BackendBase.BackendBase):
     def bk_sparse_dense_matmul(self, smat, mat):
         return smat.matmul(mat)
 
-    def conv2d(self, x, w, strides=[1, 1, 1, 1], padding="SAME"):
-        import torch.nn.functional as F
+    def conv2d(self, x, w):
+        """
+        Perform 2D convolution using PyTorch format.
 
-        lx = x.permute(0, 3, 1, 2)
-        wx = w.permute(3, 2, 0, 1)  # de (5, 5, 1, 4) à (4, 1, 5, 5)
+        Args:
+            x: Tensor of shape [..., Nx, Ny] – input
+            w: Tensor of shape [O_c, wx, wy] – conv weights
 
-        # Calculer le padding symétrique
-        kx, ky = w.shape[0], w.shape[1]
+        Returns:
+            Tensor of shape [..., O_c, Nx, Ny]
+        """
+        *leading_dims, Nx, Ny = x.shape  # extract leading dims
+        O_c, wx, wy = w.shape
 
-        # Appliquer le padding
-        x_padded = F.pad(lx, (ky // 2, ky // 2, kx // 2, kx // 2), mode="circular")
+        # Flatten leading dims into batch dimension
+        B = int(torch.prod(torch.tensor(leading_dims))) if leading_dims else 1
+        x = x.reshape(B, 1, Nx, Ny)  # [B, 1, Nx, Ny]
 
-        # Appliquer la convolution
-        return F.conv2d(x_padded, wx, stride=1, padding=0).permute(0, 2, 3, 1)
+        # Reshape filters to match conv2d format [O_c, 1, wx, wy]
+        w = w[:, None, :, :]  # [O_c, 1, wx, wy]
+
+        pad_x = wx // 2
+        pad_y = wy // 2
+
+        # Reflective padding to reduce edge artifacts
+        x_padded = F.pad(x, (pad_y, pad_y, pad_x, pad_x), mode='reflect')
+
+        # Apply convolution
+        y = F.conv2d(x_padded, w)  # [B, O_c, Nx, Ny]
+
+        # Restore original leading dimensions
+        y = y.reshape(*leading_dims, O_c, Nx, Ny)
+
+        return y
+
 
     def conv1d(self, x, w, strides=[1, 1, 1], padding="SAME"):
         # to be written!!!

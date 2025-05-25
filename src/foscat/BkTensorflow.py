@@ -68,10 +68,16 @@ class BkTensorflow(BackendBase.BackendBase):
                 print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
                 sys.stdout.flush()
                 self.ngpu = len(logical_gpus)
-                gpuname = logical_gpus[self.gpupos % self.ngpu].name
-                self.gpulist = {}
-                for i in range(self.ngpu):
-                    self.gpulist[i] = logical_gpus[i].name
+                if self.ngpu>0:
+                    gpuname = logical_gpus[self.gpupos % self.ngpu].name
+                    self.gpulist = {}
+                    for i in range(self.ngpu):
+                        self.gpulist[i] = logical_gpus[i].name
+                else:
+                    gpuname = "CPU:0"
+                    self.gpulist = {}
+                    self.gpulist[0] = gpuname
+                    self.ngpu = 1
 
             except RuntimeError as e:
                 # Memory growth must be set before GPUs have been initialized
@@ -176,11 +182,43 @@ class BkTensorflow(BackendBase.BackendBase):
 
         return mean_per_bin, unique_groups
 
-    def conv2d(self, x, w, strides=[1, 1, 1, 1], padding="SAME"):
-        kx = w.shape[0]
-        ky = w.shape[1]
-        x_padded = self.periodic_pad(x, kx // 2, ky // 2)
-        return self.backend.nn.conv2d(x_padded, w, strides=strides, padding="VALID")
+    def conv2d(self, x, w):
+        """
+        Perform 2D convolution using TensorFlow.
+
+        Args:
+            x: Tensor of shape [..., Nx, Ny] – input
+            w: Tensor of shape [O_c, wx, wy] – conv weights
+
+        Returns:
+            Tensor of shape [..., O_c, Nx, Ny]
+        """
+        # Extract shape
+        *leading_dims, Nx, Ny = x.shape
+        O_c, wx, wy = w.shape
+
+        # Flatten leading dims into a batch dimension
+        B = tf.reduce_prod(leading_dims) if leading_dims else 1
+        x = tf.reshape(x, [B, Nx, Ny, 1])  # TensorFlow format: [B, H, W, C_in=1]
+
+        # Reshape weights to [wx, wy, in_channels=1, out_channels]
+        w = tf.reshape(w, [O_c, wx, wy])
+        w = tf.transpose(w, perm=[1, 2, 0])  # [wx, wy, O_c]
+        w = tf.reshape(w, [wx, wy, 1, O_c])  # [wx, wy, C_in=1, C_out]
+
+        # Apply 'reflect' padding manually
+        pad_x = wx // 2
+        pad_y = wy // 2
+        x_padded = tf.pad(x, [[0, 0], [pad_x, pad_x], [pad_y, pad_y], [0, 0]], mode='REFLECT')
+
+        # Perform convolution
+        y = tf.nn.conv2d(x_padded, w, strides=[1, 1, 1, 1], padding='VALID')  # [B, Nx, Ny, O_c]
+
+        # Transpose back to match original format: [..., O_c, Nx, Ny]
+        y = tf.transpose(y, [0, 3, 1, 2])  # [B, O_c, Nx, Ny]
+        y = tf.reshape(y, [*leading_dims, O_c, Nx, Ny])
+
+        return y
 
     def conv1d(self, x, w, strides=[1, 1, 1], padding="SAME"):
         kx = w.shape[0]
