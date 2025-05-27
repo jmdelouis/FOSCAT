@@ -317,19 +317,14 @@ class FoCUS:
                 c = c / r
                 s = s / r
                 self.ww_RealT[1] = self.backend.bk_cast(
-                    self.backend.bk_constant(
-                        np.array(c).reshape(xx.shape[0])
-                    )
-                    )
+                    self.backend.bk_constant(np.array(c).reshape(xx.shape[0]))
+                )
                 self.ww_ImagT[1] = self.backend.bk_cast(
-                    self.backend.bk_constant(
-                    np.array(s).reshape(xx.shape[0])
-                    ))
+                    self.backend.bk_constant(np.array(s).reshape(xx.shape[0]))
+                )
                 self.ww_SmoothT[1] = self.backend.bk_cast(
-                    self.backend.bk_constant(
-                    np.array(w).reshape(xx.shape[0])
-                    )
-                    )
+                    self.backend.bk_constant(np.array(w).reshape(xx.shape[0]))
+                )
 
         else:
             self.w_smooth = slope * (w_smooth / w_smooth.sum()).astype(self.all_type)
@@ -813,12 +808,12 @@ class FoCUS:
                 ndata = ndata * ishape[k]
 
             tim = self.backend.bk_reshape(
-                self.backend.bk_cast(im), [ndata, npix//2,2]
+                self.backend.bk_cast(im), [ndata, npix // 2, 2]
             )
 
             res = self.backend.bk_reduce_mean(tim, -1)
 
-            return self.backend.bk_reshape(res, ishape[0:-1]+[npix // 2]), None
+            return self.backend.bk_reshape(res, ishape[0:-1] + [npix // 2]), None
 
         else:
             shape = list(im.shape)
@@ -1897,15 +1892,12 @@ class FoCUS:
                 if shape[axis] != l_mask.shape[1]:
                     l_mask = l_mask[:, self.KERNELSZ // 2 : -self.KERNELSZ // 2 + 1]
 
-            
             ichannel = 1
             for i in range(1, len(shape) - 1):
                 ichannel *= shape[i]
 
-            l_x = self.backend.bk_reshape(
-                x, [shape[0], 1, ichannel, shape[-1]]
-            )
-            
+            l_x = self.backend.bk_reshape(x, [shape[0], 1, ichannel, shape[-1]])
+
             if self.padding == "VALID":
                 oshape = [k for k in shape]
                 oshape[axis] = oshape[axis] - self.KERNELSZ + 1
@@ -1921,7 +1913,7 @@ class FoCUS:
 
         # data=[Nbatch,...,NORIENT[,NORIENT],X[,Y]] => data=[Nbatch,1,...,NORIENT[,NORIENT],X[,Y]]
         # mask=[Nmask,X[,Y]] => mask=[1,Nmask,....,X[,Y]]
-        l_mask = self.backend.bk_expand_dims(self.backend.bk_expand_dims(l_mask, 0),0)
+        l_mask = self.backend.bk_expand_dims(self.backend.bk_expand_dims(l_mask, 0), 0)
 
         if l_x.dtype == self.all_cbk_type:
             l_mask = self.backend.bk_complex(l_mask, self.backend.bk_cast(0.0 * l_mask))
@@ -2229,10 +2221,8 @@ class FoCUS:
             for k in range(len(ishape) - 1):
                 ndata = ndata * ishape[k]
 
-            tim = self.backend.bk_reshape(
-                self.backend.bk_cast(in_image), [ndata, npix]
-            )
-            
+            tim = self.backend.bk_reshape(self.backend.bk_cast(in_image), [ndata, npix])
+
             if self.backend.bk_is_complex(tim):
                 rr1 = self.backend.conv1d(self.backend.bk_real(tim), self.ww_RealT[1])
                 ii1 = self.backend.conv1d(self.backend.bk_real(tim), self.ww_ImagT[1])
@@ -2244,9 +2234,7 @@ class FoCUS:
                 ii = self.backend.conv1d(tim, self.ww_ImagT[1])
                 res = self.backend.bk_complex(rr, ii)
 
-            return self.backend.bk_reshape(
-                res, ishape
-            )
+            return self.backend.bk_reshape(res, ishape)
 
         else:
             ishape = list(image.shape)
@@ -2428,9 +2416,7 @@ class FoCUS:
             for k in range(len(ishape) - 1):
                 ndata = ndata * ishape[k]
 
-            tim = self.backend.bk_reshape(
-                self.backend.bk_cast(in_image), [ndata, npix]
-            )
+            tim = self.backend.bk_reshape(self.backend.bk_cast(in_image), [ndata, npix])
 
             if self.backend.bk_is_complex(tim):
                 rr = self.backend.conv1d(self.backend.bk_real(tim), self.ww_SmoothT[1])

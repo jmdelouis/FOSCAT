@@ -181,7 +181,7 @@ class BkTensorflow(BackendBase.BackendBase):
         mean_per_bin = sum_per_bin / counts  # [B, A, n_bins]
 
         return mean_per_bin, unique_groups
-        
+
     def conv2d(self, x, w):
         """
         Perform 2D convolution using TensorFlow.
@@ -223,8 +223,8 @@ class BkTensorflow(BackendBase.BackendBase):
         y = tf.reshape(y, [*leading_dims, O_c, Nx, Ny])
 
         return y
-        
-    def conv1d(self,x, w):
+
+    def conv1d(self, x, w):
         """
         Perform 1D convolution using TensorFlow.
 
@@ -244,14 +244,14 @@ class BkTensorflow(BackendBase.BackendBase):
         x = tf.reshape(x, [B, N, 1])  # TensorFlow 1D format: [B, L, C=1]
 
         # Prepare weights: [k, in_channels=1, out_channels=O_c]
-        w = tf.reshape(w, [k,1,1])
+        w = tf.reshape(w, [k, 1, 1])
 
         # Apply 'reflect' padding
         pad = k // 2
         x_padded = tf.pad(x, [[0, 0], [pad, pad], [0, 0]], mode="REFLECT")
 
         # Perform convolution
-        y = tf.nn.conv1d(x_padded, w, stride=1, padding='VALID')  # [B, N, O_c]
+        y = tf.nn.conv1d(x_padded, w, stride=1, padding="VALID")  # [B, N, O_c]
 
         # Transpose to [B, O_c, N] and reshape back
         y = tf.transpose(y, [0, 2, 1])  # [B, 1, N]
