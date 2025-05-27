@@ -68,10 +68,16 @@ class BkTensorflow(BackendBase.BackendBase):
                 print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
                 sys.stdout.flush()
                 self.ngpu = len(logical_gpus)
-                gpuname = logical_gpus[self.gpupos % self.ngpu].name
-                self.gpulist = {}
-                for i in range(self.ngpu):
-                    self.gpulist[i] = logical_gpus[i].name
+                if self.ngpu > 0:
+                    gpuname = logical_gpus[self.gpupos % self.ngpu].name
+                    self.gpulist = {}
+                    for i in range(self.ngpu):
+                        self.gpulist[i] = logical_gpus[i].name
+                else:
+                    gpuname = "CPU:0"
+                    self.gpulist = {}
+                    self.gpulist[0] = gpuname
+                    self.ngpu = 1
 
             except RuntimeError as e:
                 # Memory growth must be set before GPUs have been initialized
@@ -122,18 +128,136 @@ class BkTensorflow(BackendBase.BackendBase):
 
         return x_padded
 
-    def conv2d(self, x, w, strides=[1, 1, 1, 1], padding="SAME"):
-        kx = w.shape[0]
-        ky = w.shape[1]
-        x_padded = self.periodic_pad(x, kx // 2, ky // 2)
-        return self.backend.nn.conv2d(x_padded, w, strides=strides, padding="VALID")
+    def binned_mean(self, data, cell_ids):
+        """
+        data: Tensor of shape [..., N] (float32 or float64)
+        cell_ids: Tensor of shape [N], int indices in [0, n_bins)
+        Returns: mean per bin, shape [..., n_bins]
+        """
+        ishape = list(data.shape)
+        A = 1
+        for k in range(len(ishape) - 1):
+            A *= ishape[k]
+        N = tf.shape(data)[-1]
 
-    def conv1d(self, x, w, strides=[1, 1, 1], padding="SAME"):
-        kx = w.shape[0]
-        paddings = self.backend.constant([[0, 0], [kx // 2, kx // 2], [0, 0]])
-        tmp = self.backend.pad(x, paddings, "SYMMETRIC")
+        # Step 1: group indices
+        groups = tf.math.floordiv(cell_ids, 4)  # [N]
+        unique_groups, I = tf.unique(groups)  # I: [N]
+        n_bins = tf.shape(unique_groups)[0]
 
-        return self.backend.nn.conv1d(tmp, w, stride=strides, padding="VALID")
+        # Step 2: build I_tiled with batch + channel offsets
+        I_tiled = tf.tile(I[None, :], [A, 1])  # shape [, N]
+
+        # Offset index to flatten across [A, n_bins]
+        batch_channel_offsets = tf.range(A)[:, None] * n_bins
+        I_offset = I_tiled + batch_channel_offsets  # shape [A, N]]
+
+        # Step 3: flatten data to shape [A, N]
+        data_reshaped = tf.reshape(data, [A, N])  # shape [A, N]
+
+        # Flatten all for scatter_nd
+        indices = tf.reshape(I_offset, [-1])  # [A*N]
+        values = tf.reshape(data_reshaped, [-1])  # [A*N]
+
+        """
+        # Prepare for scatter: indices → [A*N, 1]
+        scatter_indices = tf.expand_dims(indices, axis=1)
+        scatter_indices = tf.cast(scatter_indices, tf.int64)
+        """
+        total_bins = A * n_bins
+
+        # Step 4: sum per bin
+        sum_per_bin = tf.math.unsorted_segment_sum(values, indices, total_bins)
+        sum_per_bin = tf.reshape(sum_per_bin, ishape[0:-1] + [n_bins])  # [A, n_bins]
+
+        # Step 5: count per bin (same indices)
+        counts = tf.math.unsorted_segment_sum(1.0 + 0 * values, indices, total_bins)
+        # counts = tf.math.bincount(indices, minlength=total_bins, maxlength=total_bins)
+        counts = tf.reshape(counts, ishape[0:-1] + [n_bins])
+        # counts = tf.maximum(counts, 1)  # Avoid division by zero
+        # counts = tf.cast(counts, dtype=data.dtype)
+
+        # Step 6: mean
+        mean_per_bin = sum_per_bin / counts  # [B, A, n_bins]
+
+        return mean_per_bin, unique_groups
+
+    def conv2d(self, x, w):
+        """
+        Perform 2D convolution using TensorFlow.
+
+        Args:
+            x: Tensor of shape [..., Nx, Ny] – input
+            w: Tensor of shape [O_c, wx, wy] – conv weights
+
+        Returns:
+            Tensor of shape [..., O_c, Nx, Ny]
+        """
+        # Extract shape
+        *leading_dims, Nx, Ny = x.shape
+        O_c, wx, wy = w.shape
+
+        # Flatten leading dims into a batch dimension
+        B = tf.reduce_prod(leading_dims) if leading_dims else 1
+        x = tf.reshape(x, [B, Nx, Ny, 1])  # TensorFlow format: [B, H, W, C_in=1]
+
+        # Reshape weights to [wx, wy, in_channels=1, out_channels]
+        w = tf.reshape(w, [O_c, wx, wy])
+        w = tf.transpose(w, perm=[1, 2, 0])  # [wx, wy, O_c]
+        w = tf.reshape(w, [wx, wy, 1, O_c])  # [wx, wy, C_in=1, C_out]
+
+        # Apply 'reflect' padding manually
+        pad_x = wx // 2
+        pad_y = wy // 2
+        x_padded = tf.pad(
+            x, [[0, 0], [pad_x, pad_x], [pad_y, pad_y], [0, 0]], mode="REFLECT"
+        )
+
+        # Perform convolution
+        y = tf.nn.conv2d(
+            x_padded, w, strides=[1, 1, 1, 1], padding="VALID"
+        )  # [B, Nx, Ny, O_c]
+
+        # Transpose back to match original format: [..., O_c, Nx, Ny]
+        y = tf.transpose(y, [0, 3, 1, 2])  # [B, O_c, Nx, Ny]
+        y = tf.reshape(y, [*leading_dims, O_c, Nx, Ny])
+
+        return y
+
+    def conv1d(self, x, w):
+        """
+        Perform 1D convolution using TensorFlow.
+
+        Args:
+            x: Tensor of shape [..., N] – input
+            w: Tensor of shape [k] – conv weights
+
+        Returns:
+            Tensor of shape [...,N]
+        """
+        # Extract shapes
+        *leading_dims, N = x.shape
+        k = w.shape[0]
+
+        # Flatten leading dims into batch dimension
+        B = tf.reduce_prod(leading_dims) if leading_dims else 1
+        x = tf.reshape(x, [B, N, 1])  # TensorFlow 1D format: [B, L, C=1]
+
+        # Prepare weights: [k, in_channels=1, out_channels=O_c]
+        w = tf.reshape(w, [k, 1, 1])
+
+        # Apply 'reflect' padding
+        pad = k // 2
+        x_padded = tf.pad(x, [[0, 0], [pad, pad], [0, 0]], mode="REFLECT")
+
+        # Perform convolution
+        y = tf.nn.conv1d(x_padded, w, stride=1, padding="VALID")  # [B, N, O_c]
+
+        # Transpose to [B, O_c, N] and reshape back
+        y = tf.transpose(y, [0, 2, 1])  # [B, 1, N]
+        y = tf.reshape(y, [*leading_dims, N])  # [..., N]
+
+        return y
 
     def bk_threshold(self, x, threshold, greater=True):
 

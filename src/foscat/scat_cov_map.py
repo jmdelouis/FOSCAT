@@ -29,7 +29,6 @@ class funct(scat.funct):
         image2=None,
         mask=None,
         norm=None,
-        Auto=True,
         calc_var=False,
         out_nside=None,
     ):
@@ -38,7 +37,6 @@ class funct(scat.funct):
             image2=image2,
             mask=mask,
             norm=norm,
-            Auto=Auto,
             calc_var=calc_var,
             out_nside=out_nside,
         )

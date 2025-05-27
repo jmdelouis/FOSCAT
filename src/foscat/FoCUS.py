@@ -5,7 +5,7 @@ import healpy as hp
 import numpy as np
 from scipy.interpolate import griddata
 
-TMPFILE_VERSION = "V4_0"
+TMPFILE_VERSION = "V5_0"
 
 
 class FoCUS:
@@ -35,7 +35,7 @@ class FoCUS:
         mpi_rank=0,
     ):
 
-        self.__version__ = "3.8.2"
+        self.__version__ = "2025.05.2"
         # P00 coeff for normalization for scat_cov
         self.TMPFILE_VERSION = TMPFILE_VERSION
         self.P1_dic = None
@@ -49,6 +49,12 @@ class FoCUS:
         self.mpi_rank = mpi_rank
         self.return_data = return_data
         self.silent = silent
+
+        self.kernel_smooth = {}
+        self.padding_smooth = {}
+        self.kernelR_conv = {}
+        self.kernelI_conv = {}
+        self.padding_conv = {}
 
         if not self.silent:
             print("================================================")
@@ -68,10 +74,7 @@ class FoCUS:
                 if not self.silent:
                     print("The directory %s is created")
             except:
-                if not self.silent:
-                    print(
-                        "Impossible to create the directory %s" % (self.TEMPLATE_PATH)
-                    )
+                print("Impossible to create the directory %s" % (self.TEMPLATE_PATH))
                 return None
 
         self.number_of_loss = 0
@@ -81,10 +84,9 @@ class FoCUS:
         self.padding = padding
 
         if JmaxDelta != 0:
-            if not self.silent:
-                print(
-                    "OPTION JmaxDelta is not avialable anymore after version 3.6.2. Please use Jmax option in eval function"
-                )
+            print(
+                "OPTION JmaxDelta is not avialable anymore after version 3.6.2. Please use Jmax option in eval function"
+            )
             return None
 
         self.OSTEP = JmaxDelta
@@ -177,8 +179,8 @@ class FoCUS:
         self.filters_set = {}
         self.edge_masks = {}
 
-        wwc = np.zeros([KERNELSZ**2, l_NORIENT]).astype(all_type)
-        wws = np.zeros([KERNELSZ**2, l_NORIENT]).astype(all_type)
+        wwc = np.zeros([l_NORIENT, KERNELSZ**2]).astype(all_type)
+        wws = np.zeros([l_NORIENT, KERNELSZ**2]).astype(all_type)
 
         x = np.repeat(np.arange(KERNELSZ) - KERNELSZ // 2, KERNELSZ).reshape(
             KERNELSZ, KERNELSZ
@@ -201,12 +203,12 @@ class FoCUS:
                     -0.5 * (xx**2 + yy**2)
                 )
 
-            wwc[:, 0] = tmp.flatten() - tmp.mean()
+            wwc[0] = tmp.flatten() - tmp.mean()
             tmp = 0 * w_smooth
-            wws[:, 0] = tmp.flatten()
+            wws[0] = tmp.flatten()
             sigma = np.sqrt((wwc[:, 0] ** 2).mean())
-            wwc[:, 0] /= sigma
-            wws[:, 0] /= sigma
+            wwc[0] /= sigma
+            wws[0] /= sigma
 
             w_smooth = w_smooth.flatten()
         else:
@@ -237,12 +239,12 @@ class FoCUS:
                 tmp1 = np.cos(yy * np.pi) * w_smooth
                 tmp2 = np.sin(yy * np.pi) * w_smooth
 
-                wwc[:, i] = tmp1.flatten() - tmp1.mean()
-                wws[:, i] = tmp2.flatten() - tmp2.mean()
+                wwc[i] = tmp1.flatten() - tmp1.mean()
+                wws[i] = tmp2.flatten() - tmp2.mean()
                 # sigma = np.sqrt((wwc[:, i] ** 2).mean())
                 sigma = np.mean(w_smooth)
-                wwc[:, i] /= sigma
-                wws[:, i] /= sigma
+                wwc[i] /= sigma
+                wws[i] /= sigma
 
                 if DODIV and i == 0:
                     r = xx**2 + yy**2
@@ -251,22 +253,22 @@ class FoCUS:
                     tmp1 = r * np.cos(2 * theta) * w_smooth
                     tmp2 = r * np.sin(2 * theta) * w_smooth
 
-                    wwc[:, NORIENT] = tmp1.flatten() - tmp1.mean()
-                    wws[:, NORIENT] = tmp2.flatten() - tmp2.mean()
+                    wwc[NORIENT] = tmp1.flatten() - tmp1.mean()
+                    wws[NORIENT] = tmp2.flatten() - tmp2.mean()
                     # sigma = np.sqrt((wwc[:, NORIENT] ** 2).mean())
                     sigma = np.mean(w_smooth)
 
-                    wwc[:, NORIENT] /= sigma
-                    wws[:, NORIENT] /= sigma
+                    wwc[NORIENT] /= sigma
+                    wws[NORIENT] /= sigma
                     tmp1 = r * np.cos(2 * theta + np.pi)
                     tmp2 = r * np.sin(2 * theta + np.pi)
 
-                    wwc[:, NORIENT + 1] = tmp1.flatten() - tmp1.mean()
-                    wws[:, NORIENT + 1] = tmp2.flatten() - tmp2.mean()
+                    wwc[NORIENT + 1] = tmp1.flatten() - tmp1.mean()
+                    wws[NORIENT + 1] = tmp2.flatten() - tmp2.mean()
                     # sigma = np.sqrt((wwc[:, NORIENT + 1] ** 2).mean())
                     sigma = np.mean(w_smooth)
-                    wwc[:, NORIENT + 1] /= sigma
-                    wws[:, NORIENT + 1] /= sigma
+                    wwc[NORIENT + 1] /= sigma
+                    wws[NORIENT + 1] /= sigma
 
                 w_smooth = w_smooth.flatten()
 
@@ -314,14 +316,14 @@ class FoCUS:
                 r = np.sum(np.sqrt(c * c + s * s))
                 c = c / r
                 s = s / r
-                self.ww_RealT[1] = self.backend.bk_constant(
-                    np.array(c).reshape(xx.shape[0], 1, 1)
+                self.ww_RealT[1] = self.backend.bk_cast(
+                    self.backend.bk_constant(np.array(c).reshape(xx.shape[0]))
                 )
-                self.ww_ImagT[1] = self.backend.bk_constant(
-                    np.array(s).reshape(xx.shape[0], 1, 1)
+                self.ww_ImagT[1] = self.backend.bk_cast(
+                    self.backend.bk_constant(np.array(s).reshape(xx.shape[0]))
                 )
-                self.ww_SmoothT[1] = self.backend.bk_constant(
-                    np.array(w).reshape(xx.shape[0], 1, 1)
+                self.ww_SmoothT[1] = self.backend.bk_cast(
+                    self.backend.bk_constant(np.array(w).reshape(xx.shape[0]))
                 )
 
         else:
@@ -331,22 +333,16 @@ class FoCUS:
             self.ww_SmoothT = {}
 
             self.ww_SmoothT[1] = self.backend.bk_constant(
-                self.w_smooth.reshape(KERNELSZ, KERNELSZ, 1, 1)
-            )
-            www = np.zeros([KERNELSZ, KERNELSZ, NORIENT, NORIENT], dtype=self.all_type)
-            for k in range(NORIENT):
-                www[:, :, k, k] = self.w_smooth.reshape(KERNELSZ, KERNELSZ)
-            self.ww_SmoothT[NORIENT] = self.backend.bk_constant(
-                www.reshape(KERNELSZ, KERNELSZ, NORIENT, NORIENT)
+                self.w_smooth.reshape(1, KERNELSZ, KERNELSZ)
             )
             self.ww_RealT[1] = self.backend.bk_constant(
                 self.backend.bk_reshape(
-                    wwc.astype(self.all_type), [KERNELSZ, KERNELSZ, 1, NORIENT]
+                    wwc.astype(self.all_type), [NORIENT, KERNELSZ, KERNELSZ]
                 )
             )
             self.ww_ImagT[1] = self.backend.bk_constant(
                 self.backend.bk_reshape(
-                    wws.astype(self.all_type), [KERNELSZ, KERNELSZ, 1, NORIENT]
+                    wws.astype(self.all_type), [NORIENT, KERNELSZ, KERNELSZ]
                 )
             )
 
@@ -742,14 +738,14 @@ class FoCUS:
         return rim
 
     # --------------------------------------------------------
-    def ud_grade_2(self, im, axis=0):
+    def ud_grade_2(self, im, axis=0, cell_ids=None, nside=None):
 
         if self.use_2D:
             ishape = list(im.shape)
             if len(ishape) < axis + 2:
                 if not self.silent:
                     print("Use of 2D scat with data that has less than 2D")
-                return None
+                return None, None
 
             npix = im.shape[axis]
             npiy = im.shape[axis + 1]
@@ -774,68 +770,56 @@ class FoCUS:
 
             if axis == 0:
                 if len(ishape) == 2:
-                    return self.backend.bk_reshape(res, [npix // 2, npiy // 2])
+                    return self.backend.bk_reshape(res, [npix // 2, npiy // 2]), None
                 else:
-                    return self.backend.bk_reshape(
-                        res, [npix // 2, npiy // 2] + ishape[axis + 2 :]
+                    return (
+                        self.backend.bk_reshape(
+                            res, [npix // 2, npiy // 2] + ishape[axis + 2 :]
+                        ),
+                        None,
                     )
             else:
                 if len(ishape) == axis + 2:
-                    return self.backend.bk_reshape(
-                        res, ishape[0:axis] + [npix // 2, npiy // 2]
+                    return (
+                        self.backend.bk_reshape(
+                            res, ishape[0:axis] + [npix // 2, npiy // 2]
+                        ),
+                        None,
                     )
                 else:
-                    return self.backend.bk_reshape(
-                        res,
-                        ishape[0:axis] + [npix // 2, npiy // 2] + ishape[axis + 2 :],
+                    return (
+                        self.backend.bk_reshape(
+                            res,
+                            ishape[0:axis]
+                            + [npix // 2, npiy // 2]
+                            + ishape[axis + 2 :],
+                        ),
+                        None,
                     )
 
-            return self.backend.bk_reshape(res, [npix // 2, npiy // 2])
+            return self.backend.bk_reshape(res, [npix // 2, npiy // 2]), None
         elif self.use_1D:
             ishape = list(im.shape)
-            if len(ishape) < axis + 1:
-                if not self.silent:
-                    print("Use of 1D scat with data that has less than 1D")
-                return None
 
-            npix = im.shape[axis]
-            odata = 1
-            if len(ishape) > axis + 1:
-                for k in range(axis + 1, len(ishape)):
-                    odata = odata * ishape[k]
+            npix = ishape[-1]
 
             ndata = 1
-            for k in range(axis):
+            for k in range(len(ishape) - 1):
                 ndata = ndata * ishape[k]
 
             tim = self.backend.bk_reshape(
-                self.backend.bk_cast(im), [ndata, npix, odata]
-            )
-            tim = self.backend.bk_reshape(
-                tim[:, 0 : 2 * (npix // 2), :], [ndata, npix // 2, 2, odata]
+                self.backend.bk_cast(im), [ndata, npix // 2, 2]
             )
 
-            res = self.backend.bk_reduce_mean(tim, 2)
+            res = self.backend.bk_reduce_mean(tim, -1)
 
-            if axis == 0:
-                if len(ishape) == 1:
-                    return self.backend.bk_reshape(res, [npix // 2])
-                else:
-                    return self.backend.bk_reshape(
-                        res, [npix // 2] + ishape[axis + 1 :]
-                    )
-            else:
-                if len(ishape) == axis + 1:
-                    return self.backend.bk_reshape(res, ishape[0:axis] + [npix // 2])
-                else:
-                    return self.backend.bk_reshape(
-                        res, ishape[0:axis] + [npix // 2] + ishape[axis + 1 :]
-                    )
-
-            return self.backend.bk_reshape(res, [npix // 2])
+            return self.backend.bk_reshape(res, ishape[0:-1] + [npix // 2]), None
 
         else:
             shape = list(im.shape)
+            if cell_ids is not None:
+                sim, new_cell_ids = self.backend.binned_mean(im, cell_ids)
+                return sim, new_cell_ids
 
             lout = int(np.sqrt(shape[axis] // 12))
             if im.__class__ == np.zeros([0]).__class__:
@@ -854,8 +838,11 @@ class FoCUS:
                 if len(shape) > axis:
                     oshape = oshape + shape[axis + 1 :]
 
-            return self.backend.bk_reduce_mean(
-                self.backend.bk_reshape(im, oshape), axis=axis + 1
+            return (
+                self.backend.bk_reduce_mean(
+                    self.backend.bk_reshape(im, oshape), axis=axis + 1
+                ),
+                None,
             )
 
     # --------------------------------------------------------
@@ -1358,12 +1345,17 @@ class FoCUS:
         return res
 
     # ---------------------------------------------−---------
-    def init_index(self, nside, kernel=-1):
+    def init_index(self, nside, kernel=-1, cell_ids=None):
 
         if kernel == -1:
             l_kernel = self.KERNELSZ
         else:
             l_kernel = kernel
+
+        if cell_ids is not None:
+            ncell = cell_ids.shape[0]
+        else:
+            ncell = 12 * nside * nside
 
         try:
             if self.use_2D:
@@ -1372,16 +1364,29 @@ class FoCUS:
                     % (self.TEMPLATE_PATH, l_kernel**2, TMPFILE_VERSION, nside)
                 )
             else:
-                tmp = np.load(
-                    "%s/FOSCAT_%s_W%d_%d_%d_PIDX.npy"
-                    % (
-                        self.TEMPLATE_PATH,
-                        TMPFILE_VERSION,
-                        l_kernel**2,
-                        self.NORIENT,
-                        nside,
+                if cell_ids is not None:
+                    tmp = np.load(
+                        "%s/XXXX_%s_W%d_%d_%d_PIDX.npy"  # can not work
+                        % (
+                            self.TEMPLATE_PATH,
+                            TMPFILE_VERSION,
+                            l_kernel**2,
+                            self.NORIENT,
+                            nside,  # if cell_ids computes the index
+                        )
                     )
-                )
+
+                else:
+                    tmp = np.load(
+                        "%s/FOSCAT_%s_W%d_%d_%d_PIDX.npy"
+                        % (
+                            self.TEMPLATE_PATH,
+                            TMPFILE_VERSION,
+                            l_kernel**2,
+                            self.NORIENT,
+                            nside,  # if cell_ids computes the index
+                        )
+                    )
         except:
             if not self.use_2D:
 
@@ -1400,36 +1405,64 @@ class FoCUS:
                     pw2 = 0.25
                     threshold = 4e-5
 
-                th, ph = hp.pix2ang(nside, np.arange(12 * nside**2), nest=True)
-                x, y, z = hp.pix2vec(nside, np.arange(12 * nside**2), nest=True)
+                if cell_ids is not None:
+                    if not isinstance(cell_ids, np.ndarray):
+                        cell_ids = self.backend.to_numpy(cell_ids)
+                    th, ph = hp.pix2ang(nside, cell_ids, nest=True)
+                    x, y, z = hp.pix2vec(nside, cell_ids, nest=True)
 
-                t, p = hp.pix2ang(nside, np.arange(12 * nside * nside), nest=True)
-                phi = [p[k] / np.pi * 180 for k in range(12 * nside * nside)]
-                thi = [t[k] / np.pi * 180 for k in range(12 * nside * nside)]
+                    t, p = hp.pix2ang(nside, cell_ids, nest=True)
+                    phi = [p[k] / np.pi * 180 for k in range(ncell)]
+                    thi = [t[k] / np.pi * 180 for k in range(ncell)]
 
-                indice2 = np.zeros([12 * nside * nside * 64, 2], dtype="int")
-                indice = np.zeros(
-                    [12 * nside * nside * 64 * self.NORIENT, 2], dtype="int"
-                )
-                wav = np.zeros(
-                    [12 * nside * nside * 64 * self.NORIENT], dtype="complex"
-                )
-                wwav = np.zeros([12 * nside * nside * 64 * self.NORIENT], dtype="float")
+                    indice2 = np.zeros([ncell * 64, 2], dtype="int")
+                    indice = np.zeros([ncell * 64 * self.NORIENT, 2], dtype="int")
+                    wav = np.zeros([ncell * 64 * self.NORIENT], dtype="complex")
+                    wwav = np.zeros([ncell * 64 * self.NORIENT], dtype="float")
 
+                else:
+
+                    th, ph = hp.pix2ang(nside, np.arange(12 * nside**2), nest=True)
+                    x, y, z = hp.pix2vec(nside, np.arange(12 * nside**2), nest=True)
+
+                    t, p = hp.pix2ang(nside, np.arange(12 * nside * nside), nest=True)
+                    phi = [p[k] / np.pi * 180 for k in range(12 * nside * nside)]
+                    thi = [t[k] / np.pi * 180 for k in range(12 * nside * nside)]
+
+                    indice2 = np.zeros([12 * nside * nside * 64, 2], dtype="int")
+                    indice = np.zeros(
+                        [12 * nside * nside * 64 * self.NORIENT, 2], dtype="int"
+                    )
+                    wav = np.zeros(
+                        [12 * nside * nside * 64 * self.NORIENT], dtype="complex"
+                    )
+                    wwav = np.zeros(
+                        [12 * nside * nside * 64 * self.NORIENT], dtype="float"
+                    )
                 iv = 0
                 iv2 = 0
-                for iii in range(12 * nside * nside):
 
-                    if iii % (nside * nside) == nside * nside - 1:
-                        if not self.silent:
-                            print(
-                                "Pre-compute nside=%6d %.2f%%"
-                                % (nside, 100 * iii / (12 * nside * nside))
-                            )
+                for iii in range(ncell):
+                    if cell_ids is None:
+                        if iii % (nside * nside) == nside * nside - 1:
+                            if not self.silent:
+                                print(
+                                    "Pre-compute nside=%6d %.2f%%"
+                                    % (nside, 100 * iii / (12 * nside * nside))
+                                )
 
-                    hidx = hp.query_disc(
-                        nside, [x[iii], y[iii], z[iii]], 2 * np.pi / nside, nest=True
-                    )
+                    if cell_ids is not None:
+                        hidx = np.where(
+                            (x - x[iii]) ** 2 + (y - y[iii]) ** 2 + (z - z[iii]) ** 2
+                            < (2 * np.pi / nside) ** 2
+                        )[0]
+                    else:
+                        hidx = hp.query_disc(
+                            nside,
+                            [x[iii], y[iii], z[iii]],
+                            2 * np.pi / nside,
+                            nest=True,
+                        )
 
                     R = hp.Rotator(rot=[phi[iii], -thi[iii]], eulertype="ZYZ")
 
@@ -1448,8 +1481,8 @@ class FoCUS:
                     )
                     idx = np.where((ww**2) > threshold)[0]
                     nval2 = len(idx)
-                    indice2[iv2 : iv2 + nval2, 0] = iii
-                    indice2[iv2 : iv2 + nval2, 1] = hidx[idx]
+                    indice2[iv2 : iv2 + nval2, 1] = iii
+                    indice2[iv2 : iv2 + nval2, 0] = hidx[idx]
                     wwav[iv2 : iv2 + nval2] = ww[idx] / np.sum(ww[idx])
                     iv2 += nval2
 
@@ -1471,15 +1504,18 @@ class FoCUS:
                         idx = np.where(vnorm > threshold)[0]
 
                         nval = len(idx)
-                        indice[iv : iv + nval, 0] = iii * 4 + l_rotation
-                        indice[iv : iv + nval, 1] = hidx[idx]
+                        indice[iv : iv + nval, 1] = iii + l_rotation * ncell
+                        indice[iv : iv + nval, 0] = hidx[idx]
                         # print([hidx[k] for k in idx])
                         # print(hp.query_disc(nside, [x[iii],y[iii],z[iii]], np.pi/nside,nest=True))
                         normr = np.mean(wresr[idx])
                         normi = np.mean(wresi[idx])
 
                         val = wresr[idx] - normr + 1j * (wresi[idx] - normi)
-                        val = val / abs(val).sum()
+                        r = abs(val).sum()
+
+                        if r > 0:
+                            val = val / r
 
                         wav[iv : iv + nval] = val
                         iv += nval
@@ -1583,56 +1619,57 @@ class FoCUS:
                 wav=w.flatten()
                 wwav=wwav.flatten()
                 """
-                if not self.silent:
-                    print(
-                        "Write FOSCAT_%s_W%d_%d_%d_PIDX.npy"
-                        % (TMPFILE_VERSION, self.KERNELSZ**2, self.NORIENT, nside)
+                if cell_ids is None:
+                    if not self.silent:
+                        print(
+                            "Write FOSCAT_%s_W%d_%d_%d_PIDX.npy"
+                            % (TMPFILE_VERSION, self.KERNELSZ**2, self.NORIENT, nside)
+                        )
+                    np.save(
+                        "%s/FOSCAT_%s_W%d_%d_%d_PIDX.npy"
+                        % (
+                            self.TEMPLATE_PATH,
+                            TMPFILE_VERSION,
+                            self.KERNELSZ**2,
+                            self.NORIENT,
+                            nside,
+                        ),
+                        indice,
                     )
-                np.save(
-                    "%s/FOSCAT_%s_W%d_%d_%d_PIDX.npy"
-                    % (
-                        self.TEMPLATE_PATH,
-                        TMPFILE_VERSION,
-                        self.KERNELSZ**2,
-                        self.NORIENT,
-                        nside,
-                    ),
-                    indice,
-                )
-                np.save(
-                    "%s/FOSCAT_%s_W%d_%d_%d_WAVE.npy"
-                    % (
-                        self.TEMPLATE_PATH,
-                        TMPFILE_VERSION,
-                        self.KERNELSZ**2,
-                        self.NORIENT,
-                        nside,
-                    ),
-                    wav,
-                )
-                np.save(
-                    "%s/FOSCAT_%s_W%d_%d_%d_PIDX2.npy"
-                    % (
-                        self.TEMPLATE_PATH,
-                        TMPFILE_VERSION,
-                        self.KERNELSZ**2,
-                        self.NORIENT,
-                        nside,
-                    ),
-                    indice2,
-                )
-                np.save(
-                    "%s/FOSCAT_%s_W%d_%d_%d_SMOO.npy"
-                    % (
-                        self.TEMPLATE_PATH,
-                        TMPFILE_VERSION,
-                        self.KERNELSZ**2,
-                        self.NORIENT,
-                        nside,
-                    ),
-                    wwav,
-                )
-            else:
+                    np.save(
+                        "%s/FOSCAT_%s_W%d_%d_%d_WAVE.npy"
+                        % (
+                            self.TEMPLATE_PATH,
+                            TMPFILE_VERSION,
+                            self.KERNELSZ**2,
+                            self.NORIENT,
+                            nside,
+                        ),
+                        wav,
+                    )
+                    np.save(
+                        "%s/FOSCAT_%s_W%d_%d_%d_PIDX2.npy"
+                        % (
+                            self.TEMPLATE_PATH,
+                            TMPFILE_VERSION,
+                            self.KERNELSZ**2,
+                            self.NORIENT,
+                            nside,
+                        ),
+                        indice2,
+                    )
+                    np.save(
+                        "%s/FOSCAT_%s_W%d_%d_%d_SMOO.npy"
+                        % (
+                            self.TEMPLATE_PATH,
+                            TMPFILE_VERSION,
+                            self.KERNELSZ**2,
+                            self.NORIENT,
+                            nside,
+                        ),
+                        wwav,
+                    )
+            if self.use_2D:
                 if l_kernel**2 == 9:
                     if self.rank == 0:
                         self.comp_idx_w9(nside)
@@ -1648,23 +1685,24 @@ class FoCUS:
                             )
                         return None
 
-        self.barrier()
-        if self.use_2D:
-            tmp = np.load(
-                "%s/W%d_%s_%d_IDX.npy"
-                % (self.TEMPLATE_PATH, l_kernel**2, TMPFILE_VERSION, nside)
-            )
-        else:
-            tmp = np.load(
-                "%s/FOSCAT_%s_W%d_%d_%d_PIDX.npy"
-                % (
-                    self.TEMPLATE_PATH,
-                    TMPFILE_VERSION,
-                    self.KERNELSZ**2,
-                    self.NORIENT,
-                    nside,
+        if cell_ids is None:
+            self.barrier()
+            if self.use_2D:
+                tmp = np.load(
+                    "%s/W%d_%s_%d_IDX.npy"
+                    % (self.TEMPLATE_PATH, l_kernel**2, TMPFILE_VERSION, nside)
                 )
-            )
+            else:
+                tmp = np.load(
+                    "%s/FOSCAT_%s_W%d_%d_%d_PIDX.npy"
+                    % (
+                        self.TEMPLATE_PATH,
+                        TMPFILE_VERSION,
+                        self.KERNELSZ**2,
+                        self.NORIENT,
+                        nside,
+                    )
+                )
             tmp2 = np.load(
                 "%s/FOSCAT_%s_W%d_%d_%d_PIDX2.npy"
                 % (
@@ -1705,22 +1743,28 @@ class FoCUS:
                     nside,
                 )
             )
+        else:
+            tmp = indice
+            tmp2 = indice2
+            wr = wav.real
+            wi = wav.imag
+            ws = self.slope * wwav
 
-            wr = self.backend.bk_SparseTensor(
-                self.backend.bk_constant(tmp),
-                self.backend.bk_constant(self.backend.bk_cast(wr)),
-                dense_shape=[12 * nside**2 * self.NORIENT, 12 * nside**2],
-            )
-            wi = self.backend.bk_SparseTensor(
-                self.backend.bk_constant(tmp),
-                self.backend.bk_constant(self.backend.bk_cast(wi)),
-                dense_shape=[12 * nside**2 * self.NORIENT, 12 * nside**2],
-            )
-            ws = self.backend.bk_SparseTensor(
-                self.backend.bk_constant(tmp2),
-                self.backend.bk_constant(self.backend.bk_cast(ws)),
-                dense_shape=[12 * nside**2, 12 * nside**2],
-            )
+        wr = self.backend.bk_SparseTensor(
+            self.backend.bk_constant(tmp),
+            self.backend.bk_constant(self.backend.bk_cast(wr)),
+            dense_shape=[ncell, self.NORIENT * ncell],
+        )
+        wi = self.backend.bk_SparseTensor(
+            self.backend.bk_constant(tmp),
+            self.backend.bk_constant(self.backend.bk_cast(wi)),
+            dense_shape=[ncell, self.NORIENT * ncell],
+        )
+        ws = self.backend.bk_SparseTensor(
+            self.backend.bk_constant(tmp2),
+            self.backend.bk_constant(self.backend.bk_cast(ws)),
+            dense_shape=[ncell, ncell],
+        )
 
         if kernel == -1:
             self.Idx_Neighbours[nside] = tmp
@@ -1757,7 +1801,7 @@ class FoCUS:
     def masked_mean(self, x, mask, axis=0, rank=0, calc_var=False):
 
         # ==========================================================================
-        # in input data=[Nbatch,...,X[,Y],NORIENT[,NORIENT]]
+        # in input data=[Nbatch,...,NORIENT[,NORIENT],X[,Y]]
         # in input mask=[Nmask,X[,Y]]
         # if self.use_2D :  X[,Y]] = [X,Y]
         # if second level:  NORIENT[,NORIENT]= NORIENT,NORIENT
@@ -1765,7 +1809,7 @@ class FoCUS:
 
         shape = list(x.shape)
 
-        if not self.use_2D:
+        if not self.use_2D and not self.use_1D:
             nside = int(np.sqrt(x.shape[axis] // 12))
 
         l_mask = mask
@@ -1776,6 +1820,7 @@ class FoCUS:
                 ),
                 1,
             )
+
             if not self.use_2D:
                 l_mask = (
                     12
@@ -1819,13 +1864,11 @@ class FoCUS:
                     ]
 
             ichannel = 1
-            for i in range(axis):
+            for i in range(1, len(shape) - 2):
                 ichannel *= shape[i]
-            ochannel = 1
-            for i in range(axis + 2, len(shape)):
-                ochannel *= shape[i]
+
             l_x = self.backend.bk_reshape(
-                x, [ichannel, 1, shape[axis], shape[axis + 1], ochannel]
+                x, [shape[0], 1, ichannel, shape[-2], shape[-1]]
             )
 
             if self.padding == "VALID":
@@ -1850,12 +1893,10 @@ class FoCUS:
                     l_mask = l_mask[:, self.KERNELSZ // 2 : -self.KERNELSZ // 2 + 1]
 
             ichannel = 1
-            for i in range(axis):
+            for i in range(1, len(shape) - 1):
                 ichannel *= shape[i]
-            ochannel = 1
-            for i in range(axis + 1, len(shape)):
-                ochannel *= shape[i]
-            l_x = self.backend.bk_reshape(x, [ichannel, 1, shape[axis], ochannel])
+
+            l_x = self.backend.bk_reshape(x, [shape[0], 1, ichannel, shape[-1]])
 
             if self.padding == "VALID":
                 oshape = [k for k in shape]
@@ -1865,18 +1906,14 @@ class FoCUS:
                 )
         else:
             ichannel = 1
-            for i in range(axis):
+            for i in range(len(shape) - 1):
                 ichannel *= shape[i]
-            ochannel = 1
-            for i in range(axis + 1, len(shape)):
-                ochannel *= shape[i]
-            l_x = self.backend.bk_reshape(x, [ichannel, 1, shape[axis], ochannel])
 
-        # data=[Nbatch,...,X[,Y],NORIENT[,NORIENT]] => data=[Nbatch,1,...,X[,Y],NORIENT[,NORIENT]]
-        # mask=[Nmask,X[,Y]] => mask=[1,Nmask,X[,Y]]
-        l_mask = self.backend.bk_expand_dims(l_mask, 0)
-        # mask=[1,Nmask,X[,Y]] => mask=[1,Nmask,X[,Y],1]
-        l_mask = self.backend.bk_expand_dims(l_mask, -1)
+            l_x = self.backend.bk_reshape(x, [ichannel, 1, shape[-1]])
+
+        # data=[Nbatch,...,NORIENT[,NORIENT],X[,Y]] => data=[Nbatch,1,...,NORIENT[,NORIENT],X[,Y]]
+        # mask=[Nmask,X[,Y]] => mask=[1,Nmask,....,X[,Y]]
+        l_mask = self.backend.bk_expand_dims(self.backend.bk_expand_dims(l_mask, 0), 0)
 
         if l_x.dtype == self.all_cbk_type:
             l_mask = self.backend.bk_complex(l_mask, self.backend.bk_cast(0.0 * l_mask))
@@ -1890,21 +1927,23 @@ class FoCUS:
             #    vtmp = l_x[:,self.KERNELSZ // 2 : -self.KERNELSZ // 2,self.KERNELSZ // 2 : -self.KERNELSZ // 2,:]
 
             v1 = self.backend.bk_reduce_sum(
-                self.backend.bk_reduce_sum(mtmp * vtmp, axis=2), 2
+                self.backend.bk_reduce_sum(mtmp * vtmp, axis=-1), -1
             )
             v2 = self.backend.bk_reduce_sum(
-                self.backend.bk_reduce_sum(mtmp * vtmp * vtmp, axis=2), 2
+                self.backend.bk_reduce_sum(mtmp * vtmp * vtmp, axis=-1), -1
             )
-            vh = self.backend.bk_reduce_sum(self.backend.bk_reduce_sum(mtmp, axis=2), 2)
+            vh = self.backend.bk_reduce_sum(
+                self.backend.bk_reduce_sum(mtmp, axis=-1), -1
+            )
 
             res = v1 / vh
 
-            oshape = []
+            oshape = [x.shape[0]] + [mask.shape[0]]
             if axis > 0:
-                oshape = oshape + list(x.shape[0:axis])
-            oshape = oshape + [mask.shape[0]]
-            if axis + 1 < len(x.shape):
-                oshape = oshape + list(x.shape[axis + 2 :])
+                oshape = oshape + list(x.shape[1:axis])
+
+            if len(x.shape[axis:-2]) > 0:
+                oshape = oshape + list(x.shape[axis:-2])
 
             if calc_var:
                 if self.backend.bk_is_complex(vtmp):
@@ -1934,19 +1973,15 @@ class FoCUS:
         elif self.use_1D:
             mtmp = l_mask
             vtmp = l_x
-
-            v1 = self.backend.bk_reduce_sum(mtmp * vtmp, axis=2)
-            v2 = self.backend.bk_reduce_sum(mtmp * vtmp * vtmp, axis=2)
-            vh = self.backend.bk_reduce_sum(mtmp, axis=2)
+            v1 = self.backend.bk_reduce_sum(mtmp * vtmp, axis=-1)
+            v2 = self.backend.bk_reduce_sum(mtmp * vtmp * vtmp, axis=-1)
+            vh = self.backend.bk_reduce_sum(mtmp, axis=-1)
 
             res = v1 / vh
 
-            oshape = []
-            if axis > 0:
-                oshape = oshape + list(x.shape[0:axis])
-            oshape = oshape + [mask.shape[0]]
-            if axis + 1 < len(x.shape):
-                oshape = oshape + list(x.shape[axis + 1 :])
+            oshape = [x.shape[0]] + [mask.shape[0]]
+            if len(x.shape) > 1:
+                oshape = oshape + list(x.shape[1:-1])
 
             if calc_var:
                 if self.backend.bk_is_complex(vtmp):
@@ -1965,7 +2000,6 @@ class FoCUS:
                     )
                 else:
                     res2 = self.backend.bk_sqrt((v2 / vh - res * res) / (vh))
-
                 res = self.backend.bk_reshape(res, oshape)
                 res2 = self.backend.bk_reshape(res2, oshape)
                 return res, res2
@@ -1974,18 +2008,20 @@ class FoCUS:
                 return res
 
         else:
-            v1 = self.backend.bk_reduce_sum(l_mask * l_x, axis=2)
-            v2 = self.backend.bk_reduce_sum(l_mask * l_x * l_x, axis=2)
-            vh = self.backend.bk_reduce_sum(l_mask, axis=2)
+            v1 = self.backend.bk_reduce_sum(l_mask * l_x, axis=-1)
+            v2 = self.backend.bk_reduce_sum(l_mask * l_x * l_x, axis=-1)
+            vh = self.backend.bk_reduce_sum(l_mask, axis=-1)
 
             res = v1 / vh
 
             oshape = []
             if axis > 0:
-                oshape = oshape + list(x.shape[0:axis])
+                oshape = [x.shape[0]]
+            else:
+                oshape = [1]
             oshape = oshape + [mask.shape[0]]
-            if axis + 1 < len(x.shape):
-                oshape = oshape + list(x.shape[axis + 1 :])
+            if axis > 1:
+                oshape = oshape + list(x.shape[1:-1])
 
             if calc_var:
                 if self.backend.bk_is_complex(l_x):
@@ -2139,7 +2175,7 @@ class FoCUS:
                 return self.backend.bk_reduce_sum(r)
 
     # ---------------------------------------------−---------
-    def convol(self, in_image, axis=0):
+    def convol(self, in_image, axis=0, cell_ids=None, nside=None):
 
         image = self.backend.bk_cast(in_image)
 
@@ -2150,167 +2186,121 @@ class FoCUS:
                     print("Use of 2D scat with data that has less than 2D")
                 return None
 
-            npix = ishape[axis]
-            npiy = ishape[axis + 1]
-            odata = 1
-            if len(ishape) > axis + 2:
-                for k in range(axis + 2, len(ishape)):
-                    odata = odata * ishape[k]
+            npix = ishape[-2]
+            npiy = ishape[-1]
 
             ndata = 1
-            for k in range(axis):
+            for k in range(len(ishape) - 2):
                 ndata = ndata * ishape[k]
 
             tim = self.backend.bk_reshape(
-                self.backend.bk_cast(in_image), [ndata, npix, npiy, odata]
+                self.backend.bk_cast(in_image), [ndata, npix, npiy]
             )
 
             if self.backend.bk_is_complex(tim):
-                rr1 = self.backend.conv2d(
-                    self.backend.bk_real(tim),
-                    self.ww_RealT[odata],
-                    strides=[1, 1, 1, 1],
-                    padding=self.padding,
-                )
-                ii1 = self.backend.conv2d(
-                    self.backend.bk_real(tim),
-                    self.ww_ImagT[odata],
-                    strides=[1, 1, 1, 1],
-                    padding=self.padding,
-                )
-                rr2 = self.backend.conv2d(
-                    self.backend.bk_imag(tim),
-                    self.ww_RealT[odata],
-                    strides=[1, 1, 1, 1],
-                    padding=self.padding,
-                )
-                ii2 = self.backend.conv2d(
-                    self.backend.bk_imag(tim),
-                    self.ww_ImagT[odata],
-                    strides=[1, 1, 1, 1],
-                    padding=self.padding,
-                )
+                rr1 = self.backend.conv2d(self.backend.bk_real(tim), self.ww_RealT[1])
+                ii1 = self.backend.conv2d(self.backend.bk_real(tim), self.ww_ImagT[1])
+                rr2 = self.backend.conv2d(self.backend.bk_imag(tim), self.ww_RealT[1])
+                ii2 = self.backend.conv2d(self.backend.bk_imag(tim), self.ww_ImagT[1])
                 res = self.backend.bk_complex(rr1 - ii2, ii1 + rr2)
             else:
-                rr = self.backend.conv2d(
-                    tim,
-                    self.ww_RealT[odata],
-                    strides=[1, 1, 1, 1],
-                    padding=self.padding,
-                )
-                ii = self.backend.conv2d(
-                    tim,
-                    self.ww_ImagT[odata],
-                    strides=[1, 1, 1, 1],
-                    padding=self.padding,
-                )
+                rr = self.backend.conv2d(tim, self.ww_RealT[1])
+                ii = self.backend.conv2d(tim, self.ww_ImagT[1])
                 res = self.backend.bk_complex(rr, ii)
 
-            if axis == 0:
-                if len(ishape) == 2:
-                    return self.backend.bk_reshape(
-                        res, [res.shape[1], res.shape[2], self.NORIENT]
-                    )
-                else:
-                    return self.backend.bk_reshape(
-                        res,
-                        [res.shape[1], res.shape[2], self.NORIENT] + ishape[axis + 2 :],
-                    )
-            else:
-                if len(ishape) == axis + 2:
-                    return self.backend.bk_reshape(
-                        res, ishape[0:axis] + [res.shape[1], res.shape[2], self.NORIENT]
-                    )
-                else:
-                    return self.backend.bk_reshape(
-                        res,
-                        ishape[0:axis]
-                        + [res.shape[1], res.shape[2], self.NORIENT]
-                        + ishape[axis + 2 :],
-                    )
+            return self.backend.bk_reshape(
+                res, ishape[0:-2] + [self.NORIENT, npix, npiy]
+            )
 
-            return self.backend.bk_reshape(res, in_image.shape + [self.NORIENT])
         elif self.use_1D:
             ishape = list(in_image.shape)
-            if len(ishape) < axis + 1:
-                if not self.silent:
-                    print("Use of 1D scat with data that has less than 1D")
-                return None
 
-            npix = ishape[axis]
-            odata = 1
-            if len(ishape) > axis + 1:
-                for k in range(axis + 1, len(ishape)):
-                    odata = odata * ishape[k]
+            npix = ishape[-1]
 
             ndata = 1
-            for k in range(axis):
+            for k in range(len(ishape) - 1):
                 ndata = ndata * ishape[k]
 
-            tim = self.backend.bk_reshape(
-                self.backend.bk_cast(in_image), [ndata, npix, odata]
-            )
+            tim = self.backend.bk_reshape(self.backend.bk_cast(in_image), [ndata, npix])
 
             if self.backend.bk_is_complex(tim):
-                rr1 = self.backend.conv1d(
-                    self.backend.bk_real(tim),
-                    self.ww_RealT[odata],
-                    strides=[1, 1, 1],
-                    padding=self.padding,
-                )
-                ii1 = self.backend.conv1d(
-                    self.backend.bk_real(tim),
-                    self.ww_ImagT[odata],
-                    strides=[1, 1, 1],
-                    padding=self.padding,
-                )
-                rr2 = self.backend.conv1d(
-                    self.backend.bk_imag(tim),
-                    self.ww_RealT[odata],
-                    strides=[1, 1, 1],
-                    padding=self.padding,
-                )
-                ii2 = self.backend.conv1d(
-                    self.backend.bk_imag(tim),
-                    self.ww_ImagT[odata],
-                    strides=[1, 1, 1],
-                    padding=self.padding,
-                )
+                rr1 = self.backend.conv1d(self.backend.bk_real(tim), self.ww_RealT[1])
+                ii1 = self.backend.conv1d(self.backend.bk_real(tim), self.ww_ImagT[1])
+                rr2 = self.backend.conv1d(self.backend.bk_imag(tim), self.ww_RealT[1])
+                ii2 = self.backend.conv1d(self.backend.bk_imag(tim), self.ww_ImagT[1])
                 res = self.backend.bk_complex(rr1 - ii2, ii1 + rr2)
             else:
-                rr = self.backend.conv1d(
-                    tim, self.ww_RealT[odata], strides=[1, 1, 1], padding=self.padding
-                )
-                ii = self.backend.conv1d(
-                    tim, self.ww_ImagT[odata], strides=[1, 1, 1], padding=self.padding
-                )
+                rr = self.backend.conv1d(tim, self.ww_RealT[1])
+                ii = self.backend.conv1d(tim, self.ww_ImagT[1])
                 res = self.backend.bk_complex(rr, ii)
 
-            if axis == 0:
-                if len(ishape) == 1:
-                    return self.backend.bk_reshape(res, [res.shape[1]])
-                else:
-                    return self.backend.bk_reshape(
-                        res, [res.shape[1]] + ishape[axis + 2 :]
-                    )
-            else:
-                if len(ishape) == axis + 1:
-                    return self.backend.bk_reshape(res, ishape[0:axis] + [res.shape[1]])
-                else:
-                    return self.backend.bk_reshape(
-                        res, ishape[0:axis] + [res.shape[1]] + ishape[axis + 1 :]
-                    )
-
-            return self.backend.bk_reshape(res, in_image.shape + [self.NORIENT])
+            return self.backend.bk_reshape(res, ishape)
 
         else:
-            nside = int(np.sqrt(image.shape[axis] // 12))
+            ishape = list(image.shape)
+            """
+            if cell_ids is not None:
+                if cell_ids.shape[0] not in self.padding_conv:
+                    print(image.shape,cell_ids.shape)
+                    import healpix_convolution as hc
+                    from xdggs.healpix import HealpixInfo
+
+                    res = self.backend.bk_zeros(
+                        ishape[0:-1] + [self.NORIENT]+ishape[-1], dtype=self.backend.all_cbk_type
+                    )
+
+                    grid_info = HealpixInfo(
+                        level=int(np.log(nside) / np.log(2)), indexing_scheme="nested"
+                    )
+
+                    for k in range(self.NORIENT):
+                        kernelR, kernelI = hc.kernels.wavelet_kernel(
+                            cell_ids, grid_info=grid_info, orientation=k, is_torch=True
+                        )
+                        self.kernelR_conv[(cell_ids.shape[0], k)] = kernelR.to(
+                            self.backend.all_bk_type
+                        ).to(image.device)
+                        self.kernelI_conv[(cell_ids.shape[0], k)] = kernelI.to(
+                            self.backend.all_bk_type
+                        ).to(image.device)
+                        self.padding_conv[(cell_ids.shape[0], k)] = hc.pad(
+                            cell_ids,
+                            grid_info=grid_info,
+                            ring=5 // 2,  # wavelet kernel_size=5 is hard coded
+                            mode="mean",
+                            constant_value=0,
+                        )
+
+                for k in range(self.NORIENT):
+
+                    kernelR = self.kernelR_conv[(cell_ids.shape[0], k)]
+                    kernelI = self.kernelI_conv[(cell_ids.shape[0], k)]
+                    padding = self.padding_conv[(cell_ids.shape[0], k)]
+                    if len(ishape) == 2:
+                        for l in range(ishape[0]):
+                            padded_data = padding.apply(image[l], is_torch=True)
+                            res[l, :, k] = kernelR.matmul(
+                                padded_data
+                            ) + 1j * kernelI.matmul(padded_data)
+                    else:
+                        for l in range(ishape[0]):
+                            for k2 in range(ishape[2]):
+                                padded_data = padding.apply(
+                                    image[l, :, k2], is_torch=True
+                                )
+                                res[l, :, k2, k] = kernelR.matmul(
+                                    padded_data
+                                ) + 1j * kernelI.matmul(padded_data)
+                return res
+            """
+            if nside is None:
+                nside = int(np.sqrt(image.shape[-1] // 12))
 
             if self.Idx_Neighbours[nside] is None:
                 if self.InitWave is None:
-                    wr, wi, ws, widx = self.init_index(nside)
+                    wr, wi, ws, widx = self.init_index(nside, cell_ids=cell_ids)
                 else:
-                    wr, wi, ws, widx = self.InitWave(self, nside)
+                    wr, wi, ws, widx = self.InitWave(nside, cell_ids=cell_ids)
 
                 self.Idx_Neighbours[nside] = 1  # self.backend.bk_constant(tmp)
                 self.ww_Real[nside] = wr
@@ -2320,161 +2310,67 @@ class FoCUS:
             l_ww_real = self.ww_Real[nside]
             l_ww_imag = self.ww_Imag[nside]
 
-            ishape = list(image.shape)
-            odata = 1
-            for k in range(axis + 1, len(ishape)):
-                odata = odata * ishape[k]
+            # always convolve the last dimension
 
-            if axis > 0:
-                ndata = 1
-                for k in range(axis):
+            ndata = 1
+            if len(ishape) > 1:
+                for k in range(len(ishape) - 1):
                     ndata = ndata * ishape[k]
-                tim = self.backend.bk_reshape(
-                    self.backend.bk_cast(image), [ndata, 12 * nside**2, odata]
+            tim = self.backend.bk_reshape(
+                self.backend.bk_cast(image), [ndata, ishape[-1]]
+            )
+
+            if tim.dtype == self.all_cbk_type:
+                rr1 = self.backend.bk_reshape(
+                    self.backend.bk_sparse_dense_matmul(
+                        self.backend.bk_real(tim),
+                        l_ww_real,
+                    ),
+                    [ndata, self.NORIENT, ishape[-1]],
                 )
-                if tim.dtype == self.all_cbk_type:
-                    rr1 = self.backend.bk_reshape(
-                        self.backend.bk_sparse_dense_matmul(
-                            l_ww_real, self.backend.bk_real(tim[0])
-                        ),
-                        [1, 12 * nside**2, self.NORIENT, odata],
-                    )
-                    ii1 = self.backend.bk_reshape(
-                        self.backend.bk_sparse_dense_matmul(
-                            l_ww_imag, self.backend.bk_real(tim[0])
-                        ),
-                        [1, 12 * nside**2, self.NORIENT, odata],
-                    )
-                    rr2 = self.backend.bk_reshape(
-                        self.backend.bk_sparse_dense_matmul(
-                            l_ww_real, self.backend.bk_imag(tim[0])
-                        ),
-                        [1, 12 * nside**2, self.NORIENT, odata],
-                    )
-                    ii2 = self.backend.bk_reshape(
-                        self.backend.bk_sparse_dense_matmul(
-                            l_ww_imag, self.backend.bk_imag(tim[0])
-                        ),
-                        [1, 12 * nside**2, self.NORIENT, odata],
-                    )
-                    res = self.backend.bk_complex(rr1 - ii2, ii1 + rr2)
-                else:
-                    rr = self.backend.bk_reshape(
-                        self.backend.bk_sparse_dense_matmul(l_ww_real, tim[0]),
-                        [1, 12 * nside**2, self.NORIENT, odata],
-                    )
-                    ii = self.backend.bk_reshape(
-                        self.backend.bk_sparse_dense_matmul(l_ww_imag, tim[0]),
-                        [1, 12 * nside**2, self.NORIENT, odata],
-                    )
-                    res = self.backend.bk_complex(rr, ii)
-
-                for k in range(1, ndata):
-                    if tim.dtype == self.all_cbk_type:
-                        rr1 = self.backend.bk_reshape(
-                            self.backend.bk_sparse_dense_matmul(
-                                l_ww_real, self.backend.bk_real(tim[k])
-                            ),
-                            [1, 12 * nside**2, self.NORIENT, odata],
-                        )
-                        ii1 = self.backend.bk_reshape(
-                            self.backend.bk_sparse_dense_matmul(
-                                l_ww_imag, self.backend.bk_real(tim[k])
-                            ),
-                            [1, 12 * nside**2, self.NORIENT, odata],
-                        )
-                        rr2 = self.backend.bk_reshape(
-                            self.backend.bk_sparse_dense_matmul(
-                                l_ww_real, self.backend.bk_imag(tim[k])
-                            ),
-                            [1, 12 * nside**2, self.NORIENT, odata],
-                        )
-                        ii2 = self.backend.bk_reshape(
-                            self.backend.bk_sparse_dense_matmul(
-                                l_ww_imag, self.backend.bk_imag(tim[k])
-                            ),
-                            [1, 12 * nside**2, self.NORIENT, odata],
-                        )
-                        res = self.backend.bk_concat(
-                            [res, self.backend.bk_complex(rr1 - ii2, ii1 + rr2)], 0
-                        )
-                    else:
-                        rr = self.backend.bk_reshape(
-                            self.backend.bk_sparse_dense_matmul(l_ww_real, tim[k]),
-                            [1, 12 * nside**2, self.NORIENT, odata],
-                        )
-                        ii = self.backend.bk_reshape(
-                            self.backend.bk_sparse_dense_matmul(l_ww_imag, tim[k]),
-                            [1, 12 * nside**2, self.NORIENT, odata],
-                        )
-                        res = self.backend.bk_concat(
-                            [res, self.backend.bk_complex(rr, ii)], 0
-                        )
-
-                if len(ishape) == axis + 1:
-                    return self.backend.bk_reshape(
-                        res, ishape[0:axis] + [12 * nside**2, self.NORIENT]
-                    )
-                else:
-                    return self.backend.bk_reshape(
-                        res,
-                        ishape[0:axis]
-                        + [12 * nside**2]
-                        + ishape[axis + 1 :]
-                        + [self.NORIENT],
-                    )
-
-            if axis == 0:
-                tim = self.backend.bk_reshape(
-                    self.backend.bk_cast(image), [12 * nside**2, odata]
+                ii1 = self.backend.bk_reshape(
+                    self.backend.bk_sparse_dense_matmul(
+                        self.backend.bk_real(tim),
+                        l_ww_imag,
+                    ),
+                    [ndata, self.NORIENT, ishape[-1]],
                 )
-                if tim.dtype == self.all_cbk_type:
-                    rr1 = self.backend.bk_reshape(
-                        self.backend.bk_sparse_dense_matmul(
-                            l_ww_real, self.backend.bk_real(tim)
-                        ),
-                        [12 * nside**2, self.NORIENT, odata],
-                    )
-                    ii1 = self.backend.bk_reshape(
-                        self.backend.bk_sparse_dense_matmul(
-                            l_ww_imag, self.backend.bk_real(tim)
-                        ),
-                        [12 * nside**2, self.NORIENT, odata],
-                    )
-                    rr2 = self.backend.bk_reshape(
-                        self.backend.bk_sparse_dense_matmul(
-                            l_ww_real, self.backend.bk_imag(tim)
-                        ),
-                        [12 * nside**2, self.NORIENT, odata],
-                    )
-                    ii2 = self.backend.bk_reshape(
-                        self.backend.bk_sparse_dense_matmul(
-                            l_ww_imag, self.backend.bk_imag(tim)
-                        ),
-                        [12 * nside**2, self.NORIENT, odata],
-                    )
-                    res = self.backend.bk_complex(rr1 - ii2, ii1 + rr2)
-                else:
-                    rr = self.backend.bk_reshape(
-                        self.backend.bk_sparse_dense_matmul(l_ww_real, tim),
-                        [12 * nside**2, self.NORIENT, odata],
-                    )
-                    ii = self.backend.bk_reshape(
-                        self.backend.bk_sparse_dense_matmul(l_ww_imag, tim),
-                        [12 * nside**2, self.NORIENT, odata],
-                    )
-                    res = self.backend.bk_complex(rr, ii)
+                rr2 = self.backend.bk_reshape(
+                    self.backend.bk_sparse_dense_matmul(
+                        self.backend.bk_imag(tim),
+                        l_ww_real,
+                    ),
+                    [ndata, self.NORIENT, ishape[-1]],
+                )
+                ii2 = self.backend.bk_reshape(
+                    self.backend.bk_sparse_dense_matmul(
+                        self.backend.bk_imag(tim),
+                        l_ww_imag,
+                    ),
+                    [ndata, self.NORIENT, ishape[-1]],
+                )
+                res = self.backend.bk_complex(rr1 - ii2, ii1 + rr2)
+            else:
+                rr = self.backend.bk_reshape(
+                    self.backend.bk_sparse_dense_matmul(tim, l_ww_real),
+                    [ndata, self.NORIENT, ishape[-1]],
+                )
+                ii = self.backend.bk_reshape(
+                    self.backend.bk_sparse_dense_matmul(tim, l_ww_imag),
+                    [ndata, self.NORIENT, ishape[-1]],
+                )
+                res = self.backend.bk_complex(rr, ii)
+            if len(ishape) > 1:
+                return self.backend.bk_reshape(
+                    res, ishape[0:-1] + [self.NORIENT, ishape[-1]]
+                )
+            else:
+                return self.backend.bk_reshape(res, [self.NORIENT, ishape[-1]])
 
-                if len(ishape) == 1:
-                    return self.backend.bk_reshape(res, [12 * nside**2, self.NORIENT])
-                else:
-                    return self.backend.bk_reshape(
-                        res, [12 * nside**2] + ishape[axis + 1 :] + [self.NORIENT]
-                    )
         return res
 
     # ---------------------------------------------−---------
-    def smooth(self, in_image, axis=0):
+    def smooth(self, in_image, axis=0, cell_ids=None, nside=None):
 
         image = self.backend.bk_cast(in_image)
 
@@ -2498,119 +2394,93 @@ class FoCUS:
                 ndata = ndata * ishape[k]
 
             tim = self.backend.bk_reshape(
-                self.backend.bk_cast(in_image), [ndata, npix, npiy, odata]
+                self.backend.bk_cast(in_image), [ndata, npix, npiy]
             )
 
             if self.backend.bk_is_complex(tim):
-                rr = self.backend.conv2d(
-                    self.backend.bk_real(tim),
-                    self.ww_SmoothT[odata],
-                    strides=[1, 1, 1, 1],
-                    padding=self.padding,
-                )
-                ii = self.backend.conv2d(
-                    self.backend.bk_imag(tim),
-                    self.ww_SmoothT[odata],
-                    strides=[1, 1, 1, 1],
-                    padding=self.padding,
-                )
+                rr = self.backend.conv2d(self.backend.bk_real(tim), self.ww_SmoothT[1])
+                ii = self.backend.conv2d(self.backend.bk_imag(tim), self.ww_SmoothT[1])
                 res = self.backend.bk_complex(rr, ii)
             else:
-                res = self.backend.conv2d(
-                    tim,
-                    self.ww_SmoothT[odata],
-                    strides=[1, 1, 1, 1],
-                    padding=self.padding,
-                )
+                res = self.backend.conv2d(tim, self.ww_SmoothT[1])
 
-            if axis == 0:
-                if len(ishape) == 2:
-                    return self.backend.bk_reshape(res, [res.shape[1], res.shape[2]])
-                else:
-                    return self.backend.bk_reshape(
-                        res, [res.shape[1], res.shape[2]] + ishape[axis + 2 :]
-                    )
-            else:
-                if len(ishape) == axis + 2:
-                    return self.backend.bk_reshape(
-                        res, ishape[0:axis] + [res.shape[1], res.shape[2]]
-                    )
-                else:
-                    return self.backend.bk_reshape(
-                        res,
-                        ishape[0:axis]
-                        + [res.shape[1], res.shape[2]]
-                        + ishape[axis + 2 :],
-                    )
+            return self.backend.bk_reshape(res, ishape)
 
-            return self.backend.bk_reshape(res, in_image.shape)
         elif self.use_1D:
 
             ishape = list(in_image.shape)
-            if len(ishape) < axis + 1:
-                if not self.silent:
-                    print("Use of 1D scat with data that has less than 1D")
-                return None
 
-            npix = ishape[axis]
-            odata = 1
-            if len(ishape) > axis + 1:
-                for k in range(axis + 1, len(ishape)):
-                    odata = odata * ishape[k]
+            npix = ishape[-1]
 
             ndata = 1
-            for k in range(axis):
+            for k in range(len(ishape) - 1):
                 ndata = ndata * ishape[k]
 
-            tim = self.backend.bk_reshape(
-                self.backend.bk_cast(in_image), [ndata, npix, odata]
-            )
+            tim = self.backend.bk_reshape(self.backend.bk_cast(in_image), [ndata, npix])
 
             if self.backend.bk_is_complex(tim):
-                rr = self.backend.conv1d(
-                    self.backend.bk_real(tim),
-                    self.ww_SmoothT[odata],
-                    strides=[1, 1, 1],
-                    padding=self.padding,
-                )
-                ii = self.backend.conv1d(
-                    self.backend.bk_imag(tim),
-                    self.ww_SmoothT[odata],
-                    strides=[1, 1, 1],
-                    padding=self.padding,
-                )
+                rr = self.backend.conv1d(self.backend.bk_real(tim), self.ww_SmoothT[1])
+                ii = self.backend.conv1d(self.backend.bk_imag(tim), self.ww_SmoothT[1])
                 res = self.backend.bk_complex(rr, ii)
             else:
-                res = self.backend.conv1d(
-                    tim, self.ww_SmoothT[odata], strides=[1, 1, 1], padding=self.padding
-                )
+                res = self.backend.conv1d(tim, self.ww_SmoothT[1])
 
-            if axis == 0:
-                if len(ishape) == 1:
-                    return self.backend.bk_reshape(res, [res.shape[1]])
-                else:
-                    return self.backend.bk_reshape(
-                        res, [res.shape[1]] + ishape[axis + 1 :]
-                    )
-            else:
-                if len(ishape) == axis + 1:
-                    return self.backend.bk_reshape(res, ishape[0:axis] + [res.shape[1]])
-                else:
-                    return self.backend.bk_reshape(
-                        res, ishape[0:axis] + [res.shape[1]] + ishape[axis + 1 :]
-                    )
-
-            return self.backend.bk_reshape(res, in_image.shape)
+            return self.backend.bk_reshape(res, ishape)
 
         else:
-            nside = int(np.sqrt(image.shape[axis] // 12))
+
+            ishape = list(image.shape)
+            """
+            if cell_ids is not None:
+                if cell_ids.shape[0] not in self.padding_smooth:
+                    import healpix_convolution as hc
+                    from xdggs.healpix import HealpixInfo
+
+                    grid_info = HealpixInfo(
+                        level=int(np.log(nside) / np.log(2)), indexing_scheme="nested"
+                    )
+
+                    kernel = hc.kernels.wavelet_smooth_kernel(
+                        cell_ids, grid_info=grid_info, is_torch=True
+                    )
+
+                    self.kernel_smooth[cell_ids.shape[0]] = kernel.to(
+                        self.backend.all_bk_type
+                    ).to(image.device)
+
+                    self.padding_smooth[cell_ids.shape[0]] = hc.pad(
+                        cell_ids,
+                        grid_info=grid_info,
+                        ring=5 // 2,  # wavelet kernel_size=5 is hard coded
+                        mode="mean",
+                        constant_value=0,
+                    )
+
+                kernel = self.kernel_smooth[cell_ids.shape[0]]
+                padding = self.padding_smooth[cell_ids.shape[0]]
+
+                res = self.backend.bk_zeros(ishape, dtype=self.backend.all_cbk_type)
+
+                if len(ishape) == 2:
+                    for l in range(ishape[0]):
+                        padded_data = padding.apply(image[l], is_torch=True)
+                        res[l] = kernel.matmul(padded_data)
+                else:
+                    for l in range(ishape[0]):
+                        for k2 in range(ishape[2]):
+                            padded_data = padding.apply(image[l, :, k2], is_torch=True)
+                            res[l, :, k2] = kernel.matmul(padded_data)
+                return res
+            """
+            if nside is None:
+                nside = int(np.sqrt(image.shape[-1] // 12))
 
             if self.Idx_Neighbours[nside] is None:
 
                 if self.InitWave is None:
-                    wr, wi, ws, widx = self.init_index(nside)
+                    wr, wi, ws, widx = self.init_index(nside, cell_ids=cell_ids)
                 else:
-                    wr, wi, ws, widx = self.InitWave(self, nside)
+                    wr, wi, ws, widx = self.InitWave(self, nside, cell_ids=cell_ids)
 
                 self.Idx_Neighbours[nside] = 1
                 self.ww_Real[nside] = wr
@@ -2618,95 +2488,26 @@ class FoCUS:
                 self.w_smooth[nside] = ws
 
             l_w_smooth = self.w_smooth[nside]
-            ishape = list(image.shape)
 
             odata = 1
-            for k in range(axis + 1, len(ishape)):
+            for k in range(0, len(ishape) - 1):
                 odata = odata * ishape[k]
 
-            if axis == 0:
-                tim = self.backend.bk_reshape(image, [12 * nside**2, odata])
-                if tim.dtype == self.all_cbk_type:
-                    rr = self.backend.bk_sparse_dense_matmul(
-                        l_w_smooth, self.backend.bk_real(tim)
-                    )
-                    ri = self.backend.bk_sparse_dense_matmul(
-                        l_w_smooth, self.backend.bk_imag(tim)
-                    )
-                    res = self.backend.bk_complex(rr, ri)
-                else:
-                    res = self.backend.bk_sparse_dense_matmul(l_w_smooth, tim)
-                if len(ishape) == 1:
-                    return self.backend.bk_reshape(res, [12 * nside**2])
-                else:
-                    return self.backend.bk_reshape(
-                        res, [12 * nside**2] + ishape[axis + 1 :]
-                    )
-
-            if axis > 0:
-                ndata = ishape[0]
-                for k in range(1, axis):
-                    ndata = ndata * ishape[k]
-                tim = self.backend.bk_reshape(image, [ndata, 12 * nside**2, odata])
-                if tim.dtype == self.all_cbk_type:
-                    rr = self.backend.bk_reshape(
-                        self.backend.bk_sparse_dense_matmul(
-                            l_w_smooth, self.backend.bk_real(tim[0])
-                        ),
-                        [1, 12 * nside**2, odata],
-                    )
-                    ri = self.backend.bk_reshape(
-                        self.backend.bk_sparse_dense_matmul(
-                            l_w_smooth, self.backend.bk_imag(tim[0])
-                        ),
-                        [1, 12 * nside**2, odata],
-                    )
-                    res = self.backend.bk_complex(rr, ri)
-                else:
-                    res = self.backend.bk_reshape(
-                        self.backend.bk_sparse_dense_matmul(l_w_smooth, tim[0]),
-                        [1, 12 * nside**2, odata],
-                    )
-
-                for k in range(1, ndata):
-                    if tim.dtype == self.all_cbk_type:
-                        rr = self.backend.bk_reshape(
-                            self.backend.bk_sparse_dense_matmul(
-                                l_w_smooth, self.backend.bk_real(tim[k])
-                            ),
-                            [1, 12 * nside**2, odata],
-                        )
-                        ri = self.backend.bk_reshape(
-                            self.backend.bk_sparse_dense_matmul(
-                                l_w_smooth, self.backend.bk_imag(tim[k])
-                            ),
-                            [1, 12 * nside**2, odata],
-                        )
-                        res = self.backend.bk_concat(
-                            [res, self.backend.bk_complex(rr, ri)], 0
-                        )
-                    else:
-                        res = self.backend.bk_concat(
-                            [
-                                res,
-                                self.backend.bk_reshape(
-                                    self.backend.bk_sparse_dense_matmul(
-                                        l_w_smooth, tim[k]
-                                    ),
-                                    [1, 12 * nside**2, odata],
-                                ),
-                            ],
-                            0,
-                        )
-
-                if len(ishape) == axis + 1:
-                    return self.backend.bk_reshape(
-                        res, ishape[0:axis] + [12 * nside**2]
-                    )
-                else:
-                    return self.backend.bk_reshape(
-                        res, ishape[0:axis] + [12 * nside**2] + ishape[axis + 1 :]
-                    )
+            tim = self.backend.bk_reshape(image, [odata, ishape[-1]])
+            if tim.dtype == self.all_cbk_type:
+                rr = self.backend.bk_sparse_dense_matmul(
+                    self.backend.bk_real(tim), l_w_smooth
+                )
+                ri = self.backend.bk_sparse_dense_matmul(
+                    self.backend.bk_imag(tim), l_w_smooth
+                )
+                res = self.backend.bk_complex(rr, ri)
+            else:
+                res = self.backend.bk_sparse_dense_matmul(tim, l_w_smooth)
+            if len(ishape) == 1:
+                return self.backend.bk_reshape(res, [ishape[-1]])
+            else:
+                return self.backend.bk_reshape(res, ishape[0:-1] + [ishape[-1]])
 
         return res
 

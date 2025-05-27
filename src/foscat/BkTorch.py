@@ -2,6 +2,7 @@ import sys
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 
 import foscat.BkBase as BackendBase
 
@@ -62,6 +63,88 @@ class BkTorch(BackendBase.BackendBase):
             torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
         )
 
+    import torch
+
+    def binned_mean(self, data, cell_ids):
+        """
+        Compute the mean over groups of 4 nested HEALPix cells (nside → nside/2).
+
+        Args:
+            data (torch.Tensor): Tensor of shape [..., N], where N is the number of HEALPix cells.
+            cell_ids (torch.LongTensor): Tensor of shape [N], with cell indices (nested ordering).
+
+        Returns:
+            torch.Tensor: Tensor of shape [..., n_bins], with averaged values per group of 4 cells.
+        """
+        if isinstance(data, np.ndarray):
+            data = torch.from_numpy(data).to(
+                dtype=torch.float32, device=self.torch_device
+            )
+        if isinstance(cell_ids, np.ndarray):
+            cell_ids = torch.from_numpy(cell_ids).to(
+                dtype=torch.long, device=self.torch_device
+            )
+
+        # Compute supercell ids by grouping 4 nested cells together
+        groups = cell_ids // 4
+
+        # Get unique group ids and inverse mapping
+        unique_groups, inverse_indices = torch.unique(groups, return_inverse=True)
+        n_bins = unique_groups.shape[0]
+
+        # Flatten all leading dimensions into a single batch dimension
+        original_shape = data.shape[:-1]
+        N = data.shape[-1]
+        data_flat = data.reshape(-1, N)  # Shape: [B, N]
+
+        # Prepare to compute sums using scatter_add
+        B = data_flat.shape[0]
+
+        # Repeat inverse indices for each batch element
+        idx = inverse_indices.repeat(B, 1)  # Shape: [B, N]
+
+        # Offset indices to simulate a per-batch scatter into [B * n_bins]
+        batch_offsets = torch.arange(B, device=data.device).unsqueeze(1) * n_bins
+        idx_offset = idx + batch_offsets  # Shape: [B, N]
+
+        # Flatten everything for scatter
+        idx_offset_flat = idx_offset.flatten()
+        data_flat_flat = data_flat.flatten()
+
+        # Accumulate sums per bin
+        out = torch.zeros(B * n_bins, dtype=data.dtype, device=data.device)
+        out = out.scatter_add(0, idx_offset_flat, data_flat_flat)
+
+        # Count number of elements per bin (to compute mean)
+        ones = torch.ones_like(data_flat_flat)
+        counts = torch.zeros(B * n_bins, dtype=data.dtype, device=data.device)
+        counts = counts.scatter_add(0, idx_offset_flat, ones)
+
+        # Compute mean
+        mean = out / counts  # Shape: [B * n_bins]
+        mean = mean.view(B, n_bins)
+
+        # Restore original leading dimensions
+        return mean.view(*original_shape, n_bins), unique_groups
+
+    def average_by_cell_group(data, cell_ids):
+        """
+        data: tensor of shape [..., N, ...] (ex: [B, N, C])
+        cell_ids: tensor of shape [N]
+        Returns: mean_data of shape [..., G, ...] where G = number of unique cell_ids//4
+        """
+        original_shape = data.shape
+        leading = data.shape[:-2]  # all dims before N
+        N = data.shape[-2]
+        trailing = data.shape[-1:]  # all dims after N
+
+        groups = (cell_ids // 4).long()  # [N]
+        unique_groups, group_indices, counts = torch.unique(
+            groups, return_inverse=True, return_counts=True
+        )
+
+        return torch.bincount(group_indices, weights=data) / counts, unique_groups
+
     # ---------------------------------------------−---------
     # --             BACKEND DEFINITION                    --
     # ---------------------------------------------−---------
@@ -78,20 +161,40 @@ class BkTorch(BackendBase.BackendBase):
     def bk_sparse_dense_matmul(self, smat, mat):
         return smat.matmul(mat)
 
-    def conv2d(self, x, w, strides=[1, 1, 1, 1], padding="SAME"):
-        import torch.nn.functional as F
+    def conv2d(self, x, w):
+        """
+        Perform 2D convolution using PyTorch format.
 
-        lx = x.permute(0, 3, 1, 2)
-        wx = w.permute(3, 2, 0, 1)  # de (5, 5, 1, 4) à (4, 1, 5, 5)
+        Args:
+            x: Tensor of shape [..., Nx, Ny] – input
+            w: Tensor of shape [O_c, wx, wy] – conv weights
 
-        # Calculer le padding symétrique
-        kx, ky = w.shape[0], w.shape[1]
+        Returns:
+            Tensor of shape [..., O_c, Nx, Ny]
+        """
+        *leading_dims, Nx, Ny = x.shape  # extract leading dims
+        O_c, wx, wy = w.shape
 
-        # Appliquer le padding
-        x_padded = F.pad(lx, (ky // 2, ky // 2, kx // 2, kx // 2), mode="circular")
+        # Flatten leading dims into batch dimension
+        B = int(torch.prod(torch.tensor(leading_dims))) if leading_dims else 1
+        x = x.reshape(B, 1, Nx, Ny)  # [B, 1, Nx, Ny]
 
-        # Appliquer la convolution
-        return F.conv2d(x_padded, wx, stride=1, padding=0).permute(0, 2, 3, 1)
+        # Reshape filters to match conv2d format [O_c, 1, wx, wy]
+        w = w[:, None, :, :]  # [O_c, 1, wx, wy]
+
+        pad_x = wx // 2
+        pad_y = wy // 2
+
+        # Reflective padding to reduce edge artifacts
+        x_padded = F.pad(x, (pad_y, pad_y, pad_x, pad_x), mode="reflect")
+
+        # Apply convolution
+        y = F.conv2d(x_padded, w)  # [B, O_c, Nx, Ny]
+
+        # Restore original leading dimensions
+        y = y.reshape(*leading_dims, O_c, Nx, Ny)
+
+        return y
 
     def conv1d(self, x, w, strides=[1, 1, 1], padding="SAME"):
         # to be written!!!
@@ -308,7 +411,7 @@ class BkTorch(BackendBase.BackendBase):
         return self.backend.unsqueeze(data, axis)
 
     def bk_transpose(self, data, thelist):
-        return self.backend.transpose(data, thelist)
+        return self.backend.transpose(data, thelist[0], thelist[1])
 
     def bk_concat(self, data, axis=None):
 
