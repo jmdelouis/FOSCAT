@@ -181,7 +181,7 @@ class BkTensorflow(BackendBase.BackendBase):
         mean_per_bin = sum_per_bin / counts  # [B, A, n_bins]
 
         return mean_per_bin, unique_groups
-
+        
     def conv2d(self, x, w):
         """
         Perform 2D convolution using TensorFlow.
@@ -223,13 +223,41 @@ class BkTensorflow(BackendBase.BackendBase):
         y = tf.reshape(y, [*leading_dims, O_c, Nx, Ny])
 
         return y
+        
+    def conv1d(self,x, w):
+        """
+        Perform 1D convolution using TensorFlow.
 
-    def conv1d(self, x, w, strides=[1, 1, 1], padding="SAME"):
-        kx = w.shape[0]
-        paddings = self.backend.constant([[0, 0], [kx // 2, kx // 2], [0, 0]])
-        tmp = self.backend.pad(x, paddings, "SYMMETRIC")
+        Args:
+            x: Tensor of shape [..., N] – input
+            w: Tensor of shape [k] – conv weights
 
-        return self.backend.nn.conv1d(tmp, w, stride=strides, padding="VALID")
+        Returns:
+            Tensor of shape [...,N]
+        """
+        # Extract shapes
+        *leading_dims, N = x.shape
+        k = w.shape[0]
+
+        # Flatten leading dims into batch dimension
+        B = tf.reduce_prod(leading_dims) if leading_dims else 1
+        x = tf.reshape(x, [B, N, 1])  # TensorFlow 1D format: [B, L, C=1]
+
+        # Prepare weights: [k, in_channels=1, out_channels=O_c]
+        w = tf.reshape(w, [k,1,1])
+
+        # Apply 'reflect' padding
+        pad = k // 2
+        x_padded = tf.pad(x, [[0, 0], [pad, pad], [0, 0]], mode="REFLECT")
+
+        # Perform convolution
+        y = tf.nn.conv1d(x_padded, w, stride=1, padding='VALID')  # [B, N, O_c]
+
+        # Transpose to [B, O_c, N] and reshape back
+        y = tf.transpose(y, [0, 2, 1])  # [B, 1, N]
+        y = tf.reshape(y, [*leading_dims, N])  # [..., N]
+
+        return y
 
     def bk_threshold(self, x, threshold, greater=True):
 

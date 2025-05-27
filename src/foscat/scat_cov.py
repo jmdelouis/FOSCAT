@@ -2624,6 +2624,9 @@ class funct(FOC.FoCUS):
                 x1 = im_shape[1]
                 x2 = im_shape[2]
             J = int(np.log(nside - self.KERNELSZ) / np.log(2))  # Number of j scales
+            if J==0:
+                print('Use of too small 2D domain does not work J_max=',J)
+                return None
         elif self.use_1D:
             if len(image1.shape) == 2:
                 npix = int(im_shape[1])  # Number of pixels

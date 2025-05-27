@@ -411,7 +411,7 @@ class BkTorch(BackendBase.BackendBase):
         return self.backend.unsqueeze(data, axis)
 
     def bk_transpose(self, data, thelist):
-        return self.backend.transpose(data, thelist)
+        return self.backend.transpose(data, thelist[0],thelist[1])
 
     def bk_concat(self, data, axis=None):
 
