@@ -252,7 +252,7 @@ class BkTorch(BackendBase.BackendBase):
 
             return r
         else:
-            return self.backend.sign(x) * self.backend.sqrt(self.backend.sign(x) * x)
+            return torch.where(x == 0,0.0,self.backend.sign(x) * self.backend.sqrt(self.backend.sign(x) * x))
 
     def bk_square_comp(self, x):
         if x.dtype == self.all_cbk_type:

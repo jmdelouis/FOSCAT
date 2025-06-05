@@ -60,6 +60,7 @@ class SoftmaxClassifier:
             epochs (int, optional): Number of epochs to train the model. Defaults to 10.
         """
         # Train the model
+        self.model.build(input_shape=(None, x_train.shape[1]))
         self.model.fit(x_train, y_train, epochs=epochs)
 
     def predict(self, x_train):
