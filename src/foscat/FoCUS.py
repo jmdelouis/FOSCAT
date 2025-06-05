@@ -35,7 +35,7 @@ class FoCUS:
         mpi_rank=0,
     ):
 
-        self.__version__ = "2025.05.2"
+        self.__version__ = "2025.06.1"
         # P00 coeff for normalization for scat_cov
         self.TMPFILE_VERSION = TMPFILE_VERSION
         self.P1_dic = None
