@@ -246,13 +246,13 @@ class BkTorch(BackendBase.BackendBase):
             xr = self.bk_real(x)
             # xi = self.bk_imag(x)
 
-            r = self.backend.sign(xr) * self.backend.sqrt(self.backend.sign(xr) * xr)
+            r = self.backend.sign(xr) * self.backend.sqrt(self.backend.sign(xr) * xr + 1E-16)
             # return r
             # i = self.backend.sign(xi) * self.backend.sqrt(self.backend.sign(xi) * xi)
 
             return r
         else:
-            return torch.where(x == 0,0.0,self.backend.sign(x) * self.backend.sqrt(self.backend.sign(x) * x))
+            return self.backend.sign(x) * self.backend.sqrt(self.backend.sign(x) * x + 1E-16)
 
     def bk_square_comp(self, x):
         if x.dtype == self.all_cbk_type:
