@@ -1816,7 +1816,7 @@ class FoCUS:
             tmp = indice
         
         self.Idx_CNN[(nside,NORIENT,self.KERNELSZ)] = tmp
-        self.Idx_WCNN[(nside,NORIENT,self.KERNELSZ)] = wav
+        self.Idx_WCNN[(nside,NORIENT,self.KERNELSZ)] = self.backend.bk_cast(wav)
 
         return wav, tmp
         

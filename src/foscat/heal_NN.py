@@ -17,6 +17,7 @@ class CNN:
         SEED=1234,
         all_type='float32',
         filename=None,
+        scat_operator=None,
         BACKEND='tensorflow'
     ):
 
@@ -40,10 +41,13 @@ class CNN:
             self.nscale = len(chanlist)-1
             self.npar = nparam
             self.n_chan_in = n_chan_in
-            self.scat_operator = sc.funct(
+            if scat_operator is None:
+                self.scat_operator = sc.funct(
                     KERNELSZ=KERNELSZ,
                     NORIENT=NORIENT,
                     all_type=all_type)
+            else:
+                self.scat_operator = scat_operator
 
             self.chanlist = chanlist
             self.KERNELSZ = self.scat_operator.KERNELSZ
@@ -172,6 +176,7 @@ class GCNN:
         SEED=1234,
         all_type='float32',
         filename=None,
+        scat_operator=None,
         BACKEND='tensorflow'
     ):
 
@@ -192,10 +197,14 @@ class GCNN:
         else:
             self.nscale = len(chanlist)-1
             self.npar = nparam
-            self.scat_operator = sc.funct(
+            
+            if scat_operator is None:
+                self.scat_operator = sc.funct(
                     KERNELSZ=KERNELSZ,
                     NORIENT=NORIENT,
                     all_type=all_type)
+            else:
+                self.scat_operator = scat_operator
 
             self.chanlist = chanlist
             self.KERNELSZ = self.scat_operator.KERNELSZ
