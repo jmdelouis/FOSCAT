@@ -165,7 +165,7 @@ class CNN:
             
         self.x = self.scat_operator.backend.bk_cast(x)
         
-    def eval(self, im, indices=None, weights=None):
+    def eval(self, im, indices=None, weights=None, out_map=False):
 
         x = self.x
         ww = self.backend.bk_reshape(
@@ -208,6 +208,8 @@ class CNN:
             im = self.scat_operator.backend.bk_abs(im)
             im = self.backend.bk_reduce_mean(self.backend.bk_reshape(im,[im.shape[0],im.shape[1],self.NORIENT,im.shape[3]//4,4]),4)
 
+        if out_map:
+            return im
         ww = self.scat_operator.backend.bk_reshape(
             x[
                 nn : nn
