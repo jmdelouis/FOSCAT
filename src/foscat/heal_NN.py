@@ -177,7 +177,7 @@ class CNN:
         im = self.scat_operator.healpix_layer(im[:,:,None,:], ww)
         im = self.backend.bk_abs(im)
         
-        im = self.backend.bk_reduce_mean(self.backend.bk_reshape(im,[im.shape[0],im.shape[1],self.NORIENT,im.shape[3]//4,4]),4)
+        im = self.backend.bk_reduce_sum(self.backend.bk_reshape(im,[im.shape[0],im.shape[1],self.NORIENT,im.shape[3]//4,4]),4)
 
         for k in range(self.nscale):
             ww = self.scat_operator.backend.bk_reshape(
@@ -206,7 +206,7 @@ class CNN:
                     im, ww, indices=indices[k], weights=weights[k]
                 )
             im = self.scat_operator.backend.bk_abs(im)
-            im = self.backend.bk_reduce_mean(self.backend.bk_reshape(im,[im.shape[0],im.shape[1],self.NORIENT,im.shape[3]//4,4]),4)
+            im = self.backend.bk_reduce_sum(self.backend.bk_reshape(im,[im.shape[0],im.shape[1],self.NORIENT,im.shape[3]//4,4]),4)
 
         if out_map:
             return im
