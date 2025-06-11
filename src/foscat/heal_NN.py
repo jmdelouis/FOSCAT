@@ -123,8 +123,8 @@ class CNN:
             w0[:,13]=0.2
             w0[:,14]=0.1
         
-        x=np.random.randn(self.get_number_of_weights())*np.sqrt(6/(12 * self.out_nside**2 
-            * self.chanlist[self.nscale]*self.NORIENT*self.npar))
+        a=2*np.sqrt(6/(12 * self.out_nside**2 * self.chanlist[self.nscale]*self.NORIENT))
+        x=(np.random.rand(self.get_number_of_weights())-0.5)*a
         
         w0=w0.flatten()
         x[0:w0.shape[0]]=w0
