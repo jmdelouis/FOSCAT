@@ -149,11 +149,7 @@ class BkTorch(BackendBase.BackendBase):
     # --             BACKEND DEFINITION                    --
     # ---------------------------------------------−---------
     def bk_SparseTensor(self, indice, w, dense_shape=[]):
-        return (
-            self.backend.sparse_coo_tensor(indice.T, w, dense_shape)
-            .to_sparse_csr()
-            .to(self.torch_device)
-        )
+        return self.backend.sparse_coo_tensor(indice.T, w, dense_shape).to_sparse_csr().to(self.torch_device)
 
     def bk_stack(self, list, axis=0):
         return self.backend.stack(list, axis=axis).to(self.torch_device)
@@ -391,9 +387,9 @@ class BkTorch(BackendBase.BackendBase):
         return self.backend.argmax(data)
 
     def bk_reshape(self, data, shape):
-        if isinstance(data, np.ndarray):
-            return data.reshape(shape)
-        return data.view(shape)
+        #if isinstance(data, np.ndarray):
+        #    return data.reshape(shape)
+        return data.reshape(shape)
 
     def bk_repeat(self, data, nn, axis=0):
         return self.backend.repeat_interleave(data, repeats=nn, dim=axis)

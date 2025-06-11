@@ -102,6 +102,69 @@ class CNN:
     def get_weights(self):
         return self.x
 
+    def init_wave(self):
+        w0=np.zeros([self.n_chan_in, self.KERNELSZ * (self.KERNELSZ//2+1),  self.chanlist[0], self.NORIENT])
+        if self.KERNELSZ==3:
+            w0[:,0]=-0.2
+            w0[:,1]=-0.5
+            w0[:,2]=-0.2
+            w0[:,3]=0.2
+            w0[:,4]=0.5
+            w0[:,5]=0.2
+        if self.KERNELSZ==5:
+            w0[:,0]=-0.1
+            w0[:,1]=-0.2
+            w0[:,2]=-0.5
+            w0[:,3]=-0.2
+            w0[:,4]=-0.1
+            w0[:,10]=0.1
+            w0[:,11]=0.2
+            w0[:,12]=0.5
+            w0[:,13]=0.2
+            w0[:,14]=0.1
+        
+        x=np.random.randn(self.get_number_of_weights())*np.sqrt(6/(12 * self.out_nside**2 
+            * self.chanlist[self.nscale]*self.NORIENT*self.npar))
+        
+        w0=w0.flatten()
+        x[0:w0.shape[0]]=w0
+        nn = self.KERNELSZ * (self.KERNELSZ//2+1) * self.n_chan_in * self.chanlist[0]*self.NORIENT
+        
+        for k in range(self.nscale):
+            ww = np.zeros([self.chanlist[k], self.NORIENT, self.KERNELSZ * (self.KERNELSZ//2+1),  self.chanlist[k + 1], self.NORIENT])
+            
+            if self.KERNELSZ==3:
+                ww[:,:,0]=-0.2
+                ww[:,:,1]=-0.5
+                ww[:,:,2]=-0.2
+                ww[:,:,3]=0.2
+                ww[:,:,4]=0.5
+                ww[:,:,5]=0.2
+            if self.KERNELSZ==5:
+                ww[:,:,0]=-0.1
+                ww[:,:,1]=-0.2
+                ww[:,:,2]=-0.5
+                ww[:,:,3]=-0.2
+                ww[:,:,4]=-0.1
+                ww[:,:,10]=0.1
+                ww[:,:,11]=0.2
+                ww[:,:,12]=0.5
+                ww[:,:,13]=0.2
+                ww[:,:,14]=0.1
+            x[nn : nn + self.KERNELSZ
+                    * (self.KERNELSZ//2+1)
+                    * self.NORIENT*self.NORIENT
+                    * self.chanlist[k]
+                    * self.chanlist[k + 1]
+                ]=ww.flatten()
+                
+            nn = nn + (self.KERNELSZ * (self.KERNELSZ//2+1)
+                * self.NORIENT*self.NORIENT
+                * self.chanlist[k]
+                * self.chanlist[k + 1])
+            
+        self.x = self.scat_operator.backend.bk_cast(x)
+        
     def eval(self, im, indices=None, weights=None):
 
         x = self.x
@@ -112,7 +175,7 @@ class CNN:
         nn = self.KERNELSZ * (self.KERNELSZ//2+1) * self.n_chan_in * self.chanlist[0]*self.NORIENT
 
         im = self.scat_operator.healpix_layer(im[:,:,None,:], ww)
-        im = self.backend.bk_relu(im)
+        im = self.backend.bk_abs(im)
         
         im = self.backend.bk_reduce_mean(self.backend.bk_reshape(im,[im.shape[0],im.shape[1],self.NORIENT,im.shape[3]//4,4]),4)
 
@@ -142,7 +205,7 @@ class CNN:
                 im = self.scat_operator.healpix_layer(
                     im, ww, indices=indices[k], weights=weights[k]
                 )
-            im = self.scat_operator.backend.bk_relu(im)
+            im = self.scat_operator.backend.bk_abs(im)
             im = self.backend.bk_reduce_mean(self.backend.bk_reshape(im,[im.shape[0],im.shape[1],self.NORIENT,im.shape[3]//4,4]),4)
 
         ww = self.scat_operator.backend.bk_reshape(
