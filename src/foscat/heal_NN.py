@@ -123,7 +123,7 @@ class CNN:
             w0[:,13]=0.2
             w0[:,14]=0.1
         
-        a=2*np.sqrt(6/(12 * self.out_nside**2 * self.chanlist[self.nscale]*self.NORIENT))
+        a=2*np.sqrt(6/(12 * self.out_nside**2 * self.chanlist[self.nscale]*self.NORIENT*self.npar))
         x=(np.random.rand(self.get_number_of_weights())-0.5)*a
         
         w0=w0.flatten()
@@ -189,7 +189,12 @@ class CNN:
             m[:,k,:,:]=np.roll(alpha,k,1)
         return self.scat_operator.backend.bk_cast(m[None,...])
         
-    def eval(self, im, indices=None, weights=None, out_map=False, first_layer_rot=None):
+    def eval(self, im, 
+            indices=None, 
+            weights=None, 
+            out_map=False, 
+            first_layer_rot=None,
+            activation='relu'):
 
         x = self.x
         ww = self.backend.bk_reshape(
@@ -207,7 +212,10 @@ class CNN:
         if out_map:
             return im
         
-        im = self.backend.bk_relu(im)
+        if activation=='relu':
+            im = self.backend.bk_relu(im)
+        elif activation=='abs':
+            im = self.backend.bk_abs(im)
         
         im = self.backend.bk_reduce_sum(self.backend.bk_reshape(im,[im.shape[0],im.shape[1],self.NORIENT,im.shape[3]//4,4]),4)
 
@@ -237,7 +245,11 @@ class CNN:
                 im = self.scat_operator.healpix_layer(
                     im, ww, indices=indices[k], weights=weights[k]
                 )
-            im = self.scat_operator.backend.bk_relu(im)
+            
+            if activation=='relu':
+                im = self.backend.bk_relu(im)
+            elif activation=='abs':
+                im = self.backend.bk_abs(im)
             im = self.backend.bk_reduce_sum(self.backend.bk_reshape(im,[im.shape[0],im.shape[1],self.NORIENT,im.shape[3]//4,4]),4)
 
         ww = self.scat_operator.backend.bk_reshape(
