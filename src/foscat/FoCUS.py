@@ -519,9 +519,9 @@ class FoCUS:
         wim = self.backend.bk_reshape(wim,[im.shape[0],im.shape[1],im.shape[2]]+list(indices.shape))*mat[None,...]
         #win is [N_batch,N_i,  NORIENT,K*(K+1),1,  NORIENT,N,N_w]
         #ww is  [1,      N_i,  NORIENT,K*(K+1),N_o,NORIENT]
-        wim = self.backend.bk_reduce_mean(wim[:,:,:,:,None]*ww[None,:,:,:,:,:,None,None],[1,2,3])
+        wim = self.backend.bk_reduce_sum(wim[:,:,:,:,None]*ww[None,:,:,:,:,:,None,None],[1,2,3])
 
-        wim = self.backend.bk_reduce_mean(wim,-1)
+        wim = self.backend.bk_reduce_sum(wim,-1)
         return self.backend.bk_reshape(wim,[im.shape[0],ww.shape[3],ww.shape[4],im.shape[-1]])
 
     # ---------------------------------------------−---------

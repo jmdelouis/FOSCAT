@@ -165,7 +165,31 @@ class CNN:
             
         self.x = self.scat_operator.backend.bk_cast(x)
         
-    def eval(self, im, indices=None, weights=None, out_map=False):
+    def calc_matrix_first_layer(self,noise_map):
+        # Décalage circulaire par matrice de permutation
+        def circ_shift_matrix(N,k):
+            return np.roll(np.eye(N), shift=-k, axis=1)
+        
+        im=self.scat_operator.convol(noise_map)
+        mm=np.mean(abs(im.cpu().numpy()),0)
+        Norient=mm.shape[1]
+        xx=np.cos(np.arange(Norient)/Norient*2*np.pi)
+        yy=np.sin(np.arange(Norient)/Norient*2*np.pi)
+
+        a=np.sum(mm*xx[None,:,None],1)
+        b=np.sum(mm*yy[None,:,None],1)
+        o=np.fmod(Norient*np.arctan2(-b,a)/(2*np.pi)+Norient,Norient)
+        xx=np.arange(Norient)
+        alpha = o[:,None,:]-xx[None,:,None]
+        beta = np.fmod(1+o[:,None,:]-xx[None,:,None],Norient)
+        alpha=(1-alpha)*(alpha<1)*(alpha>0)+beta*(beta<1)*(beta>0)
+
+        m=np.zeros([mm.shape[0],4,4,mm.shape[2]])
+        for k in range(4):
+            m[:,k,:,:]=np.roll(alpha,k,1)
+        return self.scat_operator.backend.bk_cast(m[None,...])
+        
+    def eval(self, im, indices=None, weights=None, out_map=False, first_layer_rot=None):
 
         x = self.x
         ww = self.backend.bk_reshape(
@@ -175,6 +199,14 @@ class CNN:
         nn = self.KERNELSZ * (self.KERNELSZ//2+1) * self.n_chan_in * self.chanlist[0]*self.NORIENT
 
         im = self.scat_operator.healpix_layer(im[:,:,None,:], ww)
+        
+        if first_layer_rot is not None:
+            im = self.backend.bk_reshape(im,[im.shape[0],im.shape[1],self.NORIENT,1,im.shape[3]])
+            im = self.backend.bk_reduce_sum(im*first_layer_rot,2)
+            
+        if out_map:
+            return im
+        
         im = self.backend.bk_relu(im)
         
         im = self.backend.bk_reduce_sum(self.backend.bk_reshape(im,[im.shape[0],im.shape[1],self.NORIENT,im.shape[3]//4,4]),4)
@@ -208,8 +240,6 @@ class CNN:
             im = self.scat_operator.backend.bk_relu(im)
             im = self.backend.bk_reduce_sum(self.backend.bk_reshape(im,[im.shape[0],im.shape[1],self.NORIENT,im.shape[3]//4,4]),4)
 
-        if out_map:
-            return im
         ww = self.scat_operator.backend.bk_reshape(
             x[
                 nn : nn
