@@ -187,7 +187,8 @@ class CNN:
         m=np.zeros([mm.shape[0],4,4,mm.shape[2]])
         for k in range(4):
             m[:,k,:,:]=np.roll(alpha,k,1)
-        return self.scat_operator.backend.bk_cast(m[None,...])
+        m=np.mean(m,0)
+        return self.scat_operator.backend.bk_cast(m[None,None,...])
         
     def eval(self, im, 
             indices=None, 
