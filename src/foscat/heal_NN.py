@@ -175,7 +175,7 @@ class CNN:
         nn = self.KERNELSZ * (self.KERNELSZ//2+1) * self.n_chan_in * self.chanlist[0]*self.NORIENT
 
         im = self.scat_operator.healpix_layer(im[:,:,None,:], ww)
-        im = self.backend.bk_abs(im)
+        im = self.backend.bk_relu(im)
         
         im = self.backend.bk_reduce_sum(self.backend.bk_reshape(im,[im.shape[0],im.shape[1],self.NORIENT,im.shape[3]//4,4]),4)
 
@@ -205,7 +205,7 @@ class CNN:
                 im = self.scat_operator.healpix_layer(
                     im, ww, indices=indices[k], weights=weights[k]
                 )
-            im = self.scat_operator.backend.bk_abs(im)
+            im = self.scat_operator.backend.bk_relu(im)
             im = self.backend.bk_reduce_sum(self.backend.bk_reshape(im,[im.shape[0],im.shape[1],self.NORIENT,im.shape[3]//4,4]),4)
 
         if out_map:
