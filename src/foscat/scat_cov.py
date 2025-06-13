@@ -6101,7 +6101,7 @@ class funct(FOC.FoCUS):
         
         m=np.zeros([Norient,Norient,mm.shape[1]])
         for k in range(Norient):
-            m[k,:,:]=np.roll(alpha,k,1)
+            m[k,:,:]=np.roll(alpha,k,0)
         #m=np.mean(m,0)
         return self.backend.bk_cast(m)
         
