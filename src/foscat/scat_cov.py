@@ -6102,7 +6102,7 @@ class funct(FOC.FoCUS):
         for k in range(4):
             m[:,k,:,:]=np.roll(alpha,k,1)
         m=np.mean(m,0)
-        return self.backend.bk_cast(m[None,None,...])
+        return self.backend.bk_cast(m[None,...])
         
     def synthesis(
         self,
