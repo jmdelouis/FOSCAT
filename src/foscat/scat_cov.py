@@ -6086,16 +6086,16 @@ class funct(FOC.FoCUS):
         Norient = self.NORIENT
         im=self.convol(noise_map)
         mm=np.mean(abs(im.cpu().numpy()),0)
-        Norient=mm.shape[1]
+        Norient=mm.shape[0]
         xx=np.cos(np.arange(Norient)/Norient*2*np.pi)
         yy=np.sin(np.arange(Norient)/Norient*2*np.pi)
 
-        a=np.sum(mm*xx[None,:,None],1)
-        b=np.sum(mm*yy[None,:,None],1)
+        a=np.sum(mm*xx[:,None],1)
+        b=np.sum(mm*yy[:,None],1)
         o=np.fmod(Norient*np.arctan2(-b,a)/(2*np.pi)+Norient,Norient)
         xx=np.arange(Norient)
-        alpha = o[:,None,:]-xx[None,:,None]
-        beta = np.fmod(1+o[:,None,:]-xx[None,:,None],Norient)
+        alpha = o[None,:]-xx[:,None]
+        beta = np.fmod(1+o[None,:]-xx[:,None],Norient)
         alpha=(1-alpha)*(alpha<1)*(alpha>0)+beta*(beta<1)*(beta>0)
 
         m=np.zeros([mm.shape[0],4,4,mm.shape[2]])
