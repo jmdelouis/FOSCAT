@@ -6101,7 +6101,7 @@ class funct(FOC.FoCUS):
         m=np.zeros([mm.shape[0],4,4,mm.shape[2]])
         for k in range(4):
             m[:,k,:,:]=np.roll(alpha,k,1)
-        m=np.mean(m,0)
+        #m=np.mean(m,0)
         return self.backend.bk_cast(m)
         
     def synthesis(
