@@ -6086,11 +6086,12 @@ class funct(FOC.FoCUS):
         Norient = self.NORIENT
         im=self.convol(noise_map)
         if image2 is None:
-            mm=np.mean(abs(f.backend.bk_cast(im)),0)
+            mm=np.mean(abs(self.backend.to_numpy(im)),0)
         else:
-            im2=self.convol(image2)
-            mm=np.mean(np.sqrt(f.backend.to_numpy(im*f.backend.bk_conjugate(im2))),0)
-            
+            im2=self.convol(self.backend.bk_cast(image2))
+            mm=np.mean(self.backend.to_numpy(
+                self.backend.bk_L1(im*self.backend.bk_conjugate(im2))).real,0)
+        
         Norient=mm.shape[0]
         xx=np.cos(np.arange(Norient)/Norient*2*np.pi)
         yy=np.sin(np.arange(Norient)/Norient*2*np.pi)
