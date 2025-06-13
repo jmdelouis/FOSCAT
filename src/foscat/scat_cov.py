@@ -6079,7 +6079,31 @@ class funct(FOC.FoCUS):
         return scat_cov(
             s0, s2, s3, s4, s1=s1, s3p=s3p, backend=self.backend, use_1D=self.use_1D
         )
+    def calc_matrix_orientation(self,noise_map):
+        # Décalage circulaire par matrice de permutation
+        def circ_shift_matrix(N,k):
+            return np.roll(np.eye(N), shift=-k, axis=1)
+        Norient = self.NORIENT
+        im=self.convol(noise_map)
+        mm=np.mean(abs(im.cpu().numpy()),0)
+        Norient=mm.shape[1]
+        xx=np.cos(np.arange(Norient)/Norient*2*np.pi)
+        yy=np.sin(np.arange(Norient)/Norient*2*np.pi)
 
+        a=np.sum(mm*xx[None,:,None],1)
+        b=np.sum(mm*yy[None,:,None],1)
+        o=np.fmod(Norient*np.arctan2(-b,a)/(2*np.pi)+Norient,Norient)
+        xx=np.arange(Norient)
+        alpha = o[:,None,:]-xx[None,:,None]
+        beta = np.fmod(1+o[:,None,:]-xx[None,:,None],Norient)
+        alpha=(1-alpha)*(alpha<1)*(alpha>0)+beta*(beta<1)*(beta>0)
+
+        m=np.zeros([mm.shape[0],4,4,mm.shape[2]])
+        for k in range(4):
+            m[:,k,:,:]=np.roll(alpha,k,1)
+        m=np.mean(m,0)
+        return self.backend.bk_cast(m[None,None,...])
+        
     def synthesis(
         self,
         image_target,
