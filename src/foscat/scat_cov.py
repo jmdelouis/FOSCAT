@@ -6079,13 +6079,18 @@ class funct(FOC.FoCUS):
         return scat_cov(
             s0, s2, s3, s4, s1=s1, s3p=s3p, backend=self.backend, use_1D=self.use_1D
         )
-    def calc_matrix_orientation(self,noise_map):
+    def calc_matrix_orientation(self,noise_map,image2=None):
         # Décalage circulaire par matrice de permutation
         def circ_shift_matrix(N,k):
             return np.roll(np.eye(N), shift=-k, axis=1)
         Norient = self.NORIENT
         im=self.convol(noise_map)
-        mm=np.mean(abs(im.cpu().numpy()),0)
+        if image2 is None:
+            mm=np.mean(abs(f.backend.bk_cast(im)),0)
+        else:
+            im2=self.convol(image2)
+            mm=np.mean(np.sqrt(f.backend.to_numpy(im*f.backend.bk_conjugate(im2))),0)
+            
         Norient=mm.shape[0]
         xx=np.cos(np.arange(Norient)/Norient*2*np.pi)
         yy=np.sin(np.arange(Norient)/Norient*2*np.pi)
@@ -6101,7 +6106,7 @@ class funct(FOC.FoCUS):
         
         m=np.zeros([Norient,Norient,mm.shape[1]])
         for k in range(Norient):
-            m[k,:,:]=np.roll(alpha,-k,0)
+            m[k,:,:]=np.roll(alpha,k,0)
         #m=np.mean(m,0)
         return self.backend.bk_cast(m)
         
