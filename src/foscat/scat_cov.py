@@ -6090,14 +6090,15 @@ class funct(FOC.FoCUS):
         xx=np.cos(np.arange(Norient)/Norient*2*np.pi)
         yy=np.sin(np.arange(Norient)/Norient*2*np.pi)
 
-        a=np.sum(mm*xx[:,None],1)
-        b=np.sum(mm*yy[:,None],1)
+        a=np.sum(mm*xx[:,None],0)
+        b=np.sum(mm*yy[:,None],0)
+        
         o=np.fmod(Norient*np.arctan2(-b,a)/(2*np.pi)+Norient,Norient)
         xx=np.arange(Norient)
         alpha = o[None,:]-xx[:,None]
         beta = np.fmod(1+o[None,:]-xx[:,None],Norient)
         alpha=(1-alpha)*(alpha<1)*(alpha>0)+beta*(beta<1)*(beta>0)
-
+        
         m=np.zeros([Norient,Norient,mm.shape[1]])
         for k in range(Norient):
             m[k,:,:]=np.roll(alpha,k,1)
