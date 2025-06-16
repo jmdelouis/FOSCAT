@@ -223,9 +223,10 @@ class CNN:
         im = self.backend.bk_reduce_sum(self.backend.bk_reshape(im,[im.shape[0],im.shape[1],self.NORIENT,im.shape[3]//4,4]),4)
 
         if self.add_undersample_data:
+            l_im=self.backend.bk_repeat(self.backend.bk_reshape(l_im,[in_im.shape[0],in_im.shape[1],1,l_im.shape[2]]),2)
             l_im=self.backend.bk_reduce_sum(
-                                           self.backend.bk_reshape(in_im,[in_im.shape[0],in_im.shape[1],1,in_im.shape[2]//4,4]), 4)
-            im=self.backend.bk_concat([im,l_im],2)
+                                           self.backend.bk_reshape(in_im,[in_im.shape[0],in_im.shape[1]+1,self.NORIENT,l_im.shape[2]//4,4]), 4)
+            im=self.backend.bk_concat([im,l_im],1)
                 
         for k in range(self.nscale):
             ww = self.scat_operator.backend.bk_reshape(
@@ -266,8 +267,8 @@ class CNN:
 
             if self.add_undersample_data:
                 l_im=self.backend.bk_reduce_sum(
-                    self.backend.bk_reshape(l_im,[l_im.shape[0],l_im.shape[1],1,l_im.shape[2]//4,4]), 4)
-                im=self.backend.bk_concat([im,l_im],2)
+                    self.backend.bk_reshape(l_im,[l_im.shape[0],l_im.shape[1]+1,self.NORIENT,l_im.shape[2]//4,4]), 4)
+                im=self.backend.bk_concat([im,l_im],1)
 
         ww = self.scat_operator.backend.bk_reshape(
             x[
