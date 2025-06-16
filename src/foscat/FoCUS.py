@@ -16,7 +16,7 @@ class FoCUS:
         KERNELSZ=3,
         slope=1.0,
         all_type="float32",
-        nstep_max=16,
+        nstep_max=20,
         padding="SAME",
         gpupos=0,
         mask_thres=None,

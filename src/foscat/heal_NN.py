@@ -7,18 +7,19 @@ import foscat.scat_cov as sc
 class CNN:
 
     def __init__(
-        self,
-        nparam=1,
-        KERNELSZ=3,
-        NORIENT=4,
-        chanlist=[],
-        in_nside=1,
-        n_chan_in=1,
-        SEED=1234,
-        all_type='float32',
-        filename=None,
-        scat_operator=None,
-        BACKEND='tensorflow'
+            self,
+            nparam=1,
+            KERNELSZ=3,
+            NORIENT=4,
+            chanlist=[],
+            in_nside=1,
+            n_chan_in=1,
+            SEED=1234,
+            add_udersample_data=False,
+            all_type='float32',
+            filename=None,
+            scat_operator=None,
+            BACKEND='tensorflow'
     ):
 
         if filename is not None:
@@ -66,6 +67,7 @@ class CNN:
         self.gpupos = self.scat_operator.gpupos
         self.ngpu = self.scat_operator.ngpu
         self.gpulist = self.scat_operator.gpulist
+        self.add_undersample_data=add_undersample_data
 
     def save(self, filename):
 
@@ -89,9 +91,9 @@ class CNN:
     def get_number_of_weights(self):
         totnchan = 0
         for i in range(self.nscale):
-            totnchan = totnchan + self.chanlist[i] * self.chanlist[i + 1]
+            totnchan = totnchan + (self.chanlist[i]+int(self.add_undersample_data)) * self.chanlist[i + 1]
         return (
-            self.npar * 12 * self.out_nside**2 * self.chanlist[self.nscale]*self.NORIENT
+            self.npar * 12 * self.out_nside**2 * (self.chanlist[self.nscale]+int(self.add_undersample_data))*self.NORIENT
             + totnchan * self.KERNELSZ * (self.KERNELSZ//2+1)*self.NORIENT*self.NORIENT
             + self.KERNELSZ * (self.KERNELSZ//2+1) * self.n_chan_in * self.chanlist[0]*self.NORIENT
         )
@@ -190,7 +192,7 @@ class CNN:
         m=np.mean(m,0)
         return self.scat_operator.backend.bk_cast(m[None,None,...])
         
-    def eval(self, im, 
+    def eval(self, in_im, 
             indices=None, 
             weights=None, 
             out_map=False, 
@@ -204,7 +206,7 @@ class CNN:
         )
         nn = self.KERNELSZ * (self.KERNELSZ//2+1) * self.n_chan_in * self.chanlist[0]*self.NORIENT
 
-        im = self.scat_operator.healpix_layer(im[:,:,None,:], ww)
+        im = self.scat_operator.healpix_layer(in_im[:,:,None,:], ww)
         
         if first_layer_rot is not None:
             im = self.backend.bk_reshape(im,[im.shape[0],im.shape[1],self.NORIENT,1,im.shape[3]])
@@ -220,6 +222,11 @@ class CNN:
         
         im = self.backend.bk_reduce_sum(self.backend.bk_reshape(im,[im.shape[0],im.shape[1],self.NORIENT,im.shape[3]//4,4]),4)
 
+        if self.add_undersample_data:
+            l_im=self.backend.bk_reduce_sum(
+                                           self.backend.bk_reshape(in_im,[in_im.shape[0],in_im.shape[1],1,in_im.shape[2]//4,4]), 4)
+            im=self.backend.bk_concat([im,l_im],2)
+                
         for k in range(self.nscale):
             ww = self.scat_operator.backend.bk_reshape(
                 x[
@@ -227,17 +234,21 @@ class CNN:
                     + self.KERNELSZ
                     * (self.KERNELSZ//2+1)
                     * self.NORIENT*self.NORIENT
-                    * self.chanlist[k]
+                    * (self.chanlist[k]+int(self.add_undersample_data))
                     * self.chanlist[k + 1]
                 ],
-                [self.chanlist[k], self.NORIENT, self.KERNELSZ * (self.KERNELSZ//2+1),  self.chanlist[k + 1], self.NORIENT],
+                [self.chanlist[k]+int(self.add_undersample_data),
+                 self.NORIENT,
+                 self.KERNELSZ * (self.KERNELSZ//2+1),
+                 self.chanlist[k + 1],
+                 self.NORIENT],
             )
             nn = (
                 nn
                 + self.KERNELSZ
                 * (self.KERNELSZ//2+1)
                 * self.NORIENT*self.NORIENT
-                * self.chanlist[k]
+                * (self.chanlist[k]+int(self.add_undersample_data))
                 * self.chanlist[k + 1]
             )
             if indices is None:
@@ -253,12 +264,17 @@ class CNN:
                 im = self.backend.bk_abs(im)
             im = self.backend.bk_reduce_sum(self.backend.bk_reshape(im,[im.shape[0],im.shape[1],self.NORIENT,im.shape[3]//4,4]),4)
 
+            if self.add_undersample_data:
+                l_im=self.backend.bk_reduce_sum(
+                    self.backend.bk_reshape(l_im,[l_im.shape[0],l_im.shape[1],1,l_im.shape[2]//4,4]), 4)
+                im=self.backend.bk_concat([im,l_im],2)
+
         ww = self.scat_operator.backend.bk_reshape(
             x[
                 nn : nn
-                + self.npar * 12 * self.out_nside**2 * self.chanlist[self.nscale]*self.NORIENT
+                + self.npar * 12 * self.out_nside**2 * (self.chanlist[self.nscale]+int(self.add_undersample_data))*self.NORIENT
             ],
-            [12 * self.out_nside**2 * self.chanlist[self.nscale]*self.NORIENT, self.npar],
+            [12 * self.out_nside**2 * (self.chanlist[self.nscale]+int(self.add_undersample_data))*self.NORIENT, self.npar],
         )
 
         im = self.scat_operator.backend.bk_matmul(
