@@ -39,6 +39,7 @@ class CNN:
             self.x = self.scat_operator.backend.bk_cast(outlist[6])
             self.out_nside = self.in_nside // (2**(self.nscale+1))
         else:
+            self.add_undersample_data=add_undersample_data
             self.nscale = len(chanlist)-1
             self.npar = nparam
             self.n_chan_in = n_chan_in
@@ -67,7 +68,6 @@ class CNN:
         self.gpupos = self.scat_operator.gpupos
         self.ngpu = self.scat_operator.ngpu
         self.gpulist = self.scat_operator.gpulist
-        self.add_undersample_data=add_undersample_data
 
     def save(self, filename):
 
