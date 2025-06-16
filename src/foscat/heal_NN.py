@@ -15,7 +15,7 @@ class CNN:
             in_nside=1,
             n_chan_in=1,
             SEED=1234,
-            add_udersample_data=False,
+            add_undersample_data=False,
             all_type='float32',
             filename=None,
             scat_operator=None,
