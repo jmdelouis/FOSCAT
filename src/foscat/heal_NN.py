@@ -212,8 +212,6 @@ class CNN:
             im = self.backend.bk_reshape(im,[im.shape[0],im.shape[1],self.NORIENT,1,im.shape[3]])
             im = self.backend.bk_reduce_sum(im*first_layer_rot,2)
             
-        if out_map:
-            return im
         
         if activation=='relu':
             im = self.backend.bk_relu(im)
@@ -228,6 +226,10 @@ class CNN:
                                            self.backend.bk_reshape(l_im,[in_im.shape[0],in_im.shape[1],self.NORIENT,l_im.shape[3]//4,4]), 4)
             im=self.backend.bk_concat([im,l_im],1)
                 
+            
+        if out_map:
+            return im
+        
         for k in range(self.nscale):
             ww = self.scat_operator.backend.bk_reshape(
                 x[
