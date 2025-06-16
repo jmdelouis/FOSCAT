@@ -249,7 +249,7 @@ class CNN:
                 + self.KERNELSZ
                 * (self.KERNELSZ//2+1)
                 * self.NORIENT*self.NORIENT
-                * (self.chanlist[k]+int(self.add_undersample_data))* self.n_chan_in
+                * (self.chanlist[k]+int(self.add_undersample_data)* self.n_chan_in)
                 * self.chanlist[k + 1]
             )
             if indices is None:
