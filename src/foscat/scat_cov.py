@@ -2761,6 +2761,7 @@ class funct(FOC.FoCUS):
         off_S2 = -2
         off_S3 = -3
         off_S4 = -4
+            
         if self.use_1D:
             off_S2 = -1
             off_S3 = -1
@@ -2803,6 +2804,9 @@ class funct(FOC.FoCUS):
                 
             vs0 = self.backend.bk_concat([l_vs0, l_vs0], -1)
             s0 = self.backend.bk_concat([s0, l_vs0], -1)
+            if spin>0:
+                vs0=self.backend.bk_reshape(vs0,[vs0.shape[0],vs0.shape[1],2,vs0.shape[2]//2])
+                s0=self.backend.bk_reshape(s0,[s0.shape[0],s0.shape[1],2,s0.shape[2]//2])
         #### COMPUTE S1, S2, S3 and S4
         nside_j3 = nside  # NSIDE start (nside_j3 = nside / 2^j3)
 
@@ -2851,7 +2855,8 @@ class funct(FOC.FoCUS):
             ####### S1 and S2
             ### Make the convolution I1 * Psi_j3
             conv1 = self.convol(
-                I1, cell_ids=cell_ids_j3, nside=nside_j3
+                I1, cell_ids=cell_ids_j3, nside=nside_j3,
+                spin=spin
             )  # [Nbatch, Norient3 , Npix_j3]
 
             if cmat is not None:
@@ -2873,7 +2878,6 @@ class funct(FOC.FoCUS):
             M1 = self.backend.bk_L1(M1_square)  # [Nbatch, Npix_j3, Norient3]
             # Store M1_j3 in a dictionary
             M1_dic[j3] = M1
-
             if not cross:  # Auto
                 M1_square = self.backend.bk_real(M1_square)
 
@@ -2888,7 +2892,7 @@ class funct(FOC.FoCUS):
                         )
                     else:
                         s2 = self.masked_mean(M1_square, vmask, rank=j3)
-
+                        
                 if cond_init_P1_dic:
                     # We fill P1_dic with S2 for normalisation of S3 and S4
                     P1_dic[j3] = self.backend.bk_real(s2)  # [Nbatch, Nmask, Norient3]
@@ -2969,7 +2973,8 @@ class funct(FOC.FoCUS):
             else:  # Cross
                 ### Make the convolution I2 * Psi_j3
                 conv2 = self.convol(
-                    I2,  cell_ids=cell_ids_j3, nside=nside_j3
+                    I2,  cell_ids=cell_ids_j3, nside=nside_j3,
+                    spin=spin
                 )  # [Nbatch, Npix_j3, Norient3]
                 if cmat is not None:
                     tmp2 = self.backend.bk_repeat(conv2, self.NORIENT, axis=-2)
@@ -3531,33 +3536,21 @@ class funct(FOC.FoCUS):
             self.P1_dic = P1_dic
             if cross:
                 self.P2_dic = P2_dic
-        """
-        Sout=[s0]+S1+S2+S3+S4
-
-        if cross:
-            Sout=Sout+S3P
-        if calc_var:
-            SVout=[vs0]+VS1+VS2+VS3+VS4
-            if cross:
-                VSout=VSout+VS3P
-            return self.backend.bk_concat(Sout, 2),self.backend.bk_concat(VSout, 2)
-
-        return self.backend.bk_concat(Sout, 2)
-        """
+                
         if not return_data:
-            S1 = self.backend.bk_concat(S1, 2)
-            S2 = self.backend.bk_concat(S2, 2)
-            S3 = self.backend.bk_concat(S3, 2)
-            S4 = self.backend.bk_concat(S4, 2)
+            S1 = self.backend.bk_concat(S1, -2)
+            S2 = self.backend.bk_concat(S2, -2)
+            S3 = self.backend.bk_concat(S3, -3)
+            S4 = self.backend.bk_concat(S4, -4)
             if cross:
-                S3P = self.backend.bk_concat(S3P, 2)
+                S3P = self.backend.bk_concat(S3P, -3)
             if calc_var:
-                VS1 = self.backend.bk_concat(VS1, 2)
-                VS2 = self.backend.bk_concat(VS2, 2)
-                VS3 = self.backend.bk_concat(VS3, 2)
-                VS4 = self.backend.bk_concat(VS4, 2)
+                VS1 = self.backend.bk_concat(VS1, -2)
+                VS2 = self.backend.bk_concat(VS2, -2)
+                VS3 = self.backend.bk_concat(VS3, -3)
+                VS4 = self.backend.bk_concat(VS4, -4)
                 if cross:
-                    VS3P = self.backend.bk_concat(VS3P, 2)
+                    VS3P = self.backend.bk_concat(VS3P, -3)
         if calc_var:
             if not cross:
                 return scat_cov(

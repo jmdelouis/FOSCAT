@@ -1941,18 +1941,18 @@ class FoCUS:
                 l_x = self.backend.bk_reshape(
                     l_x[:, :, self.KERNELSZ // 2 : -self.KERNELSZ // 2 + 1, :], oshape
                 )
-        else:
+        else:   
             ichannel = 1
             if len(shape)>1:
-                ichannel=shape[0]
+                ichannel = shape[0]
                 
             ochannel = 1
-            for i in range(len(shape) - 2):
-                ochannel *= shape[i+1]
+            for i in range(1,len(shape)-1):
+                ochannel *= shape[i]
 
-            l_x = self.backend.bk_reshape(x, [ichannel, 1, ochannel, shape[-1]])
+            l_x = self.backend.bk_reshape(x, [ichannel,1,ochannel,shape[-1]])
 
-        # data=[Nbatch,...,NORIENT[,NORIENT],X[,Y]] => data=[Nbatch,1,...,NORIENT[,NORIENT],X[,Y]]
+        # data=[Nbatch,...,NORIENT[,NORIENT],X[,Y]] => data=[Nbatch,...,1,NORIENT[,NORIENT],X[,Y]]
         # mask=[Nmask,X[,Y]] => mask=[1,Nmask,....,X[,Y]]
         
         if self.use_2D:
@@ -2068,6 +2068,7 @@ class FoCUS:
                 oshape = [x.shape[0]]
             else:
                 oshape = [1]
+                
             oshape = oshape + [mask.shape[0]]
             if len(shape) > 2:
                 oshape = oshape + shape[1:-1]
