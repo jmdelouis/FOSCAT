@@ -1989,6 +1989,8 @@ class FoCUS:
 
             if len(x.shape[axis:-2]) > 0:
                 oshape = oshape + list(x.shape[axis:-2])
+            else:
+                oshape = oshape + [1]
 
             if calc_var:
                 if self.backend.bk_is_complex(vtmp):
@@ -2027,6 +2029,8 @@ class FoCUS:
             oshape = [x.shape[0]] + [mask.shape[0]]
             if len(x.shape) > 1:
                 oshape = oshape + list(x.shape[1:-1])
+            else:
+                oshape = oshape + [1]
 
             if calc_var:
                 if self.backend.bk_is_complex(vtmp):
@@ -2067,6 +2071,8 @@ class FoCUS:
             oshape = oshape + [mask.shape[0]]
             if len(shape) > 2:
                 oshape = oshape + shape[1:-1]
+            else:
+                oshape = oshape + [1]
 
             if calc_var:
                 if self.backend.bk_is_complex(l_x):

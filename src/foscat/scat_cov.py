@@ -107,7 +107,7 @@ class scat_cov:
     def flatten(self):
         tmp = [
             self.conv2complex(
-                self.backend.bk_reshape(self.S0, [self.S1.shape[0], self.S0.shape[1]])
+                self.backend.bk_reshape(self.S0, [self.S1.shape[0], self.S0.shape[1]*self.S0.shape[2]])
             )
         ]
         if self.use_1D:
@@ -206,7 +206,7 @@ class scat_cov:
             self.backend.bk_reshape(
                 self.S4,
                 [
-                    self.S3.shape[0],
+                    self.S4.shape[0],
                     self.S4.shape[1]
                     * self.S4.shape[2]
                     * self.S4.shape[3]
@@ -215,7 +215,6 @@ class scat_cov:
                 ],
             )
         ]
-
         return self.backend.bk_concat(tmp, 1)
 
     # ---------------------------------------------−---------
@@ -2354,9 +2353,9 @@ class funct(FOC.FoCUS):
             tmpi2 = image2
         if upscale:
             l_nside = int(np.sqrt(tmp.shape[1] // 12))
-            tmp = self.up_grade(tmp, l_nside * 2, axis=1)
+            tmp = self.up_grade(tmp, l_nside * 2)
             if image2 is not None:
-                tmpi2 = self.up_grade(tmpi2, l_nside * 2, axis=1)
+                tmpi2 = self.up_grade(tmpi2, l_nside * 2)
         l_nside = int(np.sqrt(tmp.shape[1] // 12))
         nscale = int(np.log(l_nside) / np.log(2))
         cmat = {}
@@ -2367,12 +2366,12 @@ class funct(FOC.FoCUS):
             if image2 is not None:
                 sim = self.backend.bk_real(
                     self.backend.bk_L1(
-                        self.convol(tmp, axis=1)
-                        * self.backend.bk_conjugate(self.convol(tmpi2, axis=1))
+                        self.convol(tmp)
+                        * self.backend.bk_conjugate(self.convol(tmpi2))
                     )
                 )
             else:
-                sim = self.backend.bk_abs(self.convol(tmp, axis=1))
+                sim = self.backend.bk_abs(self.convol(tmp))
 
             # instead of difference between "opposite" channels use weighted average
             # of cosine and sine contributions using all channels
@@ -2442,12 +2441,13 @@ class funct(FOC.FoCUS):
 
             for k2 in range(k + 1):
 
-                tmp2 = self.backend.bk_repeat(sim, self.NORIENT, axis=1)
+                tmp2 = self.backend.bk_expand_dims(sim,-2)
 
+                print(tmp2.shape,mat.shape,sim.shape)
                 sim2 = self.backend.bk_reduce_sum(
                     self.backend.bk_reshape(
                         self.backend.bk_cast(
-                            mat.reshape(1, self.NORIENT * self.NORIENT, mat.shape[1])
+                            mat.reshape(1, self.NORIENT, self.NORIENT, mat.shape[1])
                         )
                         * tmp2,
                         [sim.shape[0], self.NORIENT, self.NORIENT, mat.shape[1]],
@@ -2455,14 +2455,14 @@ class funct(FOC.FoCUS):
                     1,
                 )
 
-                sim2 = self.backend.bk_abs(self.convol(sim2, axis=-1))
+                sim2 = self.backend.bk_abs(self.convol(sim2))
 
                 angles = self.backend.bk_reshape(angles, [1, self.NORIENT, 1, 1])
                 weighted_cos2 = self.backend.bk_reduce_mean(
-                    sim2 * self.backend.bk_cos(angles), axis=1
+                    sim2 * self.backend.bk_cos(angles), axis=-3
                 )
                 weighted_sin2 = self.backend.bk_reduce_mean(
-                    sim2 * self.backend.bk_sin(angles), axis=1
+                    sim2 * self.backend.bk_sin(angles), axis=-3
                 )
 
                 cc2 = weighted_cos2[0]
@@ -2471,13 +2471,13 @@ class funct(FOC.FoCUS):
                 if smooth_scale > 0:
                     for m in range(smooth_scale):
                         if cc2.shape[1] > 12:
-                            cc2, _ = self.ud_grade_2(self.smooth(cc2, axis=1), axis=1)
-                            ss2, _ = self.ud_grade_2(self.smooth(ss2, axis=1), axis=1)
+                            cc2, _ = self.ud_grade_2(self.smooth(cc2))
+                            ss2, _ = self.ud_grade_2(self.smooth(ss2))
 
                 if cc2.shape[1] != sim.shape[2]:
                     ll_nside = int(np.sqrt(sim.shape[2] // 12))
-                    cc2 = self.up_grade(cc2, ll_nside, axis=1)
-                    ss2 = self.up_grade(ss2, ll_nside, axis=1)
+                    cc2 = self.up_grade(cc2, ll_nside)
+                    ss2 = self.up_grade(ss2, ll_nside)
 
                 if self.BACKEND == "numpy":
                     phase2 = np.fmod(np.arctan2(ss2, cc2) + 2 * np.pi, 2 * np.pi)
@@ -2509,9 +2509,9 @@ class funct(FOC.FoCUS):
                 )
 
             if k < l_nside - 1:
-                tmp, _ = self.ud_grade_2(tmp, axis=1)
+                tmp, _ = self.ud_grade_2(tmp)
                 if image2 is not None:
-                    tmpi2, _ = self.ud_grade_2(tmpi2, axis=1)
+                    tmpi2, _ = self.ud_grade_2(tmpi)
         return cmat, cmat2
 
     def div_norm(self, complex_value, float_value):
@@ -2800,9 +2800,9 @@ class funct(FOC.FoCUS):
                     self.backend.bk_L1(I1 * I2),
                     vmask,
                     calc_var=True)
-                
-            vs0 = self.backend.bk_concat([l_vs0, l_vs0], 1)
-            s0 = self.backend.bk_concat([s0, l_vs0], 1)
+            print(s0.shape,I1.shape,vmask.shape)
+            vs0 = self.backend.bk_concat([l_vs0, l_vs0], -1)
+            s0 = self.backend.bk_concat([s0, l_vs0], -1)
         #### COMPUTE S1, S2, S3 and S4
         nside_j3 = nside  # NSIDE start (nside_j3 = nside / 2^j3)
 
@@ -2855,9 +2855,8 @@ class funct(FOC.FoCUS):
             )  # [Nbatch, Norient3 , Npix_j3]
 
             if cmat is not None:
-
                 tmp2 = self.backend.bk_repeat(conv1, self.NORIENT, axis=-2)
-
+                
                 conv1 = self.backend.bk_reduce_sum(
                     self.backend.bk_reshape(
                         cmat[j3] * tmp2,
