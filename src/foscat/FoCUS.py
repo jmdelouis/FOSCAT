@@ -1144,7 +1144,10 @@ class FoCUS:
 
                     for k in range(self.NORIENT*12*nside**2):
                         if k%(nside**2)==0:
-                            print(k//(nside**2),self.NORIENT*12,nside)
+                            print('Init index 1/2 spin=%d Please wait %d done against %d nside=%d kernel=%d'%(spin,k//(nside**2),
+                                                                                                              self.NORIENT*12,
+                                                                                                              nside,
+                                                                                                              self.KERNELSZ))
                         idx=np.where(tmp[:,1]==k)[0]
 
                         im=np.zeros([12*nside**2])
@@ -1213,7 +1216,10 @@ class FoCUS:
                     
                     for k in range(12*nside**2):
                         if k%(nside**2)==0:
-                            print(k//(nside**2),12,nside)
+                            print('Init index 2/2 spin=%d Please wait %d done against %d nside=%d kernel=%d'%(spin,k//(nside**2),
+                                                                                                              12,
+                                                                                                              nside,
+                                                                                                              self.KERNELSZ))
                         idx=np.where(tmp[:,1]==k)[0]
                         
                         im=np.zeros([12*nside**2])
