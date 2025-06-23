@@ -425,9 +425,6 @@ class BkTorch(BackendBase.BackendBase):
                 xr = self.backend.concat(
                     [self.bk_real(data[k]) for k in range(ndata)], axis=axis
                 )
-                for k in range(ndata):
-                    print(k,data[k])
-                    print(self.bk_imag(data[k]).shape)
                     
                 xi = self.backend.concat(
                     [self.bk_imag(data[k]) for k in range(ndata)], axis=axis

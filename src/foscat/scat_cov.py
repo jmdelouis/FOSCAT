@@ -92,12 +92,7 @@ class scat_cov:
         )
 
     def conv2complex(self, val):
-        if (
-            val.dtype == "complex64"
-            or val.dtype == "complex128"
-            or val.dtype == "torch.complex64"
-            or val.dtype == "torch.complex128"
-        ):
+        if self.backend.bk_is_complex(val):
             return val
         else:
             return self.backend.bk_complex(val, 0 * val)
@@ -177,21 +172,9 @@ class scat_cov:
                     ],
                 )
             ),
-            self.backend.bk_reshape(
-                self.S3,
-                [
-                    self.S3.shape[0],
-                    self.S3.shape[1]
-                    * self.S3.shape[2]
-                    * self.S3.shape[3]
-                    * self.S3.shape[4],
-                ],
-            ),
-        ]
-        if self.S3P is not None:
-            tmp = tmp + [
+            self.conv2complex(
                 self.backend.bk_reshape(
-                    self.S3P,
+                    self.S3,
                     [
                         self.S3.shape[0],
                         self.S3.shape[1]
@@ -200,19 +183,37 @@ class scat_cov:
                         * self.S3.shape[4],
                     ],
                 )
+            ),
+        ]
+        if self.S3P is not None:
+            tmp = tmp + [
+                self.conv2complex(
+                    self.backend.bk_reshape(
+                        self.S3P,
+                        [
+                            self.S3.shape[0],
+                            self.S3.shape[1]
+                            * self.S3.shape[2]
+                            * self.S3.shape[3]
+                            * self.S3.shape[4],
+                        ],
+                    )
+                )
             ]
 
         tmp = tmp + [
-            self.backend.bk_reshape(
-                self.S4,
-                [
-                    self.S4.shape[0],
-                    self.S4.shape[1]
-                    * self.S4.shape[2]
-                    * self.S4.shape[3]
-                    * self.S4.shape[4]
-                    * self.S4.shape[5],
-                ],
+            self.conv2complex(
+                self.backend.bk_reshape(
+                    self.S4,
+                    [
+                        self.S4.shape[0],
+                        self.S4.shape[1]
+                        * self.S4.shape[2]
+                        * self.S4.shape[3]
+                        * self.S4.shape[4]
+                        * self.S4.shape[5],
+                    ],
+                )
             )
         ]
         return self.backend.bk_concat(tmp, 1)
@@ -2443,7 +2444,6 @@ class funct(FOC.FoCUS):
 
                 tmp2 = self.backend.bk_expand_dims(sim,-2)
 
-                print(tmp2.shape,mat.shape,sim.shape)
                 sim2 = self.backend.bk_reduce_sum(
                     self.backend.bk_reshape(
                         self.backend.bk_cast(
@@ -2800,7 +2800,7 @@ class funct(FOC.FoCUS):
                     self.backend.bk_L1(I1 * I2),
                     vmask,
                     calc_var=True)
-            print(s0.shape,I1.shape,vmask.shape)
+                
             vs0 = self.backend.bk_concat([l_vs0, l_vs0], -1)
             s0 = self.backend.bk_concat([s0, l_vs0], -1)
         #### COMPUTE S1, S2, S3 and S4
