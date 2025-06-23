@@ -2381,7 +2381,7 @@ class FoCUS:
             else:
                 if len(ishape) > 2:
                     return self.backend.bk_reshape(
-                        res, ishape[0:-1] + [2,self.NORIENT, ishape[-1]]
+                        res, ishape[0:-2] + [2,self.NORIENT, ishape[-1]]
                     )
                 else:
                     return self.backend.bk_reshape(res, [2,self.NORIENT, ishape[-1]])

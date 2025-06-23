@@ -5787,7 +5787,9 @@ class funct(FOC.FoCUS):
 
     def from_gaussian(self, x):
 
-        x = self.backend.bk_clip_by_value(x, self.val_min, self.val_max)
+        x = self.backend.bk_clip_by_value(x,
+                                          self.val_min+1E-6*abs(self.val_min),
+                                          self.val_max-1E-6*abs(self.val_max))
         return self.f_gaussian(self.backend.to_numpy(x))
 
     def square(self, x):
