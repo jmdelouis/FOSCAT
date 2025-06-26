@@ -2348,16 +2348,16 @@ class funct(FOC.FoCUS):
         )
 
     # compute local direction to make the statistical analysis more efficient
-    def stat_cfft(self, im, image2=None, upscale=False, smooth_scale=0):
+    def stat_cfft(self, im, image2=None, upscale=False, smooth_scale=0,spin=0):
         tmp = im
         if image2 is not None:
             tmpi2 = image2
         if upscale:
-            l_nside = int(np.sqrt(tmp.shape[1] // 12))
+            l_nside = int(np.sqrt(tmp.shape[-1] // 12))
             tmp = self.up_grade(tmp, l_nside * 2)
             if image2 is not None:
                 tmpi2 = self.up_grade(tmpi2, l_nside * 2)
-        l_nside = int(np.sqrt(tmp.shape[1] // 12))
+        l_nside = int(np.sqrt(tmp.shape[-1] // 12))
         nscale = int(np.log(l_nside) / np.log(2))
         cmat = {}
         cmat2 = {}
@@ -2367,20 +2367,23 @@ class funct(FOC.FoCUS):
             if image2 is not None:
                 sim = self.backend.bk_real(
                     self.backend.bk_L1(
-                        self.convol(tmp)
-                        * self.backend.bk_conjugate(self.convol(tmpi2))
+                        self.convol(tmp,spin=spin)
+                        * self.backend.bk_conjugate(self.convol(tmpi2,spin=spin))
                     )
                 )
             else:
-                sim = self.backend.bk_abs(self.convol(tmp))
+                sim = self.backend.bk_abs(self.convol(tmp,spin=spin))
 
             # instead of difference between "opposite" channels use weighted average
             # of cosine and sine contributions using all channels
-            angles = self.backend.bk_cast(
-                (2 * np.pi * np.arange(self.NORIENT) / self.NORIENT).reshape(
-                    1, self.NORIENT, 1
-                )
-            )  # shape: (NORIENT,)
+            if spin==0:
+                angles = self.backend.bk_cast(
+                    (2 * np.pi * np.arange(self.NORIENT)
+                     / self.NORIENT).reshape(1,self.NORIENT,1)) # shape: (NORIENT,)
+            else:
+                angles = self.backend.bk_cast(
+                    (2 * np.pi * np.arange(self.NORIENT)
+                     / self.NORIENT).reshape(1,1,self.NORIENT,1)) # shape: (NORIENT,)
 
             # we use cosines and sines as weights for sim
             weighted_cos = self.backend.bk_reduce_mean(
@@ -2399,8 +2402,8 @@ class funct(FOC.FoCUS):
                         cc, _ = self.ud_grade_2(self.smooth(cc))
                         ss, _ = self.ud_grade_2(self.smooth(ss))
 
-            if cc.shape[0] != tmp.shape[0]:
-                ll_nside = int(np.sqrt(tmp.shape[1] // 12))
+            if cc.shape[-1] != tmp.shape[-1]:
+                ll_nside = int(np.sqrt(tmp.shape[-1] // 12))
                 cc = self.up_grade(cc, ll_nside)
                 ss = self.up_grade(ss, ll_nside)
 
@@ -2423,37 +2426,62 @@ class funct(FOC.FoCUS):
             w1 = np.sin(delta * np.pi / 2) ** 2
 
             # build rotation matrix
-            mat = np.zeros([self.NORIENT * self.NORIENT, sim.shape[2]])
-            lidx = np.arange(sim.shape[2])
+            if spin==0:
+                mat = np.zeros([self.NORIENT * self.NORIENT, sim.shape[-1]])
+            else:
+                mat = np.zeros([2,self.NORIENT * self.NORIENT, sim.shape[-1]])
+            lidx = np.arange(sim.shape[-1])
             for ell in range(self.NORIENT):
                 # Instead of simple linear weights, we use the cosine weights w0 and w1.
                 col0 = self.NORIENT * ((ell + iph) % self.NORIENT) + ell
                 col1 = self.NORIENT * ((ell + iph + 1) % self.NORIENT) + ell
 
-                mat[col0, lidx] = w0
-                mat[col1, lidx] = w1
+                if spin==0:
+                    mat[col0, lidx] = w0
+                    mat[col1, lidx] = w1
+                else:
+                    mat[0,col0, lidx] = w0[0]
+                    mat[0,col1, lidx] = w1[0]
+                    mat[1,col0, lidx] = w0[1]
+                    mat[1,col1, lidx] = w1[1]
 
             cmat[k] = self.backend.bk_cast(mat[None, ...].astype("complex64"))
 
             # do same modifications for mat2
-            mat2 = np.zeros(
-                [k + 1, self.NORIENT * self.NORIENT, self.NORIENT, sim.shape[2]]
-            )
+            if spin==0:
+                mat2 = np.zeros(
+                    [k + 1, self.NORIENT * self.NORIENT, self.NORIENT, sim.shape[-1]]
+                )
+            else:
+                mat2 = np.zeros(
+                    [k + 1, 2, self.NORIENT * self.NORIENT, self.NORIENT, sim.shape[-1]]
+                )
 
             for k2 in range(k + 1):
 
                 tmp2 = self.backend.bk_expand_dims(sim,-2)
-
-                sim2 = self.backend.bk_reduce_sum(
-                    self.backend.bk_reshape(
-                        self.backend.bk_cast(
-                            mat.reshape(1, self.NORIENT, self.NORIENT, mat.shape[1])
-                        )
-                        * tmp2,
-                        [sim.shape[0], self.NORIENT, self.NORIENT, mat.shape[1]],
-                    ),
-                    1,
-                )
+                if spin==0:
+                    sim2 = self.backend.bk_reduce_sum(
+                        self.backend.bk_reshape(
+                            self.backend.bk_cast(
+                                mat.reshape(1, self.NORIENT, self.NORIENT, mat.shape[-1])
+                            )
+                            * tmp2,
+                            [sim.shape[0], self.NORIENT, self.NORIENT, mat.shape[-1]],
+                        ),
+                        1,
+                    )
+                else:
+                    sim2 = self.backend.bk_reduce_sum(
+                        self.backend.bk_reshape(
+                            self.backend.bk_cast(
+                                mat.reshape(1, 2, self.NORIENT, self.NORIENT, mat.shape[-1])
+                            )
+                            * tmp2,
+                            [sim.shape[0], 2, self.NORIENT, self.NORIENT, mat.shape[-1]],
+                        ),
+                        1,
+                    )
 
                 sim2 = self.backend.bk_abs(self.convol(sim2))
 
@@ -2474,8 +2502,8 @@ class funct(FOC.FoCUS):
                             cc2, _ = self.ud_grade_2(self.smooth(cc2))
                             ss2, _ = self.ud_grade_2(self.smooth(ss2))
 
-                if cc2.shape[1] != sim.shape[2]:
-                    ll_nside = int(np.sqrt(sim.shape[2] // 12))
+                if cc2.shape[-1] != sim.shape[-1]:
+                    ll_nside = int(np.sqrt(sim.shape[-1] // 12))
                     cc2 = self.up_grade(cc2, ll_nside)
                     ss2 = self.up_grade(ss2, ll_nside)
 
@@ -2501,8 +2529,14 @@ class funct(FOC.FoCUS):
                     for ell in range(self.NORIENT):
                         col0 = self.NORIENT * ((ell + iph2[m]) % self.NORIENT) + ell
                         col1 = self.NORIENT * ((ell + iph2[m] + 1) % self.NORIENT) + ell
-                        mat2[k2, col0, m, lidx] = w0_2[m, lidx]
-                        mat2[k2, col1, m, lidx] = w1_2[m, lidx]
+                        if spin==0:
+                            mat2[k2, col0, m, lidx] = w0_2[m, lidx]
+                            mat2[k2, col1, m, lidx] = w1_2[m, lidx]
+                        else:
+                            mat2[k2, 0, col0, m, lidx] = w0_2[0,m, lidx]
+                            mat2[k2, 0, col1, m, lidx] = w1_2[0,m, lidx]
+                            mat2[k2, 1, col0, m, lidx] = w0_2[1,m, lidx]
+                            mat2[k2, 1, col1, m, lidx] = w1_2[1,m, lidx]
 
                 cmat2[k] = self.backend.bk_cast(
                     mat2[0 : k + 1, None, ...].astype("complex64")

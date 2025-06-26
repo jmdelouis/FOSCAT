@@ -35,7 +35,7 @@ class FoCUS:
             mpi_rank=0
     ):
 
-        self.__version__ = "2025.06.3"
+        self.__version__ = "2025.06.4"
         # P00 coeff for normalization for scat_cov
         self.TMPFILE_VERSION = TMPFILE_VERSION
         self.P1_dic = None
@@ -281,28 +281,10 @@ class FoCUS:
         self.KERNELSZ = KERNELSZ
 
         self.Idx_Neighbours = {}
+        self.w_smooth = {}
 
-        if not self.use_2D and not self.use_1D:
-            self.w_smooth = {}
-            for i in range(nstep_max):
-                lout = 2**i
-                self.ww_Real[lout] = None
-
-            for i in range(1, 6):
-                lout = 2**i
-                if not self.silent:
-                    print("Init Wave ", lout)
-
-                if self.InitWave is None:
-                    wr, wi, ws, widx = self.init_index(lout)
-                else:
-                    wr, wi, ws, widx = self.InitWave(self, lout)
-
-                self.Idx_Neighbours[lout] = 1  # self.backend.bk_constant(widx)
-                self.ww_Real[lout] = wr
-                self.ww_Imag[lout] = wi
-                self.w_smooth[lout] = ws
-        elif self.use_1D:
+        
+        if self.use_1D:
             self.w_smooth = slope * (w_smooth / w_smooth.sum()).astype(self.all_type)
             self.ww_RealT = {}
             self.ww_ImagT = {}
@@ -329,7 +311,7 @@ class FoCUS:
                     self.backend.bk_constant(np.array(w).reshape(xx.shape[0]))
                 )
 
-        else:
+        if self.use_2D:
             self.w_smooth = slope * (w_smooth / w_smooth.sum()).astype(self.all_type)
             self.ww_RealT = {}
             self.ww_ImagT = {}
@@ -1590,7 +1572,7 @@ class FoCUS:
             if kernel != -1:
                 return tmp
 
-        return wr, wi, ws, tmp
+        return wr, wi, ws,tmp
 
 
     # ---------------------------------------------−---------
@@ -2342,7 +2324,6 @@ class FoCUS:
                 tim = self.backend.bk_reshape(
                     self.backend.bk_cast(image), [ndata, ishape[-1]]
                 )
-
             if tim.dtype == self.all_cbk_type:
                 rr1 = self.backend.bk_reshape(
                     self.backend.bk_sparse_dense_matmul(
@@ -2399,7 +2380,6 @@ class FoCUS:
                 else:
                     return self.backend.bk_reshape(res, [2,self.NORIENT, ishape[-1]])
                 
-
         return res
 
     # ---------------------------------------------−---------
