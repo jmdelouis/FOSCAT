@@ -2545,7 +2545,7 @@ class funct(FOC.FoCUS):
             if k < l_nside - 1:
                 tmp, _ = self.ud_grade_2(tmp)
                 if image2 is not None:
-                    tmpi2, _ = self.ud_grade_2(tmpi)
+                    tmpi2, _ = self.ud_grade_2(tmpi2)
         return cmat, cmat2
 
     def div_norm(self, complex_value, float_value):
