@@ -10,29 +10,29 @@ TMPFILE_VERSION = "V5_0"
 
 class FoCUS:
     def __init__(
-            self,
-            NORIENT=4,
-            LAMBDA=1.2,
-            KERNELSZ=3,
-            slope=1.0,
-            all_type="float32",
-            nstep_max=20,
-            padding="SAME",
-            gpupos=0,
-            mask_thres=None,
-            mask_norm=False,
-            isMPI=False,
-            TEMPLATE_PATH="data",
-            BACKEND="torch",
-            use_2D=False,
-            use_1D=False,
-            return_data=False,
-            JmaxDelta=0,
-            DODIV=False,
-            InitWave=None,
-            silent=True,
-            mpi_size=1,
-            mpi_rank=0
+        self,
+        NORIENT=4,
+        LAMBDA=1.2,
+        KERNELSZ=3,
+        slope=1.0,
+        all_type="float32",
+        nstep_max=20,
+        padding="SAME",
+        gpupos=0,
+        mask_thres=None,
+        mask_norm=False,
+        isMPI=False,
+        TEMPLATE_PATH="data",
+        BACKEND="torch",
+        use_2D=False,
+        use_1D=False,
+        return_data=False,
+        JmaxDelta=0,
+        DODIV=False,
+        InitWave=None,
+        silent=True,
+        mpi_size=1,
+        mpi_rank=0,
     ):
 
         self.__version__ = "2025.06.4"
@@ -178,7 +178,7 @@ class FoCUS:
 
         self.Idx_CNN = {}
         self.Idx_WCNN = {}
-        
+
         self.filters_set = {}
         self.edge_masks = {}
 
@@ -283,7 +283,6 @@ class FoCUS:
         self.Idx_Neighbours = {}
         self.w_smooth = {}
 
-        
         if self.use_1D:
             self.w_smooth = slope * (w_smooth / w_smooth.sum()).astype(self.all_type)
             self.ww_RealT = {}
@@ -456,24 +455,35 @@ class FoCUS:
     # ---------------------------------------------−---------
     # ---------------------------------------------−---------
     def healpix_layer(self, im, ww, indices=None, weights=None):
-        #ww [N_i,NORIENT,KERNELSZ*KERNELSZ//2,N_o,NORIENT]
-        #im [N_batch,N_i,  NORIENT,N]
-        nside=int(np.sqrt(im.shape[-1]//12))
+        # ww [N_i,NORIENT,KERNELSZ*KERNELSZ//2,N_o,NORIENT]
+        # im [N_batch,N_i,  NORIENT,N]
+        nside = int(np.sqrt(im.shape[-1] // 12))
         if indices is None:
-            if (nside,self.NORIENT,self.KERNELSZ) not in self.ww_CNN:
-                self.init_index_cnn(nside,self.NORIENT)
-            indices = self.Idx_CNN[(nside,self.NORIENT,self.KERNELSZ)]
-            mat = self.Idx_WCNN[(nside,self.NORIENT,self.KERNELSZ)]
-            
-        wim = self.backend.bk_gather(im,indices.flatten(),axis=3) #[N_batch,N_i,NORIENT,K*(K+1),N_o,NORIENT,N,N_w]
-        
-        wim = self.backend.bk_reshape(wim,[im.shape[0],im.shape[1],im.shape[2]]+list(indices.shape))*mat[None,...]
-        #win is [N_batch,N_i,  NORIENT,K*(K+1),1,  NORIENT,N,N_w]
-        #ww is  [1,      N_i,  NORIENT,K*(K+1),N_o,NORIENT]
-        wim = self.backend.bk_reduce_sum(wim[:,:,:,:,None]*ww[None,:,:,:,:,:,None,None],[1,2,3])
+            if (nside, self.NORIENT, self.KERNELSZ) not in self.ww_CNN:
+                self.init_index_cnn(nside, self.NORIENT)
+            indices = self.Idx_CNN[(nside, self.NORIENT, self.KERNELSZ)]
+            mat = self.Idx_WCNN[(nside, self.NORIENT, self.KERNELSZ)]
 
-        wim = self.backend.bk_reduce_sum(wim,-1)
-        return self.backend.bk_reshape(wim,[im.shape[0],ww.shape[3],ww.shape[4],im.shape[-1]])
+        wim = self.backend.bk_gather(
+            im, indices.flatten(), axis=3
+        )  # [N_batch,N_i,NORIENT,K*(K+1),N_o,NORIENT,N,N_w]
+
+        wim = (
+            self.backend.bk_reshape(
+                wim, [im.shape[0], im.shape[1], im.shape[2]] + list(indices.shape)
+            )
+            * mat[None, ...]
+        )
+        # win is [N_batch,N_i,  NORIENT,K*(K+1),1,  NORIENT,N,N_w]
+        # ww is  [1,      N_i,  NORIENT,K*(K+1),N_o,NORIENT]
+        wim = self.backend.bk_reduce_sum(
+            wim[:, :, :, :, None] * ww[None, :, :, :, :, :, None, None], [1, 2, 3]
+        )
+
+        wim = self.backend.bk_reduce_sum(wim, -1)
+        return self.backend.bk_reshape(
+            wim, [im.shape[0], ww.shape[3], ww.shape[4], im.shape[-1]]
+        )
 
     # ---------------------------------------------−---------
 
@@ -590,10 +600,14 @@ class FoCUS:
             if cell_ids is not None:
                 sim, new_cell_ids = self.backend.binned_mean(im, cell_ids)
                 return sim, new_cell_ids
-            
-            return self.backend.bk_reduce_mean(
-                self.backend.bk_reshape(im, shape[0:-1]+[shape[-1]//4,4]), axis=-1
-                ),None
+
+            return (
+                self.backend.bk_reduce_mean(
+                    self.backend.bk_reshape(im, shape[0:-1] + [shape[-1] // 4, 4]),
+                    axis=-1,
+                ),
+                None,
+            )
 
     # --------------------------------------------------------
     def up_grade(self, im, nout, axis=0, nouty=None):
@@ -706,7 +720,7 @@ class FoCUS:
 
             lout = int(np.sqrt(im.shape[-1] // 12))
 
-            if (lout,nout) not in self.pix_interp_val:
+            if (lout, nout) not in self.pix_interp_val:
                 if not self.silent:
                     print("compute lout nout", lout, nout)
                 th, ph = hp.pix2ang(
@@ -728,47 +742,47 @@ class FoCUS:
                 indice[:, 1] = np.repeat(np.arange(12 * nout**2), 4)
                 indice[:, 0] = p
 
-                self.pix_interp_val[(lout,nout)] = 1
-                self.weight_interp_val[(lout,nout)] = self.backend.bk_SparseTensor(
+                self.pix_interp_val[(lout, nout)] = 1
+                self.weight_interp_val[(lout, nout)] = self.backend.bk_SparseTensor(
                     self.backend.bk_constant(indice),
                     self.backend.bk_constant(self.backend.bk_cast(w.flatten())),
-                    dense_shape=[12 * lout**2,12 * nout**2],
+                    dense_shape=[12 * lout**2, 12 * nout**2],
                 )
 
             if lout == nout:
                 imout = im
             else:
                 # work only on the last column
-                
+
                 ishape = list(im.shape)
 
                 ndata = 1
-                for k in range(len(ishape)-1):
+                for k in range(len(ishape) - 1):
                     ndata = ndata * ishape[k]
                 tim = self.backend.bk_reshape(
                     self.backend.bk_cast(im), [ndata, 12 * lout**2]
                 )
                 if tim.dtype == self.all_cbk_type:
                     rr = self.backend.bk_sparse_dense_matmul(
-                            self.backend.bk_real(tim),
-                            self.weight_interp_val[(lout,nout)],
-                        )
+                        self.backend.bk_real(tim),
+                        self.weight_interp_val[(lout, nout)],
+                    )
                     ii = self.backend.bk_sparse_dense_matmul(
-                            self.backend.bk_real(tim),
-                            self.weight_interp_val[(lout,nout)],
-                        )
+                        self.backend.bk_real(tim),
+                        self.weight_interp_val[(lout, nout)],
+                    )
                     imout = self.backend.bk_complex(rr, ii)
                 else:
                     imout = self.backend.bk_sparse_dense_matmul(
                         tim,
-                        self.weight_interp_val[(lout,nout)],
+                        self.weight_interp_val[(lout, nout)],
                     )
 
                 if len(ishape) == 1:
                     return self.backend.bk_reshape(imout, [12 * nout**2])
                 else:
                     return self.backend.bk_reshape(
-                        imout, ishape[0:axis-1]+[12 * nout**2]
+                        imout, ishape[0 : axis - 1] + [12 * nout**2]
                     )
         return imout
 
@@ -1081,170 +1095,233 @@ class FoCUS:
                             TMPFILE_VERSION,
                             l_kernel**2,
                             self.NORIENT,
-                            nside,spin  # if cell_ids computes the index
+                            nside,
+                            spin,  # if cell_ids computes the index
                         )
                     )
-                        
+
         except:
             if not self.use_2D:
-                if spin!=0:
+                if spin != 0:
                     try:
-                        tmp = np.load("%s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN0.npy"% (
-                            self.TEMPLATE_PATH,
-                            self.TMPFILE_VERSION,
-                            self.KERNELSZ**2,
-                            self.NORIENT,
-                            nside)
-                                      )
+                        tmp = np.load(
+                            "%s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN0.npy"
+                            % (
+                                self.TEMPLATE_PATH,
+                                self.TMPFILE_VERSION,
+                                self.KERNELSZ**2,
+                                self.NORIENT,
+                                nside,
+                            )
+                        )
                     except:
                         self.init_index(nside, kernel=kernel, spin=0)
-                        
-                        tmp = np.load("%s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN0.npy"% (
+
+                        tmp = np.load(
+                            "%s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN0.npy"
+                            % (
+                                self.TEMPLATE_PATH,
+                                self.TMPFILE_VERSION,
+                                self.KERNELSZ**2,
+                                self.NORIENT,
+                                nside,
+                            )
+                        )
+
+                    tmpw = np.load(
+                        "%s/FOSCAT_%s_W%d_%d_%d_WAVE-SPIN0.npy"
+                        % (
                             self.TEMPLATE_PATH,
                             self.TMPFILE_VERSION,
                             self.KERNELSZ**2,
                             self.NORIENT,
-                            nside)
-                                      )
-                        
-                    tmpw = np.load("%s/FOSCAT_%s_W%d_%d_%d_WAVE-SPIN0.npy"% (
-                                            self.TEMPLATE_PATH,
-                                            self.TMPFILE_VERSION,
-                                            self.KERNELSZ**2,
-                                            self.NORIENT,
-                                            nside,
-                                        )
-                                    )
+                            nside,
+                        )
+                    )
 
-                    nn=self.NORIENT*12*nside**2
-                    idxEB=np.concatenate([tmp,tmp,tmp,tmp],0)
-                    idxEB[tmp.shape[0]:2*tmp.shape[0],0]+=12*nside**2
-                    idxEB[3*tmp.shape[0]:,0]+=12*nside**2
-                    idxEB[2*tmp.shape[0]:,1]+=nn
+                    nn = self.NORIENT * 12 * nside**2
+                    idxEB = np.concatenate([tmp, tmp, tmp, tmp], 0)
+                    idxEB[tmp.shape[0] : 2 * tmp.shape[0], 0] += 12 * nside**2
+                    idxEB[3 * tmp.shape[0] :, 0] += 12 * nside**2
+                    idxEB[2 * tmp.shape[0] :, 1] += nn
 
-                    tmpEB=np.zeros([tmpw.shape[0]*4],dtype='complex')
+                    tmpEB = np.zeros([tmpw.shape[0] * 4], dtype="complex")
 
-                    for k in range(self.NORIENT*12*nside**2):
-                        if k%(nside**2)==0:
-                            print('Init index 1/2 spin=%d Please wait %d done against %d nside=%d kernel=%d'%(spin,k//(nside**2),
-                                                                                                              self.NORIENT*12,
-                                                                                                              nside,
-                                                                                                              self.KERNELSZ))
-                        idx=np.where(tmp[:,1]==k)[0]
-
-                        im=np.zeros([12*nside**2])
-                        im[tmp[idx,0]]=tmpw[idx].real
-                        almR=hp.map2alm(hp.reorder(im,n2r=True))
-                        im[tmp[idx,0]]=tmpw[idx].imag
-                        almI=hp.map2alm(hp.reorder(im,n2r=True))
-
-                        i,q,u=hp.alm2map_spin([almR,almR*0,0*almR],nside,spin,3*nside-1)
-                        i2,q2,u2=hp.alm2map_spin([almI,0*almI,0*almI],nside,spin,3*nside-1)
-
-                        tmpEB[idx]=hp.reorder(i,r2n=True)[tmp[idx,0]]+1J*hp.reorder(i2,r2n=True)[tmp[idx,0]]
-                        tmpEB[idx+tmp.shape[0]]=hp.reorder(q,r2n=True)[tmp[idx,0]]+1J*hp.reorder(q2,r2n=True)[tmp[idx,0]]
-
-                        i,q,u=hp.alm2map_spin([0*almR,almR,0*almR],nside,spin,3*nside-1)
-                        i2,q2,u2=hp.alm2map_spin([0*almI,almI,0*almI],nside,spin,3*nside-1)
-
-                        tmpEB[idx+2*tmp.shape[0]]=hp.reorder(i,r2n=True)[tmp[idx,0]]+1J*hp.reorder(i2,r2n=True)[tmp[idx,0]]
-                        tmpEB[idx+3*tmp.shape[0]]=hp.reorder(q,r2n=True)[tmp[idx,0]]+1J*hp.reorder(q2,r2n=True)[tmp[idx,0]]
-
-
-                    np.save("%s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN%d.npy"% (self.TEMPLATE_PATH,
-                                                                       self.TMPFILE_VERSION,
-                                                                       self.KERNELSZ**2,
-                                                                       self.NORIENT,
-                                                                       nside,
-                                                                       spin
-                                                                       ),
-                            idxEB
+                    for k in range(self.NORIENT * 12 * nside**2):
+                        if k % (nside**2) == 0:
+                            print(
+                                "Init index 1/2 spin=%d Please wait %d done against %d nside=%d kernel=%d"
+                                % (
+                                    spin,
+                                    k // (nside**2),
+                                    self.NORIENT * 12,
+                                    nside,
+                                    self.KERNELSZ,
+                                )
                             )
-                    np.save("%s/FOSCAT_%s_W%d_%d_%d_WAVE-SPIN%d.npy"% (self.TEMPLATE_PATH,
-                                                                       self.TMPFILE_VERSION,
-                                                                       self.KERNELSZ**2,
-                                                                       self.NORIENT,
-                                                                       nside,
-                                                                       spin,
-                                                                       ),
-                            tmpEB
+                        idx = np.where(tmp[:, 1] == k)[0]
+
+                        im = np.zeros([12 * nside**2])
+                        im[tmp[idx, 0]] = tmpw[idx].real
+                        almR = hp.map2alm(hp.reorder(im, n2r=True))
+                        im[tmp[idx, 0]] = tmpw[idx].imag
+                        almI = hp.map2alm(hp.reorder(im, n2r=True))
+
+                        i, q, u = hp.alm2map_spin(
+                            [almR, almR * 0, 0 * almR], nside, spin, 3 * nside - 1
+                        )
+                        i2, q2, u2 = hp.alm2map_spin(
+                            [almI, 0 * almI, 0 * almI], nside, spin, 3 * nside - 1
+                        )
+
+                        tmpEB[idx] = (
+                            hp.reorder(i, r2n=True)[tmp[idx, 0]]
+                            + 1j * hp.reorder(i2, r2n=True)[tmp[idx, 0]]
+                        )
+                        tmpEB[idx + tmp.shape[0]] = (
+                            hp.reorder(q, r2n=True)[tmp[idx, 0]]
+                            + 1j * hp.reorder(q2, r2n=True)[tmp[idx, 0]]
+                        )
+
+                        i, q, u = hp.alm2map_spin(
+                            [0 * almR, almR, 0 * almR], nside, spin, 3 * nside - 1
+                        )
+                        i2, q2, u2 = hp.alm2map_spin(
+                            [0 * almI, almI, 0 * almI], nside, spin, 3 * nside - 1
+                        )
+
+                        tmpEB[idx + 2 * tmp.shape[0]] = (
+                            hp.reorder(i, r2n=True)[tmp[idx, 0]]
+                            + 1j * hp.reorder(i2, r2n=True)[tmp[idx, 0]]
+                        )
+                        tmpEB[idx + 3 * tmp.shape[0]] = (
+                            hp.reorder(q, r2n=True)[tmp[idx, 0]]
+                            + 1j * hp.reorder(q2, r2n=True)[tmp[idx, 0]]
+                        )
+
+                    np.save(
+                        "%s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN%d.npy"
+                        % (
+                            self.TEMPLATE_PATH,
+                            self.TMPFILE_VERSION,
+                            self.KERNELSZ**2,
+                            self.NORIENT,
+                            nside,
+                            spin,
+                        ),
+                        idxEB,
+                    )
+                    np.save(
+                        "%s/FOSCAT_%s_W%d_%d_%d_WAVE-SPIN%d.npy"
+                        % (
+                            self.TEMPLATE_PATH,
+                            self.TMPFILE_VERSION,
+                            self.KERNELSZ**2,
+                            self.NORIENT,
+                            nside,
+                            spin,
+                        ),
+                        tmpEB,
+                    )
+                    tmp = np.load(
+                        "%s/FOSCAT_%s_W%d_%d_%d_PIDX2-SPIN0.npy"
+                        % (
+                            self.TEMPLATE_PATH,
+                            self.TMPFILE_VERSION,
+                            self.KERNELSZ**2,
+                            self.NORIENT,
+                            nside,
+                        )
+                    )
+                    tmpw = np.load(
+                        "%s/FOSCAT_%s_W%d_%d_%d_SMOO-SPIN0.npy"
+                        % (
+                            self.TEMPLATE_PATH,
+                            self.TMPFILE_VERSION,
+                            self.KERNELSZ**2,
+                            self.NORIENT,
+                            nside,
+                        )
+                    )
+
+                    nn = 12 * nside**2
+                    idxEB = np.concatenate([tmp, tmp, tmp, tmp], 0)
+                    idxEB[tmp.shape[0] : 2 * tmp.shape[0], 0] += 12 * nside**2
+                    idxEB[3 * tmp.shape[0] :, 0] += 12 * nside**2
+                    idxEB[2 * tmp.shape[0] :, 1] += nn
+
+                    tmpEB = np.zeros([tmpw.shape[0] * 4], dtype="complex")
+
+                    for k in range(12 * nside**2):
+                        if k % (nside**2) == 0:
+                            print(
+                                "Init index 2/2 spin=%d Please wait %d done against %d nside=%d kernel=%d"
+                                % (spin, k // (nside**2), 12, nside, self.KERNELSZ)
                             )
-                    tmp = np.load("%s/FOSCAT_%s_W%d_%d_%d_PIDX2-SPIN0.npy"%
-                                  (
-                                      self.TEMPLATE_PATH,
-                                      self.TMPFILE_VERSION,
-                                      self.KERNELSZ**2,
-                                      self.NORIENT,
-                                      nside,
-                                  )
-                                  )
-                    tmpw = np.load("%s/FOSCAT_%s_W%d_%d_%d_SMOO-SPIN0.npy"%
-                                   (
-                                       self.TEMPLATE_PATH,
-                                       self.TMPFILE_VERSION,
-                                       self.KERNELSZ**2,
-                                       self.NORIENT,
-                                       nside,
-                                   )
-                                   )
-    
-                    nn=12*nside**2
-                    idxEB=np.concatenate([tmp,tmp,tmp,tmp],0)
-                    idxEB[tmp.shape[0]:2*tmp.shape[0],0]+=12*nside**2
-                    idxEB[3*tmp.shape[0]:,0]+=12*nside**2
-                    idxEB[2*tmp.shape[0]:,1]+=nn
-                    
-                    tmpEB=np.zeros([tmpw.shape[0]*4],dtype='complex')
-                    
-                    for k in range(12*nside**2):
-                        if k%(nside**2)==0:
-                            print('Init index 2/2 spin=%d Please wait %d done against %d nside=%d kernel=%d'%(spin,k//(nside**2),
-                                                                                                              12,
-                                                                                                              nside,
-                                                                                                              self.KERNELSZ))
-                        idx=np.where(tmp[:,1]==k)[0]
-                        
-                        im=np.zeros([12*nside**2])
-                        im[tmp[idx,0]]=tmpw[idx].real
-                        almR=hp.map2alm(hp.reorder(im,n2r=True))
-                        im[tmp[idx,0]]=tmpw[idx].imag
-                        almI=hp.map2alm(hp.reorder(im,n2r=True))
-                        
-                        i,q,u=hp.alm2map_spin([almR,almR*0,0*almR],nside,spin,3*nside-1)
-                        i2,q2,u2=hp.alm2map_spin([almI,0*almI,0*almI],nside,spin,3*nside-1)
-                        
-                        tmpEB[idx]=hp.reorder(i,r2n=True)[tmp[idx,0]]+1J*hp.reorder(i2,r2n=True)[tmp[idx,0]]
-                        tmpEB[idx+tmp.shape[0]]=hp.reorder(q,r2n=True)[tmp[idx,0]]+1J*hp.reorder(q2,r2n=True)[tmp[idx,0]]
-                        
-                        i,q,u=hp.alm2map_spin([0*almR,almR,0*almR],nside,spin,3*nside-1)
-                        i2,q2,u2=hp.alm2map_spin([0*almI,almI,0*almI],nside,spin,3*nside-1)
-                        
-                        tmpEB[idx+2*tmp.shape[0]]=hp.reorder(i,r2n=True)[tmp[idx,0]]+1J*hp.reorder(i2,r2n=True)[tmp[idx,0]]
-                        tmpEB[idx+3*tmp.shape[0]]=hp.reorder(q,r2n=True)[tmp[idx,0]]+1J*hp.reorder(q2,r2n=True)[tmp[idx,0]]
-                        
-        
-                    np.save("%s/FOSCAT_%s_W%d_%d_%d_PIDX2-SPIN%d.npy"%
-                            (
-                                self.TEMPLATE_PATH,
-                                self.TMPFILE_VERSION,
-                                self.KERNELSZ**2,
-                                self.NORIENT,
-                                nside,
-                                spin,
-                            ),
-                            idxEB
-                            )
-                    np.save("%s/FOSCAT_%s_W%d_%d_%d_SMOO-SPIN%d.npy"%
-                            (
-                                self.TEMPLATE_PATH,
-                                self.TMPFILE_VERSION,
-                                self.KERNELSZ**2,
-                                self.NORIENT,
-                                nside,
-                                spin,
-                            ),
-                            tmpEB
-                            )
+                        idx = np.where(tmp[:, 1] == k)[0]
+
+                        im = np.zeros([12 * nside**2])
+                        im[tmp[idx, 0]] = tmpw[idx].real
+                        almR = hp.map2alm(hp.reorder(im, n2r=True))
+                        im[tmp[idx, 0]] = tmpw[idx].imag
+                        almI = hp.map2alm(hp.reorder(im, n2r=True))
+
+                        i, q, u = hp.alm2map_spin(
+                            [almR, almR * 0, 0 * almR], nside, spin, 3 * nside - 1
+                        )
+                        i2, q2, u2 = hp.alm2map_spin(
+                            [almI, 0 * almI, 0 * almI], nside, spin, 3 * nside - 1
+                        )
+
+                        tmpEB[idx] = (
+                            hp.reorder(i, r2n=True)[tmp[idx, 0]]
+                            + 1j * hp.reorder(i2, r2n=True)[tmp[idx, 0]]
+                        )
+                        tmpEB[idx + tmp.shape[0]] = (
+                            hp.reorder(q, r2n=True)[tmp[idx, 0]]
+                            + 1j * hp.reorder(q2, r2n=True)[tmp[idx, 0]]
+                        )
+
+                        i, q, u = hp.alm2map_spin(
+                            [0 * almR, almR, 0 * almR], nside, spin, 3 * nside - 1
+                        )
+                        i2, q2, u2 = hp.alm2map_spin(
+                            [0 * almI, almI, 0 * almI], nside, spin, 3 * nside - 1
+                        )
+
+                        tmpEB[idx + 2 * tmp.shape[0]] = (
+                            hp.reorder(i, r2n=True)[tmp[idx, 0]]
+                            + 1j * hp.reorder(i2, r2n=True)[tmp[idx, 0]]
+                        )
+                        tmpEB[idx + 3 * tmp.shape[0]] = (
+                            hp.reorder(q, r2n=True)[tmp[idx, 0]]
+                            + 1j * hp.reorder(q2, r2n=True)[tmp[idx, 0]]
+                        )
+
+                    np.save(
+                        "%s/FOSCAT_%s_W%d_%d_%d_PIDX2-SPIN%d.npy"
+                        % (
+                            self.TEMPLATE_PATH,
+                            self.TMPFILE_VERSION,
+                            self.KERNELSZ**2,
+                            self.NORIENT,
+                            nside,
+                            spin,
+                        ),
+                        idxEB,
+                    )
+                    np.save(
+                        "%s/FOSCAT_%s_W%d_%d_%d_SMOO-SPIN%d.npy"
+                        % (
+                            self.TEMPLATE_PATH,
+                            self.TMPFILE_VERSION,
+                            self.KERNELSZ**2,
+                            self.NORIENT,
+                            nside,
+                            spin,
+                        ),
+                        tmpEB,
+                    )
                 else:
 
                     if l_kernel == 5:
@@ -1282,7 +1359,9 @@ class FoCUS:
                         th, ph = hp.pix2ang(nside, np.arange(12 * nside**2), nest=True)
                         x, y, z = hp.pix2vec(nside, np.arange(12 * nside**2), nest=True)
 
-                        t, p = hp.pix2ang(nside, np.arange(12 * nside * nside), nest=True)
+                        t, p = hp.pix2ang(
+                            nside, np.arange(12 * nside * nside), nest=True
+                        )
                         phi = [p[k] / np.pi * 180 for k in range(12 * nside * nside)]
                         thi = [t[k] / np.pi * 180 for k in range(12 * nside * nside)]
 
@@ -1310,7 +1389,9 @@ class FoCUS:
 
                         if cell_ids is not None:
                             hidx = np.where(
-                                (x - x[iii]) ** 2 + (y - y[iii]) ** 2 + (z - z[iii]) ** 2
+                                (x - x[iii]) ** 2
+                                + (y - y[iii]) ** 2
+                                + (z - z[iii]) ** 2
                                 < (2 * np.pi / nside) ** 2
                             )[0]
                         else:
@@ -1388,10 +1469,13 @@ class FoCUS:
                         if not self.silent:
                             print(
                                 "Write FOSCAT_%s_W%d_%d_%d_PIDX-SPIN%d.npy"
-                                % (TMPFILE_VERSION, self.KERNELSZ**2,
-                                   self.NORIENT,
-                                   nside,
-                                spin,)
+                                % (
+                                    TMPFILE_VERSION,
+                                    self.KERNELSZ**2,
+                                    self.NORIENT,
+                                    nside,
+                                    spin,
+                                )
                             )
                         np.save(
                             "%s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN%d.npy"
@@ -1462,12 +1546,7 @@ class FoCUS:
             if self.use_2D:
                 tmp = np.load(
                     "%s/W%d_%s_%d_IDX-SPIN%d.npy"
-                    % (
-                        self.TEMPLATE_PATH,
-                        l_kernel**2,
-                        TMPFILE_VERSION,
-                        nside,
-                        spin)
+                    % (self.TEMPLATE_PATH, l_kernel**2, TMPFILE_VERSION, nside, spin)
                 )
             else:
                 tmp = np.load(
@@ -1532,7 +1611,7 @@ class FoCUS:
             wi = wav.imag
             ws = self.slope * wwav
 
-        if spin==0:
+        if spin == 0:
             wr = self.backend.bk_SparseTensor(
                 self.backend.bk_constant(tmp),
                 self.backend.bk_constant(self.backend.bk_cast(wr)),
@@ -1552,17 +1631,17 @@ class FoCUS:
             wr = self.backend.bk_SparseTensor(
                 self.backend.bk_constant(tmp),
                 self.backend.bk_constant(self.backend.bk_cast(wr)),
-                dense_shape=[2*ncell, 2*self.NORIENT * ncell],
+                dense_shape=[2 * ncell, 2 * self.NORIENT * ncell],
             )
             wi = self.backend.bk_SparseTensor(
                 self.backend.bk_constant(tmp),
                 self.backend.bk_constant(self.backend.bk_cast(wi)),
-                dense_shape=[2*ncell, 2*self.NORIENT * ncell],
+                dense_shape=[2 * ncell, 2 * self.NORIENT * ncell],
             )
             ws = self.backend.bk_SparseTensor(
                 self.backend.bk_constant(tmp2),
                 self.backend.bk_constant(self.backend.bk_cast(ws)),
-                dense_shape=[2*ncell, 2*ncell],
+                dense_shape=[2 * ncell, 2 * ncell],
             )
 
         if kernel == -1:
@@ -1572,11 +1651,10 @@ class FoCUS:
             if kernel != -1:
                 return tmp
 
-        return wr, wi, ws,tmp
-
+        return wr, wi, ws, tmp
 
     # ---------------------------------------------−---------
-    def init_index_cnn(self, nside, NORIENT=4,kernel=-1, cell_ids=None):
+    def init_index_cnn(self, nside, NORIENT=4, kernel=-1, cell_ids=None):
 
         if kernel == -1:
             l_kernel = self.KERNELSZ
@@ -1589,82 +1667,82 @@ class FoCUS:
             ncell = 12 * nside * nside
 
         try:
-            
+
             if cell_ids is not None:
                 tmp = np.load(
-                      "%s/XXXX_%s_W%d_%d_%d_PIDX.npy"  # can not work
-                        % (
-                            self.TEMPLATE_PATH,
-                            TMPFILE_VERSION,
-                            l_kernel**2,
-                            NORIENT,
-                            nside,  # if cell_ids computes the index
-                        )
+                    "%s/XXXX_%s_W%d_%d_%d_PIDX.npy"  # can not work
+                    % (
+                        self.TEMPLATE_PATH,
+                        TMPFILE_VERSION,
+                        l_kernel**2,
+                        NORIENT,
+                        nside,  # if cell_ids computes the index
                     )
+                )
 
             else:
-                    tmp = np.load(
-                        "%s/CNN_FOSCAT_%s_W%d_%d_%d_PIDX.npy"
-                        % (
-                            self.TEMPLATE_PATH,
-                            TMPFILE_VERSION,
-                            l_kernel**2,
-                            NORIENT,
-                            nside,  # if cell_ids computes the index
-                        )
+                tmp = np.load(
+                    "%s/CNN_FOSCAT_%s_W%d_%d_%d_PIDX.npy"
+                    % (
+                        self.TEMPLATE_PATH,
+                        TMPFILE_VERSION,
+                        l_kernel**2,
+                        NORIENT,
+                        nside,  # if cell_ids computes the index
                     )
+                )
         except:
 
-            pw = 8.0 
+            pw = 8.0
             pw2 = 1.0
             threshold = 1e-3
-            
+
             if l_kernel == 5:
-                    pw = 8.0
-                    pw2 = 0.5
-                    threshold = 2e-4
+                pw = 8.0
+                pw2 = 0.5
+                threshold = 2e-4
 
             elif l_kernel == 3:
-                    pw = 8.0 
-                    pw2 = 1.0
-                    threshold = 1e-3
+                pw = 8.0
+                pw2 = 1.0
+                threshold = 1e-3
 
             elif l_kernel == 7:
-                    pw = 8.0
-                    pw2 = 0.25
-                    threshold = 4e-5
-            
-            n_weights = self.KERNELSZ*(self.KERNELSZ//2+1)
-            
+                pw = 8.0
+                pw2 = 0.25
+                threshold = 4e-5
+
+            n_weights = self.KERNELSZ * (self.KERNELSZ // 2 + 1)
+
             if cell_ids is not None:
-                    if not isinstance(cell_ids, np.ndarray):
-                        cell_ids = self.backend.to_numpy(cell_ids)
-                    th, ph = hp.pix2ang(nside, cell_ids, nest=True)
-                    x, y, z = hp.pix2vec(nside, cell_ids, nest=True)
+                if not isinstance(cell_ids, np.ndarray):
+                    cell_ids = self.backend.to_numpy(cell_ids)
+                th, ph = hp.pix2ang(nside, cell_ids, nest=True)
+                x, y, z = hp.pix2vec(nside, cell_ids, nest=True)
 
-                    t, p = hp.pix2ang(nside, cell_ids, nest=True)
-                    phi = [p[k] / np.pi * 180 for k in range(ncell)]
-                    thi = [t[k] / np.pi * 180 for k in range(ncell)]
+                t, p = hp.pix2ang(nside, cell_ids, nest=True)
+                phi = [p[k] / np.pi * 180 for k in range(ncell)]
+                thi = [t[k] / np.pi * 180 for k in range(ncell)]
 
-                    indice = np.zeros([n_weights, NORIENT, ncell,4], dtype="int")
-                    
-                    wav = np.zeros([n_weights, NORIENT, ncell,4], dtype="float")
+                indice = np.zeros([n_weights, NORIENT, ncell, 4], dtype="int")
+
+                wav = np.zeros([n_weights, NORIENT, ncell, 4], dtype="float")
 
             else:
 
-                    th, ph = hp.pix2ang(nside, np.arange(12 * nside**2), nest=True)
-                    x, y, z = hp.pix2vec(nside, np.arange(12 * nside**2), nest=True)
+                th, ph = hp.pix2ang(nside, np.arange(12 * nside**2), nest=True)
+                x, y, z = hp.pix2vec(nside, np.arange(12 * nside**2), nest=True)
 
-                    t, p = hp.pix2ang(nside, np.arange(12 * nside * nside), nest=True)
-                    phi = [p[k] / np.pi * 180 for k in range(12 * nside * nside)]
-                    thi = [t[k] / np.pi * 180 for k in range(12 * nside * nside)]
+                t, p = hp.pix2ang(nside, np.arange(12 * nside * nside), nest=True)
+                phi = [p[k] / np.pi * 180 for k in range(12 * nside * nside)]
+                thi = [t[k] / np.pi * 180 for k in range(12 * nside * nside)]
 
-                    indice = np.zeros(
-                        [n_weights, NORIENT, 12 * nside * nside,4], dtype="int"
-                    )
-                    wav = np.zeros(
-                        [n_weights, NORIENT, 12 * nside * nside,4], dtype="float"
-                    )
+                indice = np.zeros(
+                    [n_weights, NORIENT, 12 * nside * nside, 4], dtype="int"
+                )
+                wav = np.zeros(
+                    [n_weights, NORIENT, 12 * nside * nside, 4], dtype="float"
+                )
             iv = 0
             iv2 = 0
 
@@ -1672,23 +1750,23 @@ class FoCUS:
                 if cell_ids is None:
                     if iii % (nside * nside) == nside * nside - 1:
                         if not self.silent:
-                                print(
-                                    "Pre-compute nside=%6d %.2f%%"
-                                    % (nside, 100 * iii / (12 * nside * nside))
-                                )
+                            print(
+                                "Pre-compute nside=%6d %.2f%%"
+                                % (nside, 100 * iii / (12 * nside * nside))
+                            )
 
                 if cell_ids is not None:
-                        hidx = np.where(
-                            (x - x[iii]) ** 2 + (y - y[iii]) ** 2 + (z - z[iii]) ** 2
-                            < (2 * np.pi / nside) ** 2
-                        )[0]
+                    hidx = np.where(
+                        (x - x[iii]) ** 2 + (y - y[iii]) ** 2 + (z - z[iii]) ** 2
+                        < (2 * np.pi / nside) ** 2
+                    )[0]
                 else:
-                        hidx = hp.query_disc(
-                            nside,
-                            [x[iii], y[iii], z[iii]],
-                            2 * np.pi / nside,
-                            nest=True,
-                        )
+                    hidx = hp.query_disc(
+                        nside,
+                        [x[iii], y[iii], z[iii]],
+                        2 * np.pi / nside,
+                        nest=True,
+                    )
 
                 R = hp.Rotator(rot=[phi[iii], -thi[iii]], eulertype="ZYZ")
 
@@ -1702,67 +1780,105 @@ class FoCUS:
 
                 for l_rotation in range(NORIENT):
 
-                        angle = (
-                            l_rotation / 4.0 * np.pi
-                            - phi[iii] / 180.0 * np.pi * (z[hidx] > 0)
-                            - (180.0 - phi[iii]) / 180.0 * np.pi * (z[hidx] < 0)
-                        )
+                    angle = (
+                        l_rotation / 4.0 * np.pi
+                        - phi[iii] / 180.0 * np.pi * (z[hidx] > 0)
+                        - (180.0 - phi[iii]) / 180.0 * np.pi * (z[hidx] < 0)
+                    )
 
+                    axes = y2 * np.cos(angle) - x2 * np.sin(angle)
+                    axes2 = -y2 * np.sin(angle) - x2 * np.cos(angle)
 
-                        axes  = y2 * np.cos(angle)  - x2 * np.sin(angle)
-                        axes2 = -y2 * np.sin(angle) - x2 * np.cos(angle)
-                        
-                        for k_weights in range(self.KERNELSZ//2+1):
-                            for l_weights in range(self.KERNELSZ):
-                                
-                                val=np.exp(-(pw*(axes2*(nside)-(k_weights-self.KERNELSZ//2))**2+pw*(axes*(nside)-(l_weights-self.KERNELSZ//2))**2))+ \
-                                    np.exp(-(pw*(axes2*(nside)+(k_weights-self.KERNELSZ//2))**2+pw*(axes*(nside)-(l_weights-self.KERNELSZ//2))**2))
+                    for k_weights in range(self.KERNELSZ // 2 + 1):
+                        for l_weights in range(self.KERNELSZ):
 
-                                idx = np.argsort(-val)
-                                idx = idx[0:4]
-                                
-                                nval = len(idx)
-                                val=val[idx]
-                                
-                                r = abs(val).sum()
+                            val = np.exp(
+                                -(
+                                    pw
+                                    * (
+                                        axes2 * (nside)
+                                        - (k_weights - self.KERNELSZ // 2)
+                                    )
+                                    ** 2
+                                    + pw
+                                    * (
+                                        axes * (nside)
+                                        - (l_weights - self.KERNELSZ // 2)
+                                    )
+                                    ** 2
+                                )
+                            ) + np.exp(
+                                -(
+                                    pw
+                                    * (
+                                        axes2 * (nside)
+                                        + (k_weights - self.KERNELSZ // 2)
+                                    )
+                                    ** 2
+                                    + pw
+                                    * (
+                                        axes * (nside)
+                                        - (l_weights - self.KERNELSZ // 2)
+                                    )
+                                    ** 2
+                                )
+                            )
 
-                                if r > 0:
-                                    val = val / r
-                                    
-                                indice[k_weights*self.KERNELSZ+l_weights,l_rotation,iii,:] = hidx[idx]
-                                wav[k_weights*self.KERNELSZ+l_weights,l_rotation,iii,:] = val
-                
+                            idx = np.argsort(-val)
+                            idx = idx[0:4]
+
+                            nval = len(idx)
+                            val = val[idx]
+
+                            r = abs(val).sum()
+
+                            if r > 0:
+                                val = val / r
+
+                            indice[
+                                k_weights * self.KERNELSZ + l_weights,
+                                l_rotation,
+                                iii,
+                                :,
+                            ] = hidx[idx]
+                            wav[
+                                k_weights * self.KERNELSZ + l_weights,
+                                l_rotation,
+                                iii,
+                                :,
+                            ] = val
+
             if not self.silent:
-                    print("Kernel Size ", iv / (NORIENT * 12 * nside * nside))
-                
+                print("Kernel Size ", iv / (NORIENT * 12 * nside * nside))
+
             if cell_ids is None:
-                    if not self.silent:
-                        print(
-                            "Write FOSCAT_%s_W%d_%d_%d_PIDX.npy"
-                            % (TMPFILE_VERSION, self.KERNELSZ**2, NORIENT, nside)
-                        )
-                    np.save(
-                        "%s/CNN_FOSCAT_%s_W%d_%d_%d_PIDX.npy"
-                        % (
-                            self.TEMPLATE_PATH,
-                            TMPFILE_VERSION,
-                            self.KERNELSZ**2,
-                            NORIENT,
-                            nside,
-                        ),
-                        indice,
+                if not self.silent:
+                    print(
+                        "Write FOSCAT_%s_W%d_%d_%d_PIDX.npy"
+                        % (TMPFILE_VERSION, self.KERNELSZ**2, NORIENT, nside)
                     )
-                    np.save(
-                        "%s/CNN_FOSCAT_%s_W%d_%d_%d_WAVE.npy"
-                        % (
-                            self.TEMPLATE_PATH,
-                            TMPFILE_VERSION,
-                            self.KERNELSZ**2,
-                            NORIENT,
-                            nside,
-                        ),
-                        wav,
-                    )
+                np.save(
+                    "%s/CNN_FOSCAT_%s_W%d_%d_%d_PIDX.npy"
+                    % (
+                        self.TEMPLATE_PATH,
+                        TMPFILE_VERSION,
+                        self.KERNELSZ**2,
+                        NORIENT,
+                        nside,
+                    ),
+                    indice,
+                )
+                np.save(
+                    "%s/CNN_FOSCAT_%s_W%d_%d_%d_WAVE.npy"
+                    % (
+                        self.TEMPLATE_PATH,
+                        TMPFILE_VERSION,
+                        self.KERNELSZ**2,
+                        NORIENT,
+                        nside,
+                    ),
+                    wav,
+                )
 
         if cell_ids is None:
             self.barrier()
@@ -1794,12 +1910,12 @@ class FoCUS:
             )
         else:
             tmp = indice
-        
-        self.Idx_CNN[(nside,NORIENT,self.KERNELSZ)] = tmp
-        self.Idx_WCNN[(nside,NORIENT,self.KERNELSZ)] = self.backend.bk_cast(wav)
+
+        self.Idx_CNN[(nside, NORIENT, self.KERNELSZ)] = tmp
+        self.Idx_WCNN[(nside, NORIENT, self.KERNELSZ)] = self.backend.bk_cast(wav)
 
         return wav, tmp
-        
+
     # ---------------------------------------------−---------
     # convert swap axes tensor x [....,a,....,b,....] to [....,b,....,a,....]
     def swapaxes(self, x, axis1, axis2):
@@ -1929,24 +2045,28 @@ class FoCUS:
                 l_x = self.backend.bk_reshape(
                     l_x[:, :, self.KERNELSZ // 2 : -self.KERNELSZ // 2 + 1, :], oshape
                 )
-        else:   
+        else:
             ichannel = 1
-            if len(shape)>1:
+            if len(shape) > 1:
                 ichannel = shape[0]
-                
+
             ochannel = 1
-            for i in range(1,len(shape)-1):
+            for i in range(1, len(shape) - 1):
                 ochannel *= shape[i]
 
-            l_x = self.backend.bk_reshape(x, [ichannel,1,ochannel,shape[-1]])
+            l_x = self.backend.bk_reshape(x, [ichannel, 1, ochannel, shape[-1]])
 
         # data=[Nbatch,...,NORIENT[,NORIENT],X[,Y]] => data=[Nbatch,...,1,NORIENT[,NORIENT],X[,Y]]
         # mask=[Nmask,X[,Y]] => mask=[1,Nmask,....,X[,Y]]
-        
+
         if self.use_2D:
-            l_mask = self.backend.bk_expand_dims(self.backend.bk_expand_dims(l_mask,0),-3)
+            l_mask = self.backend.bk_expand_dims(
+                self.backend.bk_expand_dims(l_mask, 0), -3
+            )
         else:
-            l_mask = self.backend.bk_expand_dims(self.backend.bk_expand_dims(l_mask,0),-2)
+            l_mask = self.backend.bk_expand_dims(
+                self.backend.bk_expand_dims(l_mask, 0), -2
+            )
 
         if l_x.dtype == self.all_cbk_type:
             l_mask = self.backend.bk_complex(l_mask, self.backend.bk_cast(0.0 * l_mask))
@@ -2008,7 +2128,7 @@ class FoCUS:
         elif self.use_1D:
             mtmp = l_mask
             vtmp = l_x
-            v1 = self.backend.bk_reduce_sum(l_mask[1,:,...,:] * vtmp, axis=-1)
+            v1 = self.backend.bk_reduce_sum(l_mask[1, :, ..., :] * vtmp, axis=-1)
             v2 = self.backend.bk_reduce_sum(mtmp * vtmp * vtmp, axis=-1)
             vh = self.backend.bk_reduce_sum(mtmp, axis=-1)
 
@@ -2056,7 +2176,7 @@ class FoCUS:
                 oshape = [x.shape[0]]
             else:
                 oshape = [1]
-                
+
             oshape = oshape + [mask.shape[0]]
             if len(shape) > 2:
                 oshape = oshape + shape[1:-1]
@@ -2281,7 +2401,7 @@ class FoCUS:
             if nside is None:
                 nside = int(np.sqrt(image.shape[-1] // 12))
 
-            if spin==0:
+            if spin == 0:
                 if nside not in self.Idx_Neighbours:
                     if self.InitWave is None:
                         wr, wi, ws, widx = self.init_index(nside, cell_ids=cell_ids)
@@ -2296,19 +2416,25 @@ class FoCUS:
                 l_ww_real = self.ww_Real[nside]
                 l_ww_imag = self.ww_Imag[nside]
             else:
-                if (spin,nside) not in self.Idx_Neighbours:
+                if (spin, nside) not in self.Idx_Neighbours:
                     if self.InitWave is None:
-                        wr, wi, ws, widx = self.init_index(nside, cell_ids=cell_ids,spin=spin)
+                        wr, wi, ws, widx = self.init_index(
+                            nside, cell_ids=cell_ids, spin=spin
+                        )
                     else:
-                        wr, wi, ws, widx = self.InitWave(nside, cell_ids=cell_ids,spin=spin)
+                        wr, wi, ws, widx = self.InitWave(
+                            nside, cell_ids=cell_ids, spin=spin
+                        )
 
-                    self.Idx_Neighbours[(spin,nside)] = 1  # self.backend.bk_constant(tmp)
-                    self.ww_Real[(spin,nside)] = wr
-                    self.ww_Imag[(spin,nside)] = wi
-                    self.w_smooth[(spin,nside)] = ws
+                    self.Idx_Neighbours[(spin, nside)] = (
+                        1  # self.backend.bk_constant(tmp)
+                    )
+                    self.ww_Real[(spin, nside)] = wr
+                    self.ww_Imag[(spin, nside)] = wi
+                    self.w_smooth[(spin, nside)] = ws
 
-                l_ww_real = self.ww_Real[(spin,nside)]
-                l_ww_imag = self.ww_Imag[(spin,nside)]
+                l_ww_real = self.ww_Real[(spin, nside)]
+                l_ww_imag = self.ww_Imag[(spin, nside)]
 
             # always convolve the last dimension
 
@@ -2316,9 +2442,9 @@ class FoCUS:
             if len(ishape) > 1:
                 for k in range(len(ishape) - 1):
                     ndata = ndata * ishape[k]
-            if spin>0:
+            if spin > 0:
                 tim = self.backend.bk_reshape(
-                    self.backend.bk_cast(image), [ndata//2,2*ishape[-1]]
+                    self.backend.bk_cast(image), [ndata // 2, 2 * ishape[-1]]
                 )
             else:
                 tim = self.backend.bk_reshape(
@@ -2364,8 +2490,8 @@ class FoCUS:
                     [ndata, self.NORIENT, ishape[-1]],
                 )
                 res = self.backend.bk_complex(rr, ii)
-                
-            if spin==0:
+
+            if spin == 0:
                 if len(ishape) > 1:
                     return self.backend.bk_reshape(
                         res, ishape[0:-1] + [self.NORIENT, ishape[-1]]
@@ -2375,11 +2501,11 @@ class FoCUS:
             else:
                 if len(ishape) > 2:
                     return self.backend.bk_reshape(
-                        res, ishape[0:-2] + [2,self.NORIENT, ishape[-1]]
+                        res, ishape[0:-2] + [2, self.NORIENT, ishape[-1]]
                     )
                 else:
-                    return self.backend.bk_reshape(res, [2,self.NORIENT, ishape[-1]])
-                
+                    return self.backend.bk_reshape(res, [2, self.NORIENT, ishape[-1]])
+
         return res
 
     # ---------------------------------------------−---------
@@ -2443,11 +2569,11 @@ class FoCUS:
         else:
 
             ishape = list(image.shape)
-            
+
             if nside is None:
                 nside = int(np.sqrt(image.shape[-1] // 12))
 
-            if spin==0:
+            if spin == 0:
                 if nside not in self.Idx_Neighbours:
                     if self.InitWave is None:
                         wr, wi, ws, widx = self.init_index(nside, cell_ids=cell_ids)
@@ -2461,17 +2587,23 @@ class FoCUS:
 
                 l_w_smooth = self.w_smooth[nside]
             else:
-                if (spin,nside) not in self.Idx_Neighbours:
+                if (spin, nside) not in self.Idx_Neighbours:
                     if self.InitWave is None:
-                        wr, wi, ws, widx = self.init_index(nside, cell_ids=cell_ids,spin=spin)
+                        wr, wi, ws, widx = self.init_index(
+                            nside, cell_ids=cell_ids, spin=spin
+                        )
                     else:
-                        wr, wi, ws, widx = self.InitWave(nside, cell_ids=cell_ids,spin=spin)
+                        wr, wi, ws, widx = self.InitWave(
+                            nside, cell_ids=cell_ids, spin=spin
+                        )
 
-                    self.Idx_Neighbours[(spin,nside)] = 1  # self.backend.bk_constant(tmp)
-                    self.ww_Real[(spin,nside)] = wr
-                    self.ww_Imag[(spin,nside)] = wi
-                    self.w_smooth[(spin,nside)] = ws
-                l_w_smooth = self.w_smooth[(spin,nside)]
+                    self.Idx_Neighbours[(spin, nside)] = (
+                        1  # self.backend.bk_constant(tmp)
+                    )
+                    self.ww_Real[(spin, nside)] = wr
+                    self.ww_Imag[(spin, nside)] = wi
+                    self.w_smooth[(spin, nside)] = ws
+                l_w_smooth = self.w_smooth[(spin, nside)]
 
             odata = 1
             for k in range(0, len(ishape) - 1):
