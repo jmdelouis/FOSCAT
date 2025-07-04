@@ -102,7 +102,9 @@ class scat_cov:
     def flatten(self):
         tmp = [
             self.conv2complex(
-                self.backend.bk_reshape(self.S0, [self.S1.shape[0], self.S0.shape[1]*self.S0.shape[2]])
+                self.backend.bk_reshape(
+                    self.S0, [self.S1.shape[0], self.S0.shape[1] * self.S0.shape[2]]
+                )
             )
         ]
         if self.use_1D:
@@ -2348,7 +2350,7 @@ class funct(FOC.FoCUS):
         )
 
     # compute local direction to make the statistical analysis more efficient
-    def stat_cfft(self, im, image2=None, upscale=False, smooth_scale=0,spin=0):
+    def stat_cfft(self, im, image2=None, upscale=False, smooth_scale=0, spin=0):
         tmp = im
         if image2 is not None:
             tmpi2 = image2
@@ -2367,23 +2369,27 @@ class funct(FOC.FoCUS):
             if image2 is not None:
                 sim = self.backend.bk_real(
                     self.backend.bk_L1(
-                        self.convol(tmp,spin=spin)
-                        * self.backend.bk_conjugate(self.convol(tmpi2,spin=spin))
+                        self.convol(tmp, spin=spin)
+                        * self.backend.bk_conjugate(self.convol(tmpi2, spin=spin))
                     )
                 )
             else:
-                sim = self.backend.bk_abs(self.convol(tmp,spin=spin))
+                sim = self.backend.bk_abs(self.convol(tmp, spin=spin))
 
             # instead of difference between "opposite" channels use weighted average
             # of cosine and sine contributions using all channels
-            if spin==0:
+            if spin == 0:
                 angles = self.backend.bk_cast(
-                    (2 * np.pi * np.arange(self.NORIENT)
-                     / self.NORIENT).reshape(1,self.NORIENT,1)) # shape: (NORIENT,)
+                    (2 * np.pi * np.arange(self.NORIENT) / self.NORIENT).reshape(
+                        1, self.NORIENT, 1
+                    )
+                )  # shape: (NORIENT,)
             else:
                 angles = self.backend.bk_cast(
-                    (2 * np.pi * np.arange(self.NORIENT)
-                     / self.NORIENT).reshape(1,1,self.NORIENT,1)) # shape: (NORIENT,)
+                    (2 * np.pi * np.arange(self.NORIENT) / self.NORIENT).reshape(
+                        1, 1, self.NORIENT, 1
+                    )
+                )  # shape: (NORIENT,)
 
             # we use cosines and sines as weights for sim
             weighted_cos = self.backend.bk_reduce_mean(
@@ -2426,29 +2432,29 @@ class funct(FOC.FoCUS):
             w1 = np.sin(delta * np.pi / 2) ** 2
 
             # build rotation matrix
-            if spin==0:
+            if spin == 0:
                 mat = np.zeros([self.NORIENT * self.NORIENT, sim.shape[-1]])
             else:
-                mat = np.zeros([2,self.NORIENT * self.NORIENT, sim.shape[-1]])
+                mat = np.zeros([2, self.NORIENT * self.NORIENT, sim.shape[-1]])
             lidx = np.arange(sim.shape[-1])
             for ell in range(self.NORIENT):
                 # Instead of simple linear weights, we use the cosine weights w0 and w1.
                 col0 = self.NORIENT * ((ell + iph) % self.NORIENT) + ell
                 col1 = self.NORIENT * ((ell + iph + 1) % self.NORIENT) + ell
 
-                if spin==0:
+                if spin == 0:
                     mat[col0, lidx] = w0
                     mat[col1, lidx] = w1
                 else:
-                    mat[0,col0, lidx] = w0[0]
-                    mat[0,col1, lidx] = w1[0]
-                    mat[1,col0, lidx] = w0[1]
-                    mat[1,col1, lidx] = w1[1]
+                    mat[0, col0, lidx] = w0[0]
+                    mat[0, col1, lidx] = w1[0]
+                    mat[1, col0, lidx] = w0[1]
+                    mat[1, col1, lidx] = w1[1]
 
             cmat[k] = self.backend.bk_cast(mat[None, ...].astype("complex64"))
 
             # do same modifications for mat2
-            if spin==0:
+            if spin == 0:
                 mat2 = np.zeros(
                     [k + 1, self.NORIENT * self.NORIENT, self.NORIENT, sim.shape[-1]]
                 )
@@ -2459,12 +2465,14 @@ class funct(FOC.FoCUS):
 
             for k2 in range(k + 1):
 
-                tmp2 = self.backend.bk_expand_dims(sim,-2)
-                if spin==0:
+                tmp2 = self.backend.bk_expand_dims(sim, -2)
+                if spin == 0:
                     sim2 = self.backend.bk_reduce_sum(
                         self.backend.bk_reshape(
                             self.backend.bk_cast(
-                                mat.reshape(1, self.NORIENT, self.NORIENT, mat.shape[-1])
+                                mat.reshape(
+                                    1, self.NORIENT, self.NORIENT, mat.shape[-1]
+                                )
                             )
                             * tmp2,
                             [sim.shape[0], self.NORIENT, self.NORIENT, mat.shape[-1]],
@@ -2475,10 +2483,18 @@ class funct(FOC.FoCUS):
                     sim2 = self.backend.bk_reduce_sum(
                         self.backend.bk_reshape(
                             self.backend.bk_cast(
-                                mat.reshape(1, 2, self.NORIENT, self.NORIENT, mat.shape[-1])
+                                mat.reshape(
+                                    1, 2, self.NORIENT, self.NORIENT, mat.shape[-1]
+                                )
                             )
                             * tmp2,
-                            [sim.shape[0], 2, self.NORIENT, self.NORIENT, mat.shape[-1]],
+                            [
+                                sim.shape[0],
+                                2,
+                                self.NORIENT,
+                                self.NORIENT,
+                                mat.shape[-1],
+                            ],
                         ),
                         1,
                     )
@@ -2529,14 +2545,14 @@ class funct(FOC.FoCUS):
                     for ell in range(self.NORIENT):
                         col0 = self.NORIENT * ((ell + iph2[m]) % self.NORIENT) + ell
                         col1 = self.NORIENT * ((ell + iph2[m] + 1) % self.NORIENT) + ell
-                        if spin==0:
+                        if spin == 0:
                             mat2[k2, col0, m, lidx] = w0_2[m, lidx]
                             mat2[k2, col1, m, lidx] = w1_2[m, lidx]
                         else:
-                            mat2[k2, 0, col0, m, lidx] = w0_2[0,m, lidx]
-                            mat2[k2, 0, col1, m, lidx] = w1_2[0,m, lidx]
-                            mat2[k2, 1, col0, m, lidx] = w0_2[1,m, lidx]
-                            mat2[k2, 1, col1, m, lidx] = w1_2[1,m, lidx]
+                            mat2[k2, 0, col0, m, lidx] = w0_2[0, m, lidx]
+                            mat2[k2, 0, col1, m, lidx] = w1_2[0, m, lidx]
+                            mat2[k2, 1, col0, m, lidx] = w0_2[1, m, lidx]
+                            mat2[k2, 1, col1, m, lidx] = w1_2[1, m, lidx]
 
                 cmat2[k] = self.backend.bk_cast(
                     mat2[0 : k + 1, None, ...].astype("complex64")
@@ -2568,7 +2584,7 @@ class funct(FOC.FoCUS):
         edge=True,
         nside=None,
         cell_ids=None,
-        spin=0
+        spin=0,
     ):
         """
         Calculates the scattering correlations for a batch of images. Mean are done over pixels.
@@ -2601,7 +2617,7 @@ class funct(FOC.FoCUS):
         -------
         S1, S2, S3, S4 normalized
         """
-        
+
         return_data = self.return_data
 
         # Check input consistency
@@ -2674,7 +2690,7 @@ class funct(FOC.FoCUS):
 
             J = int(np.log(nside) / np.log(2))  # Number of j scales
         else:
-            npix=int(im_shape[-1])
+            npix = int(im_shape[-1])
 
             if nside is None:
                 nside = int(np.sqrt(npix // 12))
@@ -2693,7 +2709,11 @@ class funct(FOC.FoCUS):
             print("\n\n==========")
 
         ### LOCAL VARIABLES (IMAGES and MASK)
-        if len(image1.shape) == 1 or (len(image1.shape) == 2 and self.use_2D) or (len(image1.shape) == 2 and spin>0):
+        if (
+            len(image1.shape) == 1
+            or (len(image1.shape) == 2 and self.use_2D)
+            or (len(image1.shape) == 2 and spin > 0)
+        ):
             I1 = self.backend.bk_cast(
                 self.backend.bk_expand_dims(image1, 0)
             )  # Local image1 [Nbatch, Npix]
@@ -2717,16 +2737,10 @@ class funct(FOC.FoCUS):
         if self.KERNELSZ > 3 and not self.use_2D and cell_ids is None:
             # if the kernel size is bigger than 3 increase the binning before smoothing
             if self.use_2D:
-                vmask = self.up_grade(
-                    vmask, I1.shape[-2] * 2, nouty=I1.shape[-1] * 2
-                )
-                I1 = self.up_grade(
-                    I1, I1.shape[-2] * 2, nouty=I1.shape[-1] * 2
-                )
+                vmask = self.up_grade(vmask, I1.shape[-2] * 2, nouty=I1.shape[-1] * 2)
+                I1 = self.up_grade(I1, I1.shape[-2] * 2, nouty=I1.shape[-1] * 2)
                 if cross:
-                    I2 = self.up_grade(
-                        I2, I2.shape[-2] * 2, nouty=I2.shape[-1] * 2
-                    )
+                    I2 = self.up_grade(I2, I2.shape[-2] * 2, nouty=I2.shape[-1] * 2)
             elif self.use_1D:
                 vmask = self.up_grade(vmask, I1.shape[-1] * 2)
                 I1 = self.up_grade(I1, I1.shape[-1] * 2)
@@ -2747,9 +2761,7 @@ class funct(FOC.FoCUS):
                     vmask = self.up_grade(
                         vmask, I1.shape[-2] * 2, nouty=I1.shape[-1] * 2
                     )
-                    I1 = self.up_grade(
-                        I1, I1.shape[-2] * 2, nouty=I1.shape[-1] * 2
-                    )
+                    I1 = self.up_grade(I1, I1.shape[-2] * 2, nouty=I1.shape[-1] * 2)
                     if cross:
                         I2 = self.up_grade(
                             I2,
@@ -2795,7 +2807,7 @@ class funct(FOC.FoCUS):
         off_S2 = -2
         off_S3 = -3
         off_S4 = -4
-            
+
         if self.use_1D:
             off_S2 = -1
             off_S3 = -1
@@ -2827,20 +2839,21 @@ class funct(FOC.FoCUS):
                 )
         else:
             if not cross:
-                s0, l_vs0 = self.masked_mean(I1,
-                                             vmask,
-                                             calc_var=True)
+                s0, l_vs0 = self.masked_mean(I1, vmask, calc_var=True)
             else:
                 s0, l_vs0 = self.masked_mean(
-                    self.backend.bk_L1(I1 * I2),
-                    vmask,
-                    calc_var=True)
-                
+                    self.backend.bk_L1(I1 * I2), vmask, calc_var=True
+                )
+
             vs0 = self.backend.bk_concat([l_vs0, l_vs0], -1)
             s0 = self.backend.bk_concat([s0, l_vs0], -1)
-            if spin>0:
-                vs0=self.backend.bk_reshape(vs0,[vs0.shape[0],vs0.shape[1],2,vs0.shape[2]//2])
-                s0=self.backend.bk_reshape(s0,[s0.shape[0],s0.shape[1],2,s0.shape[2]//2])
+            if spin > 0:
+                vs0 = self.backend.bk_reshape(
+                    vs0, [vs0.shape[0], vs0.shape[1], 2, vs0.shape[2] // 2]
+                )
+                s0 = self.backend.bk_reshape(
+                    s0, [s0.shape[0], s0.shape[1], 2, s0.shape[2] // 2]
+                )
         #### COMPUTE S1, S2, S3 and S4
         nside_j3 = nside  # NSIDE start (nside_j3 = nside / 2^j3)
 
@@ -2889,13 +2902,12 @@ class funct(FOC.FoCUS):
             ####### S1 and S2
             ### Make the convolution I1 * Psi_j3
             conv1 = self.convol(
-                I1, cell_ids=cell_ids_j3, nside=nside_j3,
-                spin=spin
+                I1, cell_ids=cell_ids_j3, nside=nside_j3, spin=spin
             )  # [Nbatch, Norient3 , Npix_j3]
 
             if cmat is not None:
                 tmp2 = self.backend.bk_repeat(conv1, self.NORIENT, axis=-2)
-                
+
                 conv1 = self.backend.bk_reduce_sum(
                     self.backend.bk_reshape(
                         cmat[j3] * tmp2,
@@ -2926,7 +2938,7 @@ class funct(FOC.FoCUS):
                         )
                     else:
                         s2 = self.masked_mean(M1_square, vmask, rank=j3)
-                        
+
                 if cond_init_P1_dic:
                     # We fill P1_dic with S2 for normalisation of S3 and S4
                     P1_dic[j3] = self.backend.bk_real(s2)  # [Nbatch, Nmask, Norient3]
@@ -3007,8 +3019,7 @@ class funct(FOC.FoCUS):
             else:  # Cross
                 ### Make the convolution I2 * Psi_j3
                 conv2 = self.convol(
-                    I2,  cell_ids=cell_ids_j3, nside=nside_j3,
-                    spin=spin
+                    I2, cell_ids=cell_ids_j3, nside=nside_j3, spin=spin
                 )  # [Nbatch, Npix_j3, Norient3]
                 if cmat is not None:
                     tmp2 = self.backend.bk_repeat(conv2, self.NORIENT, axis=-2)
@@ -3042,10 +3053,10 @@ class funct(FOC.FoCUS):
                     else:
                         if calc_var:
                             p1, vp1 = self.masked_mean(
-                                M1_square, vmask,  rank=j3, calc_var=True
+                                M1_square, vmask, rank=j3, calc_var=True
                             )  # [Nbatch, Nmask, Norient3]
                             p2, vp2 = self.masked_mean(
-                                M2_square, vmask,  rank=j3, calc_var=True
+                                M2_square, vmask, rank=j3, calc_var=True
                             )  # [Nbatch, Nmask, Norient3]
                         else:
                             p1 = self.masked_mean(
@@ -3067,9 +3078,7 @@ class funct(FOC.FoCUS):
                     s2 = s2
                 else:
                     if calc_var:
-                        s2, vs2 = self.masked_mean(
-                            s2, vmask, rank=j3, calc_var=True
-                        )
+                        s2, vs2 = self.masked_mean(s2, vmask, rank=j3, calc_var=True)
                     else:
                         s2 = self.masked_mean(s2, vmask, rank=j3)
 
@@ -3530,7 +3539,7 @@ class funct(FOC.FoCUS):
 
                 ### Image I2
                 if cross:
-                    I2 = self.smooth(I2,  cell_ids=cell_ids_j3, nside=nside_j3)
+                    I2 = self.smooth(I2, cell_ids=cell_ids_j3, nside=nside_j3)
                     I2, new_cell_ids_j3 = self.ud_grade_2(
                         I2, cell_ids=cell_ids_j3, nside=nside_j3
                     )
@@ -3542,16 +3551,16 @@ class funct(FOC.FoCUS):
                         M1_dic[j2], cell_ids=cell_ids_j3, nside=nside_j3
                     )  # [Nbatch, Npix_j3, Norient3]
                     M1_dic[j2], new_cell_ids_j2 = self.ud_grade_2(
-                        M1_smooth,  cell_ids=cell_ids_j3, nside=nside_j3
+                        M1_smooth, cell_ids=cell_ids_j3, nside=nside_j3
                     )  # [Nbatch, Npix_j3, Norient3]
 
                     ### Dictionary M2_dic[j2]
                     if cross:
                         M2_smooth = self.smooth(
-                            M2_dic[j2],  cell_ids=cell_ids_j3, nside=nside_j3
+                            M2_dic[j2], cell_ids=cell_ids_j3, nside=nside_j3
                         )  # [Nbatch, Npix_j3, Norient3]
                         M2_dic[j2], new_cell_ids_j2 = self.ud_grade_2(
-                            M2_smooth,  cell_ids=cell_ids_j3, nside=nside_j3
+                            M2_smooth, cell_ids=cell_ids_j3, nside=nside_j3
                         )  # [Nbatch, Npix_j3, Norient3]
                 ### Mask
                 vmask, new_cell_ids_j3 = self.ud_grade_2(
@@ -3570,7 +3579,7 @@ class funct(FOC.FoCUS):
             self.P1_dic = P1_dic
             if cross:
                 self.P2_dic = P2_dic
-                
+
         if not return_data:
             S1 = self.backend.bk_concat(S1, -2)
             S2 = self.backend.bk_concat(S2, -2)
@@ -3951,20 +3960,20 @@ class funct(FOC.FoCUS):
     #
     # ---------------------------------------------------------------------------
     def scattering_cov(
-            self,
-            data,
-            data2=None,
-            Jmax=None,
-            if_large_batch=False,
-            S4_criteria=None,
-            use_ref=False,
-            normalization="S2",
-            edge=False,
-            in_mask=None,
-            pseudo_coef=1,
-            get_variance=False,
-            ref_sigma=None,
-            iso_ang=False,
+        self,
+        data,
+        data2=None,
+        Jmax=None,
+        if_large_batch=False,
+        S4_criteria=None,
+        use_ref=False,
+        normalization="S2",
+        edge=False,
+        in_mask=None,
+        pseudo_coef=1,
+        get_variance=False,
+        ref_sigma=None,
+        iso_ang=False,
     ):
         """
         Calculates the scattering correlations for a batch of images, including:
@@ -4077,7 +4086,7 @@ class funct(FOC.FoCUS):
                 if data2 is not None:
                     N_image2 = data2.shape[0]
 
-            if spin==0:
+            if spin == 0:
                 nside = int(np.sqrt(npix // 12))
             else:
                 nside = int(np.sqrt(npix // 24))
@@ -5813,9 +5822,11 @@ class funct(FOC.FoCUS):
 
     def from_gaussian(self, x):
 
-        x = self.backend.bk_clip_by_value(x,
-                                          self.val_min+1E-4*abs(self.val_min),
-                                          self.val_max-1E-4*abs(self.val_max))
+        x = self.backend.bk_clip_by_value(
+            x,
+            self.val_min + 1e-4 * abs(self.val_min),
+            self.val_max - 1e-4 * abs(self.val_max),
+        )
         return self.f_gaussian(self.backend.to_numpy(x))
 
     def square(self, x):
@@ -6113,38 +6124,44 @@ class funct(FOC.FoCUS):
         return scat_cov(
             s0, s2, s3, s4, s1=s1, s3p=s3p, backend=self.backend, use_1D=self.use_1D
         )
-    def calc_matrix_orientation(self,noise_map,image2=None):
-        # Décalage circulaire par matrice de permutation
-        def circ_shift_matrix(N,k):
-            return np.roll(np.eye(N), shift=-k, axis=1)
-        Norient = self.NORIENT
-        im=self.convol(noise_map)
-        if image2 is None:
-            mm=np.mean(abs(self.backend.to_numpy(im)),0)
-        else:
-            im2=self.convol(self.backend.bk_cast(image2))
-            mm=np.mean(self.backend.to_numpy(
-                self.backend.bk_L1(im*self.backend.bk_conjugate(im2))).real,0)
-        
-        Norient=mm.shape[0]
-        xx=np.cos(np.arange(Norient)/Norient*2*np.pi)
-        yy=np.sin(np.arange(Norient)/Norient*2*np.pi)
 
-        a=np.sum(mm*xx[:,None],0)
-        b=np.sum(mm*yy[:,None],0)
-        
-        o=np.fmod(Norient*np.arctan2(-b,a)/(2*np.pi)+Norient,Norient)
-        xx=np.arange(Norient)
-        alpha = o[None,:]-xx[:,None]
-        beta = np.fmod(1+o[None,:]-xx[:,None],Norient)
-        alpha=(1-alpha)*(alpha<1)*(alpha>0)+beta*(beta<1)*(beta>0)
-        
-        m=np.zeros([Norient,Norient,mm.shape[1]])
+    def calc_matrix_orientation(self, noise_map, image2=None):
+        # Décalage circulaire par matrice de permutation
+        def circ_shift_matrix(N, k):
+            return np.roll(np.eye(N), shift=-k, axis=1)
+
+        Norient = self.NORIENT
+        im = self.convol(noise_map)
+        if image2 is None:
+            mm = np.mean(abs(self.backend.to_numpy(im)), 0)
+        else:
+            im2 = self.convol(self.backend.bk_cast(image2))
+            mm = np.mean(
+                self.backend.to_numpy(
+                    self.backend.bk_L1(im * self.backend.bk_conjugate(im2))
+                ).real,
+                0,
+            )
+
+        Norient = mm.shape[0]
+        xx = np.cos(np.arange(Norient) / Norient * 2 * np.pi)
+        yy = np.sin(np.arange(Norient) / Norient * 2 * np.pi)
+
+        a = np.sum(mm * xx[:, None], 0)
+        b = np.sum(mm * yy[:, None], 0)
+
+        o = np.fmod(Norient * np.arctan2(-b, a) / (2 * np.pi) + Norient, Norient)
+        xx = np.arange(Norient)
+        alpha = o[None, :] - xx[:, None]
+        beta = np.fmod(1 + o[None, :] - xx[:, None], Norient)
+        alpha = (1 - alpha) * (alpha < 1) * (alpha > 0) + beta * (beta < 1) * (beta > 0)
+
+        m = np.zeros([Norient, Norient, mm.shape[1]])
         for k in range(Norient):
-            m[k,:,:]=np.roll(alpha,k,0)
-        #m=np.mean(m,0)
+            m[k, :, :] = np.roll(alpha, k, 0)
+        # m=np.mean(m,0)
         return self.backend.bk_cast(m)
-        
+
     def synthesis(
         self,
         image_target,

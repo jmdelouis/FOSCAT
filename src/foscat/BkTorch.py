@@ -149,7 +149,11 @@ class BkTorch(BackendBase.BackendBase):
     # --             BACKEND DEFINITION                    --
     # ---------------------------------------------−---------
     def bk_SparseTensor(self, indice, w, dense_shape=[]):
-        return self.backend.sparse_coo_tensor(indice.T, w, dense_shape).to_sparse_csr().to(self.torch_device)
+        return (
+            self.backend.sparse_coo_tensor(indice.T, w, dense_shape)
+            .to_sparse_csr()
+            .to(self.torch_device)
+        )
 
     def bk_stack(self, list, axis=0):
         return self.backend.stack(list, axis=axis).to(self.torch_device)
@@ -242,13 +246,17 @@ class BkTorch(BackendBase.BackendBase):
             xr = self.bk_real(x)
             # xi = self.bk_imag(x)
 
-            r = self.backend.sign(xr) * self.backend.sqrt(self.backend.sign(xr) * xr + 1E-16)
+            r = self.backend.sign(xr) * self.backend.sqrt(
+                self.backend.sign(xr) * xr + 1e-16
+            )
             # return r
             # i = self.backend.sign(xi) * self.backend.sqrt(self.backend.sign(xi) * xi)
 
             return r
         else:
-            return self.backend.sign(x) * self.backend.sqrt(self.backend.sign(x) * x + 1E-16)
+            return self.backend.sign(x) * self.backend.sqrt(
+                self.backend.sign(x) * x + 1e-16
+            )
 
     def bk_square_comp(self, x):
         if x.dtype == self.all_cbk_type:
@@ -387,7 +395,7 @@ class BkTorch(BackendBase.BackendBase):
         return self.backend.argmax(data)
 
     def bk_reshape(self, data, shape):
-        #if isinstance(data, np.ndarray):
+        # if isinstance(data, np.ndarray):
         #    return data.reshape(shape)
         return data.reshape(shape)
 
@@ -425,7 +433,7 @@ class BkTorch(BackendBase.BackendBase):
                 xr = self.backend.concat(
                     [self.bk_real(data[k]) for k in range(ndata)], axis=axis
                 )
-                    
+
                 xi = self.backend.concat(
                     [self.bk_imag(data[k]) for k in range(ndata)], axis=axis
                 )
@@ -438,7 +446,7 @@ class BkTorch(BackendBase.BackendBase):
 
     def bk_gather(self, data, idx, axis=0):
         if axis == -1:
-            return data[...,idx]
+            return data[..., idx]
         elif axis == 0:
             return data[idx]
         elif axis == 1:
@@ -447,7 +455,7 @@ class BkTorch(BackendBase.BackendBase):
             return data[:, :, idx]
         elif axis == 3:
             return data[:, :, :, idx]
-        return data[idx,...]
+        return data[idx, ...]
 
     def bk_reverse(self, data, axis=0):
         return self.backend.flip(data, dims=[axis])
