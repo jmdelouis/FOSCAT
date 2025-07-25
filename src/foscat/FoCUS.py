@@ -751,9 +751,6 @@ class FoCUS:
             npix = im.shape[axis]
             npiy = im.shape[axis + 1]
             odata = 1
-            if len(ishape) > axis + 2:
-                for k in range(axis + 2, len(ishape)):
-                    odata = odata * ishape[k]
 
             ndata = 1
             for k in range(axis):
@@ -777,7 +774,7 @@ class FoCUS:
                     return self.backend.bk_reshape(res, ishape[0:axis] + [nout, nouty])
                 else:
                     return self.backend.bk_reshape(
-                        res, ishape[0:axis] + [nout, nouty] + ishape[axis + 2 :]
+                        res, ishape[0:axis] + [nout, nouty] 
                     )
 
             return self.backend.bk_reshape(res, [nout, nouty])
