@@ -44,6 +44,12 @@ class scat_cov:
         self.idx1 = None
         self.idx2 = None
         self.use_1D = use_1D
+        self.numel = self.backend.bk_len(s0)+ \
+            self.backend.bk_len(s1)+ \
+            self.backend.bk_len(s2)+ \
+            self.backend.bk_len(s3)+ \
+            self.backend.bk_len(s4)+ \
+            self.backend.bk_len(s3p)
 
     def numpy(self):
         if self.BACKEND == "numpy":
@@ -1589,20 +1595,20 @@ class scat_cov:
     def mean(self):
         if self.S1 is not None:  # Auto
             return (
-                abs(self.get_np(self.S0)).mean()
-                + abs(self.get_np(self.S1)).mean()
-                + abs(self.get_np(self.S3)).mean()
-                + abs(self.get_np(self.S4)).mean()
-                + abs(self.get_np(self.S2)).mean()
-            ) / 4
+                abs(self.get_np(self.S0)).sum()
+                + abs(self.get_np(self.S1)).sum()
+                + abs(self.get_np(self.S3)).sum()
+                + abs(self.get_np(self.S4)).sum()
+                + abs(self.get_np(self.S2)).sum()
+            ) / self.numel
         else:  # Cross
             return (
-                abs(self.get_np(self.S0)).mean()
-                + abs(self.get_np(self.S3)).mean()
-                + abs(self.get_np(self.S3P)).mean()
-                + abs(self.get_np(self.S4)).mean()
-                + abs(self.get_np(self.S2)).mean()
-            ) / 4
+                abs(self.get_np(self.S0)).sum()
+                + abs(self.get_np(self.S3)).sum()
+                + abs(self.get_np(self.S3P)).sum()
+                + abs(self.get_np(self.S4)).sum()
+                + abs(self.get_np(self.S2)).sum()
+            ) / self.numel
 
     def initdx(self, norient):
         idx1 = np.zeros([norient * norient], dtype="int")
@@ -2480,11 +2486,10 @@ class funct(FOC.FoCUS):
                             * tmp2,
                             [sim.shape[0], 2, self.NORIENT, self.NORIENT, mat.shape[-1]],
                         ),
-                        1,
+                        2,
                     )
 
                 sim2 = self.backend.bk_abs(self.convol(sim2))
-
                 angles = self.backend.bk_reshape(angles, [1, self.NORIENT, 1, 1])
                 weighted_cos2 = self.backend.bk_reduce_mean(
                     sim2 * self.backend.bk_cos(angles), axis=-3
@@ -2523,20 +2528,23 @@ class funct(FOC.FoCUS):
                 delta2 = phase2_scaled - iph2
                 w0_2 = np.cos(delta2 * np.pi / 2) ** 2
                 w1_2 = np.sin(delta2 * np.pi / 2) ** 2
-                lidx = np.arange(sim.shape[2])
+                lidx = np.arange(sim.shape[-1])
 
-                for m in range(self.NORIENT):
-                    for ell in range(self.NORIENT):
-                        col0 = self.NORIENT * ((ell + iph2[m]) % self.NORIENT) + ell
-                        col1 = self.NORIENT * ((ell + iph2[m] + 1) % self.NORIENT) + ell
-                        if spin==0:
+                if spin==0:
+                    for m in range(self.NORIENT):
+                        for ell in range(self.NORIENT):
+                            col0 = self.NORIENT * ((ell + iph2[m]) % self.NORIENT) + ell
+                            col1 = self.NORIENT * ((ell + iph2[m] + 1) % self.NORIENT) + ell
                             mat2[k2, col0, m, lidx] = w0_2[m, lidx]
                             mat2[k2, col1, m, lidx] = w1_2[m, lidx]
-                        else:
-                            mat2[k2, 0, col0, m, lidx] = w0_2[0,m, lidx]
-                            mat2[k2, 0, col1, m, lidx] = w1_2[0,m, lidx]
-                            mat2[k2, 1, col0, m, lidx] = w0_2[1,m, lidx]
-                            mat2[k2, 1, col1, m, lidx] = w1_2[1,m, lidx]
+                else:
+                    for sidx in range(2):
+                        for m in range(self.NORIENT):
+                            for ell in range(self.NORIENT):
+                                col0 = self.NORIENT * ((ell + iph2[sidx,m]) % self.NORIENT) + ell
+                                col1 = self.NORIENT * ((ell + iph2[sidx,m] + 1) % self.NORIENT) + ell
+                                mat2[k2, sidx, col0, m, lidx] = w0_2[sidx,m, lidx]
+                                mat2[k2, sidx, col1, m, lidx] = w1_2[sidx,m, lidx]
 
                 cmat2[k] = self.backend.bk_cast(
                     mat2[0 : k + 1, None, ...].astype("complex64")
@@ -2718,14 +2726,14 @@ class funct(FOC.FoCUS):
             # if the kernel size is bigger than 3 increase the binning before smoothing
             if self.use_2D:
                 vmask = self.up_grade(
-                    vmask, I1.shape[-2] * 2, nouty=I1.shape[-1] * 2
+                    vmask, I1.shape[-2] * 2, nouty=I1.shape[-1] * 2,axis=-2
                 )
                 I1 = self.up_grade(
-                    I1, I1.shape[-2] * 2, nouty=I1.shape[-1] * 2
+                    I1, I1.shape[-2] * 2, nouty=I1.shape[-1] * 2,axis=-2
                 )
                 if cross:
                     I2 = self.up_grade(
-                        I2, I2.shape[-2] * 2, nouty=I2.shape[-1] * 2
+                        I2, I2.shape[-2] * 2, nouty=I2.shape[-1] * 2,axis=-2
                     )
             elif self.use_1D:
                 vmask = self.up_grade(vmask, I1.shape[-1] * 2)
@@ -2745,16 +2753,16 @@ class funct(FOC.FoCUS):
                 # if the kernel size is bigger than 3 increase the binning before smoothing
                 if self.use_2D:
                     vmask = self.up_grade(
-                        vmask, I1.shape[-2] * 2, nouty=I1.shape[-1] * 2
+                        vmask, I1.shape[-2] * 2, nouty=I1.shape[-1] * 2,axis=-2
                     )
                     I1 = self.up_grade(
-                        I1, I1.shape[-2] * 2, nouty=I1.shape[-1] * 2
+                        I1, I1.shape[-2] * 2, nouty=I1.shape[-1] * 2,axis=-2
                     )
                     if cross:
                         I2 = self.up_grade(
                             I2,
                             I2.shape[-2] * 2,
-                            nouty=I2.shape[-1] * 2,
+                            nouty=I2.shape[-1] * 2,axis=-2
                         )
                 elif self.use_1D:
                     vmask = self.up_grade(vmask, I1.shape[-1] * 2)
@@ -2896,13 +2904,22 @@ class funct(FOC.FoCUS):
             if cmat is not None:
                 tmp2 = self.backend.bk_repeat(conv1, self.NORIENT, axis=-2)
                 
-                conv1 = self.backend.bk_reduce_sum(
-                    self.backend.bk_reshape(
-                        cmat[j3] * tmp2,
-                        [tmp2.shape[0], self.NORIENT, self.NORIENT, cmat[j3].shape[2]],
-                    ),
-                    1,
-                )
+                if spin==0:
+                    conv1 = self.backend.bk_reduce_sum(
+                        self.backend.bk_reshape(
+                            cmat[j3] * tmp2,
+                            [tmp2.shape[0], self.NORIENT, self.NORIENT, cmat[j3].shape[2]],
+                        ),
+                        1,
+                    )
+                else:
+                    conv1 = self.backend.bk_reduce_sum(
+                        self.backend.bk_reshape(
+                            cmat[j3] * tmp2,
+                            [tmp2.shape[0], 2,self.NORIENT, self.NORIENT, cmat[j3].shape[3]],
+                        ),
+                        2,
+                    )
 
             ### Take the module M1 = |I1 * Psi_j3|
             M1_square = conv1 * self.backend.bk_conjugate(
@@ -3012,18 +3029,33 @@ class funct(FOC.FoCUS):
                 )  # [Nbatch, Npix_j3, Norient3]
                 if cmat is not None:
                     tmp2 = self.backend.bk_repeat(conv2, self.NORIENT, axis=-2)
-                    conv2 = self.backend.bk_reduce_sum(
-                        self.backend.bk_reshape(
-                            cmat[j3] * tmp2,
-                            [
-                                tmp2.shape[0],
-                                self.NORIENT,
-                                self.NORIENT,
-                                cmat[j3].shape[2],
-                            ],
-                        ),
-                        1,
-                    )
+                    if spin==0:
+                        conv2 = self.backend.bk_reduce_sum(
+                            self.backend.bk_reshape(
+                                cmat[j3] * tmp2,
+                                [
+                                    tmp2.shape[0],
+                                    self.NORIENT,
+                                    self.NORIENT,
+                                    cmat[j3].shape[2],
+                                ],
+                            ),
+                            1,
+                        )
+                    else:
+                        conv2 = self.backend.bk_reduce_sum(
+                            self.backend.bk_reshape(
+                                cmat[j3] * tmp2,
+                                [
+                                    tmp2.shape[0],
+                                    2,
+                                    self.NORIENT,
+                                    self.NORIENT,
+                                    cmat[j3].shape[3],
+                                ],
+                            ),
+                            2,
+                        )
                 ### Take the module M2 = |I2 * Psi_j3|
                 M2_square = conv2 * self.backend.bk_conjugate(
                     conv2
@@ -3174,6 +3206,7 @@ class funct(FOC.FoCUS):
                             cmat2=cmat2,
                             cell_ids=cell_ids_j3,
                             nside_j2=nside_j3,
+                            spin=spin,
                         )  # [Nbatch, Nmask, Norient3, Norient2]
                     else:
                         s3 = self._compute_S3(
@@ -3187,6 +3220,7 @@ class funct(FOC.FoCUS):
                             cmat2=cmat2,
                             cell_ids=cell_ids_j3,
                             nside_j2=nside_j3,
+                            spin=spin,
                         )  # [Nbatch, Nmask, Norient3, Norient2]
 
                     if return_data:
@@ -3248,6 +3282,7 @@ class funct(FOC.FoCUS):
                             cmat2=cmat2,
                             cell_ids=cell_ids_j3,
                             nside_j2=nside_j3,
+                            spin=spin,
                         )
                         s3p, vs3p = self._compute_S3(
                             j2,
@@ -3260,6 +3295,7 @@ class funct(FOC.FoCUS):
                             cmat2=cmat2,
                             cell_ids=cell_ids_j3,
                             nside_j2=nside_j3,
+                            spin=spin,
                         )
                     else:
                         s3p = self._compute_S3(
@@ -3273,6 +3309,7 @@ class funct(FOC.FoCUS):
                             cmat2=cmat2,
                             cell_ids=cell_ids_j3,
                             nside_j2=nside_j3,
+                            spin=spin,
                         )
                         s3 = self._compute_S3(
                             j2,
@@ -3285,6 +3322,7 @@ class funct(FOC.FoCUS):
                             cmat2=cmat2,
                             cell_ids=cell_ids_j3,
                             nside_j2=nside_j3,
+                            spin=spin,
                         )
 
                     if return_data:
@@ -3641,18 +3679,19 @@ class funct(FOC.FoCUS):
         return
 
     def _compute_S3(
-        self,
-        j2,
-        j3,
-        conv,
-        vmask,
-        M_dic,
-        MconvPsi_dic,
-        calc_var=False,
-        return_data=False,
-        cmat2=None,
-        cell_ids=None,
-        nside_j2=None,
+            self,
+            j2,
+            j3,
+            conv,
+            vmask,
+            M_dic,
+            MconvPsi_dic,
+            calc_var=False,
+            return_data=False,
+            cmat2=None,
+            cell_ids=None,
+            nside_j2=None,
+            spin=0,
     ):
         """
         Compute the S3 coefficients (auto or cross)
@@ -3671,19 +3710,35 @@ class funct(FOC.FoCUS):
 
         if cmat2 is not None:
             tmp2 = self.backend.bk_repeat(MconvPsi, self.NORIENT, axis=-3)
-            MconvPsi = self.backend.bk_reduce_sum(
-                self.backend.bk_reshape(
-                    cmat2[j3][j2] * tmp2,
-                    [
-                        tmp2.shape[0],
-                        self.NORIENT,
-                        self.NORIENT,
-                        self.NORIENT,
-                        cmat2[j3][j2].shape[3],
-                    ],
-                ),
-                1,
-            )
+            if spin==0:
+                MconvPsi = self.backend.bk_reduce_sum(
+                    self.backend.bk_reshape(
+                        cmat2[j3][j2] * tmp2,
+                        [
+                            tmp2.shape[0],
+                            self.NORIENT,
+                            self.NORIENT,
+                            self.NORIENT,
+                            cmat2[j3][j2].shape[3],
+                        ],
+                    ),
+                    1,
+                )
+            else:
+                MconvPsi = self.backend.bk_reduce_sum(
+                    self.backend.bk_reshape(
+                        cmat2[j3][j2] * tmp2,
+                        [
+                            tmp2.shape[0],
+                            2,
+                            self.NORIENT,
+                            self.NORIENT,
+                            self.NORIENT,
+                            cmat2[j3][j2].shape[4],
+                        ],
+                    ),
+                    2,
+                )
 
         # Store it so we can use it in S4 computation
         MconvPsi_dic[j2] = MconvPsi  # [Nbatch, Norient3, Norient2, Npix_j3]
@@ -6215,6 +6270,32 @@ class funct(FOC.FoCUS):
             )
             return loss
 
+        def The_lossH(u, scat_operator, args):
+            ref = args[0]
+            sref = args[1]
+            use_v = args[2]
+            ljmax = args[3]
+
+            learn = scat_operator.reduce_mean_batch(
+                scat_operator.eval(
+                    u,
+                    Jmax=ljmax,
+                    norm='self'
+                )
+            )
+            
+            # compute scattering covariance of the current synthetised map called u
+            if use_v:
+                learn = (learn-ref)/sref
+            else:
+                learn = learn-ref
+
+            # make the difference withe the reference coordinates
+            loss = scat_operator.reduce_mean(
+                scat_operator.square(learn)
+            )
+            return loss
+        
         def The_lossX(u, scat_operator, args):
             ref = args[0]
             sref = args[1]
@@ -6374,37 +6455,74 @@ class funct(FOC.FoCUS):
                 # Increase the resolution between each step
                 if self.use_2D:
                     imap = self.up_grade(
-                        omap, imap.shape[1] * 2, axis=1, nouty=imap.shape[2] * 2
+                        omap,
+                        imap.shape[1] * 2,
+                        axis=-2,
+                        nouty=imap.shape[2] * 2
                     )
                 elif self.use_1D:
-                    imap = self.up_grade(omap, imap.shape[1] * 2, axis=1)
+                    imap = self.up_grade(omap, imap.shape[1] * 2)
                 else:
-                    imap = self.up_grade(omap, l_nside, axis=1)
-
+                    imap = self.up_grade(omap, l_nside)
+                    
             if grd_mask is not None:
                 imap = imap * l_grd_mask[k] + tmp[k] * (1 - l_grd_mask[k])
 
-            # compute the coefficients for the target image
-            if use_variance:
-                ref, sref = self.scattering_cov(
-                    tmp[k],
-                    data2=l_ref[k],
-                    get_variance=True,
-                    edge=l_edge,
-                    Jmax=l_jmax[k],
-                    in_mask=l_in_mask[k],
-                    iso_ang=iso_ang,
-                )
+            
+            if self.use_2D:
+                # compute the coefficients for the target image
+                if use_variance:
+                    ref, sref = self.scattering_cov(
+                        tmp[k],
+                        data2=l_ref[k],
+                        get_variance=True,
+                        edge=l_edge,
+                        Jmax=l_jmax[k],
+                        in_mask=l_in_mask[k],
+                        iso_ang=iso_ang,
+                    )
+                else:
+                    ref = self.scattering_cov(
+                        tmp[k],
+                        data2=l_ref[k],
+                        mask=l_in_mask[k],
+                        edge=l_edge,
+                        Jmax=l_jmax[k],
+                        iso_ang=iso_ang,
+                    )
+                    sref = ref
             else:
-                ref = self.scattering_cov(
-                    tmp[k],
-                    data2=l_ref[k],
-                    in_mask=l_in_mask[k],
-                    edge=l_edge,
-                    Jmax=l_jmax[k],
-                    iso_ang=iso_ang,
-                )
-                sref = ref
+                ref = self.eval(
+                        tmp[k],
+                        image2=l_ref[k],
+                        mask=l_in_mask[k],
+                        Jmax=l_jmax[k],
+                        norm='auto'
+                    )
+                
+                # compute the coefficients for the target image
+                if use_variance:
+                    ref, sref = self.eval(
+                        tmp[k],
+                        image2=l_ref[k],
+                        mask=l_in_mask[k],
+                        Jmax=l_jmax[k],
+                        calc_var=True,
+                        norm='self'
+                    )
+                else:
+                    ref = self.eval(
+                        tmp[k],
+                        image2=l_ref[k],
+                        mask=l_in_mask[k],
+                        Jmax=l_jmax[k],
+                        norm='self'
+                    )
+                    sref = ref
+                    
+                if iso_ang:
+                    ref=ref.iso_mean()
+                    sref=sref.iso_mean()
 
             # compute the mean of the population does nothing if only one map is given
             ref = self.reduce_mean_batch(ref)
@@ -6413,13 +6531,21 @@ class funct(FOC.FoCUS):
                 self.purge_edge_mask()
 
             if l_ref[k] is None:
-                # define a loss to minimize
-                loss = synthe.Loss(The_loss, self, ref, sref, use_variance, l_jmax[k])
+                if self.use_2D:
+                    # define a loss to minimize
+                    loss = synthe.Loss(The_loss, self, ref, sref, use_variance, l_jmax[k])
+                else:
+                    loss = synthe.Loss(The_lossH, self, ref, sref, use_variance, l_jmax[k])
             else:
                 # define a loss to minimize
-                loss = synthe.Loss(
-                    The_lossX, self, ref, sref, use_variance, l_ref[k], l_jmax[k]
-                )
+                if self.use_2D:
+                    loss = synthe.Loss(
+                        The_lossX, self, ref, sref, use_variance, l_ref[k], l_jmax[k]
+                    )
+                else:
+                    loss = synthe.Loss(
+                        The_lossXH, self, ref, sref, use_variance, l_ref[k], l_jmax[k]
+                    )
 
             if input_image is not None:
                 # define a loss to minimize

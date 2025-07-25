@@ -148,6 +148,11 @@ class BkTorch(BackendBase.BackendBase):
     # ---------------------------------------------−---------
     # --             BACKEND DEFINITION                    --
     # ---------------------------------------------−---------
+    def bk_len(self,S):
+        if S is None:
+            return 0
+        return S.numel()
+    
     def bk_SparseTensor(self, indice, w, dense_shape=[]):
         return self.backend.sparse_coo_tensor(indice.T, w, dense_shape).to_sparse_csr().to(self.torch_device)
 

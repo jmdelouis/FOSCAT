@@ -5,7 +5,7 @@ import healpy as hp
 import numpy as np
 from scipy.interpolate import griddata
 
-TMPFILE_VERSION = "V5_0"
+TMPFILE_VERSION = "V6_0"
 
 
 class FoCUS:
@@ -22,7 +22,7 @@ class FoCUS:
             mask_thres=None,
             mask_norm=False,
             isMPI=False,
-            TEMPLATE_PATH="data",
+            TEMPLATE_PATH=None,
             BACKEND="torch",
             use_2D=False,
             use_1D=False,
@@ -35,7 +35,7 @@ class FoCUS:
             mpi_rank=0
     ):
 
-        self.__version__ = "2025.06.4"
+        self.__version__ = "2025.07.1"
         # P00 coeff for normalization for scat_cov
         self.TMPFILE_VERSION = TMPFILE_VERSION
         self.P1_dic = None
@@ -62,6 +62,11 @@ class FoCUS:
             print("================================================")
             sys.stdout.flush()
 
+        home_dir = os.environ["HOME"]
+        
+        if TEMPLATE_PATH is None:
+            TEMPLATE_PATH=home_dir+"/.FOSCAT/data"
+            
         self.TEMPLATE_PATH = TEMPLATE_PATH
         if not os.path.exists(self.TEMPLATE_PATH):
             if not self.silent:
@@ -355,6 +360,30 @@ class FoCUS:
 
         self.loss = {}
 
+        self.dtype_dcode_map = {
+            0: np.int64,
+            1: np.int32,
+            2: np.float32,
+            3: np.float64,
+            4: np.complex64,
+            5: np.complex128
+        }
+        self.dtype_code_map = {
+            np.int64: 0,
+            np.int32: 1,
+            np.float32: 2,
+            np.float64: 3,
+            np.complex64: 4,
+            np.complex128: 5
+        }
+
+    # this is for the storage only
+    def get_dtype_code(self, dtype):
+        for key, code in self.dtype_code_map.items():
+            if np.dtype(dtype) == np.dtype(key):
+                return code
+        raise ValueError(f"Unsupported data type: {dtype}")
+    
     def get_type(self):
         return self.all_type
 
@@ -453,6 +482,114 @@ class FoCUS:
             )
         return indices, weights, xc, yc, zc
 
+    #======================================================================================
+    # The next two functions prepare the ability of FOSCAT to work with large indexed file
+    #======================================================================================
+    
+    def save_index(self, filepath, data, offset=0, count=None):
+        """
+        Save an N-dimensional NumPy array with shape (N, ...) to binary file.
+        A 12x int64 header is written, describing dtype and shape beyond axis 0.
+
+        Header layout (12 x int64):
+        [0] = dtype code (0=int64, 1=int32, 2=float32, 3=float64, 4=complex64, 5=complex128)
+        [1] = number of extra dimensions (i.e., data.ndim - 1)
+        [2:12] = shape[1:] padded with zeros
+
+        Parameters:
+        - filepath: target binary file path
+        - data: NumPy array with shape (N, ...)
+        - offset: number of items to skip on axis 0
+        - count: number of items to write on axis 0 (default: rest of the array)
+        """
+        if filepath is None:
+            raise ValueError("No filepath specified for writing.")
+
+        data = np.asarray(data)
+        if data.ndim < 1:
+            raise ValueError("Data must have at least one dimension.")
+
+        extra_dims = data.shape[1:]
+        if len(extra_dims) > 10:
+            raise ValueError(f"Too many dimensions: {data.ndim}. Max supported is 11 (1 + 10 extra).")
+
+        dtype_code = self.get_dtype_code(data.dtype)
+        itemsize = data.dtype.itemsize
+        item_shape = data.shape[1:]
+        item_count = np.prod(item_shape, dtype=np.int64) if item_shape else 1
+
+        if count is None:
+            count = data.shape[0]
+
+        header = np.zeros(12, dtype=np.int64)
+        header[0] = dtype_code
+        header[1] = len(extra_dims)
+        header[2:2 + len(extra_dims)] = extra_dims
+
+        mode = 'r+b' if os.path.exists(filepath) else 'w+b'
+        with open(filepath, mode) as f:
+            if os.path.getsize(filepath) == 0:
+                f.write(header.tobytes())
+
+            byte_offset = 12 * 8 + offset * itemsize * item_count  # header is 96 bytes
+            f.seek(byte_offset)
+            f.write(data[offset:offset + count].tobytes())
+
+    def read_index(self, filepath, offset=0, count=None):
+        """
+        Load a NumPy array from a binary file with a 12x int64 header.
+
+        Header layout:
+        [0] = dtype code
+        [1] = number of extra dimensions (D)
+        [2:2+D] = shape[1:] of each sample (shape after axis 0)
+
+        Parameters:
+        - filepath: path to the binary file
+        - offset: number of samples to skip on axis 0
+        - count: number of samples to read (default: all remaining)
+
+        Returns:
+        - data: NumPy array with shape (count, ...) and correct dtype
+        """
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"File not found: {filepath}")
+
+        with open(filepath, 'rb') as f:
+            header_bytes = f.read(12 * 8)
+            if len(header_bytes) != 96:
+                raise ValueError("Invalid or missing header (expected 96 bytes).")
+
+            header = np.frombuffer(header_bytes, dtype=np.int64)
+            dtype_code = header[0]
+            ndim_extra = header[1]
+            if dtype_code not in self.dtype_dcode_map:
+                raise ValueError(f"Unknown dtype code in header: {dtype_code}")
+
+            dtype = self.dtype_dcode_map[dtype_code]
+            shape1 = tuple(header[2:2 + ndim_extra])
+            itemsize = np.dtype(dtype).itemsize
+            item_count = np.prod(shape1, dtype=np.int64) if shape1 else 1
+            bytes_per_sample = itemsize * item_count
+
+            # Seek to data block
+            f.seek(12 * 8 + offset * bytes_per_sample)
+
+            # Determine number of items
+            if count is None:
+                remaining_bytes = os.path.getsize(filepath) - (12 * 8 + offset * bytes_per_sample)
+                count = remaining_bytes // bytes_per_sample
+
+            raw = f.read(count * bytes_per_sample)
+            data = np.frombuffer(raw, dtype=dtype)
+
+            if shape1:
+                data = data.reshape((count,) + shape1)
+            else:
+                data = data.reshape((count,))
+
+            return data
+    
     # ---------------------------------------------−---------
     # ---------------------------------------------−---------
     def healpix_layer(self, im, ww, indices=None, weights=None):
@@ -596,10 +733,10 @@ class FoCUS:
                 ),None
 
     # --------------------------------------------------------
-    def up_grade(self, im, nout, axis=0, nouty=None):
+    def up_grade(self, im, nout, axis=-1, nouty=None):
 
+        ishape = list(im.shape)
         if self.use_2D:
-            ishape = list(im.shape)
             if len(ishape) < axis + 2:
                 if not self.silent:
                     print("Use of 2D scat with data that has less than 2D")
@@ -646,7 +783,6 @@ class FoCUS:
             return self.backend.bk_reshape(res, [nout, nouty])
 
         elif self.use_1D:
-            ishape = list(im.shape)
             if len(ishape) < axis + 1:
                 if not self.silent:
                     print("Use of 1D scat with data that has less than 1D")
@@ -739,8 +875,6 @@ class FoCUS:
                 imout = im
             else:
                 # work only on the last column
-                
-                ishape = list(im.shape)
 
                 ndata = 1
                 for k in range(len(ishape)-1):
@@ -763,12 +897,12 @@ class FoCUS:
                         tim,
                         self.weight_interp_val[(lout,nout)],
                     )
-
+                    
                 if len(ishape) == 1:
                     return self.backend.bk_reshape(imout, [12 * nout**2])
                 else:
                     return self.backend.bk_reshape(
-                        imout, ishape[0:axis-1]+[12 * nout**2]
+                        imout, ishape[0:axis]+[12 * nout**2]
                     )
         return imout
 
@@ -1056,14 +1190,13 @@ class FoCUS:
 
         try:
             if self.use_2D:
-                tmp = np.load(
-                    "%s/W%d_%s_%d_IDX.npy"
-                    % (self.TEMPLATE_PATH, l_kernel**2, TMPFILE_VERSION, nside)
+                tmp = self.read_index("%s/W%d_%s_%d_IDX.fst"
+                                      % (self.TEMPLATE_PATH, l_kernel**2,TMPFILE_VERSION, nside)
                 )
             else:
-                if cell_ids is not None:
-                    tmp = np.load(
-                        "%s/XXXX_%s_W%d_%d_%d_PIDX.npy"  # can not work
+                if cell_ids is not None and nside>512:
+                    tmp = self.read_index(
+                        "%s/XXXX_%s_W%d_%d_%d_PIDX.fst"  # can not work
                         % (
                             self.TEMPLATE_PATH,
                             TMPFILE_VERSION,
@@ -1074,8 +1207,16 @@ class FoCUS:
                     )
 
                 else:
-                    tmp = np.load(
-                        "%s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN%d.npy"
+                    print('read here',"%s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN%d.fst"
+                        % (
+                            self.TEMPLATE_PATH,
+                            TMPFILE_VERSION,
+                            l_kernel**2,
+                            self.NORIENT,
+                            nside,spin  # if cell_ids computes the index
+                        ))
+                    tmp = self.read_index(
+                        "%s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN%d.fst"
                         % (
                             self.TEMPLATE_PATH,
                             TMPFILE_VERSION,
@@ -1086,28 +1227,56 @@ class FoCUS:
                     )
                         
         except:
+            if cell_ids is not None and nside<=512:
+                self.init_index(nside, kernel=kernel, spin=spin)
+                
             if not self.use_2D:
+                print('NO FOUND THEN COMPUTE %s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN%d.fst'
+                    % (
+                        self.TEMPLATE_PATH,
+                        TMPFILE_VERSION,
+                        l_kernel**2,
+                        self.NORIENT,
+                        nside,spin  # if cell_ids computes the index
+                    )
+                      )
                 if spin!=0:
                     try:
-                        tmp = np.load("%s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN0.npy"% (
-                            self.TEMPLATE_PATH,
-                            self.TMPFILE_VERSION,
-                            self.KERNELSZ**2,
-                            self.NORIENT,
-                            nside)
-                                      )
+                        tmp = self.read_index(
+                            "%s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN0.fst"
+                            % (
+                                self.TEMPLATE_PATH,
+                                TMPFILE_VERSION,
+                                l_kernel**2,
+                                self.NORIENT,
+                                nside
+                            )
+                        )
                     except:
+                        print('NO FOUND THEN COMPUTE %s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN0.fst'
+                              % (
+                                  self.TEMPLATE_PATH,
+                                  TMPFILE_VERSION,
+                                  l_kernel**2,
+                                  self.NORIENT,
+                                  nside
+                              )
+                              )
+                        
                         self.init_index(nside, kernel=kernel, spin=0)
                         
-                        tmp = np.load("%s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN0.npy"% (
-                            self.TEMPLATE_PATH,
-                            self.TMPFILE_VERSION,
-                            self.KERNELSZ**2,
-                            self.NORIENT,
-                            nside)
-                                      )
+                        tmp = self.read_index(
+                            "%s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN0.fst"
+                            % (
+                                self.TEMPLATE_PATH,
+                                TMPFILE_VERSION,
+                                l_kernel**2,
+                                self.NORIENT,
+                                nside
+                            )
+                        )
                         
-                    tmpw = np.load("%s/FOSCAT_%s_W%d_%d_%d_WAVE-SPIN0.npy"% (
+                    tmpw = self.read_index("%s/FOSCAT_%s_W%d_%d_%d_WAVE-SPIN0.fst"% (
                                             self.TEMPLATE_PATH,
                                             self.TMPFILE_VERSION,
                                             self.KERNELSZ**2,
@@ -1150,52 +1319,45 @@ class FoCUS:
                         tmpEB[idx+2*tmp.shape[0]]=hp.reorder(i,r2n=True)[tmp[idx,0]]+1J*hp.reorder(i2,r2n=True)[tmp[idx,0]]
                         tmpEB[idx+3*tmp.shape[0]]=hp.reorder(q,r2n=True)[tmp[idx,0]]+1J*hp.reorder(q2,r2n=True)[tmp[idx,0]]
 
-
-                    np.save("%s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN%d.npy"% (self.TEMPLATE_PATH,
+                    
+                    self.save_index("%s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN%d.fst"% (self.TEMPLATE_PATH,
                                                                        self.TMPFILE_VERSION,
                                                                        self.KERNELSZ**2,
                                                                        self.NORIENT,
                                                                        nside,
                                                                        spin
                                                                        ),
-                            idxEB
-                            )
-                    np.save("%s/FOSCAT_%s_W%d_%d_%d_WAVE-SPIN%d.npy"% (self.TEMPLATE_PATH,
+                                    idxEB
+                                    )
+                    self.save_index("%s/FOSCAT_%s_W%d_%d_%d_WAVE-SPIN%d.fst"% (self.TEMPLATE_PATH,
                                                                        self.TMPFILE_VERSION,
                                                                        self.KERNELSZ**2,
                                                                        self.NORIENT,
                                                                        nside,
                                                                        spin,
                                                                        ),
-                            tmpEB
+                                    tmpEB
+                                    )
+                    
+                    tmp = self.read_index(
+                            "%s/FOSCAT_%s_W%d_%d_%d_PIDX2-SPIN0.fst"
+                            % (
+                                self.TEMPLATE_PATH,
+                                TMPFILE_VERSION,
+                                l_kernel**2,
+                                self.NORIENT,
+                                nside
                             )
-                    tmp = np.load("%s/FOSCAT_%s_W%d_%d_%d_PIDX2-SPIN0.npy"%
-                                  (
-                                      self.TEMPLATE_PATH,
-                                      self.TMPFILE_VERSION,
-                                      self.KERNELSZ**2,
-                                      self.NORIENT,
-                                      nside,
-                                  )
-                                  )
-                    tmpw = np.load("%s/FOSCAT_%s_W%d_%d_%d_SMOO-SPIN0.npy"%
-                                   (
-                                       self.TEMPLATE_PATH,
-                                       self.TMPFILE_VERSION,
-                                       self.KERNELSZ**2,
-                                       self.NORIENT,
-                                       nside,
-                                   )
-                                   )
-    
-                    nn=12*nside**2
-                    idxEB=np.concatenate([tmp,tmp,tmp,tmp],0)
-                    idxEB[tmp.shape[0]:2*tmp.shape[0],0]+=12*nside**2
-                    idxEB[3*tmp.shape[0]:,0]+=12*nside**2
-                    idxEB[2*tmp.shape[0]:,1]+=nn
-                    
-                    tmpEB=np.zeros([tmpw.shape[0]*4],dtype='complex')
-                    
+                        )
+                        
+                    tmpw = self.read_index("%s/FOSCAT_%s_W%d_%d_%d_SMOO-SPIN0.fst"% (
+                                            self.TEMPLATE_PATH,
+                                            self.TMPFILE_VERSION,
+                                            self.KERNELSZ**2,
+                                            self.NORIENT,
+                                            nside,
+                                        )
+                                    )
                     for k in range(12*nside**2):
                         if k%(nside**2)==0:
                             print('Init index 2/2 spin=%d Please wait %d done against %d nside=%d kernel=%d'%(spin,k//(nside**2),
@@ -1203,48 +1365,40 @@ class FoCUS:
                                                                                                               nside,
                                                                                                               self.KERNELSZ))
                         idx=np.where(tmp[:,1]==k)[0]
-                        
+
                         im=np.zeros([12*nside**2])
-                        im[tmp[idx,0]]=tmpw[idx].real
+                        im[tmp[idx,0]]=tmpw[idx]
                         almR=hp.map2alm(hp.reorder(im,n2r=True))
-                        im[tmp[idx,0]]=tmpw[idx].imag
-                        almI=hp.map2alm(hp.reorder(im,n2r=True))
-                        
+
                         i,q,u=hp.alm2map_spin([almR,almR*0,0*almR],nside,spin,3*nside-1)
-                        i2,q2,u2=hp.alm2map_spin([almI,0*almI,0*almI],nside,spin,3*nside-1)
-                        
-                        tmpEB[idx]=hp.reorder(i,r2n=True)[tmp[idx,0]]+1J*hp.reorder(i2,r2n=True)[tmp[idx,0]]
-                        tmpEB[idx+tmp.shape[0]]=hp.reorder(q,r2n=True)[tmp[idx,0]]+1J*hp.reorder(q2,r2n=True)[tmp[idx,0]]
-                        
+
+                        tmpEB[idx]=hp.reorder(i,r2n=True)[tmp[idx,0]]
+                        tmpEB[idx+tmp.shape[0]]=hp.reorder(q,r2n=True)[tmp[idx,0]]
+
                         i,q,u=hp.alm2map_spin([0*almR,almR,0*almR],nside,spin,3*nside-1)
-                        i2,q2,u2=hp.alm2map_spin([0*almI,almI,0*almI],nside,spin,3*nside-1)
-                        
-                        tmpEB[idx+2*tmp.shape[0]]=hp.reorder(i,r2n=True)[tmp[idx,0]]+1J*hp.reorder(i2,r2n=True)[tmp[idx,0]]
-                        tmpEB[idx+3*tmp.shape[0]]=hp.reorder(q,r2n=True)[tmp[idx,0]]+1J*hp.reorder(q2,r2n=True)[tmp[idx,0]]
-                        
-        
-                    np.save("%s/FOSCAT_%s_W%d_%d_%d_PIDX2-SPIN%d.npy"%
-                            (
-                                self.TEMPLATE_PATH,
-                                self.TMPFILE_VERSION,
-                                self.KERNELSZ**2,
-                                self.NORIENT,
-                                nside,
-                                spin,
-                            ),
-                            idxEB
-                            )
-                    np.save("%s/FOSCAT_%s_W%d_%d_%d_SMOO-SPIN%d.npy"%
-                            (
-                                self.TEMPLATE_PATH,
-                                self.TMPFILE_VERSION,
-                                self.KERNELSZ**2,
-                                self.NORIENT,
-                                nside,
-                                spin,
-                            ),
-                            tmpEB
-                            )
+
+                        tmpEB[idx+2*tmp.shape[0]]=hp.reorder(i,r2n=True)[tmp[idx,0]]
+                        tmpEB[idx+3*tmp.shape[0]]=hp.reorder(q,r2n=True)[tmp[idx,0]]
+
+                    
+                    self.save_index("%s/FOSCAT_%s_W%d_%d_%d_PIDX2-SPIN%d.fst"% (self.TEMPLATE_PATH,
+                                                                       self.TMPFILE_VERSION,
+                                                                       self.KERNELSZ**2,
+                                                                       self.NORIENT,
+                                                                       nside,
+                                                                       spin
+                                                                       ),
+                                    idxEB
+                                    )
+                    self.save_index("%s/FOSCAT_%s_W%d_%d_%d_SMOO-SPIN%d.fst"% (self.TEMPLATE_PATH,
+                                                                       self.TMPFILE_VERSION,
+                                                                       self.KERNELSZ**2,
+                                                                       self.NORIENT,
+                                                                       nside,
+                                                                       spin,
+                                                                       ),
+                                    tmpEB
+                                    )
                 else:
 
                     if l_kernel == 5:
@@ -1262,7 +1416,7 @@ class FoCUS:
                         pw2 = 0.25
                         threshold = 4e-5
 
-                    if cell_ids is not None:
+                    if cell_ids is not None and nside>512:
                         if not isinstance(cell_ids, np.ndarray):
                             cell_ids = self.backend.to_numpy(cell_ids)
                         th, ph = hp.pix2ang(nside, cell_ids, nest=True)
@@ -1286,15 +1440,20 @@ class FoCUS:
                         phi = [p[k] / np.pi * 180 for k in range(12 * nside * nside)]
                         thi = [t[k] / np.pi * 180 for k in range(12 * nside * nside)]
 
-                        indice2 = np.zeros([12 * nside * nside * 64, 2], dtype="int")
+                        indice2 = np.zeros([12 * nside * nside * 64, 2],
+                                           dtype="int")
+                        
                         indice = np.zeros(
-                            [12 * nside * nside * 64 * self.NORIENT, 2], dtype="int"
+                            [12 * nside * nside * 64 * self.NORIENT, 2],
+                            dtype="int"
                         )
                         wav = np.zeros(
-                            [12 * nside * nside * 64 * self.NORIENT], dtype="complex"
+                            [12 * nside * nside * 64 * self.NORIENT],
+                            dtype="complex"
                         )
                         wwav = np.zeros(
-                            [12 * nside * nside * 64 * self.NORIENT], dtype="float"
+                            [12 * nside * nside * 64 * self.NORIENT],
+                            dtype="float"
                         )
                     iv = 0
                     iv2 = 0
@@ -1387,26 +1546,26 @@ class FoCUS:
                     if cell_ids is None:
                         if not self.silent:
                             print(
-                                "Write FOSCAT_%s_W%d_%d_%d_PIDX-SPIN%d.npy"
-                                % (TMPFILE_VERSION, self.KERNELSZ**2,
+                                "Write %s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN%d.fst"
+                                % ( self.TEMPLATE_PATH,
+                                    TMPFILE_VERSION, self.KERNELSZ**2,
                                    self.NORIENT,
                                    nside,
-                                spin,)
+                                spin)
                             )
-                        np.save(
-                            "%s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN%d.npy"
-                            % (
-                                self.TEMPLATE_PATH,
-                                TMPFILE_VERSION,
-                                self.KERNELSZ**2,
-                                self.NORIENT,
-                                nside,
-                                spin,
-                            ),
-                            indice,
-                        )
-                        np.save(
-                            "%s/FOSCAT_%s_W%d_%d_%d_WAVE-SPIN%d.npy"
+                        self.save_index("%s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN%d.fst"
+                                        % (
+                                            self.TEMPLATE_PATH,
+                                            TMPFILE_VERSION,
+                                            self.KERNELSZ**2,
+                                            self.NORIENT,
+                                            nside,
+                                            spin,
+                                        ),
+                                        indice
+                                        )
+                        self.save_index(
+                            "%s/FOSCAT_%s_W%d_%d_%d_WAVE-SPIN%d.fst"
                             % (
                                 self.TEMPLATE_PATH,
                                 TMPFILE_VERSION,
@@ -1417,8 +1576,8 @@ class FoCUS:
                             ),
                             wav,
                         )
-                        np.save(
-                            "%s/FOSCAT_%s_W%d_%d_%d_PIDX2-SPIN%d.npy"
+                        self.save_index(
+                            "%s/FOSCAT_%s_W%d_%d_%d_PIDX2-SPIN%d.fst"
                             % (
                                 self.TEMPLATE_PATH,
                                 TMPFILE_VERSION,
@@ -1429,8 +1588,8 @@ class FoCUS:
                             ),
                             indice2,
                         )
-                        np.save(
-                            "%s/FOSCAT_%s_W%d_%d_%d_SMOO-SPIN%d.npy"
+                        self.save_index(
+                            "%s/FOSCAT_%s_W%d_%d_%d_SMOO-SPIN%d.fst"
                             % (
                                 self.TEMPLATE_PATH,
                                 TMPFILE_VERSION,
@@ -1457,11 +1616,11 @@ class FoCUS:
                             )
                         return None
 
-        if cell_ids is None:
+        if cell_ids is None or nside<=512:
             self.barrier()
             if self.use_2D:
-                tmp = np.load(
-                    "%s/W%d_%s_%d_IDX-SPIN%d.npy"
+                tmp = self.read_index(
+                    "%s/W%d_%s_%d_IDX-SPIN%d.fst"
                     % (
                         self.TEMPLATE_PATH,
                         l_kernel**2,
@@ -1470,8 +1629,8 @@ class FoCUS:
                         spin)
                 )
             else:
-                tmp = np.load(
-                    "%s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN%d.npy"
+                tmp = self.read_index(
+                    "%s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN%d.fst"
                     % (
                         self.TEMPLATE_PATH,
                         TMPFILE_VERSION,
@@ -1481,8 +1640,8 @@ class FoCUS:
                         spin,
                     )
                 )
-            tmp2 = np.load(
-                "%s/FOSCAT_%s_W%d_%d_%d_PIDX2-SPIN%d.npy"
+            tmp2 = self.read_index(
+                "%s/FOSCAT_%s_W%d_%d_%d_PIDX2-SPIN%d.fst"
                 % (
                     self.TEMPLATE_PATH,
                     TMPFILE_VERSION,
@@ -1492,8 +1651,8 @@ class FoCUS:
                     spin,
                 )
             )
-            wr = np.load(
-                "%s/FOSCAT_%s_W%d_%d_%d_WAVE-SPIN%d.npy"
+            wr = self.read_index(
+                "%s/FOSCAT_%s_W%d_%d_%d_WAVE-SPIN%d.fst"
                 % (
                     self.TEMPLATE_PATH,
                     TMPFILE_VERSION,
@@ -1503,8 +1662,8 @@ class FoCUS:
                     spin,
                 )
             ).real
-            wi = np.load(
-                "%s/FOSCAT_%s_W%d_%d_%d_WAVE-SPIN%d.npy"
+            wi = self.read_index(
+                "%s/FOSCAT_%s_W%d_%d_%d_WAVE-SPIN%d.fst"
                 % (
                     self.TEMPLATE_PATH,
                     TMPFILE_VERSION,
@@ -1514,8 +1673,8 @@ class FoCUS:
                     spin,
                 )
             ).imag
-            ws = self.slope * np.load(
-                "%s/FOSCAT_%s_W%d_%d_%d_SMOO-SPIN%d.npy"
+            ws = self.slope * self.read_index(
+                "%s/FOSCAT_%s_W%d_%d_%d_SMOO-SPIN%d.fst"
                 % (
                     self.TEMPLATE_PATH,
                     TMPFILE_VERSION,
@@ -1525,6 +1684,39 @@ class FoCUS:
                     spin,
                 )
             )
+                                        
+            if cell_ids is not None:
+                idx_map=-np.ones([12*nside**2],dtype='int32')
+                lcell_ids=cell_ids
+                
+                try:
+                    idx_map[lcell_ids]=np.arange(lcell_ids.shape[0],dtype='int32')
+                except:
+                    lcell_ids=self.to_numpy(cell_ids)
+                    idx_map[lcell_ids]=np.arange(lcell_ids.shape[0],dtype='int32')
+                    
+                lidx=np.where(idx_map[tmp[:,1]%(12*nside**2)]!=-1)[0]
+                orientation=tmp[lidx,1]//(12*nside**2)
+                tmp=tmp[lidx]
+                wr=wr[lidx]
+                wi=wi[lidx]
+                tmp=idx_map[tmp%(12*nside**2)]
+                lidx=np.where(tmp[:,0]==-1)[0]
+                wr[lidx]=0.0
+                wi[lidx]=0.0
+                tmp[lidx,0]=0
+                tmp[:,1]+=orientation*lcell_ids.shape[0]
+                
+                idx_map=-np.ones([12*nside**2],dtype='int32')
+                idx_map[lcell_ids]=np.arange(cell_ids.shape[0],dtype='int32')
+                lidx=np.where(idx_map[tmp2[:,1]]!=-1)[0]
+                tmp2=tmp2[lidx]
+                ws=ws[lidx]
+                tmp2=idx_map[tmp2]
+                lidx=np.where(tmp2[:,0]==-1)[0]
+                ws[lidx]=0.0
+                tmp2[lidx,0]=0
+                
         else:
             tmp = indice
             tmp2 = indice2
@@ -1532,6 +1724,7 @@ class FoCUS:
             wi = wav.imag
             ws = self.slope * wwav
 
+            
         if spin==0:
             wr = self.backend.bk_SparseTensor(
                 self.backend.bk_constant(tmp),
@@ -1591,8 +1784,8 @@ class FoCUS:
         try:
             
             if cell_ids is not None:
-                tmp = np.load(
-                      "%s/XXXX_%s_W%d_%d_%d_PIDX.npy"  # can not work
+                tmp = self.read_index(
+                      "%s/XXXX_%s_W%d_%d_%d_PIDX.fst"  # can not work
                         % (
                             self.TEMPLATE_PATH,
                             TMPFILE_VERSION,
@@ -1603,8 +1796,8 @@ class FoCUS:
                     )
 
             else:
-                    tmp = np.load(
-                        "%s/CNN_FOSCAT_%s_W%d_%d_%d_PIDX.npy"
+                    tmp = self.read_index(
+                        "%s/CNN_FOSCAT_%s_W%d_%d_%d_PIDX.fst"
                         % (
                             self.TEMPLATE_PATH,
                             TMPFILE_VERSION,
@@ -1738,11 +1931,11 @@ class FoCUS:
             if cell_ids is None:
                     if not self.silent:
                         print(
-                            "Write FOSCAT_%s_W%d_%d_%d_PIDX.npy"
+                            "Write FOSCAT_%s_W%d_%d_%d_PIDX.fst"
                             % (TMPFILE_VERSION, self.KERNELSZ**2, NORIENT, nside)
                         )
-                    np.save(
-                        "%s/CNN_FOSCAT_%s_W%d_%d_%d_PIDX.npy"
+                    self.save_index(
+                        "%s/CNN_FOSCAT_%s_W%d_%d_%d_PIDX.fst"
                         % (
                             self.TEMPLATE_PATH,
                             TMPFILE_VERSION,
@@ -1752,8 +1945,8 @@ class FoCUS:
                         ),
                         indice,
                     )
-                    np.save(
-                        "%s/CNN_FOSCAT_%s_W%d_%d_%d_WAVE.npy"
+                    self.save_index(
+                        "%s/CNN_FOSCAT_%s_W%d_%d_%d_WAVE.fst"
                         % (
                             self.TEMPLATE_PATH,
                             TMPFILE_VERSION,
@@ -1767,13 +1960,13 @@ class FoCUS:
         if cell_ids is None:
             self.barrier()
             if self.use_2D:
-                tmp = np.load(
-                    "%s/W%d_%s_%d_IDX.npy"
+                tmp = self.read_index(
+                    "%s/W%d_%s_%d_IDX.fst"
                     % (self.TEMPLATE_PATH, l_kernel**2, TMPFILE_VERSION, nside)
                 )
             else:
-                tmp = np.load(
-                    "%s/CNN_FOSCAT_%s_W%d_%d_%d_PIDX.npy"
+                tmp = self.read_index(
+                    "%s/CNN_FOSCAT_%s_W%d_%d_%d_PIDX.fst"
                     % (
                         self.TEMPLATE_PATH,
                         TMPFILE_VERSION,
@@ -1782,8 +1975,8 @@ class FoCUS:
                         nside,
                     )
                 )
-            wav = np.load(
-                "%s/CNN_FOSCAT_%s_W%d_%d_%d_WAVE.npy"
+            wav = self.read_index(
+                "%s/CNN_FOSCAT_%s_W%d_%d_%d_WAVE.fst"
                 % (
                     self.TEMPLATE_PATH,
                     TMPFILE_VERSION,
@@ -2281,34 +2474,19 @@ class FoCUS:
             if nside is None:
                 nside = int(np.sqrt(image.shape[-1] // 12))
 
-            if spin==0:
-                if nside not in self.Idx_Neighbours:
-                    if self.InitWave is None:
-                        wr, wi, ws, widx = self.init_index(nside, cell_ids=cell_ids)
-                    else:
-                        wr, wi, ws, widx = self.InitWave(nside, cell_ids=cell_ids)
+            if (spin,nside) not in self.Idx_Neighbours:
+                if self.InitWave is None:
+                    wr, wi, ws, widx = self.init_index(nside, cell_ids=cell_ids,spin=spin)
+                else:
+                    wr, wi, ws, widx = self.InitWave(nside, cell_ids=cell_ids,spin=spin)
 
-                    self.Idx_Neighbours[nside] = 1  # self.backend.bk_constant(tmp)
-                    self.ww_Real[nside] = wr
-                    self.ww_Imag[nside] = wi
-                    self.w_smooth[nside] = ws
+                self.Idx_Neighbours[(spin,nside)] = 1  # self.backend.bk_constant(tmp)
+                self.ww_Real[(spin,nside)] = wr
+                self.ww_Imag[(spin,nside)] = wi
+                self.w_smooth[(spin,nside)] = ws
 
-                l_ww_real = self.ww_Real[nside]
-                l_ww_imag = self.ww_Imag[nside]
-            else:
-                if (spin,nside) not in self.Idx_Neighbours:
-                    if self.InitWave is None:
-                        wr, wi, ws, widx = self.init_index(nside, cell_ids=cell_ids,spin=spin)
-                    else:
-                        wr, wi, ws, widx = self.InitWave(nside, cell_ids=cell_ids,spin=spin)
-
-                    self.Idx_Neighbours[(spin,nside)] = 1  # self.backend.bk_constant(tmp)
-                    self.ww_Real[(spin,nside)] = wr
-                    self.ww_Imag[(spin,nside)] = wi
-                    self.w_smooth[(spin,nside)] = ws
-
-                l_ww_real = self.ww_Real[(spin,nside)]
-                l_ww_imag = self.ww_Imag[(spin,nside)]
+            l_ww_real = self.ww_Real[(spin,nside)]
+            l_ww_imag = self.ww_Imag[(spin,nside)]
 
             # always convolve the last dimension
 
@@ -2447,31 +2625,18 @@ class FoCUS:
             if nside is None:
                 nside = int(np.sqrt(image.shape[-1] // 12))
 
-            if spin==0:
-                if nside not in self.Idx_Neighbours:
-                    if self.InitWave is None:
-                        wr, wi, ws, widx = self.init_index(nside, cell_ids=cell_ids)
-                    else:
-                        wr, wi, ws, widx = self.InitWave(nside, cell_ids=cell_ids)
+            if (spin,nside) not in self.Idx_Neighbours:
+                if self.InitWave is None:
+                    wr, wi, ws, widx = self.init_index(nside, cell_ids=cell_ids,spin=spin)
+                else:
+                    wr, wi, ws, widx = self.InitWave(nside, cell_ids=cell_ids,spin=spin)
 
-                    self.Idx_Neighbours[nside] = 1  # self.backend.bk_constant(tmp)
-                    self.ww_Real[nside] = wr
-                    self.ww_Imag[nside] = wi
-                    self.w_smooth[nside] = ws
-
-                l_w_smooth = self.w_smooth[nside]
-            else:
-                if (spin,nside) not in self.Idx_Neighbours:
-                    if self.InitWave is None:
-                        wr, wi, ws, widx = self.init_index(nside, cell_ids=cell_ids,spin=spin)
-                    else:
-                        wr, wi, ws, widx = self.InitWave(nside, cell_ids=cell_ids,spin=spin)
-
-                    self.Idx_Neighbours[(spin,nside)] = 1  # self.backend.bk_constant(tmp)
-                    self.ww_Real[(spin,nside)] = wr
-                    self.ww_Imag[(spin,nside)] = wi
-                    self.w_smooth[(spin,nside)] = ws
-                l_w_smooth = self.w_smooth[(spin,nside)]
+                self.Idx_Neighbours[(spin,nside)] = 1  # self.backend.bk_constant(tmp)
+                self.ww_Real[(spin,nside)] = wr
+                self.ww_Imag[(spin,nside)] = wi
+                self.w_smooth[(spin,nside)] = ws
+                
+            l_w_smooth = self.w_smooth[(spin,nside)]
 
             odata = 1
             for k in range(0, len(ishape) - 1):
