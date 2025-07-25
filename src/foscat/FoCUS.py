@@ -1207,7 +1207,7 @@ class FoCUS:
                     )
 
                 else:
-                    print('read here',"%s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN%d.fst"
+                    print('LOAD ',"%s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN%d.fst"
                         % (
                             self.TEMPLATE_PATH,
                             TMPFILE_VERSION,
@@ -1231,7 +1231,7 @@ class FoCUS:
                 self.init_index(nside, kernel=kernel, spin=spin)
                 
             if not self.use_2D:
-                print('NO FOUND THEN COMPUTE %s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN%d.fst'
+                print('NOT FOUND THEN COMPUTE %s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN%d.fst'
                     % (
                         self.TEMPLATE_PATH,
                         TMPFILE_VERSION,
@@ -1253,7 +1253,7 @@ class FoCUS:
                             )
                         )
                     except:
-                        print('NO FOUND THEN COMPUTE %s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN0.fst'
+                        print('NOT FOUND THEN COMPUTE %s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN0.fst'
                               % (
                                   self.TEMPLATE_PATH,
                                   TMPFILE_VERSION,
