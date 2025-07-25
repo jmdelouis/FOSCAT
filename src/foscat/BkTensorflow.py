@@ -92,7 +92,7 @@ class BkTensorflow(BackendBase.BackendBase):
     def bk_len(self,S):
         if S is None:
             return 0
-        return S.numpy().size
+        return tf.size(S)
     
     def bk_SparseTensor(self, indice, w, dense_shape=[]):
         return self.backend.SparseTensor(indice, w, dense_shape=dense_shape)
