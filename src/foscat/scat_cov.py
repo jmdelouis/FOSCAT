@@ -6286,14 +6286,10 @@ class funct(FOC.FoCUS):
             
             # compute scattering covariance of the current synthetised map called u
             if use_v:
-                learn = (learn-ref)/sref
+                loss = scat_operator.reduce_distance(learn,ref,sigma=sref)
             else:
-                learn = learn-ref
+                loss = scat_operator.reduce_distance(learn,ref)
 
-            # make the difference withe the reference coordinates
-            loss = scat_operator.reduce_mean(
-                scat_operator.square(learn)
-            )
             return loss
         
         def The_lossX(u, scat_operator, args):
