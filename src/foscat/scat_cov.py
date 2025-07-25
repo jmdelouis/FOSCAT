@@ -6485,7 +6485,7 @@ class funct(FOC.FoCUS):
                     ref = self.scattering_cov(
                         tmp[k],
                         data2=l_ref[k],
-                        mask=l_in_mask[k],
+                        in_mask=l_in_mask[k],
                         edge=l_edge,
                         Jmax=l_jmax[k],
                         iso_ang=iso_ang,
