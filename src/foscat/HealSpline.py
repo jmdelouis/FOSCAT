@@ -8,12 +8,12 @@ class heal_spline:
     def __init__(
             self,
             level,
-            power=1,
+            gamma=1,
     ):
         nside=2**level
         self.nside_store=2**(level//2)
         self.spline_tree={}
-        self.power=power
+        self.gamma=gamma
         
         self.nside=nside
         #compute colatitude
@@ -82,8 +82,8 @@ class heal_spline:
             
         hit=np.bincount(all_idx.flatten(),weights=www.flatten())
         www[hit[all_idx]<threshold]=0.0
-        if self.power!=1:
-            www=www**self.power
+        if self.gamma!=1:
+            www=www**self.gamma
         www=www/np.sum(www,0)[None,:]
         return www,all_idx,heal_idx
         
