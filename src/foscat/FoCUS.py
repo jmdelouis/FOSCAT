@@ -1691,9 +1691,10 @@ class FoCUS:
                 except:
                     lcell_ids=self.to_numpy(cell_ids)
                     idx_map[lcell_ids]=np.arange(lcell_ids.shape[0],dtype='int32')
-                    
+
                 lidx=np.where(idx_map[tmp[:,1]%(12*nside**2)]!=-1)[0]
                 orientation=tmp[lidx,1]//(12*nside**2)
+                orientation2=tmp[lidx,0]//(12*nside**2)
                 tmp=tmp[lidx]
                 wr=wr[lidx]
                 wi=wi[lidx]
@@ -1703,16 +1704,21 @@ class FoCUS:
                 wi[lidx]=0.0
                 tmp[lidx,0]=0
                 tmp[:,1]+=orientation*lcell_ids.shape[0]
+                tmp[:,0]+=orientation2*lcell_ids.shape[0]
                 
                 idx_map=-np.ones([12*nside**2],dtype='int32')
                 idx_map[lcell_ids]=np.arange(cell_ids.shape[0],dtype='int32')
-                lidx=np.where(idx_map[tmp2[:,1]]!=-1)[0]
+                lidx=np.where(idx_map[tmp2[:,1]%(12*nside**2)]!=-1)[0]
+                i_id=tmp2[lidx,1]//(12*nside**2)
+                i_id2=tmp2[lidx,0]//(12*nside**2)
                 tmp2=tmp2[lidx]
                 ws=ws[lidx]
-                tmp2=idx_map[tmp2]
+                tmp2=idx_map[tmp2%(12*nside**2)]
                 lidx=np.where(tmp2[:,0]==-1)[0]
                 ws[lidx]=0.0
                 tmp2[lidx,0]=0
+                tmp2[:,1]+=i_id*lcell_ids.shape[0]
+                tmp2[:,0]+=i_id2*lcell_ids.shape[0]
                 
         else:
             tmp = indice
