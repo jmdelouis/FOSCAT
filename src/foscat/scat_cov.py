@@ -106,12 +106,13 @@ class scat_cov:
 
     # ---------------------------------------------−---------
     def flatten(self):
-        tmp = [
-            self.conv2complex(
-                self.backend.bk_reshape(self.S0, [self.S1.shape[0], self.S0.shape[1]*self.S0.shape[2]])
-            )
-        ]
         if self.use_1D:
+            tmp = [
+                self.conv2complex(
+                    self.backend.bk_reshape(self.S0, [self.S1.shape[0], self.S0.shape[1]])
+                )
+            ]
+            
             if self.S1 is not None:
                 tmp = tmp + [
                     self.conv2complex(
@@ -156,6 +157,11 @@ class scat_cov:
 
             return self.backend.bk_concat(tmp, 1)
 
+        tmp = [
+            self.conv2complex(
+                self.backend.bk_reshape(self.S0, [self.S1.shape[0], self.S0.shape[1]*self.S0.shape[2]])
+            )
+        ]
         if self.S1 is not None:
             tmp = tmp + [
                 self.conv2complex(
@@ -3610,19 +3616,34 @@ class funct(FOC.FoCUS):
                 self.P2_dic = P2_dic
                 
         if not return_data:
-            S1 = self.backend.bk_concat(S1, -2)
-            S2 = self.backend.bk_concat(S2, -2)
-            S3 = self.backend.bk_concat(S3, -3)
-            S4 = self.backend.bk_concat(S4, -4)
-            if cross:
-                S3P = self.backend.bk_concat(S3P, -3)
-            if calc_var:
-                VS1 = self.backend.bk_concat(VS1, -2)
-                VS2 = self.backend.bk_concat(VS2, -2)
-                VS3 = self.backend.bk_concat(VS3, -3)
-                VS4 = self.backend.bk_concat(VS4, -4)
+            if not self.use_1D:
+                S1 = self.backend.bk_concat(S1, -2)
+                S2 = self.backend.bk_concat(S2, -2)
+                S3 = self.backend.bk_concat(S3, -3)
+                S4 = self.backend.bk_concat(S4, -4)
                 if cross:
-                    VS3P = self.backend.bk_concat(VS3P, -3)
+                    S3P = self.backend.bk_concat(S3P, -3)
+                if calc_var:
+                    VS1 = self.backend.bk_concat(VS1, -2)
+                    VS2 = self.backend.bk_concat(VS2, -2)
+                    VS3 = self.backend.bk_concat(VS3, -3)
+                    VS4 = self.backend.bk_concat(VS4, -4)
+                    if cross:
+                        VS3P = self.backend.bk_concat(VS3P, -3)
+            else:
+                S1 = self.backend.bk_concat(S1, -1)
+                S2 = self.backend.bk_concat(S2, -1)
+                S3 = self.backend.bk_concat(S3, -1)
+                S4 = self.backend.bk_concat(S4, -1)
+                if cross:
+                    S3P = self.backend.bk_concat(S3P, -1)
+                if calc_var:
+                    VS1 = self.backend.bk_concat(VS1, -1)
+                    VS2 = self.backend.bk_concat(VS2, -1)
+                    VS3 = self.backend.bk_concat(VS3, -1)
+                    VS4 = self.backend.bk_concat(VS4, -1)
+                    if cross:
+                        VS3P = self.backend.bk_concat(VS3P, -1)
         if calc_var:
             if not cross:
                 return scat_cov(
@@ -3816,62 +3837,121 @@ class funct(FOC.FoCUS):
         Done by Sihao Cheng and Rudy Morel.
         """
 
-        filter = np.zeros([J, L, M, N], dtype="complex64")
+        if N!=0:
+            filter = np.zeros([J, L, M, N], dtype="complex64")
 
-        slant = 4.0 / L
+            slant = 4.0 / L
 
-        for j in range(J):
+            for j in range(J):
 
-            for ell in range(L):
+                for ell in range(L):
 
-                theta = (int(L - L / 2 - 1) - ell) * np.pi / L
-                sigma = 0.8 * 2**j
-                xi = 3.0 / 4.0 * np.pi / 2**j
+                    theta = (int(L - L / 2 - 1) - ell) * np.pi / L
+                    sigma = 0.8 * 2**j
+                    xi = 3.0 / 4.0 * np.pi / 2**j
 
-                R = np.array(
-                    [[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]],
-                    np.float64,
-                )
-                R_inv = np.array(
-                    [[np.cos(theta), np.sin(theta)], [-np.sin(theta), np.cos(theta)]],
-                    np.float64,
-                )
-                D = np.array([[1, 0], [0, slant * slant]])
-                curv = np.matmul(R, np.matmul(D, R_inv)) / (2 * sigma * sigma)
+                    R = np.array(
+                        [[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]],
+                        np.float64,
+                    )
+                    R_inv = np.array(
+                        [[np.cos(theta), np.sin(theta)], [-np.sin(theta), np.cos(theta)]],
+                        np.float64,
+                    )
+                    D = np.array([[1, 0], [0, slant * slant]])
+                    curv = np.matmul(R, np.matmul(D, R_inv)) / (2 * sigma * sigma)
 
-                gab = np.zeros((M, N), np.complex128)
-                xx = np.empty((2, 2, M, N))
-                yy = np.empty((2, 2, M, N))
+                    gab = np.zeros((M, N), np.complex128)
+                    xx = np.empty((2, 2, M, N))
+                    yy = np.empty((2, 2, M, N))
 
-                for ii, ex in enumerate([-1, 0]):
-                    for jj, ey in enumerate([-1, 0]):
-                        xx[ii, jj], yy[ii, jj] = np.mgrid[
-                            ex * M : M + ex * M, ey * N : N + ey * N
-                        ]
+                    for ii, ex in enumerate([-1, 0]):
+                        for jj, ey in enumerate([-1, 0]):
+                            xx[ii, jj], yy[ii, jj] = np.mgrid[
+                                ex * M : M + ex * M, ey * N : N + ey * N
+                            ]
 
-                arg = -(
-                    curv[0, 0] * xx * xx
-                    + (curv[0, 1] + curv[1, 0]) * xx * yy
-                    + curv[1, 1] * yy * yy
-                )
-                argi = arg + 1.0j * (xx * xi * np.cos(theta) + yy * xi * np.sin(theta))
+                    arg = -(
+                        curv[0, 0] * xx * xx
+                        + (curv[0, 1] + curv[1, 0]) * xx * yy
+                        + curv[1, 1] * yy * yy
+                    )
+                    argi = arg + 1.0j * (xx * xi * np.cos(theta) + yy * xi * np.sin(theta))
 
-                gabi = np.exp(argi).sum((0, 1))
-                gab = np.exp(arg).sum((0, 1))
+                    gabi = np.exp(argi).sum((0, 1))
+                    gab = np.exp(arg).sum((0, 1))
 
-                norm_factor = 2 * np.pi * sigma * sigma / slant
+                    norm_factor = 2 * np.pi * sigma * sigma / slant
 
-                gab = gab / norm_factor
+                    gab = gab / norm_factor
 
-                gabi = gabi / norm_factor
+                    gabi = gabi / norm_factor
 
-                K = gabi.sum() / gab.sum()
+                    K = gabi.sum() / gab.sum()
 
-                # Apply the Gaussian
-                filter[j, ell] = np.fft.fft2(gabi - K * gab)
-                filter[j, ell, 0, 0] = 0.0
+                    # Apply the Gaussian
+                    filter[j, ell] = np.fft.fft2(gabi - K * gab)
+                    filter[j, ell, 0, 0] = 0.0
 
-        return self.backend.bk_cast(filter)
+            return self.backend.bk_cast(filter)
+        else:
+            filter = np.zeros([J, L, M], dtype="complex64")
+            #TODO
+            print('filter for 1D not yet available')
+            exit(0)
+            slant = 4.0 / L
+
+            for j in range(J):
+
+                for ell in range(L):
+
+                    theta = (int(L - L / 2 - 1) - ell) * np.pi / L
+                    sigma = 0.8 * 2**j
+                    xi = 3.0 / 4.0 * np.pi / 2**j
+
+                    R = np.array(
+                        [[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]],
+                        np.float64,
+                    )
+                    R_inv = np.array(
+                        [[np.cos(theta), np.sin(theta)], [-np.sin(theta), np.cos(theta)]],
+                        np.float64,
+                    )
+                    D = np.array([[1, 0], [0, slant * slant]])
+                    curv = np.matmul(R, np.matmul(D, R_inv)) / (2 * sigma * sigma)
+
+                    gab = np.zeros((M), np.complex128)
+                    xx = np.empty((M))
+
+                    for ii, ex in enumerate([-1, 0]):
+                        for jj, ey in enumerate([-1, 0]):
+                            xx[ii, jj], yy[ii, jj] = np.mgrid[
+                                ex * M : M + ex * M, ey * N : N + ey * N
+                            ]
+
+                    arg = -(
+                        curv[0, 0] * xx * xx
+                        + (curv[0, 1] + curv[1, 0]) * xx * yy
+                        + curv[1, 1] * yy * yy
+                    )
+                    argi = arg + 1.0j * (xx * xi * np.cos(theta) + yy * xi * np.sin(theta))
+
+                    gabi = np.exp(argi).sum((0, 1))
+                    gab = np.exp(arg).sum((0, 1))
+
+                    norm_factor = 2 * np.pi * sigma * sigma / slant
+
+                    gab = gab / norm_factor
+
+                    gabi = gabi / norm_factor
+
+                    K = gabi.sum() / gab.sum()
+
+                    # Apply the Gaussian
+                    filter[j, ell] = np.fft.fft2(gabi - K * gab)
+                    filter[j, ell, 0, 0] = 0.0
+
+            return self.backend.bk_cast(filter)
 
     # ------------------------------------------------------------------------------------------
     #
@@ -4107,18 +4187,24 @@ class funct(FOC.FoCUS):
                 if data2 is not None:
                     N_image2 = data2.shape[0]
             J = int(np.log(nside) / np.log(2)) - 1  # Number of j scales
+            dim=(-2,-1)
         elif self.use_1D:
             if len(data.shape) == 2:
                 npix = int(im_shape[1])  # Number of pixels
+                M = im_shape[1]
+                N=0
                 N_image = 1
                 N_image2 = 1
             else:
                 npix = int(im_shape[0])  # Number of pixels
                 N_image = data.shape[0]
+                M = im_shape[0]
+                N=0
                 if data2 is not None:
                     N_image2 = data2.shape[0]
 
             nside = int(npix)
+            dim=(-1)
 
             J = int(np.log(nside) / np.log(2)) - 1  # Number of j scales
         else:
@@ -4169,10 +4255,10 @@ class funct(FOC.FoCUS):
 
             # convert numpy array input into self.backend.bk_ tensors
             data = self.backend.bk_cast(data)
-            data_f = self.backend.bk_fftn(data, dim=(-2, -1))
+            data_f = self.backend.bk_fftn(data, dim=dim)
             if data2 is not None:
                 data2 = self.backend.bk_cast(data2)
-                data2_f = self.backend.bk_fftn(data2, dim=(-2, -1))
+                data2_f = self.backend.bk_fftn(data2, dim=dim)
 
             # initialize tensors for scattering coefficients
             S2 = self.backend.bk_zeros((N_image, J, L), dtype=data.dtype)
@@ -4248,13 +4334,13 @@ class funct(FOC.FoCUS):
                         I1 = self.backend.bk_ifftn(
                             data_f[None, None, None, :, :]
                             * filters_set[None, :J, :, :, :],
-                            dim=(-2, -1),
+                            dim=dim,
                         ).abs()
                     else:
                         I1 = self.backend.bk_ifftn(
                             data_f[:, None, None, :, :]
                             * filters_set[None, :J, :, :, :],
-                            dim=(-2, -1),
+                            dim=dim,
                         ).abs()
                 elif self.use_1D:
                     if len(data.shape) == 1:
@@ -4270,12 +4356,12 @@ class funct(FOC.FoCUS):
                 else:
                     print("todo")
 
-                S2 = (I1**2 * edge_mask).mean((-2, -1))
-                S1 = (I1 * edge_mask).mean((-2, -1))
+                S2 = (I1**2 * edge_mask).mean(dim)
+                S1 = (I1 * edge_mask).mean(dim)
 
                 if get_variance:
-                    S2_sigma = (I1**2 * edge_mask).std((-2, -1))
-                    S1_sigma = (I1 * edge_mask).std((-2, -1))
+                    S2_sigma = (I1**2 * edge_mask).std(dim)
+                    S1_sigma = (I1 * edge_mask).std(dim)
 
             else:
                 if self.use_2D:
@@ -4283,64 +4369,64 @@ class funct(FOC.FoCUS):
                         I1 = self.backend.bk_ifftn(
                             data_f[None, None, None, :, :]
                             * filters_set[None, :J, :, :, :],
-                            dim=(-2, -1),
+                            dim=dim,
                         )
                         I2 = self.backend.bk_ifftn(
                             data2_f[None, None, None, :, :]
                             * filters_set[None, :J, :, :, :],
-                            dim=(-2, -1),
+                            dim=dim,
                         )
                     else:
                         I1 = self.backend.bk_ifftn(
                             data_f[:, None, None, :, :]
                             * filters_set[None, :J, :, :, :],
-                            dim=(-2, -1),
+                            dim=dim,
                         )
                         I2 = self.backend.bk_ifftn(
                             data2_f[:, None, None, :, :]
                             * filters_set[None, :J, :, :, :],
-                            dim=(-2, -1),
+                            dim=dim,
                         )
                 elif self.use_1D:
                     if len(data.shape) == 1:
                         I1 = self.backend.bk_ifftn(
                             data_f[None, None, None, :] * filters_set[None, :J, :, :],
-                            dim=(-1),
+                            dim=dim,
                         )
                         I2 = self.backend.bk_ifftn(
                             data2_f[None, None, None, :] * filters_set[None, :J, :, :],
-                            dim=(-1),
+                            dim=dim,
                         )
                     else:
                         I1 = self.backend.bk_ifftn(
                             data_f[:, None, None, :] * filters_set[None, :J, :, :],
-                            dim=(-1),
+                            dim=dim,
                         )
                         I2 = self.backend.bk_ifftn(
                             data2_f[:, None, None, :] * filters_set[None, :J, :, :],
-                            dim=(-1),
+                            dim=dim,
                         )
                 else:
                     print("todo")
 
                 I1 = self.backend.bk_real(I1 * self.backend.bk_conjugate(I2))
 
-                S2 = self.backend.bk_reduce_mean((I1 * edge_mask), axis=(-2, -1))
+                S2 = self.backend.bk_reduce_mean((I1 * edge_mask), axis=dim)
                 if get_variance:
                     S2_sigma = self.backend.bk_reduce_std(
-                        (I1 * edge_mask), axis=(-2, -1)
+                        (I1 * edge_mask), axis=dim
                     )
 
                 I1 = self.backend.bk_L1(I1)
 
-                S1 = self.backend.bk_reduce_mean((I1 * edge_mask), axis=(-2, -1))
+                S1 = self.backend.bk_reduce_mean((I1 * edge_mask), axis=dim)
 
                 if get_variance:
                     S1_sigma = self.backend.bk_reduce_std(
-                        (I1 * edge_mask), axis=(-2, -1)
+                        (I1 * edge_mask), axis=dim
                     )
 
-            I1_f = self.backend.bk_fftn(I1, dim=(-2, -1))
+            I1_f = self.backend.bk_fftn(I1, dim=dim)
 
             if pseudo_coef != 1:
                 I1 = I1**pseudo_coef
@@ -4362,14 +4448,14 @@ class funct(FOC.FoCUS):
                     data2_f_small = self.cut_high_k_off(data2_f, dx3, dy3)
                 if edge:
                     I1_small = self.backend.bk_ifftn(
-                        I1_f_small, dim=(-2, -1), norm="ortho"
+                        I1_f_small, dim=dim, norm="ortho"
                     )
                     data_small = self.backend.bk_ifftn(
-                        data_f_small, dim=(-2, -1), norm="ortho"
+                        data_f_small, dim=dim, norm="ortho"
                     )
                     if data2 is not None:
                         data2_small = self.backend.bk_ifftn(
-                            data2_f_small, dim=(-2, -1), norm="ortho"
+                            data2_f_small, dim=dim, norm="ortho"
                         )
 
                 wavelet_f3 = self.cut_high_k_off(filters_set[j3], dx3, dy3)  # L,x,y
@@ -4400,10 +4486,10 @@ class funct(FOC.FoCUS):
                     ) * wavelet_f3_squared.view(1, 1, L, M3, N3)
                     if edge:
                         I12_w3_small = self.backend.bk_ifftn(
-                            I1_f2_wf3_small, dim=(-2, -1), norm="ortho"
+                            I1_f2_wf3_small, dim=dim, norm="ortho"
                         )
                         I12_w3_2_small = self.backend.bk_ifftn(
-                            I1_f2_wf3_2_small, dim=(-2, -1), norm="ortho"
+                            I1_f2_wf3_2_small, dim=dim, norm="ortho"
                         )
                     if use_ref:
                         if normalization == "P11":
@@ -4420,7 +4506,7 @@ class funct(FOC.FoCUS):
                         if normalization == "P11":
                             # [N_image,l2,l3,x,y]
                             P11_temp = (I1_f2_wf3_small.abs() ** 2).mean(
-                                (-2, -1)
+                                dim
                             ) * fft_factor
                             norm_factor_S3 = (
                                 S2[:, None, j3, :] * P11_temp**pseudo_coef
@@ -4435,7 +4521,7 @@ class funct(FOC.FoCUS):
                             (
                                 data_f_small.view(N_image, 1, 1, M3, N3)
                                 * self.backend.bk_conjugate(I1_f2_wf3_small)
-                            ).mean((-2, -1))
+                            ).mean(dim)
                             * fft_factor
                             / norm_factor_S3
                         )
@@ -4445,7 +4531,7 @@ class funct(FOC.FoCUS):
                                 (
                                     data_f_small.view(N_image, 1, 1, M3, N3)
                                     * self.backend.bk_conjugate(I1_f2_wf3_small)
-                                ).std((-2, -1))
+                                ).std(dim)
                                 * fft_factor
                                 / norm_factor_S3
                             )
@@ -4456,7 +4542,7 @@ class funct(FOC.FoCUS):
                                 * self.backend.bk_conjugate(I12_w3_small)
                                 * edge_mask[None, None, None, :, :]
                             ).mean(  # [..., edge_dx : M3 - edge_dx, edge_dy : N3 - edge_dy]
-                                (-2, -1)
+                                dim
                             )
                             * fft_factor
                             / norm_factor_S3
@@ -4467,7 +4553,7 @@ class funct(FOC.FoCUS):
                                     data_small.view(N_image, 1, 1, M3, N3)
                                     * self.backend.bk_conjugate(I12_w3_small)
                                     * edge_mask[None, None, None, :, :]
-                                ).std((-2, -1))
+                                ).std(dim)
                                 * fft_factor
                                 / norm_factor_S3
                             )
@@ -4477,7 +4563,7 @@ class funct(FOC.FoCUS):
                                 (
                                     data2_f_small.view(N_image2, 1, 1, M3, N3)
                                     * self.backend.bk_conjugate(I1_f2_wf3_small)
-                                ).mean((-2, -1))
+                                ).mean(dim)
                                 * fft_factor
                                 / norm_factor_S3
                             )
@@ -4487,7 +4573,7 @@ class funct(FOC.FoCUS):
                                     (
                                         data2_f_small.view(N_image2, 1, 1, M3, N3)
                                         * self.backend.bk_conjugate(I1_f2_wf3_small)
-                                    ).std((-2, -1))
+                                    ).std(dim)
                                     * fft_factor
                                     / norm_factor_S3
                                 )
@@ -4497,7 +4583,7 @@ class funct(FOC.FoCUS):
                                     data2_small.view(N_image2, 1, 1, M3, N3)
                                     * self.backend.bk_conjugate(I12_w3_small)
                                     * edge_mask[None, None, None, :, :]
-                                ).mean((-2, -1))
+                                ).mean(dim)
                                 * fft_factor
                                 / norm_factor_S3
                             )
@@ -4507,7 +4593,7 @@ class funct(FOC.FoCUS):
                                         data2_small.view(N_image2, 1, 1, M3, N3)
                                         * self.backend.bk_conjugate(I12_w3_small)
                                         * edge_mask[None, None, None, :, :]
-                                    ).std((-2, -1))
+                                    ).std(dim)
                                     * fft_factor
                                     / norm_factor_S3
                                 )
@@ -4528,7 +4614,7 @@ class funct(FOC.FoCUS):
                                                     N_image, 1, L, L, M3, N3
                                                 )
                                             )
-                                        ).mean((-2, -1)) * fft_factor
+                                        ).mean(dim) * fft_factor
                                         if get_variance:
                                             S4_sigma[:, Ndata_S4, :, :, :] = (
                                                 I1_f_small[:, j1].view(
@@ -4539,7 +4625,7 @@ class funct(FOC.FoCUS):
                                                         N_image, 1, L, L, M3, N3
                                                     )
                                                 )
-                                            ).std((-2, -1)) * fft_factor
+                                            ).std(dim) * fft_factor
                                     else:
                                         for l1 in range(L):
                                             # [N_image,l2,l3,x,y]
@@ -4552,7 +4638,7 @@ class funct(FOC.FoCUS):
                                                         N_image, L, L, M3, N3
                                                     )
                                                 )
-                                            ).mean((-2, -1)) * fft_factor
+                                            ).mean(dim) * fft_factor
                                             if get_variance:
                                                 S4_sigma[:, Ndata_S4, l1, :, :] = (
                                                     I1_f_small[:, j1, l1].view(
@@ -4563,7 +4649,7 @@ class funct(FOC.FoCUS):
                                                             N_image, L, L, M3, N3
                                                         )
                                                     )
-                                                ).std((-2, -1)) * fft_factor
+                                                ).std(dim) * fft_factor
                                 else:
                                     if not if_large_batch:
                                         # [N_image,l1,l2,l3,x,y]
@@ -4577,7 +4663,7 @@ class funct(FOC.FoCUS):
                                                 )
                                             )
                                             * edge_mask[None, None, None, None, :, :]
-                                        ).mean((-2, -1)) * fft_factor
+                                        ).mean(dim) * fft_factor
                                         if get_variance:
                                             S4_sigma[:, Ndata_S4, :, :, :] = (
                                                 I1_small[:, j1].view(
@@ -4591,7 +4677,7 @@ class funct(FOC.FoCUS):
                                                 * edge_mask[
                                                     None, None, None, None, :, :
                                                 ]
-                                            ).std((-2, -1)) * fft_factor
+                                            ).std(dim) * fft_factor
                                     else:
                                         for l1 in range(L):
                                             # [N_image,l2,l3,x,y]
@@ -4607,7 +4693,7 @@ class funct(FOC.FoCUS):
                                                 * edge_mask[
                                                     None, None, None, None, :, :
                                                 ]
-                                            ).mean((-2, -1)) * fft_factor
+                                            ).mean(dim) * fft_factor
                                             if get_variance:
                                                 S4_sigma[:, Ndata_S4, l1, :, :] = (
                                                     I1_small[:, j1].view(
@@ -4621,7 +4707,7 @@ class funct(FOC.FoCUS):
                                                     * edge_mask[
                                                         None, None, None, None, :, :
                                                     ]
-                                                ).std((-2, -1)) * fft_factor
+                                                ).std(dim) * fft_factor
 
                                 Ndata_S4 += 1
 
@@ -4689,11 +4775,11 @@ class funct(FOC.FoCUS):
             std_data = self.backend.bk_zeros((N_image, 1), dtype=data.dtype)
 
             if data2 is None:
-                mean_data[:, 0] = data.mean((-2, -1))
-                std_data[:, 0] = data.std((-2, -1))
+                mean_data[:, 0] = data.mean(dim)
+                std_data[:, 0] = data.std(dim)
             else:
-                mean_data[:, 0] = (data2 * data).mean((-2, -1))
-                std_data[:, 0] = (data2 * data).std((-2, -1))
+                mean_data[:, 0] = (data2 * data).mean(dim)
+                std_data[:, 0] = (data2 * data).std(dim)
 
             if get_variance:
                 ref_sigma = {}
@@ -4913,10 +4999,10 @@ class funct(FOC.FoCUS):
 
         # convert numpy array input into self.backend.bk_ tensors
         data = self.backend.bk_cast(data)
-        data_f = self.backend.bk_fftn(data, dim=(-2, -1))
+        data_f = self.backend.bk_fftn(data, dim=dim)
         if data2 is not None:
             data2 = self.backend.bk_cast(data2)
-            data2_f = self.backend.bk_fftn(data2, dim=(-2, -1))
+            data2_f = self.backend.bk_fftn(data2, dim=dim)
 
         # initialize tensors for scattering coefficients
 
@@ -4967,7 +5053,7 @@ class funct(FOC.FoCUS):
                         self.backend.bk_ifftn(
                             data_f[None, None, None, :, :]
                             * filters_set[None, :J, :, :, :],
-                            dim=(-2, -1),
+                            dim=dim,
                         )
                     )
                 else:
@@ -4975,7 +5061,7 @@ class funct(FOC.FoCUS):
                         self.backend.bk_ifftn(
                             data_f[:, None, None, :, :]
                             * filters_set[None, :J, :, :, :],
-                            dim=(-2, -1),
+                            dim=dim,
                         )
                     )
             elif self.use_1D:
@@ -4996,37 +5082,37 @@ class funct(FOC.FoCUS):
             else:
                 print("todo")
 
-            S2 = self.backend.bk_reduce_mean((I1**2 * edge_mask), axis=(-2, -1))
-            S1 = self.backend.bk_reduce_mean(I1 * edge_mask, axis=(-2, -1))
+            S2 = self.backend.bk_reduce_mean((I1**2 * edge_mask), axis=dim)
+            S1 = self.backend.bk_reduce_mean(I1 * edge_mask, axis=dim)
 
             if get_variance:
                 S2_sigma = self.backend.bk_reduce_std(
-                    (I1**2 * edge_mask), axis=(-2, -1)
+                    (I1**2 * edge_mask), axis=dim
                 )
-                S1_sigma = self.backend.bk_reduce_std((I1 * edge_mask), axis=(-2, -1))
+                S1_sigma = self.backend.bk_reduce_std((I1 * edge_mask), axis=dim)
 
-            I1_f = self.backend.bk_fftn(I1, dim=(-2, -1))
+            I1_f = self.backend.bk_fftn(I1, dim=dim)
 
         else:
             if self.use_2D:
                 if len(data.shape) == 2:
                     I1 = self.backend.bk_ifftn(
                         data_f[None, None, None, :, :] * filters_set[None, :J, :, :, :],
-                        dim=(-2, -1),
+                        dim=dim,
                     )
                     I2 = self.backend.bk_ifftn(
                         data2_f[None, None, None, :, :]
                         * filters_set[None, :J, :, :, :],
-                        dim=(-2, -1),
+                        dim=dim,
                     )
                 else:
                     I1 = self.backend.bk_ifftn(
                         data_f[:, None, None, :, :] * filters_set[None, :J, :, :, :],
-                        dim=(-2, -1),
+                        dim=dim,
                     )
                     I2 = self.backend.bk_ifftn(
                         data2_f[:, None, None, :, :] * filters_set[None, :J, :, :, :],
-                        dim=(-2, -1),
+                        dim=dim,
                     )
             elif self.use_1D:
                 if len(data.shape) == 1:
@@ -5051,18 +5137,18 @@ class funct(FOC.FoCUS):
 
             I1 = self.backend.bk_real(I1 * self.backend.bk_conjugate(I2))
 
-            S2 = self.backend.bk_reduce_mean((I1 * edge_mask), axis=(-2, -1))
+            S2 = self.backend.bk_reduce_mean((I1 * edge_mask), axis=dim)
             if get_variance:
-                S2_sigma = self.backend.bk_reduce_std((I1 * edge_mask), axis=(-2, -1))
+                S2_sigma = self.backend.bk_reduce_std((I1 * edge_mask), axis=dim)
 
             I1 = self.backend.bk_L1(I1)
 
-            S1 = self.backend.bk_reduce_mean((I1 * edge_mask), axis=(-2, -1))
+            S1 = self.backend.bk_reduce_mean((I1 * edge_mask), axis=dim)
 
             if get_variance:
-                S1_sigma = self.backend.bk_reduce_std((I1 * edge_mask), axis=(-2, -1))
+                S1_sigma = self.backend.bk_reduce_std((I1 * edge_mask), axis=dim)
 
-            I1_f = self.backend.bk_fftn(I1, dim=(-2, -1))
+            I1_f = self.backend.bk_fftn(I1, dim=dim)
 
         if pseudo_coef != 1:
             I1 = I1**pseudo_coef
@@ -5083,13 +5169,13 @@ class funct(FOC.FoCUS):
             if data2 is not None:
                 data2_f_small = self.cut_high_k_off(data2_f, dx3, dy3)
             if edge:
-                I1_small = self.backend.bk_ifftn(I1_f_small, dim=(-2, -1), norm="ortho")
+                I1_small = self.backend.bk_ifftn(I1_f_small, dim=dim, norm="ortho")
                 data_small = self.backend.bk_ifftn(
-                    data_f_small, dim=(-2, -1), norm="ortho"
+                    data_f_small, dim=dim, norm="ortho"
                 )
                 if data2 is not None:
                     data2_small = self.backend.bk_ifftn(
-                        data2_f_small, dim=(-2, -1), norm="ortho"
+                        data2_f_small, dim=dim, norm="ortho"
                     )
             wavelet_f3 = self.cut_high_k_off(filters_set[j3], dx3, dy3)  # L,x,y
             _, M3, N3 = wavelet_f3.shape
@@ -5112,10 +5198,10 @@ class funct(FOC.FoCUS):
                 ) * self.backend.bk_reshape(wavelet_f3_squared, [1, 1, 1, L, M3, N3])
                 if edge:
                     I12_w3_small = self.backend.bk_ifftn(
-                        I1_f2_wf3_small, dim=(-2, -1), norm="ortho"
+                        I1_f2_wf3_small, dim=dim, norm="ortho"
                     )
                     I12_w3_2_small = self.backend.bk_ifftn(
-                        I1_f2_wf3_2_small, dim=(-2, -1), norm="ortho"
+                        I1_f2_wf3_2_small, dim=dim, norm="ortho"
                     )
                 if use_ref:
                     if normalization == "P11":
@@ -5141,7 +5227,7 @@ class funct(FOC.FoCUS):
                         # [N_image,l2,l3,x,y]
                         P11_temp = (
                             self.backend.bk_reduce_mean(
-                                (I1_f2_wf3_small.abs() ** 2), axis=(-2, -1)
+                                (I1_f2_wf3_small.abs() ** 2), axis=dim
                             )
                             * fft_factor
                         )
@@ -5169,7 +5255,7 @@ class funct(FOC.FoCUS):
                                 data_f_small, [N_image, 1, 1, 1, M3, N3]
                             )
                             * self.backend.bk_conjugate(I1_f2_wf3_small),
-                            axis=(-2, -1),
+                            axis=dim,
                         )
                         * fft_factor
                         / norm_factor_S3
@@ -5181,7 +5267,7 @@ class funct(FOC.FoCUS):
                                     data_f_small, [N_image, 1, 1, 1, M3, N3]
                                 )
                                 * self.backend.bk_conjugate(I1_f2_wf3_small),
-                                axis=(-2, -1),
+                                axis=dim,
                             )
                             * fft_factor
                             / norm_factor_S3
@@ -5195,7 +5281,7 @@ class funct(FOC.FoCUS):
                                 )
                                 * self.backend.bk_conjugate(I12_w3_small)
                             )[..., edge_dx : M3 - edge_dx, edge_dy : N3 - edge_dy],
-                            axis=(-2, -1),
+                            axis=dim,
                         )
                         * fft_factor
                         / norm_factor_S3
@@ -5209,7 +5295,7 @@ class funct(FOC.FoCUS):
                                     )
                                     * self.backend.bk_conjugate(I12_w3_small)
                                 )[..., edge_dx : M3 - edge_dx, edge_dy : N3 - edge_dy],
-                                axis=(-2, -1),
+                                axis=dim,
                             )
                             * fft_factor
                             / norm_factor_S3
@@ -5224,7 +5310,7 @@ class funct(FOC.FoCUS):
                                     )
                                     * self.backend.bk_conjugate(I1_f2_wf3_small)
                                 ),
-                                axis=(-2, -1),
+                                axis=dim,
                             )
                             * fft_factor
                             / norm_factor_S3
@@ -5239,7 +5325,7 @@ class funct(FOC.FoCUS):
                                         )
                                         * self.backend.bk_conjugate(I1_f2_wf3_small)
                                     ),
-                                    axis=(-2, -1),
+                                    axis=dim,
                                 )
                                 * fft_factor
                                 / norm_factor_S3
@@ -5254,7 +5340,7 @@ class funct(FOC.FoCUS):
                                     )
                                     * self.backend.bk_conjugate(I12_w3_small)
                                 )[..., edge_dx : M3 - edge_dx, edge_dy : N3 - edge_dy],
-                                axis=(-2, -1),
+                                axis=dim,
                             )
                             * fft_factor
                             / norm_factor_S3
@@ -5272,7 +5358,7 @@ class funct(FOC.FoCUS):
                                         edge_dx : M3 - edge_dx,
                                         edge_dy : N3 - edge_dy,
                                     ],
-                                    axis=(-2, -1),
+                                    axis=dim,
                                 )
                                 * fft_factor
                                 / norm_factor_S3
@@ -5318,7 +5404,7 @@ class funct(FOC.FoCUS):
                                                 )
                                             )
                                         ),
-                                        axis=(-2, -1),
+                                        axis=dim,
                                     )
                                     * fft_factor
                                     * P
@@ -5338,7 +5424,7 @@ class funct(FOC.FoCUS):
                                                     )
                                                 )
                                             ),
-                                            axis=(-2, -1),
+                                            axis=dim,
                                         )
                                         * fft_factor
                                         * P
@@ -5360,7 +5446,7 @@ class funct(FOC.FoCUS):
                                                     )
                                                 )
                                             ),
-                                            axis=(-2, -1),
+                                            axis=dim,
                                         )
                                         * fft_factor
                                         * P
@@ -5380,7 +5466,7 @@ class funct(FOC.FoCUS):
                                                         )
                                                     )
                                                 ),
-                                                axis=(-2, -1),
+                                                axis=dim,
                                             )
                                             * fft_factor
                                             * P
@@ -5402,7 +5488,7 @@ class funct(FOC.FoCUS):
                                                 )
                                             )
                                         )[..., edge_dx:-edge_dx, edge_dy:-edge_dy],
-                                        axis=(-2, -1),
+                                        axis=dim,
                                     )
                                     * fft_factor
                                     * P
@@ -5422,7 +5508,7 @@ class funct(FOC.FoCUS):
                                                     )
                                                 )
                                             )[..., edge_dx:-edge_dx, edge_dy:-edge_dy],
-                                            axis=(-2, -1),
+                                            axis=dim,
                                         )
                                         * fft_factor
                                         * P
@@ -5444,7 +5530,7 @@ class funct(FOC.FoCUS):
                                                     )
                                                 )
                                             )[..., edge_dx:-edge_dx, edge_dy:-edge_dy],
-                                            axis=(-2, -1),
+                                            axis=dim,
                                         )
                                         * fft_factor
                                         * P
@@ -5468,7 +5554,7 @@ class funct(FOC.FoCUS):
                                                     edge_dx:-edge_dx,
                                                     edge_dy:-edge_dy,
                                                 ],
-                                                axis=(-2, -1),
+                                                axis=dim,
                                             )
                                             * fft_factor
                                             * P
@@ -5521,17 +5607,17 @@ class funct(FOC.FoCUS):
 
         if data2 is None:
             mean_data = self.backend.bk_reshape(
-                self.backend.bk_reduce_mean(data, axis=(-2, -1)), [N_image, 1]
+                self.backend.bk_reduce_mean(data, axis=dim), [N_image, 1]
             )
             std_data = self.backend.bk_reshape(
-                self.backend.bk_reduce_std(data, axis=(-2, -1)), [N_image, 1]
+                self.backend.bk_reduce_std(data, axis=dim), [N_image, 1]
             )
         else:
             mean_data = self.backend.bk_reshape(
-                self.backend.bk_reduce_mean(data * data2, axis=(-2, -1)), [N_image, 1]
+                self.backend.bk_reduce_mean(data * data2, axis=dim), [N_image, 1]
             )
             std_data = self.backend.bk_reshape(
-                self.backend.bk_reduce_std(data * data2, axis=(-2, -1)), [N_image, 1]
+                self.backend.bk_reduce_std(data * data2, axis=dim), [N_image, 1]
             )
 
         if get_variance:

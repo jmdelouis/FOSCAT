@@ -35,7 +35,7 @@ class FoCUS:
             mpi_rank=0
     ):
 
-        self.__version__ = "2025.07.2"
+        self.__version__ = "2025.07.3"
         # P00 coeff for normalization for scat_cov
         self.TMPFILE_VERSION = TMPFILE_VERSION
         self.P1_dic = None
@@ -790,13 +790,11 @@ class FoCUS:
 
             npix = im.shape[axis]
             odata = 1
-            if len(ishape) > axis + 1:
-                for k in range(axis + 1, len(ishape)):
-                    odata = odata * ishape[k]
-
+            
             ndata = 1
-            for k in range(axis):
-                ndata = ndata * ishape[k]
+            if len(ishape)>1:
+                for k in range(len(ishape)-1):
+                    ndata = ndata * ishape[k]
 
             tim = self.backend.bk_reshape(
                 self.backend.bk_cast(im), [ndata, npix, odata]
@@ -819,21 +817,7 @@ class FoCUS:
                     self.backend.bk_concat([res1, res2], -2),
                     [ndata, tim.shape[1] * 2, odata],
                 )
-
-            if axis == 0:
-                if len(ishape) == 1:
-                    return self.backend.bk_reshape(tim, [nout])
-                else:
-                    return self.backend.bk_reshape(tim, [nout] + ishape[axis + 1 :])
-            else:
-                if len(ishape) == axis + 1:
-                    return self.backend.bk_reshape(tim, ishape[0:axis] + [nout])
-                else:
-                    return self.backend.bk_reshape(
-                        tim, ishape[0:axis] + [nout] + ishape[axis + 1 :]
-                    )
-
-            return self.backend.bk_reshape(tim, [nout])
+            return self.backend.bk_reshape(tim, ishape[0:-1] + [nout])
 
         else:
 
@@ -2116,8 +2100,8 @@ class FoCUS:
             ichannel = 1
             for i in range(1, len(shape) - 1):
                 ichannel *= shape[i]
-
-            l_x = self.backend.bk_reshape(x, [shape[0], 1, ichannel, shape[-1]])
+            
+            l_x = self.backend.bk_reshape(x, [shape[0], 1, ichannel,shape[-1]])
 
             if self.padding == "VALID":
                 oshape = [k for k in shape]
@@ -2204,9 +2188,9 @@ class FoCUS:
         elif self.use_1D:
             mtmp = l_mask
             vtmp = l_x
-            v1 = self.backend.bk_reduce_sum(l_mask[1,:,...,:] * vtmp, axis=-1)
-            v2 = self.backend.bk_reduce_sum(mtmp * vtmp * vtmp, axis=-1)
-            vh = self.backend.bk_reduce_sum(mtmp, axis=-1)
+            v1 = self.backend.bk_reduce_sum(l_mask * vtmp, axis=-1)
+            v2 = self.backend.bk_reduce_sum(l_mask * vtmp * vtmp, axis=-1)
+            vh = self.backend.bk_reduce_sum(l_mask , axis=-1)
 
             res = v1 / vh
 
@@ -2605,7 +2589,7 @@ class FoCUS:
             ishape = list(in_image.shape)
 
             npix = ishape[-1]
-
+            
             ndata = 1
             for k in range(len(ishape) - 1):
                 ndata = ndata * ishape[k]
@@ -2618,7 +2602,7 @@ class FoCUS:
                 res = self.backend.bk_complex(rr, ii)
             else:
                 res = self.backend.conv1d(tim, self.ww_SmoothT[1])
-
+                
             return self.backend.bk_reshape(res, ishape)
 
         else:

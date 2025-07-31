@@ -196,10 +196,41 @@ class BkTorch(BackendBase.BackendBase):
         y = y.reshape(*leading_dims, O_c, Nx, Ny)
 
         return y
-
+    
     def conv1d(self, x, w, strides=[1, 1, 1], padding="SAME"):
-        # to be written!!!
-        return x
+        """
+        Performs 1D convolution along the last axis of a 2D tensor x[n, m] with kernel w[K].
+
+        Parameters:
+        - x: torch.Tensor of shape [n, m]
+        - w: torch.Tensor of shape [K]
+        - strides: list of 3 ints; only strides[1] (along axis -1) is used
+        - padding: "SAME" or "VALID"
+
+        Returns:
+        - torch.Tensor of shape [n, m] (if SAME) or smaller (if VALID)
+        """
+        assert x.ndim == 2, "Input x must be a 2D tensor [n, m]"
+        assert w.ndim == 1, "Kernel w must be a 1D tensor [K]"
+        stride = strides[1]
+
+        # Reshape for PyTorch conv1d: [batch, channels, width]
+        x_reshaped = x.unsqueeze(1)         # [n, 1, m]
+        w_flipped = w.flip(0).view(1, 1, -1)  # [out_channels=1, in_channels=1, kernel_size]
+
+        if padding.upper() == "SAME":
+            pad_total = w.shape[0] - 1
+            pad_left = pad_total // 2
+            pad_right = pad_total - pad_left
+            x_reshaped = F.pad(x_reshaped, (pad_left, pad_right), mode='constant', value=0)
+            padding_mode = 'valid'
+        elif padding.upper() == "VALID":
+            padding_mode = 'valid'
+        else:
+            raise ValueError("padding must be either 'SAME' or 'VALID'")
+
+        out = F.conv1d(x_reshaped, w_flipped, stride=stride, padding=0)  # manual padding applied above
+        return out.squeeze(1)  # [n, m_out]
 
     def bk_threshold(self, x, threshold, greater=True):
 
