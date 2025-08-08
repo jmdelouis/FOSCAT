@@ -334,6 +334,7 @@ class Synthesis:
         self.batchsz = batchsz
         self.totalsz = totalsz
         self.grd_mask = grd_mask
+        self.idx_grd = idx_grd
         self.EVAL_FREQUENCY = EVAL_FREQUENCY
         self.MESSAGE = MESSAGE
         self.SHOWGPU = SHOWGPU
