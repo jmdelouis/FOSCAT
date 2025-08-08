@@ -5955,8 +5955,8 @@ class funct(FOC.FoCUS):
     def from_gaussian(self, x):
 
         x = self.backend.bk_clip_by_value(x,
-                                          self.val_min+1E-4*abs(self.val_min),
-                                          self.val_max-1E-4*abs(self.val_max))
+                                          self.val_min+1E-7*(self.val_max-self.val_min),
+                                          self.val_max-1E-7*(self.val_max-self.val_min))
         return self.f_gaussian(self.backend.to_numpy(x))
 
     def square(self, x):
@@ -6127,13 +6127,12 @@ class funct(FOC.FoCUS):
             return result
         else:
             if sigma is None:
-                tmp = x - y
+                tmp = self.diff_data(x,y)
             else:
-                tmp = (x - y) / sigma
+                tmp = self.diff_data(x,y,sigma=sigma)
+                
             # do abs in case of complex values
-            return self.backend.bk_abs(
-                self.backend.bk_reduce_mean(self.backend.bk_square(tmp))
-            )
+            return tmp/x.shape[0]
 
     def reduce_sum(self, x):
 

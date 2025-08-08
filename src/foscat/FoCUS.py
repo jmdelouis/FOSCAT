@@ -1175,7 +1175,7 @@ class FoCUS:
                                       % (self.TEMPLATE_PATH, l_kernel**2,TMPFILE_VERSION, nside)
                 )
             else:
-                if cell_ids is not None and nside>8192:
+                if cell_ids is not None and nside>512:
                     tmp = self.read_index(
                         "%s/XXXX_%s_W%d_%d_%d_PIDX.fst"  # can not work
                         % (
@@ -1208,7 +1208,7 @@ class FoCUS:
                     )
                         
         except:
-            if cell_ids is not None and nside<=8192:
+            if cell_ids is not None and nside<=512:
                 self.init_index(nside, kernel=kernel, spin=spin)
                 
             if not self.use_2D:
@@ -1397,7 +1397,7 @@ class FoCUS:
                         pw2 = 0.25
                         threshold = 4e-5
 
-                    if cell_ids is not None and nside>8192:
+                    if cell_ids is not None and nside>512:
                         if not isinstance(cell_ids, np.ndarray):
                             cell_ids = self.backend.to_numpy(cell_ids)
                         th, ph = hp.pix2ang(nside, cell_ids, nest=True)
@@ -1597,7 +1597,7 @@ class FoCUS:
                             )
                         return None
 
-        if cell_ids is None or nside<=8192:
+        if cell_ids is None or nside<=512:
             self.barrier()
             if self.use_2D:
                 tmp = self.read_index(

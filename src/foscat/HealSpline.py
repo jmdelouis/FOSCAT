@@ -190,8 +190,9 @@ class heal_spline:
             spl=np.zeros([scale])
             spl[heal_idx[ih==k]-scale*h[k]]=self.spline[ih==k]
             self.spline_tree[h[k]]=spl
-        
-        
+            
+    def GetParam(self):
+        return self.heal_idx,self.nside,self.spline
     
     def Transform(self,th,ph,threshold=1E-2,nest=True):
         
