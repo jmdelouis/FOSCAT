@@ -318,19 +318,20 @@ class HOrientedConvol:
         if norm_mean:
             w = w.real-np.mean(w.real,2)[:,:,None]+1J*(w.imag-np.mean(w.imag,2)[:,:,None]) 
 
+        NK=self.idx_nn.shape[1]
         if return_index:
             if return_smooth:
                 return w.flatten(),np.concatenate([np.tile(self.idx_nn.flatten(),NORIENT)[:,None],
-                                               (np.tile(np.repeat(self.idx_nn[:,0],self.KERNELSZ*self.KERNELSZ),NORIENT)+
+                                               (np.tile(np.repeat(self.idx_nn[:,0],NK),NORIENT)+
                                                np.repeat(np.arange(NORIENT),self.idx_nn.shape[0]*self.idx_nn.shape[1])*12*self.nside**2)[:,None]],1),wsmooth.flatten(),np.concatenate([self.idx_nn.flatten()[:,None],
-                                               np.repeat(self.idx_nn[:,0],self.KERNELSZ*self.KERNELSZ)[:,None]],1)
+                                               np.repeat(self.idx_nn[:,0],NK)[:,None]],1)
             
             return w.flatten(),np.concatenate([np.tile(self.idx_nn.flatten(),NORIENT)[:,None],
-                                               (np.tile(np.repeat(self.idx_nn[:,0],self.KERNELSZ*self.KERNELSZ),NORIENT)+
+                                               (np.tile(np.repeat(self.idx_nn[:,0],NK),NORIENT)+
                                                np.repeat(np.arange(NORIENT),self.idx_nn.shape[0]*self.idx_nn.shape[1])*12*self.nside**2)[:,None]],1)
         return csr_array((w.flatten(), 
                               (np.tile(self.idx_nn.flatten(),NORIENT), 
-                               np.tile(np.repeat(self.idx_nn[:,0],self.KERNELSZ*self.KERNELSZ),NORIENT)
+                               np.tile(np.repeat(self.idx_nn[:,0],NK),NORIENT)
                                +np.repeat(np.arange(NORIENT),self.idx_nn.shape[0]*self.idx_nn.shape[1])*12*self.nside**2)),
                                  shape=(12*self.nside**2, 12*self.nside**2*NORIENT))
 
