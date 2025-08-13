@@ -1534,8 +1534,6 @@ class FoCUS:
                     indice2 = indice2[:iv2, :]
                     wwav = wwav[:iv2]
                     '''
-                    if not self.silent:
-                        print("Kernel Size ", iv / (self.NORIENT * 12 * nside * nside))
 
                     if cell_ids is None:
                         if not self.silent:
