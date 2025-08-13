@@ -5,7 +5,7 @@ import healpy as hp
 import numpy as np
 from scipy.interpolate import griddata
 
-TMPFILE_VERSION = "V6_0"
+TMPFILE_VERSION = "V7_0"
 
 
 class FoCUS:
@@ -1397,6 +1397,15 @@ class FoCUS:
                         pw2 = 0.25
                         threshold = 4e-5
 
+                    import foscat.HOrientedConvol as hs
+
+                    hconvol=hs.HOrientedConvol(nside,l_kernel,cell_ids=cell_ids)
+                    
+                    orientations=np.pi*np.arange(self.NORIENT)/self.NORIENT
+                    
+                    wav,indice,wwav,indice2=hconvol.make_wavelet_matrix(orientations,polar=True,return_index=True,return_smooth=True)
+                    
+                    '''
                     if cell_ids is not None and nside>512:
                         if not isinstance(cell_ids, np.ndarray):
                             cell_ids = self.backend.to_numpy(cell_ids)
@@ -1521,6 +1530,7 @@ class FoCUS:
                     wav = wav[:iv]
                     indice2 = indice2[:iv2, :]
                     wwav = wwav[:iv2]
+                    '''
                     if not self.silent:
                         print("Kernel Size ", iv / (self.NORIENT * 12 * nside * nside))
 
@@ -1703,6 +1713,7 @@ class FoCUS:
                 tmp2[lidx,0]=0
                 tmp2[:,1]+=i_id*lcell_ids.shape[0]
                 tmp2[:,0]+=i_id2*lcell_ids.shape[0]
+                
                 
         else:
             tmp = indice
