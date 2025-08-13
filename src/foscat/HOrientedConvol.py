@@ -274,7 +274,7 @@ class HOrientedConvol:
 
     def make_wavelet_matrix(self,
                             orientations,
-                            polar=False,
+                            polar=True,
                             norm_mean=True,
                             norm_std=True,
                             return_index=False,
@@ -299,21 +299,24 @@ class HOrientedConvol:
         
         rotate=2*((self.t<np.pi/2)-0.5)[None,:,None]
         if polar:
-            xx=np.cos(self.p[None,:]+orientations[:,None])[:,:,None]*self.vec_rot[None,:,:,0]-rotate*np.sin(self.p[None,:]+orientations[:,None])[:,:,None]*self.vec_rot[None,:,:,1]
+            xx=np.cos(self.p[None,:]+np.pi/2-orientations[:,None])[:,:,None]*self.vec_rot[None,:,:,0]-rotate*np.sin(self.p[None,:]+np.pi/2-orientations[:,None])[:,:,None]*self.vec_rot[None,:,:,1]
         else:
-            xx=np.cos(orientations[:,None,None])*self.vec_rot[None,:,:,0]-np.sin(orientations[:,None,None])*self.vec_rot[None,:,:,1]
+            xx=np.cos(np.pi/2-orientations[:,None,None])*self.vec_rot[None,:,:,0]-np.sin(np.pi/2-orientations[:,None,None])*self.vec_rot[None,:,:,1]
             
-        r=(self.vec_rot[None,:,:,0]**2+self.vec_rot[None,:,:,1]**2)
+        r=(self.vec_rot[None,:,:,0]**2+self.vec_rot[None,:,:,1]**2+(self.vec_rot[None,:,:,2]-1.0)**2)
         
         if return_smooth:
             wsmooth=np.exp(-sigma_gauss*r*self.nside**2)
-            
-        w=np.exp(-sigma_gauss*r*self.nside**2)*(np.cos(xx*self.nside*sigma_cosine*np.pi)+1J*np.sin(xx*self.nside*sigma_cosine*np.pi))
+            if norm_std:
+                wsmooth = wsmooth/np.sum(wsmooth,2)[:,:,None]
+
+        #for consistency with previous definition
+        w=np.exp(-sigma_gauss*r*self.nside**2)*(np.cos(xx*self.nside*sigma_cosine*np.pi)-1J*np.sin(xx*self.nside*sigma_cosine*np.pi))
         
-        if norm_mean:
-            w = w.real-np.mean(w.real,2)[:,:,None]+1J*(w.imag-np.mean(w.imag,2)[:,:,None])
         if norm_std:
-            w = w/(NORIENT*np.std(w,2)[:,:,None])
+            w = w/(np.sum(abs(w),2)[:,:,None])
+        if norm_mean:
+            w = w.real-np.mean(w.real,2)[:,:,None]+1J*(w.imag-np.mean(w.imag,2)[:,:,None]) 
 
         if return_index:
             if return_smooth:

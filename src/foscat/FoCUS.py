@@ -1381,7 +1381,7 @@ class FoCUS:
                                     tmpEB
                                     )
                 else:
-
+                    '''
                     if l_kernel == 5:
                         pw = 0.5
                         pw2 = 0.5
@@ -1396,14 +1396,17 @@ class FoCUS:
                         pw = 0.5
                         pw2 = 0.25
                         threshold = 4e-5
-
+                    '''
                     import foscat.HOrientedConvol as hs
 
                     hconvol=hs.HOrientedConvol(nside,l_kernel,cell_ids=cell_ids)
                     
                     orientations=np.pi*np.arange(self.NORIENT)/self.NORIENT
                     
-                    wav,indice,wwav,indice2=hconvol.make_wavelet_matrix(orientations,polar=True,return_index=True,return_smooth=True)
+                    wav,indice,wwav,indice2=hconvol.make_wavelet_matrix(orientations,
+                                                                        polar=True,
+                                                                        return_index=True,
+                                                                        return_smooth=True)
                     
                     '''
                     if cell_ids is not None and nside>512:
