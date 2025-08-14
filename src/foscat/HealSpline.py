@@ -192,7 +192,7 @@ class heal_spline:
             self.spline_tree[h[k]]=spl
             
     def GetParam(self):
-        return self.heal_idx,self.nside,self.spline
+        return self.heal_idx,self.spline
     
     def Transform(self,th,ph,threshold=1E-2,nest=True):
         

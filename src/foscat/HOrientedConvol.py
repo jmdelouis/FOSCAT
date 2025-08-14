@@ -9,28 +9,52 @@ class HOrientedConvol:
         
         if KERNELSZ % 2 == 0:
             raise ValueError(f"N must be odd so that coordinates are integers from -K..K; got N={N}.")
-            
+
+        self.local_test=False
+        
         if cell_ids is None:
             self.cell_ids=np.arange(12*nside**2)
+            
+            idx_nn = self.all_neighbours_batched(
+                self.cell_ids, 
+                KERNELSZ*KERNELSZ, 
+                nside=nside, 
+                nest=nest,
+                overshoot=2.0,      # candidate pool ≈ 2×N
+                parent_batch=4096,  # tune to fit memory
+                # out_memmap_path="neighbors_nest.int64.memmap",  # enable for huge M to be tested
+                )
         else:
             self.cell_ids=cell_ids
-
-        idx_nn = self.all_neighbours_batched(
-            self.cell_ids, 
-            KERNELSZ*KERNELSZ, 
-            nside=nside, 
-            nest=nest,
-            overshoot=2.0,      # candidate pool ≈ 2×N
-            parent_batch=4096,  # tune to fit memory
-            # out_memmap_path="neighbors_nest.int64.memmap",  # enable for huge M to be tested
+            self.local_test=True
+            
+            idx_nn = self.all_neighbours_batched2(
+                self.cell_ids, 
+                KERNELSZ*KERNELSZ, 
+                nside=nside, 
+                nest=nest,
+                overshoot=2.0,      # candidate pool ≈ 2×N
+                parent_batch=4096,  # tune to fit memory
+                # out_memmap_path="neighbors_nest.int64.memmap",  # enable for huge M to be tested
             )
 
-        mat_pt=self.rotation_matrices_from_healpix(nside,idx_nn[:,0],nest=nest)
+            
+        mat_pt=self.rotation_matrices_from_healpix(nside,self.cell_ids,nest=nest)
 
-        t,p = hp.pix2ang(nside,idx_nn,nest=True)
+        if self.local_test:
+            t,p = hp.pix2ang(nside,self.cell_ids[idx_nn],nest=True)
+        else:
+            t,p = hp.pix2ang(nside,idx_nn,nest=True)
+            
         vec_orig=hp.ang2vec(t,p)
 
         self.vec_rot = np.einsum('mki,ijk->kmj', vec_orig,mat_pt)
+
+        '''
+        if self.local_test:
+            idx_nn=self.remap_by_first_column(idx_nn)
+        '''
+        
         del mat_pt
         del vec_orig
         self.t=t[:,0]
@@ -38,7 +62,48 @@ class HOrientedConvol:
         self.idx_nn=idx_nn
         self.nside=nside
         self.KERNELSZ=KERNELSZ
+
+    def remap_by_first_column(self,idx: np.ndarray) -> np.ndarray:
+        """
+        Remap the values in `idx` so that:
+          - The first column becomes [0, 1, ..., N-1]
+          - All other columns are updated accordingly using the same mapping.
         
+        Parameters
+        ----------
+        idx : np.ndarray
+            Integer array of shape (N, m).
+            Assumes all values in idx are present in the first column (otherwise they get -1).
+    
+        Returns
+        -------
+        np.ndarray
+            New array with remapped indices.
+        """
+        if idx.ndim != 2:
+            raise ValueError("idx must be a 2D array of shape (N, m)")
+        
+        N, m = idx.shape
+    
+        # Create a mapping: original_value_in_first_column -> row_index
+        # Example: if idx[:,0] = [101, 505, 303], then mapping = {101:0, 505:1, 303:2}
+        keys = idx[:, 0]
+        mapping = {v: i for i, v in enumerate(keys)}
+    
+        # Optional check: ensure all values are in the mapping keys
+        # If not, you can raise an error or handle it differently
+        # if not np.isin(idx, keys).all():
+        #     missing = np.unique(idx[~np.isin(idx, keys)])
+        #     raise ValueError(f"Some values are not in idx[:,0]: {missing}")
+    
+        # Function to get mapped value, or -1 if value is not found
+        get = mapping.get
+    
+        # Apply mapping to all elements (vectorized via np.vectorize)
+        out = np.vectorize(lambda v: get(int(v), -1), otypes=[int])(idx)
+    
+        return out
+    
     def rotation_matrices_from_healpix(self,nside, hpix_idx, nest=True):
         """
         Compute rotation matrices that move each Healpix pixel center to the North pole.
@@ -100,6 +165,253 @@ class HOrientedConvol:
         while 9 * (4 ** d) < overshoot * N and d < max_depth:
             d += 1
         return d
+
+    def all_neighbours_batched2(
+        self,
+        hidx,
+        N,
+        nside,
+        *,
+        nest=True,
+        overshoot=2.0,
+        depth=None,
+        parent_batch=4096,
+        out_memmap_path=None,
+        dtype_out=np.int64,
+        vec_dtype=np.float32,    # float32 halves memory/IO for vectors
+        pad_value=-1,
+    ):
+        """
+        k-NN on a HEALPix grid (same NSIDE) with subset restriction and local indices.
+        Guarantees N neighbours per row by falling back to a global top-N over the subset if needed.
+
+        Parameters
+        ----------
+        hidx : (M,) int array
+            Input pixel IDs (NEST or RING according to `nest`). The subset domain.
+        N : int
+            Number of nearest neighbours to return (including the center). If N > M, it is clipped to M.
+        nside : int
+            Full-resolution NSIDE (power of 2, e.g., 2**20).
+        nest : bool, default True
+            Input/output scheme. Internally we use NEST.
+        overshoot : float, default 2.0
+            Safety factor for candidate pool size (9*4**d ≥ overshoot*N).
+        depth : int or None
+            Levels to go up for parent selection (None => chosen from N & overshoot via
+            self._choose_depth_for_candidates).
+        parent_batch : int, default 4096
+            Number of unique parent pixels processed per batch.
+        out_memmap_path : str or None
+            If provided, results are written to a memmap file on disk; the function returns that memmap.
+        dtype_out : dtype, default np.int64
+            Output dtype (local indices).
+        vec_dtype : dtype, default np.float32
+            dtype for 3D unit vectors.
+        pad_value : int, default -1
+            Internal padding when building rows before fallback (final result always has N valid neighbours).
+
+        Returns
+        -------
+        out_idx : (M, N) int array (or memmap)
+            Local indices (0..M-1) into the input `hidx`. Each row has exactly N entries.
+        """
+        # ---- Basic checks ----
+        hidx = np.asarray(hidx, dtype=np.int64)
+        if hidx.ndim != 1:
+            raise ValueError("hidx must be 1D (M,)")
+        M = hidx.size
+        if M == 0:
+            return np.empty((0, 0), dtype=dtype_out)
+        if N <= 0:
+            raise ValueError("N must be >= 1")
+        # You cannot return more than M neighbours within the subset
+        N = int(min(N, M))
+
+        # ---- Work in NEST internally ----
+        if nest:
+            hidx_n = hidx
+        else:
+            hidx_n = hp.ring2nest(nside, hidx)
+
+        # ---- Depth / hierarchy parameters (define shift BEFORE use) ----
+        D = int(np.log2(nside))
+        if (1 << D) != nside:
+            raise ValueError(f"nside must be a power of 2, got {nside}")
+        if depth is None:
+            d = self._choose_depth_for_candidates(N, overshoot=overshoot, max_depth=12)
+        else:
+            d = int(depth)
+        d = max(0, min(d, D))
+        nside_parent = nside >> d
+        shift = 2 * d               # child index = (parent << (2d)) + [0..4**d - 1]
+        K = 1 << shift              # 4**d children per parent (==1 if d==0)
+
+        # ---- Local-index lookup over the subset (sorted arrays; no giant dict) ----
+        # perm maps sorted position -> original local index
+        perm = np.argsort(hidx_n, kind="mergesort")
+        hidx_sorted = hidx_n[perm]
+        M_sorted = hidx_sorted.size
+
+        def values_to_local_indices(vals: np.ndarray):
+            """
+            Map HEALPix IDs in `vals` -> local indices (0..M-1) where present, else -1.
+            OOB-safe: never indexes with k==M.
+            """
+            vals = np.asarray(vals, dtype=np.int64)
+            k = np.searchsorted(hidx_sorted, vals, side="left")   # 0..M_sorted
+            in_range = (k < M_sorted)
+
+            eq = np.zeros(vals.shape, dtype=bool)
+            if np.any(in_range):
+                ki = k[in_range]
+                eq[in_range] = (hidx_sorted[ki] == vals[in_range])
+
+            valid = in_range & eq
+            out = np.full(vals.shape, -1, dtype=np.int64)
+            if np.any(valid):
+                kv = k[valid]
+                out[valid] = perm[kv]
+            return out, valid
+
+        # ---- Group centers by parent (at depth d) ----
+        parents_of_center = hidx_n >> shift
+        order = np.argsort(parents_of_center, kind="mergesort")
+        parents_sorted = parents_of_center[order]
+        uparents, starts, counts = np.unique(
+            parents_sorted, return_index=True, return_counts=True
+        )
+        P = uparents.size
+
+        # ---- Output buffer ----
+        if out_memmap_path is None:
+            out_local = np.empty((M, N), dtype=dtype_out)
+        else:
+            out_local = np.memmap(out_memmap_path, mode="w+", dtype=dtype_out, shape=(M, N))
+
+        # ---- Precompute child block used to refine parents back to full NSIDE ----
+        child_block = np.arange(K, dtype=np.int64)
+
+        # ---- Precompute unit vectors for the entire subset for the global fallback ----
+        xs, ys, zs = hp.pix2vec(nside, hidx_n, nest=True)   # (M,)
+        vsubset = np.stack([xs, ys, zs], axis=1).astype(vec_dtype, copy=False)  # (M,3)
+
+        i0 = 0
+        while i0 < P:
+            i1 = min(i0 + parent_batch, P)
+
+            # ----- Parents in this batch -----
+            parents_b = uparents[i0:i1]                     # (Pb,)
+            Pb = parents_b.size
+
+            # Centers slice in the sorted view
+            c_lo = starts[i0]
+            c_hi = starts[i1] if i1 < P else parents_sorted.size
+            centers_sorted_pos = np.arange(c_lo, c_hi, dtype=np.int64)
+            centers_idx = order[centers_sorted_pos]         # original local indices (M,)
+            centers_par = parents_sorted[centers_sorted_pos]
+
+            # Map each center to relative parent index [0..Pb-1]
+            rel_parent = np.searchsorted(parents_b, centers_par)   # (Nc,)
+            Nc = rel_parent.size
+
+            # ----- Parent neighbours at parent NSIDE (vectorized) -----
+            neigh8 = hp.get_all_neighbours(nside_parent, parents_b, nest=True)   # (8,Pb)
+            neigh8 = np.where(neigh8 < 0, parents_b[None, :], neigh8)            # (8,Pb)
+            parents_ext = np.vstack([parents_b[None, :], neigh8])                # (9,Pb)
+
+            # ----- Enumerate children candidates at full NSIDE -----
+            # children_b: (Pb, 9*K)
+            children_b = ((parents_ext.T[:, :, None] << shift) + child_block[None, None, :]).reshape(Pb, -1)
+            Cb = children_b.shape[1]
+
+            # ----- Candidate unit vectors (bank per parent) -----
+            cand_flat = children_b.reshape(-1)                                   # (Pb*Cb,)
+            xc, yc, zc = hp.pix2vec(nside, cand_flat, nest=True)
+            vcand = np.stack([xc, yc, zc], axis=1).astype(vec_dtype, copy=False).reshape(Pb, Cb, 3)
+
+            # ----- Center unit vectors for this batch -----
+            xc, yc, zc = hp.pix2vec(nside, hidx_n[centers_idx], nest=True)       # each (Nc,)
+            vcent = np.stack([xc, yc, zc], axis=1).astype(vec_dtype, copy=False) # (Nc,3)
+
+            # ----- Score candidates -----
+            vcand_sel = vcand[rel_parent]                                        # (Nc,Cb,3)
+            dots = np.sum(vcand_sel * vcent[:, None, :], axis=2)                 # (Nc,Cb)
+
+            # ----- Restrict to subset: mask out candidates not in `hidx` -----
+            local_idx_flat, is_in_subset_flat = values_to_local_indices(cand_flat)
+            is_in_subset = is_in_subset_flat.reshape(Pb, Cb)[rel_parent]         # (Nc,Cb)
+            local_idx_mat = local_idx_flat.reshape(Pb, Cb)[rel_parent]           # (Nc,Cb)
+
+            # Set out-of-subset to a large negative so they won't be selected
+            dots[~is_in_subset] = np.float32(-1e30)
+
+            # ----- Provisional top-N using local candidate bank -----
+            kth = min(N - 1, Cb - 1)
+            top_local = np.argpartition(-dots, kth=kth, axis=1)[:, :N]           # (Nc,N)
+            sel_dots = dots[np.arange(Nc)[:, None], top_local]                   # (Nc,N)
+            sel_locals = local_idx_mat[np.arange(Nc)[:, None], top_local]        # (Nc,N)
+
+            # Stable reorder by descending dot
+            sort_in_row = np.argsort(-sel_dots, axis=1)
+            sel_locals = sel_locals[np.arange(Nc)[:, None], sort_in_row]         # (Nc,N)
+            sel_dots   = sel_dots[np.arange(Nc)[:, None], sort_in_row]           # (Nc,N)
+
+            # Ensure center is present
+            center_local, _ = values_to_local_indices(hidx_n[centers_idx])
+            missing_center = ~np.any(sel_locals == center_local[:, None], axis=1)
+            if np.any(missing_center):
+                rr = np.where(missing_center)[0]
+                sel_locals[rr, -1] = center_local[rr]
+                # Re-rank those rows by true dot with the center
+                vrows = vsubset[sel_locals[rr]]                                  # (R,N,3)
+                dots_fix = np.sum(vcent[rr][:, None, :] * vrows, axis=2)         # (R,N)
+                sort_fix = np.argsort(-dots_fix, axis=1)
+                sel_locals[rr] = sel_locals[rr, np.arange(N)[None, :]][np.arange(rr.size)[:, None], sort_fix]
+
+            # ----- Guarantee N neighbours per row (“quoi qu’il arrive”) -----
+            # Some rows may still contain pad_value (-1) if not enough subset candidates in the local bank.
+            # For those rows, fall back to a global top-N over the entire subset.
+            need_fallback = np.any(sel_locals < 0, axis=1)
+            if np.any(need_fallback):
+                rr = np.where(need_fallback)[0]
+                # Global top-N: dot with all subset pixels
+                dots_global = vsubset @ vcent[rr].T                               # (M, R)
+                dots_global = dots_global.T                                      # (R, M)
+
+                # Ensure center present (and well ranked)
+                # Center local index for these rows:
+                c_loc = center_local[rr]
+                # Mask nothing; we want pure top-N within subset
+                kth_g = N - 1
+                top_g = np.argpartition(-dots_global, kth=kth_g, axis=1)[:, :N]  # (R,N)
+
+                # Order by score
+                sel_g_dots = np.take_along_axis(dots_global, top_g, axis=1)      # (R,N)
+                sort_g = np.argsort(-sel_g_dots, axis=1)
+                top_g = np.take_along_axis(top_g, sort_g, axis=1)
+
+                # Force the center to be present
+                has_center = (top_g == c_loc[:, None]).any(axis=1)
+                need_center = ~has_center
+                if np.any(need_center):
+                    r2 = np.where(need_center)[0]
+                    top_g[r2, -1] = c_loc[r2]
+                    # Re-sort only those rows
+                    sel_vecs = vsubset[top_g[r2]]                                 # (r2,N,3)
+                    dots_fix = np.sum(vcent[rr[r2]][:, None, :] * sel_vecs, axis=2)
+                    sort_fix = np.argsort(-dots_fix, axis=1)
+                    top_g[r2] = top_g[r2, np.arange(N)[None, :]][np.arange(r2.size)[:, None], sort_fix]
+
+                # Write back globally-computed rows
+                sel_locals[rr] = top_g.astype(np.int64, copy=False)
+
+            # ----- Store results in original order (local indices 0..M-1) -----
+            out_local[centers_idx, :] = sel_locals.astype(dtype_out, copy=False)
+
+            i0 = i1  # next batch
+
+        return out_local
 
     def all_neighbours_batched(
         self,
@@ -307,33 +619,57 @@ class HOrientedConvol:
         
         if return_smooth:
             wsmooth=np.exp(-sigma_gauss*r*self.nside**2)
+            '''
+            if self.local_test:
+                idx=np.where(self.idx_nn==-1)
+                wsmooth[0,idx[0],idx[1]]=0.0
+            '''    
             if norm_std:
-                wsmooth = wsmooth/np.sum(wsmooth,2)[:,:,None]
+                ww=np.sum(wsmooth,2)
+                wsmooth = wsmooth/ww[:,:,None]
 
         #for consistency with previous definition
         w=np.exp(-sigma_gauss*r*self.nside**2)*(np.cos(xx*self.nside*sigma_cosine*np.pi)-1J*np.sin(xx*self.nside*sigma_cosine*np.pi))
-        
+        '''
+        if self.local_test:
+            idx=np.where(self.idx_nn==-1)
+            for k in range(NORIENT):
+                w[k,idx[0],idx[1]]=0.0
+        '''        
         if norm_std:
-            w = w/(np.sum(abs(w),2)[:,:,None])
+            ww=1/np.sum(abs(w),2)[:,:,None] 
+        else:
+            ww=1.0
         if norm_mean:
-            w = w.real-np.mean(w.real,2)[:,:,None]+1J*(w.imag-np.mean(w.imag,2)[:,:,None]) 
-
+            w = (w.real-np.mean(w.real,2)[:,:,None]+1J*(w.imag-np.mean(w.imag,2)[:,:,None]))*ww
+            
         NK=self.idx_nn.shape[1]
+        indice_1_0 = np.tile(self.idx_nn.flatten(),NORIENT)
+        indice_1_1 = np.tile(np.repeat(self.idx_nn[:,0],NK),NORIENT)+ \
+            np.repeat(np.arange(NORIENT),self.idx_nn.shape[0]*self.idx_nn.shape[1])*self.idx_nn.shape[0]
+        w = w.flatten()
+
+        '''
+        if self.local_test:
+            w[indice_1_0==-1]=0.0
+            indice_1_0[indice_1_0==-1]=0
+        '''
+        if return_smooth:
+            indice_2_0 = self.idx_nn.flatten()
+            indice_2_1 = np.repeat(self.idx_nn[:,0],NK)
+            wsmooth = wsmooth.flatten()
+            '''
+            if self.local_test:
+                wsmooth[indice_2_0==-1]=0.0
+                indice_2_0[indice_2_0==-1]=0
+            '''    
         if return_index:
             if return_smooth:
-                return w.flatten(),np.concatenate([np.tile(self.idx_nn.flatten(),NORIENT)[:,None],
-                                               (np.tile(np.repeat(self.idx_nn[:,0],NK),NORIENT)+
-                                               np.repeat(np.arange(NORIENT),self.idx_nn.shape[0]*self.idx_nn.shape[1])*12*self.nside**2)[:,None]],1),wsmooth.flatten(),np.concatenate([self.idx_nn.flatten()[:,None],
-                                               np.repeat(self.idx_nn[:,0],NK)[:,None]],1)
+                return w,np.concatenate([indice_1_0[:,None],indice_1_1[:,None]],1),wsmooth,np.concatenate([indice_2_0[:,None],indice_2_1[:,None]],1)
             
-            return w.flatten(),np.concatenate([np.tile(self.idx_nn.flatten(),NORIENT)[:,None],
-                                               (np.tile(np.repeat(self.idx_nn[:,0],NK),NORIENT)+
-                                               np.repeat(np.arange(NORIENT),self.idx_nn.shape[0]*self.idx_nn.shape[1])*12*self.nside**2)[:,None]],1)
-        return csr_array((w.flatten(), 
-                              (np.tile(self.idx_nn.flatten(),NORIENT), 
-                               np.tile(np.repeat(self.idx_nn[:,0],NK),NORIENT)
-                               +np.repeat(np.arange(NORIENT),self.idx_nn.shape[0]*self.idx_nn.shape[1])*12*self.nside**2)),
-                                 shape=(12*self.nside**2, 12*self.nside**2*NORIENT))
+            return w,np.concatenate([indice_1_0[:,None],indice_1_1[:,None]],1)
+        
+        return csr_array((w, (indice_1_0, indice_1_1)), shape=(12*self.nside**2, 12*self.nside**2*NORIENT))
 
     
     def make_idx_weights(self,polar=False,gamma=1.0,device='cuda',allow_extrapolation=True):

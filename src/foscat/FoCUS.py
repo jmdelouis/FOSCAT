@@ -1175,7 +1175,7 @@ class FoCUS:
                                       % (self.TEMPLATE_PATH, l_kernel**2,TMPFILE_VERSION, nside)
                 )
             else:
-                if cell_ids is not None and nside>512:
+                if cell_ids is not None and nside>256:
                     tmp = self.read_index(
                         "%s/XXXX_%s_W%d_%d_%d_PIDX.fst"  # can not work
                         % (
@@ -1208,7 +1208,7 @@ class FoCUS:
                     )
                         
         except:
-            if cell_ids is not None and nside<=512:
+            if cell_ids is not None and nside<=256:
                 self.init_index(nside, kernel=kernel, spin=spin)
                 
             if not self.use_2D:
@@ -1409,7 +1409,7 @@ class FoCUS:
                                                                         return_smooth=True)
                     
                     '''
-                    if cell_ids is not None and nside>512:
+                    if cell_ids is not None and nside>256:
                         if not isinstance(cell_ids, np.ndarray):
                             cell_ids = self.backend.to_numpy(cell_ids)
                         th, ph = hp.pix2ang(nside, cell_ids, nest=True)
@@ -1608,7 +1608,7 @@ class FoCUS:
                             )
                         return None
 
-        if cell_ids is None or nside<=512:
+        if cell_ids is None or nside<=256:
             self.barrier()
             if self.use_2D:
                 tmp = self.read_index(
@@ -1714,7 +1714,20 @@ class FoCUS:
                 tmp2[lidx,0]=0
                 tmp2[:,1]+=i_id*lcell_ids.shape[0]
                 tmp2[:,0]+=i_id2*lcell_ids.shape[0]
+
+                #add normalisation
+                ww=np.bincount(tmp2[:,1],weights=ws)
+                ws/=ww[tmp2[:,1]]
+
+                wh=np.bincount(tmp[:,1])
+                ww=np.bincount(tmp[:,1],weights=wr)
+                wr-=(ww/wh)[tmp[:,1]]
+                ww=np.bincount(tmp[:,1],weights=wi)
+                wi-=(ww/wh)[tmp[:,1]]
                 
+                ww=np.bincount(tmp[:,1],weights=np.sqrt(wr*wr+wi*wi))
+                wr/=ww[tmp[:,1]]
+                wi/=ww[tmp[:,1]]
                 
         else:
             tmp = indice
