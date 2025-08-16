@@ -217,7 +217,7 @@ class HOrientedConvol:
             Local indices (0..M-1) into the input `hidx`. Each row has exactly N entries.
         """
         # ---- Basic checks ----
-        hidx = np.asarray(hidx, dtype=np.int64)
+        #hidx = np.asarray(hidx, dtype=np.int64)
         if hidx.ndim != 1:
             raise ValueError("hidx must be 1D (M,)")
         M = hidx.size
@@ -459,7 +459,7 @@ class HOrientedConvol:
         out_idx : (M, N) int array (or memmap)
             For each input pixel, indices of the N nearest pixels (same ordering as input).
         """
-        hidx = np.asarray(hidx, dtype=np.int64)
+        #hidx = np.asarray(hidx, dtype=np.int64)
         M = hidx.size
     
         # -- Work in NEST internally
