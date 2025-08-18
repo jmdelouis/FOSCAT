@@ -248,7 +248,7 @@ class HOrientedConvol:
 
         elif self.KERNELSZ == 7:
             sigma_gauss = 0.5
-            sigma_cosine = 0.25
+            sigma_cosine = 0.5
 
         orientations=np.asarray(orientations)
         NORIENT = orientations.shape[0]
@@ -263,28 +263,18 @@ class HOrientedConvol:
         
         if return_smooth:
             wsmooth=np.exp(-sigma_gauss*r*self.nside**2)
-            '''
-            if self.local_test:
-                idx=np.where(self.idx_nn==-1)
-                wsmooth[0,idx[0],idx[1]]=0.0
-            '''    
             if norm_std:
                 ww=np.sum(wsmooth,2)
-                #print(ww.min(),ww.max())
                 wsmooth = wsmooth/ww[:,:,None]
 
         #for consistency with previous definition
         w=np.exp(-sigma_gauss*r*self.nside**2)*(np.cos(xx*self.nside*sigma_cosine*np.pi)-1J*np.sin(xx*self.nside*sigma_cosine*np.pi))
-        '''
-        if self.local_test:
-            idx=np.where(self.idx_nn==-1)
-            for k in range(NORIENT):
-                w[k,idx[0],idx[1]]=0.0
-        '''        
+              
         if norm_std:
             ww=1/np.sum(abs(w),2)[:,:,None] 
         else:
             ww=1.0
+            
         if norm_mean:
             w = (w.real-np.mean(w.real,2)[:,:,None]+1J*(w.imag-np.mean(w.imag,2)[:,:,None]))*ww
             
@@ -294,20 +284,11 @@ class HOrientedConvol:
             np.repeat(np.arange(NORIENT),self.idx_nn.shape[0]*self.idx_nn.shape[1])*self.idx_nn.shape[0]
         w = w.flatten()
 
-        '''
-        if self.local_test:
-            w[indice_1_0==-1]=0.0
-            indice_1_0[indice_1_0==-1]=0
-        '''
         if return_smooth:
             indice_2_0 = self.idx_nn.flatten()
             indice_2_1 = np.repeat(self.idx_nn[:,0],NK)
             wsmooth = wsmooth.flatten()
-            '''
-            if self.local_test:
-                wsmooth[indice_2_0==-1]=0.0
-                indice_2_0[indice_2_0==-1]=0
-            '''    
+            
         if return_index:
             if return_smooth:
                 return w,np.concatenate([indice_1_0[:,None],indice_1_1[:,None]],1),wsmooth,np.concatenate([indice_2_0[:,None],indice_2_1[:,None]],1)

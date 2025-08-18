@@ -1188,6 +1188,7 @@ class FoCUS:
                     )
 
                 else:
+                    '''
                     print('LOAD ',"%s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN%d.fst"
                         % (
                             self.TEMPLATE_PATH,
@@ -1196,6 +1197,7 @@ class FoCUS:
                             self.NORIENT,
                             nside,spin  # if cell_ids computes the index
                         ))
+                    '''
                     tmp = self.read_index(
                         "%s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN%d.fst"
                         % (
@@ -1212,16 +1214,17 @@ class FoCUS:
                 self.init_index(nside, kernel=kernel, spin=spin)
                 
             if not self.use_2D:
-                print('NOT FOUND THEN COMPUTE %s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN%d.fst'
-                    % (
-                        self.TEMPLATE_PATH,
-                        TMPFILE_VERSION,
-                        l_kernel**2,
-                        self.NORIENT,
-                        nside,spin  # if cell_ids computes the index
-                    )
-                      )
                 if spin!=0:
+                    # keep the print here as spin!=0 can be long
+                    print('NOT FOUND THEN COMPUTE %s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN%d.fst'
+                        % (
+                            self.TEMPLATE_PATH,
+                            TMPFILE_VERSION,
+                            l_kernel**2,
+                            self.NORIENT,
+                            nside,spin  # if cell_ids computes the index
+                        )
+                      )
                     try:
                         tmp = self.read_index(
                             "%s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN0.fst"
@@ -1234,6 +1237,7 @@ class FoCUS:
                             )
                         )
                     except:
+                        '''
                         print('NOT FOUND THEN COMPUTE %s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN0.fst'
                               % (
                                   self.TEMPLATE_PATH,
@@ -1243,7 +1247,7 @@ class FoCUS:
                                   nside
                               )
                               )
-                        
+                        '''
                         self.init_index(nside, kernel=kernel, spin=0)
                         
                         tmp = self.read_index(
