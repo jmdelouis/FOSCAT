@@ -1175,7 +1175,7 @@ class FoCUS:
                                       % (self.TEMPLATE_PATH, l_kernel**2,TMPFILE_VERSION, nside)
                 )
             else:
-                if cell_ids is not None and nside>256:
+                if cell_ids is not None and spin==0:
                     tmp = self.read_index(
                         "%s/XXXX_%s_W%d_%d_%d_PIDX.fst"  # can not work
                         % (
@@ -1208,7 +1208,7 @@ class FoCUS:
                     )
                         
         except:
-            if cell_ids is not None and nside<=256:
+            if cell_ids is not None and spin!=0:
                 self.init_index(nside, kernel=kernel, spin=spin)
                 
             if not self.use_2D:
@@ -1608,7 +1608,7 @@ class FoCUS:
                             )
                         return None
 
-        if cell_ids is None or nside<=256:
+        if cell_ids is None or spin!=0:
             self.barrier()
             if self.use_2D:
                 tmp = self.read_index(
