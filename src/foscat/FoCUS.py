@@ -1270,6 +1270,7 @@ class FoCUS:
                                         )
                                     )
 
+                    '''
                     nn=self.NORIENT*12*nside**2
                     idxEB=np.concatenate([tmp,tmp,tmp,tmp],0)
                     idxEB[tmp.shape[0]:2*tmp.shape[0],0]+=12*nside**2
@@ -1277,7 +1278,156 @@ class FoCUS:
                     idxEB[2*tmp.shape[0]:,1]+=nn
 
                     tmpEB=np.zeros([tmpw.shape[0]*4],dtype='complex')
+                    '''
+                    import foscat.HOrientedConvol as hs
 
+                    hconvol=hs.HOrientedConvol(nside,3*self.KERNELSZ,cell_ids=cell_ids)
+                    
+                    if cell_ids is None:
+                        l_cell_ids=np.arange(12*nside**2)
+                    else:
+                        l_cell_ids=cell_ids
+                        
+                    nvalid=self.KERNELSZ**2
+                    idxEB=hconvol.idx_nn[:,0:nvalid]
+                    tmpEB=np.zeros([self.NORIENT,4,l_cell_ids.shape[0],nvalid],dtype='complex')       
+                    tmpS=np.zeros([4,l_cell_ids.shape[0],nvalid],dtype='float')           
+                    
+                    idx={}
+                    nn=0
+                    nn2=1
+                    if nside<64:
+                        pp=10
+                    else:
+                        pp=1
+                    while nn2>0:
+                        idx2={}
+                        nn2=0
+                        im=np.zeros([12*nside**2])
+                        for n in range(l_cell_ids.shape[0]):
+                            if im[hconvol.idx_nn[n,0]]==0 and n not in idx:
+                                im[hconvol.idx_nn[n,:]]=1.0
+                                idx[hconvol.idx_nn[n,0]]=1.0
+                                idx2[hconvol.idx_nn[n,0]]=1.0
+                                nn+=1
+                                nn2+=1
+                        im=np.zeros([12*nside**2])
+                        for k in idx2:
+                            im[k]=1.0
+                        r=self.convol(im)
+                        for k in range(self.NORIENT):
+                            ralm=hp.map2alm(hp.reorder(r[k].cpu().numpy().real,n2r=True))[None,:]
+                            ialm=hp.map2alm(hp.reorder(r[k].cpu().numpy().imag,n2r=True))[None,:]
+                            
+                            alm=np.concatenate([ralm,0*ralm,0*ralm],0)
+                            rqe,rue,rie=hp.alm2map_spin(alm,nside,spin,3*nside-1)
+                            alm=np.concatenate([ialm,0*ialm,0*ialm],0)
+                            iqe,iue,iie=hp.alm2map_spin(alm,nside,spin,3*nside-1)
+                            
+                            alm=np.concatenate([0*ralm,ralm,0*ralm],0)
+                            rqb,rub,rib=hp.alm2map_spin(alm,nside,spin,3*nside-1)
+                            alm=np.concatenate([0*ialm,ialm,0*ialm],0)
+                            iqb,iub,iib=hp.alm2map_spin(alm,nside,spin,3*nside-1)
+                            
+                            rqe=hp.reorder(rqe,r2n=True)
+                            rue=hp.reorder(rue,r2n=True)
+                            rqb=hp.reorder(rqb,r2n=True)
+                            rub=hp.reorder(rub,r2n=True)
+                            
+                            iqe=hp.reorder(iqe,r2n=True)
+                            iue=hp.reorder(iue,r2n=True)
+                            iqb=hp.reorder(iqb,r2n=True)
+                            iub=hp.reorder(iub,r2n=True)
+                            
+                            for l in idx2:
+                                tmpEB[k,0,l]=rqe[idxEB[l,:]]+1J*iqe[idxEB[l,:]]
+                                tmpEB[k,1,l]=rue[idxEB[l,:]]+1J*iue[idxEB[l,:]]
+                                tmpEB[k,2,l]=rqb[idxEB[l,:]]+1J*iqb[idxEB[l,:]]
+                                tmpEB[k,3,l]=rub[idxEB[l,:]]+1J*iub[idxEB[l,:]]
+                                
+                        r=self.smooth(im)
+                        
+                        ralm=hp.map2alm(hp.reorder(r.cpu().numpy(),n2r=True))[None,:]
+                            
+                        alm=np.concatenate([ralm,0*ralm,0*ralm],0)
+                        rqe,rue,rie=hp.alm2map_spin(alm,nside,spin,3*nside-1)
+                            
+                        alm=np.concatenate([0*ralm,ralm,0*ralm],0)
+                        rqb,rub,rib=hp.alm2map_spin(alm,nside,spin,3*nside-1)
+                        
+                        rqe=hp.reorder(rqe,r2n=True)
+                        rue=hp.reorder(rue,r2n=True)
+                        rqb=hp.reorder(rqb,r2n=True)
+                        rub=hp.reorder(rub,r2n=True)
+                            
+                        for l in idx2:
+                            tmpS[0,l,:]=rqe[idxEB[l,:]]
+                            tmpS[1,l,:]=rue[idxEB[l,:]]
+                            tmpS[2,l,:]=rqb[idxEB[l,:]]
+                            tmpS[3,l,:]=rub[idxEB[l,:]]
+                        if 100*nn/(l_cell_ids.shape[0])>pp:
+                            if nside<64:
+                                pp+=10
+                            else:
+                                pp+=1
+                            print('%.2f%% Done'%(100*nn/(l_cell_ids.shape[0])))
+                        
+                    wav=tmpEB.flatten()
+                    wwav=tmpS.flatten()
+                    ndata=l_cell_ids.shape[0]*nvalid
+                    indice_1_1=np.tile(idxEB.flatten(),4*self.NORIENT)
+                    for k in range(self.NORIENT):
+                        indice_1_1[(4*k+1)*ndata:(4*k+2)*ndata]+=l_cell_ids.shape[0]
+                        indice_1_1[(4*k+3)*ndata:(4*k+4)*ndata]+=l_cell_ids.shape[0]
+                    
+                    indice_1_0=np.tile(np.tile(np.repeat(np.arange(l_cell_ids.shape[0]),nvalid),4),self.NORIENT)
+                    for k in range(self.NORIENT):
+                        indice_1_0[(4*k+2)*ndata:(4*k+4)*ndata]+=self.NORIENT*l_cell_ids.shape[0]
+                        indice_1_0[(4*k)*ndata:(4*k+4)*ndata]+=k*l_cell_ids.shape[0]
+                    '''
+                    import matplotlib.pyplot as plt
+                    plt.figure()
+                    plt.subplot(2,2,1)
+                    plt.plot(indice_1_0)
+                    plt.subplot(2,2,2)
+                    plt.plot(indice_1_1)
+                    plt.subplot(2,2,3)
+                    plt.plot(wav.real)
+                    plt.subplot(2,2,4)
+                    plt.plot(abs(wav))
+                    
+                    iarg=np.argsort(indice_1_0)
+                    indice_1_1=indice_1_1[iarg]
+                    indice_1_0=indice_1_0[iarg]
+                    wav=wav[iarg]
+                    '''
+                    
+                    indice=np.concatenate([indice_1_1[:,None],indice_1_0[:,None]],1)
+                    
+                    indice_2_1=np.tile(idxEB.flatten(),4)
+                    indice_2_1[ndata:2*ndata]+=l_cell_ids.shape[0]
+                    indice_2_1[3*ndata:4*ndata]+=l_cell_ids.shape[0]
+                    indice_2_0=np.tile(np.repeat(np.arange(l_cell_ids.shape[0]),nvalid),4)
+                    indice_2_0[2*ndata:]+=l_cell_ids.shape[0]
+                    '''
+                    plt.figure()
+                    plt.subplot(2,2,1)
+                    plt.plot(indice_2_0)
+                    plt.subplot(2,2,2)
+                    plt.plot(indice_2_1)
+                    plt.subplot(2,2,3)
+                    plt.plot(wav.real)
+                    plt.subplot(2,2,4)
+                    plt.plot(wwav)
+                    
+                    iarg=np.argsort(indice_2_0)
+                    indice_2_1=indice_2_1[iarg]
+                    indice_2_0=indice_2_0[iarg]
+                    wwav=wwav[iarg]
+                    '''
+                    indice2=np.concatenate([indice_2_1[:,None],indice_2_0[:,None]],1)
+                    
+                    '''
                     for k in range(self.NORIENT*12*nside**2):
                         if k%(nside**2)==0:
                             print('Init index 1/2 spin=%d Please wait %d done against %d nside=%d kernel=%d'%(spin,k//(nside**2),
@@ -1304,7 +1454,7 @@ class FoCUS:
                         tmpEB[idx+2*tmp.shape[0]]=hp.reorder(i,r2n=True)[tmp[idx,0]]+1J*hp.reorder(i2,r2n=True)[tmp[idx,0]]
                         tmpEB[idx+3*tmp.shape[0]]=hp.reorder(q,r2n=True)[tmp[idx,0]]+1J*hp.reorder(q2,r2n=True)[tmp[idx,0]]
 
-                    
+                    '''
                     self.save_index("%s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN%d.fst"% (self.TEMPLATE_PATH,
                                                                        self.TMPFILE_VERSION,
                                                                        self.KERNELSZ**2,
@@ -1312,7 +1462,7 @@ class FoCUS:
                                                                        nside,
                                                                        spin
                                                                        ),
-                                    idxEB
+                                    indice
                                     )
                     self.save_index("%s/FOSCAT_%s_W%d_%d_%d_WAVE-SPIN%d.fst"% (self.TEMPLATE_PATH,
                                                                        self.TMPFILE_VERSION,
@@ -1321,9 +1471,9 @@ class FoCUS:
                                                                        nside,
                                                                        spin,
                                                                        ),
-                                    tmpEB
+                                    wav
                                     )
-                    
+                    '''
                     tmp = self.read_index(
                             "%s/FOSCAT_%s_W%d_%d_%d_PIDX2-SPIN0.fst"
                             % (
@@ -1365,7 +1515,7 @@ class FoCUS:
                         tmpEB[idx+2*tmp.shape[0]]=hp.reorder(i,r2n=True)[tmp[idx,0]]
                         tmpEB[idx+3*tmp.shape[0]]=hp.reorder(q,r2n=True)[tmp[idx,0]]
 
-                    
+                    '''
                     self.save_index("%s/FOSCAT_%s_W%d_%d_%d_PIDX2-SPIN%d.fst"% (self.TEMPLATE_PATH,
                                                                        self.TMPFILE_VERSION,
                                                                        self.KERNELSZ**2,
@@ -1373,7 +1523,7 @@ class FoCUS:
                                                                        nside,
                                                                        spin
                                                                        ),
-                                    idxEB
+                                    indice2
                                     )
                     self.save_index("%s/FOSCAT_%s_W%d_%d_%d_SMOO-SPIN%d.fst"% (self.TEMPLATE_PATH,
                                                                        self.TMPFILE_VERSION,
@@ -1382,8 +1532,9 @@ class FoCUS:
                                                                        nside,
                                                                        spin,
                                                                        ),
-                                    tmpEB
+                                    wwav
                                     )
+                    
                 else:
                     '''
                     if l_kernel == 5:
@@ -2659,16 +2810,30 @@ class FoCUS:
                 odata = odata * ishape[k]
 
             tim = self.backend.bk_reshape(image, [odata, ishape[-1]])
-            if tim.dtype == self.all_cbk_type:
-                rr = self.backend.bk_sparse_dense_matmul(
-                    self.backend.bk_real(tim), l_w_smooth
-                )
-                ri = self.backend.bk_sparse_dense_matmul(
-                    self.backend.bk_imag(tim), l_w_smooth
-                )
-                res = self.backend.bk_complex(rr, ri)
+            if spin==0:
+                if tim.dtype == self.all_cbk_type:
+                    rr = self.backend.bk_sparse_dense_matmul(
+                        self.backend.bk_real(tim), l_w_smooth
+                    )
+                    ri = self.backend.bk_sparse_dense_matmul(
+                        self.backend.bk_imag(tim), l_w_smooth
+                    )
+                    res = self.backend.bk_complex(rr, ri)
+                else:
+                    res = self.backend.bk_sparse_dense_matmul(tim, l_w_smooth)
             else:
-                res = self.backend.bk_sparse_dense_matmul(tim, l_w_smooth)
+                tim=self.backend.bk_reshape(tim,[odata//2,2*tim.shape[-1]])
+                if tim.dtype == self.all_cbk_type:
+                    rr = self.backend.bk_sparse_dense_matmul(
+                        self.backend.bk_real(tim), l_w_smooth
+                    )
+                    ri = self.backend.bk_sparse_dense_matmul(
+                        self.backend.bk_imag(tim), l_w_smooth
+                    )
+                    res = self.backend.bk_complex(rr, ri)
+                else:
+                    res = self.backend.bk_sparse_dense_matmul(tim, l_w_smooth)
+                
             if len(ishape) == 1:
                 return self.backend.bk_reshape(res, [ishape[-1]])
             else:

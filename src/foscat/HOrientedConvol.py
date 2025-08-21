@@ -9,7 +9,7 @@ class HOrientedConvol:
     def __init__(self,nside,KERNELSZ,cell_ids=None,nest=True):
         
         if KERNELSZ % 2 == 0:
-            raise ValueError(f"N must be odd so that coordinates are integers from -K..K; got N={N}.")
+            raise ValueError(f"N must be odd so that coordinates are integers from -K..K; got N={KERNELSZ}.")
 
         self.local_test=False
         
@@ -239,16 +239,9 @@ class HOrientedConvol:
         
         sigma_gauss = 0.5
         sigma_cosine = 0.5
-        if self.KERNELSZ == 5:
-            sigma_gauss = 0.5
-            sigma_cosine = 0.5
-        elif self.KERNELSZ == 3:
+        if self.KERNELSZ == 3:
             sigma_gauss = 1.0 / np.sqrt(2)
             sigma_cosine = 1.0
-
-        elif self.KERNELSZ == 7:
-            sigma_gauss = 0.5
-            sigma_cosine = 0.5
 
         orientations=np.asarray(orientations)
         NORIENT = orientations.shape[0]
