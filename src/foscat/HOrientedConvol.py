@@ -301,8 +301,8 @@ class HOrientedConvol:
             xx=self.vec_rot[:,:,0]
             yy=self.vec_rot[:,:,1]
         
-        self.w_idx,self.w_w = self.bilinear_weights_NxN(xx*nside*gamma,
-                                                        yy*nside*gamma,
+        self.w_idx,self.w_w = self.bilinear_weights_NxN(xx*self.nside*gamma,
+                                                        yy*self.nside*gamma,
                                                         allow_extrapolation=allow_extrapolation)
 
         # Ensure types/devices
@@ -449,7 +449,7 @@ class HOrientedConvol:
         B, C_i, Npix = im.shape
         device = im.device
         dtype  = im.dtype
-    
+        
         # Align class tensors to device/dtype
         idx_nn = self.idx_nn.to(device=device, dtype=torch.long)  # (Npix, P)
         w_idx  = self.w_idx.to(device=device, dtype=torch.long)   # (Npix, P) or (Npix, S, P)
@@ -541,3 +541,6 @@ class HOrientedConvol:
         out     = out_ci.sum(dim=1)             # (B, C_o, Npix)
     
         return out
+
+   
+        

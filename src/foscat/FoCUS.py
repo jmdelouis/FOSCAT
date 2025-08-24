@@ -3,6 +3,7 @@ import sys
 
 import healpy as hp
 import numpy as np
+import foscat.HealSpline as HS
 from scipy.interpolate import griddata
 
 TMPFILE_VERSION = "V7_0"
@@ -637,11 +638,13 @@ class FoCUS:
         return image.numpy()[self.ring2nest[lout]]
 
     # --------------------------------------------------------
-    def ud_grade(self, im, j, axis=0):
+    def ud_grade(self, im, j, axis=0, cell_ids=None, nside=None):
         rim = im
         for k in range(j):
             # rim = self.smooth(rim, axis=axis)
-            rim = self.ud_grade_2(rim, axis=axis)
+            rim = self.ud_grade_2(rim, axis=axis,
+                                  cell_ids=cell_ids,
+                                  nside=nside)
         return rim
 
     # --------------------------------------------------------
@@ -733,7 +736,12 @@ class FoCUS:
                 ),None
 
     # --------------------------------------------------------
-    def up_grade(self, im, nout, axis=-1, nouty=None):
+    def up_grade(self, im, nout,
+                 axis=-1,
+                 nouty=None,
+                 cell_ids=None,
+                 o_cell_ids=None,
+                 nside=None):
 
         ishape = list(im.shape)
         if self.use_2D:
@@ -820,37 +828,89 @@ class FoCUS:
             return self.backend.bk_reshape(tim, ishape[0:-1] + [nout])
 
         else:
-
-            lout = int(np.sqrt(im.shape[-1] // 12))
-
+            if nside is None:
+                lout = int(np.sqrt(im.shape[-1] // 12))
+            else:
+                lout = nside
+                
             if (lout,nout) not in self.pix_interp_val:
                 if not self.silent:
                     print("compute lout nout", lout, nout)
-                th, ph = hp.pix2ang(
-                    nout, np.arange(12 * nout**2, dtype="int"), nest=True
-                )
-                p, w = hp.get_interp_weights(lout, th, ph, nest=True)
-                del th
-                del ph
+                if cell_ids is None:
+                    o_cell_ids=np.arange(12 * nout**2, dtype="int")
+                    i_npix=12*lout**2
+                
+                    level=int(np.log2(lout)) # nside=128
 
-                indice = np.zeros([12 * nout * nout * 4, 2], dtype="int")
-                p = p.T
-                w = w.T
-                t = np.argsort(
-                    p, 1
-                ).flatten()  # to make oder indices for sparsematrix computation
-                t = t + np.repeat(np.arange(12 * nout * nout) * 4, 4)
-                p = p.flatten()[t]
-                w = w.flatten()[t]
-                indice[:, 1] = np.repeat(np.arange(12 * nout**2), 4)
-                indice[:, 0] = p
+                    sp = HS.heal_spline(level)
 
-                self.pix_interp_val[(lout,nout)] = 1
-                self.weight_interp_val[(lout,nout)] = self.backend.bk_SparseTensor(
-                    self.backend.bk_constant(indice),
-                    self.backend.bk_constant(self.backend.bk_cast(w.flatten())),
-                    dense_shape=[12 * lout**2,12 * nout**2],
-                )
+                    th, ph = hp.pix2ang(
+                        nout, o_cell_ids, nest=True
+                    )
+                    
+                    www,all_idx,hidx=sp.ang2weigths(th,ph,nest=True)
+
+                    w=www.T
+                    p=all_idx.T
+                    
+                    w=w.flatten()
+                    p=p.flatten()
+                    
+                    indice = np.zeros([o_cell_ids.shape[0] * 16, 2], dtype="int")
+                    indice[:, 1] = np.repeat(np.arange(o_cell_ids.shape[0]), 16)
+                    indice[:, 0] = p
+                    
+                    self.pix_interp_val[(lout,nout)] = 1
+                    self.weight_interp_val[(lout,nout)] = self.backend.bk_SparseTensor(
+                        self.backend.bk_constant(indice),
+                        self.backend.bk_constant(self.backend.bk_cast(w)),
+                        dense_shape=[i_npix,o_cell_ids.shape[0]],
+                    )
+
+                else:
+                    ratio=(nout//lout)**2
+                    if o_cell_ids is None:
+                        o_cell_ids=np.tile(cell_ids,ratio)*ratio+np.repeat(np.arange(ratio),cell_ids.shape[0])
+                    i_npix=cell_ids.shape[0]
+
+                    level=int(np.log2(lout)) # nside=128
+
+                    sp = HS.heal_spline(level)
+
+                    th, ph = hp.pix2ang(
+                        nout, o_cell_ids, nest=True
+                    )
+                    
+                    www,all_idx,hidx=sp.ang2weigths(th,ph,nest=True)
+                    
+                    sorter = np.argsort(hidx)
+                    index=sorter[np.searchsorted(hidx, cell_ids, sorter=sorter)]
+
+                    mask=-np.ones([hidx.shape[0]])
+                    mask[index]=np.arange(index.shape[0],dtype='int')
+
+                    all_idx=mask[all_idx]
+
+                    www[all_idx==-1]=0.0
+                    www/=np.sum(www,0)[None,:]
+                    all_idx[all_idx==-1]=0
+               
+                    w=www.T
+                    p=all_idx.T
+                    
+                    w=w.flatten()
+                    p=p.flatten()
+                    
+                    indice = np.zeros([o_cell_ids.shape[0] * 16, 2], dtype="int")
+                    indice[:, 1] = np.repeat(np.arange(o_cell_ids.shape[0]), 16)
+                    indice[:, 0] = p
+                    
+                    self.pix_interp_val[(lout,nout)] = 1
+                    self.weight_interp_val[(lout,nout)] = self.backend.bk_SparseTensor(
+                        self.backend.bk_constant(indice),
+                        self.backend.bk_constant(self.backend.bk_cast(w)),
+                        dense_shape=[i_npix,o_cell_ids.shape[0]],
+                    )
 
             if lout == nout:
                 imout = im
@@ -861,7 +921,7 @@ class FoCUS:
                 for k in range(len(ishape)-1):
                     ndata = ndata * ishape[k]
                 tim = self.backend.bk_reshape(
-                    self.backend.bk_cast(im), [ndata, 12 * lout**2]
+                    self.backend.bk_cast(im), [ndata, ishape[-1]]
                 )
                 if tim.dtype == self.all_cbk_type:
                     rr = self.backend.bk_sparse_dense_matmul(
@@ -878,12 +938,12 @@ class FoCUS:
                         tim,
                         self.weight_interp_val[(lout,nout)],
                     )
-                    
+
                 if len(ishape) == 1:
-                    return self.backend.bk_reshape(imout, [12 * nout**2])
+                    return self.backend.bk_reshape(imout, [imout.shape[-1]])
                 else:
                     return self.backend.bk_reshape(
-                        imout, ishape[0:axis]+[12 * nout**2]
+                        imout, ishape[0:-1]+[imout.shape[-1]]
                     )
         return imout
 
