@@ -51,7 +51,7 @@ class heal_spline:
                                    kind='cubic', fill_value='extrapolate')    
 
     
-    def ang2weigths(self,th,ph,threshold=1E-2,nest=True): 
+    def ang2weigths(self,th,ph,threshold=1E-2,nest=False): 
         th0=self.f_interp_th(th).flatten()
         
         idx_lat,w_th=self.spline_lat.eval(th0.flatten())
@@ -73,11 +73,13 @@ class heal_spline:
         www=www.reshape(16,www.shape[2])
         all_idx=all_idx.reshape(16,all_idx.shape[2])
             
+        if nest:
+            all_idx = hp.ring2nest(self.nside,all_idx)
+            
         heal_idx,inv_idx = np.unique(all_idx,
                                     return_inverse=True)
         all_idx = inv_idx
-        if nest:
-            heal_idx = hp.ring2nest(self.nside,heal_idx)
+            
         self.cell_ids = heal_idx
             
         hit=np.bincount(all_idx.flatten(),weights=www.flatten())

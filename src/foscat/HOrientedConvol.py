@@ -315,7 +315,7 @@ class HOrientedConvol:
         Map integer grid coords (xi, yi) in {-1,0,1} to flat index in [0..8]
         following the given order (row-major from y=-1 to y=1).
         """
-        return (yi + 1) * 3 + (xi + 1)
+        return (yi + self.KERNELSZ//2) * self.KERNELSZ + (xi + self.KERNELSZ//2)
     
     def bilinear_weights_NxN(self,x, y, allow_extrapolation=True):
         """

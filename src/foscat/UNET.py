@@ -13,6 +13,7 @@ class UNET:
             chanlist=None,
             in_nside=1,
             n_chan_in=1,
+            n_chan_out=1,
             cell_ids=None,
             SEED=1234,
             filename=None,
@@ -58,7 +59,7 @@ class UNET:
             l_cell_ids[l+1]=self.f.backend.to_numpy(n_cell_ids)
             l_nside//=2
             # plus one to add the input downgrade data
-            l_chan=chanlist[l]+1
+            l_chan=chanlist[l]+n_chan_in
 
         self.n_cnn=n
         self.l_cell_ids=l_cell_ids
@@ -73,7 +74,7 @@ class UNET:
         
         for l in range(nlayer):
             #upgrade data
-            l_chan+=1
+            l_chan+=n_chan_in
             l_data=self.f.up_grade(l_data,l_nside*2,
                                    cell_ids=l_cell_ids[nlayer-l],
                                    o_cell_ids=l_cell_ids[nlayer-1-l],
@@ -90,7 +91,7 @@ class UNET:
             print('Transpose Layer %d conv [%d,%d]'%(l,l_chan,l_chan))
             n+=nw
             t_wconv[2*l+1]=n
-            out_chan=1
+            out_chan=n_chan_out
             if nlayer-1-l>0:
                 out_chan+=chanlist[nlayer-1-l]
             print('Transpose Layer %d conv [%d,%d]'%(l,l_chan,out_chan))
@@ -111,6 +112,7 @@ class UNET:
         self.x=self.f.backend.bk_cast((np.random.rand(n)-0.5)/self.KERNELSZ)
         self.nside=in_nside
         self.n_chan_in=n_chan_in
+        self.n_chan_out=n_chan_out
         self.chanlist=chanlist
 
     def get_param(self):
@@ -160,10 +162,10 @@ class UNET:
             
             l_nside//=2
             # plus one to add the input downgrade data
-            l_chan=self.chanlist[l]+1
+            l_chan=self.chanlist[l]+self.n_chan_in
 
         for l in range(nlayer):
-            l_chan+=1
+            l_chan+=self.n_chan_in
             l_data=self.f.up_grade(l_data,l_nside*2,
                                    cell_ids=self.l_cell_ids[nlayer-l],
                                    o_cell_ids=self.l_cell_ids[nlayer-1-l],
@@ -174,7 +176,7 @@ class UNET:
             l_nside*=2
             
             # init double convol weights
-            out_chan=1
+            out_chan=self.n_chan_out
             if nlayer-1-l>0:
                 out_chan+=self.chanlist[nlayer-1-l]
             nw=l_chan*l_chan*kernelsz*kernelsz

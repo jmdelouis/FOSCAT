@@ -91,6 +91,7 @@ class CNN:
     def get_weights(self):
         return self.x
 
+    
     def eval(self, im, indices=None, weights=None):
 
         x = self.x

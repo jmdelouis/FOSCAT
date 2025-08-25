@@ -2825,6 +2825,7 @@ class funct(FOC.FoCUS):
             P1_dic = {}
             if cross:
                 P2_dic = {}
+            
         elif (norm == "auto") and (self.P1_dic is not None):
             P1_dic = self.P1_dic
             if cross:
@@ -3769,8 +3770,12 @@ class funct(FOC.FoCUS):
         # cconv, sconv are [Nbatch, Norient3, Npix_j3]
         if self.use_1D:
             s3 = conv * self.backend.bk_conjugate(MconvPsi)
+        elif self.use_2D:
+            s3 = self.backend.bk_expand_dims(conv, -4)* self.backend.bk_conjugate(
+                MconvPsi
+            )  # [Nbatch, Norient3, Norient2, Npix_j3]
         else:
-            s3 = self.backend.bk_expand_dims(conv, -3) * self.backend.bk_conjugate(
+            s3 = self.backend.bk_expand_dims(conv, -3)* self.backend.bk_conjugate(
                 MconvPsi
             )  # [Nbatch, Norient3, Norient2, Npix_j3]
         ### Apply the mask [Nmask, Npix_j3] and sum over pixels
@@ -6294,7 +6299,7 @@ class funct(FOC.FoCUS):
         Jmax=None,
         edge=False,
         to_gaussian=True,
-        use_variance=False,
+        use_variance=True,
         synthesised_N=1,
         input_image=None,
         grd_mask=None,
@@ -6361,13 +6366,14 @@ class funct(FOC.FoCUS):
             use_v = args[2]
             ljmax = args[3]
 
-            learn = scat_operator.reduce_mean_batch(
-                scat_operator.eval(
-                    u,
-                    Jmax=ljmax,
-                    norm='self'
+            learn = scat_operator.eval(
+                u,
+                Jmax=ljmax,
+                norm='auto'
                 )
-            )
+            
+            if synthesised_N>1:
+                learn = scat_operator.reduce_mean_batch(learn)
             
             # compute scattering covariance of the current synthetised map called u
             if use_v:
@@ -6573,6 +6579,8 @@ class funct(FOC.FoCUS):
                     )
                     sref = ref
             else:
+                self.clean_norm()
+                
                 ref = self.eval(
                         tmp[k],
                         image2=l_ref[k],
@@ -6589,7 +6597,7 @@ class funct(FOC.FoCUS):
                         mask=l_in_mask[k],
                         Jmax=l_jmax[k],
                         calc_var=True,
-                        norm='self'
+                        norm='auto'
                     )
                 else:
                     ref = self.eval(
@@ -6597,7 +6605,7 @@ class funct(FOC.FoCUS):
                         image2=l_ref[k],
                         mask=l_in_mask[k],
                         Jmax=l_jmax[k],
-                        norm='self'
+                        norm='auto'
                     )
                     sref = ref
                     

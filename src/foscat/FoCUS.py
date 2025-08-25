@@ -657,55 +657,39 @@ class FoCUS:
                     print("Use of 2D scat with data that has less than 2D")
                 return None, None
 
-            npix = im.shape[axis]
-            npiy = im.shape[axis + 1]
-            odata = 1
-            if len(ishape) > axis + 2:
-                for k in range(axis + 2, len(ishape)):
-                    odata = odata * ishape[k]
+            npix = im.shape[-2]
+            npiy = im.shape[-1]
 
             ndata = 1
-            for k in range(axis):
+            for k in range(len(im.shape)-2):
                 ndata = ndata * ishape[k]
 
             tim = self.backend.bk_reshape(
-                self.backend.bk_cast(im), [ndata, npix, npiy, odata]
+                self.backend.bk_cast(im), [ndata, npix, npiy, 1]
             )
             tim = self.backend.bk_reshape(
                 tim[:, 0 : 2 * (npix // 2), 0 : 2 * (npiy // 2), :],
-                [ndata, npix // 2, 2, npiy // 2, 2, odata],
+                [ndata, npix // 2, 2, npiy // 2, 2, 1],
             )
 
             res = self.backend.bk_reduce_sum(self.backend.bk_reduce_sum(tim, 4), 2) / 4
 
-            if axis == 0:
-                if len(ishape) == 2:
-                    return self.backend.bk_reshape(res, [npix // 2, npiy // 2]), None
-                else:
-                    return (
-                        self.backend.bk_reshape(
-                            res, [npix // 2, npiy // 2] + ishape[axis + 2 :]
-                        ),
-                        None,
-                    )
+            if len(ishape) == 2:
+                return (
+                    self.backend.bk_reshape(
+                        res, [npix // 2, npiy // 2]
+                    ),
+                    None,
+                )
             else:
-                if len(ishape) == axis + 2:
-                    return (
-                        self.backend.bk_reshape(
-                            res, ishape[0:axis] + [npix // 2, npiy // 2]
-                        ),
-                        None,
-                    )
-                else:
-                    return (
-                        self.backend.bk_reshape(
-                            res,
-                            ishape[0:axis]
-                            + [npix // 2, npiy // 2]
-                            + ishape[axis + 2 :],
-                        ),
-                        None,
-                    )
+                return (
+                    self.backend.bk_reshape(
+                        res,
+                        ishape[0:-2]
+                        + [npix // 2, npiy // 2],
+                    ),
+                    None,
+                )
 
             return self.backend.bk_reshape(res, [npix // 2, npiy // 2]), None
         elif self.use_1D:
@@ -745,7 +729,7 @@ class FoCUS:
 
         ishape = list(im.shape)
         if self.use_2D:
-            if len(ishape) < axis + 2:
+            if len(ishape) < 2:
                 if not self.silent:
                     print("Use of 2D scat with data that has less than 2D")
                 return None
@@ -753,39 +737,28 @@ class FoCUS:
             if nouty is None:
                 nouty = nout
 
-            if ishape[axis] == nout and ishape[axis + 1] == nouty:
+            if ishape[-2] == nout and ishape[-1] == nouty:
                 return im
 
-            npix = im.shape[axis]
-            npiy = im.shape[axis + 1]
-            odata = 1
+            npix = im.shape[-2]
+            npiy = im.shape[-1]
 
             ndata = 1
-            for k in range(axis):
+            for k in range(len(im.shape)-2):
                 ndata = ndata * ishape[k]
 
             tim = self.backend.bk_reshape(
-                self.backend.bk_cast(im), [ndata, npix, npiy, odata]
+                self.backend.bk_cast(im), [ndata, npix, npiy,1]
             )
 
             res = self.backend.bk_resize_image(tim, [nout, nouty])
 
-            if axis == 0:
-                if len(ishape) == 2:
-                    return self.backend.bk_reshape(res, [nout, nouty])
-                else:
-                    return self.backend.bk_reshape(
-                        res, [nout, nouty] + ishape[axis + 2 :]
-                    )
+            if len(ishape) == 2:
+                return self.backend.bk_reshape(res, [nout, nouty])
             else:
-                if len(ishape) == axis + 2:
-                    return self.backend.bk_reshape(res, ishape[0:axis] + [nout, nouty])
-                else:
-                    return self.backend.bk_reshape(
-                        res, ishape[0:axis] + [nout, nouty] 
-                    )
-
-            return self.backend.bk_reshape(res, [nout, nouty])
+                return self.backend.bk_reshape(
+                        res, ishape[0:-2] + [nout, nouty] 
+                )
 
         elif self.use_1D:
             if len(ishape) < axis + 1:
@@ -840,15 +813,17 @@ class FoCUS:
                     o_cell_ids=np.arange(12 * nout**2, dtype="int")
                     i_npix=12*lout**2
                 
-                    level=int(np.log2(lout)) # nside=128
+                    #level=int(np.log2(lout)) # nside=128
 
-                    sp = HS.heal_spline(level)
+                    #sp = HS.heal_spline(level,gamma=2.0)
 
                     th, ph = hp.pix2ang(
                         nout, o_cell_ids, nest=True
                     )
                     
-                    www,all_idx,hidx=sp.ang2weigths(th,ph,nest=True)
+                    all_idx,www=hp.get_interp_weights(lout,th,ph,nest=True)
+                                          
+                    #www,all_idx,hidx=sp.ang2weigths(th,ph,nest=True)
 
                     w=www.T
                     p=all_idx.T
@@ -856,8 +831,8 @@ class FoCUS:
                     w=w.flatten()
                     p=p.flatten()
                     
-                    indice = np.zeros([o_cell_ids.shape[0] * 16, 2], dtype="int")
-                    indice[:, 1] = np.repeat(np.arange(o_cell_ids.shape[0]), 16)
+                    indice = np.zeros([o_cell_ids.shape[0] * 4, 2], dtype="int")
+                    indice[:, 1] = np.repeat(np.arange(o_cell_ids.shape[0]), 4)
                     indice[:, 0] = p
                     
                     self.pix_interp_val[(lout,nout)] = 1
@@ -873,26 +848,36 @@ class FoCUS:
                         o_cell_ids=np.tile(cell_ids,ratio)*ratio+np.repeat(np.arange(ratio),cell_ids.shape[0])
                     i_npix=cell_ids.shape[0]
 
-                    level=int(np.log2(lout)) # nside=128
+                    #level=int(np.log2(lout)) # nside=128
 
-                    sp = HS.heal_spline(level)
+                    #sp = HS.heal_spline(level,gamma=2.0)
 
                     th, ph = hp.pix2ang(
                         nout, o_cell_ids, nest=True
                     )
-                    
-                    www,all_idx,hidx=sp.ang2weigths(th,ph,nest=True)
+
+                    all_idx,www=hp.get_interp_weights(lout,th,ph,nest=True)
+                    #www,all_idx,hidx=sp.ang2weigths(th,ph,nest=True)
+
+                    hidx,inv_idx = np.unique(all_idx,
+                                    return_inverse=True)
+                    all_idx = inv_idx
                     
                     sorter = np.argsort(hidx)
-                    index=sorter[np.searchsorted(hidx, cell_ids, sorter=sorter)]
-
-                    mask=-np.ones([hidx.shape[0]])
-                    mask[index]=np.arange(index.shape[0],dtype='int')
+                    
+                    index=sorter[np.searchsorted(hidx,
+                                                 cell_ids,
+                                                 sorter=sorter)]
+                    
+                    mask        = -np.ones([hidx.shape[0]])
+                    
+                    mask[index] = np.arange(index.shape[0],dtype='int')
 
                     all_idx=mask[all_idx]
 
                     www[all_idx==-1]=0.0
                     www/=np.sum(www,0)[None,:]
+                    
                     all_idx[all_idx==-1]=0
                
                     w=www.T
@@ -901,8 +886,8 @@ class FoCUS:
                     w=w.flatten()
                     p=p.flatten()
                     
-                    indice = np.zeros([o_cell_ids.shape[0] * 16, 2], dtype="int")
-                    indice[:, 1] = np.repeat(np.arange(o_cell_ids.shape[0]), 16)
+                    indice = np.zeros([o_cell_ids.shape[0] * 4, 2], dtype="int")
+                    indice[:, 1] = np.repeat(np.arange(o_cell_ids.shape[0]), 4)
                     indice[:, 0] = p
                     
                     self.pix_interp_val[(lout,nout)] = 1
@@ -911,6 +896,9 @@ class FoCUS:
                         self.backend.bk_constant(self.backend.bk_cast(w)),
                         dense_shape=[i_npix,o_cell_ids.shape[0]],
                     )
+                    
+                    del w
+                    del p
 
             if lout == nout:
                 imout = im
@@ -2392,13 +2380,8 @@ class FoCUS:
             res = v1 / vh
 
             oshape = [x.shape[0]] + [mask.shape[0]]
-            if axis > 0:
-                oshape = oshape + list(x.shape[1:axis])
-
-            if len(x.shape[axis:-2]) > 0:
-                oshape = oshape + list(x.shape[axis:-2])
-            else:
-                oshape = oshape + [1]
+            if len(x.shape)>1:
+                oshape = oshape + list(x.shape[1:-2])
 
             if calc_var:
                 if self.backend.bk_is_complex(vtmp):
@@ -2800,15 +2783,16 @@ class FoCUS:
                     print("Use of 2D scat with data that has less than 2D")
                 return None
 
-            npix = ishape[axis]
-            npiy = ishape[axis + 1]
+            npix = ishape[-2]
+            npiy = ishape[-1]
+            
             odata = 1
-            if len(ishape) > axis + 2:
-                for k in range(axis + 2, len(ishape)):
+            if len(ishape) > 1:
+                for k in range(len(ishape)-2):
                     odata = odata * ishape[k]
 
             ndata = 1
-            for k in range(axis):
+            for k in range(len(ishape)-2):
                 ndata = ndata * ishape[k]
 
             tim = self.backend.bk_reshape(
