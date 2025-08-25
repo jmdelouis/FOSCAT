@@ -33,7 +33,14 @@ testwarn = 0
 
 
 class scat_cov:
-    def __init__(self, s0, s2, s3, s4, s1=None, s3p=None, backend=None, use_1D=False):
+    def __init__(self,
+                 s0, s2, s3, s4,
+                 s1=None,
+                 s3p=None,
+                 backend=None,
+                 use_1D=False,
+                 return_data=False
+                 ):
         self.S0 = s0
         self.S2 = s2
         self.S3 = s3
@@ -44,12 +51,13 @@ class scat_cov:
         self.idx1 = None
         self.idx2 = None
         self.use_1D = use_1D
-        self.numel = self.backend.bk_len(s0)+ \
-            self.backend.bk_len(s1)+ \
-            self.backend.bk_len(s2)+ \
-            self.backend.bk_len(s3)+ \
-            self.backend.bk_len(s4)+ \
-            self.backend.bk_len(s3p)
+        if not return_data:
+            self.numel = self.backend.bk_len(s0)+ \
+                self.backend.bk_len(s1)+ \
+                self.backend.bk_len(s2)+ \
+                self.backend.bk_len(s3)+ \
+                self.backend.bk_len(s4)+ \
+                self.backend.bk_len(s3p)
 
     def numpy(self):
         if self.BACKEND == "numpy":
@@ -3648,7 +3656,9 @@ class funct(FOC.FoCUS):
         if calc_var:
             if not cross:
                 return scat_cov(
-                    s0, S2, S3, S4, s1=S1, backend=self.backend, use_1D=self.use_1D
+                    s0, S2, S3, S4, s1=S1, backend=self.backend,
+                    use_1D=self.use_1D,
+                    return_data=self.return_data
                 ), scat_cov(
                     vs0,
                     VS2,
@@ -3657,6 +3667,7 @@ class funct(FOC.FoCUS):
                     s1=VS1,
                     backend=self.backend,
                     use_1D=self.use_1D,
+                    return_data=self.return_data
                 )
             else:
                 return scat_cov(
@@ -3668,6 +3679,7 @@ class funct(FOC.FoCUS):
                     s3p=S3P,
                     backend=self.backend,
                     use_1D=self.use_1D,
+                    return_data=self.return_data
                 ), scat_cov(
                     vs0,
                     VS2,
@@ -3677,11 +3689,16 @@ class funct(FOC.FoCUS):
                     s3p=VS3P,
                     backend=self.backend,
                     use_1D=self.use_1D,
+                    return_data=self.return_data
                 )
         else:
             if not cross:
                 return scat_cov(
-                    s0, S2, S3, S4, s1=S1, backend=self.backend, use_1D=self.use_1D
+                    s0, S2, S3, S4,
+                    s1=S1,
+                    backend=self.backend,
+                    use_1D=self.use_1D,
+                    return_data=self.return_data
                 )
             else:
                 return scat_cov(
@@ -3693,6 +3710,7 @@ class funct(FOC.FoCUS):
                     s3p=S3P,
                     backend=self.backend,
                     use_1D=self.use_1D,
+                    return_data=self.return_data
                 )
 
     def clean_norm(self):
