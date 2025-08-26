@@ -2763,34 +2763,6 @@ class funct(FOC.FoCUS):
 
                 nside = nside * 2
 
-            if self.KERNELSZ > 5 and not self.use_2D:
-                # if the kernel size is bigger than 3 increase the binning before smoothing
-                if self.use_2D:
-                    vmask = self.up_grade(
-                        vmask, I1.shape[-2] * 2, nouty=I1.shape[-1] * 2,axis=-2
-                    )
-                    I1 = self.up_grade(
-                        I1, I1.shape[-2] * 2, nouty=I1.shape[-1] * 2,axis=-2
-                    )
-                    if cross:
-                        I2 = self.up_grade(
-                            I2,
-                            I2.shape[-2] * 2,
-                            nouty=I2.shape[-1] * 2,axis=-2
-                        )
-                elif self.use_1D:
-                    vmask = self.up_grade(vmask, I1.shape[-1] * 2)
-                    I1 = self.up_grade(I1, I1.shape[-1] * 2)
-                    if cross:
-                        I2 = self.up_grade(I2, I2.shape[-1] * 2)
-                    nside = nside * 2
-                else:
-                    I1 = self.up_grade(I1, nside * 2)
-                    vmask = self.up_grade(vmask, nside * 2)
-                    if cross:
-                        I2 = self.up_grade(I2, nside * 2)
-                    nside = nside * 2
-
         # Normalize the masks because they have different pixel numbers
         # vmask /= self.backend.bk_reduce_sum(vmask, axis=1)[:, None]  # [Nmask, Npix]
 
@@ -4123,6 +4095,7 @@ class funct(FOC.FoCUS):
             get_variance=False,
             ref_sigma=None,
             iso_ang=False,
+            return_table=False,
     ):
         """
         Calculates the scattering correlations for a batch of images, including:
@@ -4257,7 +4230,7 @@ class funct(FOC.FoCUS):
                 )
                 print("\n\n==========")
             J = Jmax  # Number of steps for the loop on scales
-
+            
         L = self.NORIENT
         norm_factor_S3 = 1.0
 
@@ -4826,6 +4799,12 @@ class funct(FOC.FoCUS):
             if data2 is None:
                 if iso_ang:
                     if ref_sigma is not None:
+                        if return_table:
+                            return (S1_iso / ref_sigma["S1_sigma"]), \
+                                (S2_iso / ref_sigma["S2_sigma"]) , \
+                                (S3_iso / ref_sigma["S3_sigma"]) , \
+                                (S4_iso / ref_sigma["S4_sigma"]) 
+                        
                         for_synthesis = self.backend.backend.cat(
                             (
                                 mean_data / ref_sigma["std_data"],
@@ -4852,6 +4831,9 @@ class funct(FOC.FoCUS):
                             dim=-1,
                         )
                     else:
+                        if return_table:
+                            return S1_iso,S2_iso,S3_iso,S4_iso
+                        
                         for_synthesis = self.backend.backend.cat(
                             (
                                 mean_data / std_data,
@@ -4867,6 +4849,12 @@ class funct(FOC.FoCUS):
                         )
                 else:
                     if ref_sigma is not None:
+                        if return_table:
+                            return (S1 / ref_sigma["S1_sigma"]), \
+                                (S2 / ref_sigma["S2_sigma"]), \
+                                (S3 / ref_sigma["S3_sigma"]), \
+                                (S4 / ref_sigma["S4_sigma"])
+                        
                         for_synthesis = self.backend.backend.cat(
                             (
                                 mean_data / ref_sigma["std_data"],
@@ -4893,6 +4881,9 @@ class funct(FOC.FoCUS):
                             dim=-1,
                         )
                     else:
+                        if return_table:
+                            return S1,S2,S3,S4
+                        
                         for_synthesis = self.backend.backend.cat(
                             (
                                 mean_data / std_data,
@@ -4909,6 +4900,12 @@ class funct(FOC.FoCUS):
             else:
                 if iso_ang:
                     if ref_sigma is not None:
+                        if return_table:
+                            return (S1_iso / ref_sigma["S1_sigma"]), \
+                                (S2_iso / ref_sigma["S2_sigma"]), \
+                                (S3_iso / ref_sigma["S3_sigma"]), \
+                                (S4_iso / ref_sigma["S4_sigma"])
+                        
                         for_synthesis = self.backend.backend.cat(
                             (
                                 mean_data / ref_sigma["std_data"],
@@ -4937,6 +4934,9 @@ class funct(FOC.FoCUS):
                             dim=-1,
                         )
                     else:
+                        if return_table:
+                            return S1_iso,S2_iso,S3_iso,S4_iso
+                        
                         for_synthesis = self.backend.backend.cat(
                             (
                                 mean_data / std_data,
@@ -4954,6 +4954,12 @@ class funct(FOC.FoCUS):
                         )
                 else:
                     if ref_sigma is not None:
+                        if return_table:
+                            return (S1 / ref_sigma["S1_sigma"]), \
+                                (S2 / ref_sigma["S2_sigma"]), \
+                                (S3 / ref_sigma["S3_sigma"]), \
+                                (S4 / ref_sigma["S4_sigma"])
+                        
                         for_synthesis = self.backend.backend.cat(
                             (
                                 mean_data / ref_sigma["std_data"],
@@ -4982,6 +4988,9 @@ class funct(FOC.FoCUS):
                             dim=-1,
                         )
                     else:
+                        if return_table:
+                            return S1,S2,S3,S4
+                        
                         for_synthesis = self.backend.backend.cat(
                             (
                                 mean_data / std_data,
