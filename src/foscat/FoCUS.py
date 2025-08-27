@@ -2380,9 +2380,11 @@ class FoCUS:
             res = v1 / vh
 
             oshape = [x.shape[0]] + [mask.shape[0]]
-            if len(x.shape)>1:
+            if len(x.shape) > 3:
                 oshape = oshape + list(x.shape[1:-2])
-
+            else:
+                oshape = oshape + [1]
+                
             if calc_var:
                 if self.backend.bk_is_complex(vtmp):
                     res2 = self.backend.bk_sqrt(
