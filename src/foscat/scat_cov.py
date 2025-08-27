@@ -6693,6 +6693,9 @@ class funct(FOC.FoCUS):
                 grd_mask=l_grd_mask[k],
             )
 
+        if not self.use_2D:
+            self.clean_norm()
+            
         t2 = time.time()
         print("Total computation %.2fs" % (t2 - t1))
 
