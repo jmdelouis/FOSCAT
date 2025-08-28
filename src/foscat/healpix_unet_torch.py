@@ -22,6 +22,7 @@ import torch.nn.functional as F
 
 import foscat.scat_cov as sc
 import foscat.HOrientedConvol as hs
+import matplotlib.pyplot as plt
 
 
 class HealpixUNet(nn.Module):
@@ -350,6 +351,202 @@ class HealpixUNet(nn.Module):
             outs.append(self.forward(x[i : i + batch_size]))
         return torch.cat(outs, dim=0)
 
+    # -----------------------------
+    # Kernel extraction & plotting
+    # -----------------------------
+    def _arch_shapes(self):
+        """Return expected (in_c, out_c) per conv for encoder/decoder.
+
+        Returns
+        -------
+        enc_shapes : list[tuple[tuple[int,int], tuple[int,int]]]
+            For each level `l`, ((in1, out1), (in2, out2)) for the two encoder convs.
+        dec_shapes : list[tuple[tuple[int,int], tuple[int,int]]]
+            For each level `l`, ((in1, out1), (in2, out2)) for the two decoder convs.
+        """
+        nlayer = len(self.chanlist)
+        enc_shapes = []
+        l_chan = self.n_chan_in
+        for l in range(nlayer):
+            enc_shapes.append(((l_chan, self.chanlist[l]), (self.chanlist[l], self.chanlist[l])))
+            l_chan = self.chanlist[l] + 1
+
+        dec_shapes = []
+        l_chan = self.chanlist[-1] + 1
+        for l in range(nlayer):
+            in1 = l_chan + 1
+            out2 = 1 + (self.chanlist[nlayer - 1 - l] if (nlayer - 1 - l) > 0 else 0)
+            dec_shapes.append(((in1, in1), (in1, out2)))
+            l_chan = out2
+        return enc_shapes, dec_shapes
+
+    def extract_kernels(self, stage: str = "encoder", layer: int = 0, conv: int = 0):
+        """Extract raw convolution kernels for a given stage/level/conv.
+
+        Parameters
+        ----------
+        stage : {"encoder", "decoder"}
+            Which part of the network to inspect.
+        layer : int
+            Pyramid level (0 = finest encoder level / bottommost decoder level).
+        conv : int
+            0 for the first conv at that level, 1 for the second conv.
+
+        Returns
+        -------
+        np.ndarray
+            Array of shape (in_c, out_c, K, K) containing the spatial kernels.
+        """
+        assert stage in {"encoder", "decoder"}
+        assert conv in {0, 1}
+        K = self.KERNELSZ
+        enc_shapes, dec_shapes = self._arch_shapes()
+
+        if stage == "encoder":
+            if conv==0:
+                w = self.enc_w1[layer]
+            else:
+                w = self.enc_w2[layer]
+        else:
+            if conv==0:
+                w = self.dec_w1[layer]
+            else:
+                w = self.dec_w2[layer]
+
+        w_np = self.f.backend.to_numpy(w.detach())
+        return w_np.reshape(w.shape[0],w.shape[1],K,K)
+
+    def plot_kernels(
+        self,
+        stage: str = "encoder",
+        layer: int = 0,
+        conv: int = 0,
+        fixed: str = "in",
+        index: int = 0,
+        max_tiles: int = 16,
+    ):
+        """Quick visualization of kernels on a grid using matplotlib.
+
+        Parameters
+        ----------
+        stage : {"encoder", "decoder"}
+            Which tower to visualize.
+        layer : int
+            Level to visualize.
+        conv : int
+            0 or 1: first or second conv in the level.
+        fixed : {"in", "out"}
+            If "in", show kernels for a fixed input channel across many outputs.
+            If "out", show kernels for a fixed output channel across many inputs.
+        index : int
+            Channel index to fix (according to `fixed`).
+        max_tiles : int
+            Maximum number of tiles to display.
+        """
+        import math
+        import matplotlib.pyplot as plt
+
+        W = self.extract_kernels(stage=stage, layer=layer, conv=conv)
+        ic, oc, K,_ = W.shape
+
+        if fixed == "in":
+            idx = min(index, ic - 1)
+            tiles = [W[idx, j] for j in range(oc)]
+            title = f"{stage} L{layer} C{conv} | in={idx}"
+        else:
+            idx = min(index, oc - 1)
+            tiles = [W[i, idx] for i in range(ic)]
+            title = f"{stage} L{layer} C{conv} | out={idx}"
+
+        tiles = tiles[:max_tiles]
+        n = len(tiles)
+        cols = int(math.ceil(math.sqrt(n)))
+        rows = int(math.ceil(n / cols))
+
+        plt.figure(figsize=(2.5 * cols, 2.5 * rows))
+        for i, ker in enumerate(tiles, 1):
+            ax = plt.subplot(rows, cols, i)
+            ax.imshow(ker)
+            ax.set_xticks([])
+            ax.set_yticks([])
+        plt.suptitle(title)
+        plt.tight_layout()
+        plt.show()
+
+# -----------------------------
+# Unit tests (smoke tests)
+# -----------------------------
+# Run with:  python UNET.py  (or)  python UNET.py -q  for quieter output
+# These tests assume Foscat and its dependencies are installed.
+
+
+def _dummy_cell_ids(nside: int) -> np.ndarray:
+    """Return a simple identity mapping for HEALPix nested pixel IDs.
+
+    Notes
+    -----
+    Replace with your pipeline's real `cell_ids` if you have a precomputed
+    mapping consistent with Foscat/HEALPix nested ordering.
+    """
+    return np.arange(12 * nside * nside, dtype=np.int64)
+
+
+if __name__ == "__main__":
+    import unittest
+
+    class TestUNET(unittest.TestCase):
+        """Lightweight smoke tests for shape and parameter plumbing."""
+
+        def setUp(self):
+            self.nside = 4  # small grid for fast tests (npix = 192)
+            self.chanlist = [4, 8]  # two-level encoder/decoder
+            self.batch = 2
+            self.channels = 1
+            self.npix = 12 * self.nside * self.nside
+            self.cell_ids = _dummy_cell_ids(self.nside)
+            self.net = UNET(
+                in_nside=self.nside,
+                n_chan_in=self.channels,
+                chanlist=self.chanlist,
+                cell_ids=self.cell_ids,
+            )
+
+        def test_forward_shape(self):
+            # random input
+            x = np.random.randn(self.batch, self.channels, self.npix).astype(np.float32)
+            x = self.net.f.backend.bk_cast(x)
+            y = self.net.eval(x)
+            # expected output: same npix, 1 channel at the very top
+            self.assertEqual(y.shape[0], self.batch)
+            self.assertEqual(y.shape[1], 1)
+            self.assertEqual(y.shape[2], self.npix)
+            # sanity: no NaNs
+            y_np = self.net.f.backend.to_numpy(y)
+            self.assertFalse(np.isnan(y_np).any())
+
+        def test_param_roundtrip_and_determinism(self):
+            x = np.random.randn(self.batch, self.channels, self.npix).astype(np.float32)
+            x = self.net.f.backend.bk_cast(x)
+
+            # forward twice -> identical outputs with fixed params
+            y1 = self.net.eval(x)
+            y2 = self.net.eval(x)
+            y1_np = self.net.f.backend.to_numpy(y1)
+            y2_np = self.net.f.backend.to_numpy(y2)
+            np.testing.assert_allclose(y1_np, y2_np, rtol=0, atol=0)
+
+            # perturb parameters -> output should (very likely) change
+            p = self.net.get_param()
+            p_np = self.net.f.backend.to_numpy(p).copy()
+            if p_np.size > 0:
+                p_np[0] += 1.0
+                self.net.set_param(p_np)
+                y3 = self.net.eval(x)
+                y3_np = self.net.f.backend.to_numpy(y3)
+                with self.assertRaises(AssertionError):
+                    np.testing.assert_allclose(y1_np, y3_np, rtol=0, atol=0)
+
+    unittest.main()
 
 def fit(
         model: HealpixUNet,
@@ -404,48 +601,53 @@ def fit(
 
     if optimizer=='ADAM':
         optim = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+        l_n_epoch=n_epoch
+        n_inter=0
     else:
-        optim = torch.optim.LBFGS(model.parameters(), lr=lr, max_iter=n_epoch, history_size=n_epoch*5, line_search_fn="strong_wolfe")
+        optim = torch.optim.LBFGS(model.parameters(), lr=lr, max_iter=20, history_size=n_epoch*5, line_search_fn="strong_wolfe")
+        l_n_epoch=n_epoch//20
+        n_inter=20
 
     history: List[float] = []
     model.train()
-    for epoch in range(n_epoch):
-        epoch_loss = 0.0
-        n_samples = 0
 
-        for xb, yb in loader:
-            # LBFGS a besoin d'un closure qui recalcule loss et gradients
-            if isinstance(optim, torch.optim.LBFGS):
-                def closure():
+    for epoch in range(l_n_epoch):
+        for k in range(n_inter):
+            epoch_loss = 0.0
+            n_samples = 0
+            for xb, yb in loader:
+                # LBFGS a besoin d'un closure qui recalcule loss et gradients
+                if isinstance(optim, torch.optim.LBFGS):
+                    def closure():
+                        optim.zero_grad(set_to_none=True)
+                        preds = model(xb)
+                        loss = criterion(preds, yb)
+                        loss.backward()
+                        return loss
+
+                    _ = optim.step(closure)  # LBFGS appelle plusieurs fois le closure
+                    # on recalcule la loss finale pour l’agg (sans gradient)
+                    with torch.no_grad():
+                        preds = model(xb)
+                        loss = criterion(preds, yb)
+
+                else:
                     optim.zero_grad(set_to_none=True)
                     preds = model(xb)
                     loss = criterion(preds, yb)
                     loss.backward()
-                    return loss
+                    if clip_grad_norm is not None:
+                        nn.utils.clip_grad_norm_(model.parameters(), clip_grad_norm)
+                    optim.step()
 
-                _ = optim.step(closure)  # LBFGS appelle plusieurs fois le closure
-                # on recalcule la loss finale pour l’agg (sans gradient)
-                with torch.no_grad():
-                    preds = model(xb)
-                    loss = criterion(preds, yb)
+                bs = xb.shape[0]
+                epoch_loss += loss.item() * bs
+                n_samples += bs
 
-            else:
-                optim.zero_grad(set_to_none=True)
-                preds = model(xb)
-                loss = criterion(preds, yb)
-                loss.backward()
-                if clip_grad_norm is not None:
-                    nn.utils.clip_grad_norm_(model.parameters(), clip_grad_norm)
-                optim.step()
-
-            bs = xb.shape[0]
-            epoch_loss += loss.item() * bs
-            n_samples += bs
-
-        epoch_loss /= max(1, n_samples)
-        history.append(epoch_loss)
-        if verbose and (epoch+1)%view_epoch==0:
-            print(f"[epoch {epoch+1}/{n_epoch}] loss={epoch_loss:.6f}")
+            epoch_loss /= max(1, n_samples)
+            history.append(epoch_loss)
+            if verbose and (epoch*n_inter+k+1)%view_epoch==0:
+                print(f"[epoch {epoch*n_inter+k+1}/{l_n_epoch*n_inter}] loss={epoch_loss:.6f}")
 
     return {"loss": history}
 
