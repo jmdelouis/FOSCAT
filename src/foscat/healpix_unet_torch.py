@@ -602,7 +602,7 @@ def fit(
     if optimizer=='ADAM':
         optim = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
         l_n_epoch=n_epoch
-        n_inter=0
+        n_inter=1
     else:
         optim = torch.optim.LBFGS(model.parameters(), lr=lr, max_iter=20, history_size=n_epoch*5, line_search_fn="strong_wolfe")
         l_n_epoch=n_epoch//20
