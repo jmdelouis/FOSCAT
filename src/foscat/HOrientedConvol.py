@@ -59,6 +59,7 @@ class HOrientedConvol:
         self.idx_nn=idx_nn
         self.nside=nside
         self.KERNELSZ=KERNELSZ
+        self.nest=nest
 
     def remap_by_first_column(self,idx: np.ndarray) -> np.ndarray:
         """
@@ -290,8 +291,52 @@ class HOrientedConvol:
         
         return csr_array((w, (indice_1_0, indice_1_1)), shape=(12*self.nside**2, 12*self.nside**2*NORIENT))
 
+    def make_idx_weights_from_cell_ids(self,cell_ids,
+                                       polar=False,
+                                       gamma=1.0,
+                                       device='cuda',
+                                       allow_extrapolation=True):
+        idx_nn = self.knn_healpix_ckdtree(self.cell_ids, 
+                self.KERNELSZ*self.KERNELSZ, 
+                self.nside,
+                nest=self.nest,
+            )
+        
+        mat_pt=self.rotation_matrices_from_healpix(nside,cell_ids,nest=self.nest)
+
+        t,p = hp.pix2ang(nside,cell_ids[idx_nn],nest=self.nest)
+            
+        vec_orig=hp.ang2vec(t,p)
+
+        vec_rot = np.einsum('mki,ijk->kmj', vec_orig,mat_pt)
+        
+        del vec_orig
+        del mat_pt
+        
+        rotate=2*((t<np.pi/2)-0.5)[:,None]
+        if polar:
+            xx=np.cos(p)[:,None]*vec_rot[:,:,0]-rotate*np.sin(p)[:,None]*vec_rot[:,:,1]
+            yy=-np.sin(p)[:,None]*vec_rot[:,:,0]-rotate*np.cos(p)[:,None]*vec_rot[:,:,1]
+        else:
+            xx=vec_rot[:,:,0]
+            yy=vec_rot[:,:,1]
+
+        del vec_rot
+        del rotate
+        del t
+        del p
+        
+        w_idx,w_w = self.bilinear_weights_NxN(xx*self.nside*gamma,
+                                              yy*self.nside*gamma,
+                                              allow_extrapolation=allow_extrapolation)
+
+        del xx
+        del yy
+        
+        if return_index:
+            return idx_nn,w_idx,w_w
     
-    def make_idx_weights(self,polar=False,gamma=1.0,device='cuda',allow_extrapolation=True):
+    def make_idx_weights(self,polar=False,gamma=1.0,device='cuda',allow_extrapolation=True,return_index=False):
         
         rotate=2*((self.t<np.pi/2)-0.5)[:,None]
         if polar:
@@ -304,7 +349,7 @@ class HOrientedConvol:
         self.w_idx,self.w_w = self.bilinear_weights_NxN(xx*self.nside*gamma,
                                                         yy*self.nside*gamma,
                                                         allow_extrapolation=allow_extrapolation)
-
+        
         # Ensure types/devices
         self.idx_nn = torch.Tensor(self.idx_nn).to(device=device, dtype=torch.long)
         self.w_idx  = torch.Tensor(self.w_idx).to(device=device, dtype=torch.long)
@@ -411,7 +456,7 @@ class HOrientedConvol:
     
         return idx, w
 
-    def Convol_torch(self, im, ww):
+    def Convol_torch(self, im, ww,cell_ids=None):
         """
         Batched KERNELSZxKERNELSZ neighborhood aggregation in pure PyTorch (generalization of the 3x3 case).
     
@@ -426,7 +471,11 @@ class HOrientedConvol:
               (C_i, C_o, M, S)
               (B, C_i, C_o, M)
               (B, C_i, C_o, M, S)
-    
+        
+        cell_ids : ndarray
+            If cell_ids is not None recompute the index and do not use the precomputed ones.
+            Note : The computation is then much longer.
+        
         Class members (already tensors; will be aligned to im.device/dtype):
         -------------------------------------------------------------------
         self.idx_nn : LongTensor, shape (Npix, P)
@@ -449,12 +498,15 @@ class HOrientedConvol:
         B, C_i, Npix = im.shape
         device = im.device
         dtype  = im.dtype
-        
-        # Align class tensors to device/dtype
-        idx_nn = self.idx_nn.to(device=device, dtype=torch.long)  # (Npix, P)
-        w_idx  = self.w_idx.to(device=device, dtype=torch.long)   # (Npix, P) or (Npix, S, P)
-        w_w    = self.w_w.to(device=device, dtype=dtype)          # (Npix, P) or (Npix, S, P)
-    
+
+        if cell_ids is None:
+            # Align class tensors to device/dtype
+            idx_nn = self.idx_nn.to(device=device, dtype=torch.long)  # (Npix, P)
+            w_idx  = self.w_idx.to(device=device, dtype=torch.long)   # (Npix, P) or (Npix, S, P)
+            w_w    = self.w_w.to(device=device, dtype=dtype)          # (Npix, P) or (Npix, S, P)
+        else:
+            idx_nn,w_idx,w_w = self.make_idx_weights_from_cell_ids(cell_ids,device=device)
+            
         # Neighbor count P inferred from idx_nn
         assert idx_nn.ndim == 2 and idx_nn.size(0) == Npix, \
             f"`idx_nn` must be (Npix, P) with Npix={Npix}, got {tuple(idx_nn.shape)}"
