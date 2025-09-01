@@ -21,7 +21,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import foscat.scat_cov as sc
-import foscat.HOrientedConvol as hs
+import foscat.HOrientedConvol as ho
 import matplotlib.pyplot as plt
 
 
@@ -63,21 +63,28 @@ class HealpixUNet(nn.Module):
     """
 
     def __init__(
-        self,
-        *,
-        in_nside: int,
-        n_chan_in: int,
-        chanlist: List[int],
-        cell_ids: np.ndarray,
-        KERNELSZ: int = 3,
-        task: Literal['regression', 'segmentation'] = 'regression',
-        out_channels: int = 1,
-        final_activation: Optional[Literal['none', 'sigmoid', 'softmax']] = None,
-        device: Optional[torch.device | str] = None,
-        prefer_foscat_gpu: bool = True,
+            self,
+            *,
+            in_nside: int,
+            n_chan_in: int,
+            chanlist: List[int],
+            cell_ids: np.ndarray,
+            KERNELSZ: int = 3,
+            task: Literal['regression', 'segmentation'] = 'regression',
+            out_channels: int = 1,
+            final_activation: Optional[Literal['none', 'sigmoid', 'softmax']] = None,
+            device: Optional[torch.device | str] = None,
+            prefer_foscat_gpu: bool = True,
+            dtype: Literal['float32','float64'] = 'float32'
     ) -> None:
         super().__init__()
 
+        self.dtype=dtype
+        if dtype=='float32':
+            self.np_dtype=np.float32
+        else:
+            self.np_dtype=np.float64
+            
         if cell_ids is None:
             raise ValueError("cell_ids must be provided for the finest resolution.")
         if len(chanlist) == 0:
@@ -116,24 +123,30 @@ class HealpixUNet(nn.Module):
         enc_nsides: List[int] = [self.in_nside]
         current_nside = self.in_nside
 
+        # ---------- Oriented convolutions per level (encoder & decoder) ----------
+        self.hconv_enc: List[ho.HOrientedConvol] = []
+        self.hconv_dec: List[ho.HOrientedConvol] = []
+        
         # dummy data to propagate shapes/ids through ud_grade_2
-        npix = 12 * current_nside * current_nside
-        l_data = self.f.backend.bk_cast(np.zeros((1, 1, cell_ids.shape[0]), dtype=np.float32))
+        l_data = self.f.backend.bk_cast(np.zeros((1, 1, cell_ids.shape[0]), dtype=self.np_dtype))
 
         for l in range(depth):
+            # operator at encoder level l
+            hc = ho.HOrientedConvol(current_nside,
+                                    self.KERNELSZ,
+                                    cell_ids=self.l_cell_ids[l],
+                                    dtype=self.dtype)
+            #hc.make_idx_weights()
+            
+            self.hconv_enc.append(hc)
+            
             # downsample once to get next level ids and new data shape
-            l_data, next_ids = self.f.ud_grade_2(
+            l_data, next_ids = hc.Down(
                 l_data, cell_ids=self.l_cell_ids[l], nside=current_nside
             )
             self.l_cell_ids[l + 1] = self.f.backend.to_numpy(next_ids)
             current_nside //= 2
             enc_nsides.append(current_nside)
-
-        self.enc_nsides = enc_nsides  # [in, in/2, ..., in/2**depth]
-
-        # ---------- Oriented convolutions per level (encoder & decoder) ----------
-        self.hconv_enc: List[hs.HOrientedConvol] = []
-        self.hconv_dec: List[hs.HOrientedConvol] = []
 
         # encoder conv weights and BN
         self.enc_w1 = nn.ParameterList()
@@ -141,12 +154,10 @@ class HealpixUNet(nn.Module):
         self.enc_w2 = nn.ParameterList()
         self.enc_bn2 = nn.ModuleList()
 
+        self.enc_nsides = enc_nsides  # [in, in/2, ..., in/2**depth]
+        
         inC = self.n_chan_in
         for l, outC in enumerate(self.chanlist):
-            # operator at encoder level l
-            hc = hs.HOrientedConvol(self.enc_nsides[l], self.KERNELSZ, cell_ids=self.l_cell_ids[l])
-            hc.make_idx_weights()
-            self.hconv_enc.append(hc)
 
             # conv1: inC -> outC
             w1 = torch.empty(inC, outC, self.KERNELSZ * self.KERNELSZ)
@@ -170,8 +181,11 @@ class HealpixUNet(nn.Module):
 
         for d in range(depth):
             level = depth - 1 - d  # encoder level we are going back to
-            hc = hs.HOrientedConvol(self.enc_nsides[level], self.KERNELSZ, cell_ids=self.l_cell_ids[level])
-            hc.make_idx_weights()
+            hc = ho.HOrientedConvol(self.enc_nsides[level],
+                                    self.KERNELSZ,
+                                    cell_ids=self.l_cell_ids[level],
+                                    dtype=self.dtype)
+            #hc.make_idx_weights()
             self.hconv_dec.append(hc)
 
             upC = self.chanlist[level + 1] if level + 1 < depth else self.chanlist[level]
@@ -190,8 +204,11 @@ class HealpixUNet(nn.Module):
             self.dec_bn2.append(nn.BatchNorm1d(outC_dec))
 
         # Output head (on finest grid, channels = chanlist[0])
-        self.head_hconv = hs.HOrientedConvol(self.in_nside, self.KERNELSZ, cell_ids=self.l_cell_ids[0])
-        self.head_hconv.make_idx_weights()
+        self.head_hconv = ho.HOrientedConvol(self.in_nside,
+                                             self.KERNELSZ,
+                                             cell_ids=self.l_cell_ids[0],
+                                             dtype=self.dtype)
+        
         head_inC = self.chanlist[0]
         self.head_w = nn.Parameter(torch.empty(head_inC, self.out_channels, self.KERNELSZ * self.KERNELSZ))
         nn.init.kaiming_uniform_(self.head_w.view(head_inC * self.out_channels, -1), a=np.sqrt(5))
@@ -201,7 +218,7 @@ class HealpixUNet(nn.Module):
         self.runtime_device = self._probe_and_set_runtime_device(self.device)
 
     # -------------------------- device plumbing --------------------------
-    def _move_hconv_tensors(self, hc: hs.HOrientedConvol, device: torch.device) -> None:
+    def _move_hconv_tensors(self, hc: ho.HOrientedConvol, device: torch.device) -> None:
         """Best-effort: move any torch.Tensor attribute of HOrientedConvol to device."""
         for name, val in list(vars(hc).items()):
             try:
@@ -250,13 +267,15 @@ class HealpixUNet(nn.Module):
         return self.runtime_device
 
     # -------------------------- forward --------------------------
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor,cell_ids: Optional[np.ndarray ] = None) -> torch.Tensor:
         """Forward pass.
 
         Parameters
         ----------
         x : torch.Tensor, shape (B, C_in, Npix)
             Input tensor on `in_nside` grid.
+        cell_ids : np.ndarray (B, Npix) optional, use another cell_ids than the initial one.
+                   if None use the initial cell_ids.
         """
         if not isinstance(x, torch.Tensor):
             raise TypeError("Input must be a torch.Tensor")
@@ -274,14 +293,26 @@ class HealpixUNet(nn.Module):
         skips: List[torch.Tensor] = []
         l_data = x
         current_nside = self.in_nside
+        l_cell_ids=cell_ids
+        
+        if cell_ids is not None:
+            t_cell_ids={}
+            t_cell_ids[0]=l_cell_ids
+        else:
+            t_cell_ids=self.l_cell_ids
+            
         for l, outC in enumerate(self.chanlist):
             # conv1 + BN + ReLU
-            l_data = self.hconv_enc[l].Convol_torch(l_data, self.enc_w1[l])
+            l_data = self.hconv_enc[l].Convol_torch(l_data,
+                                                    self.enc_w1[l],
+                                                    cell_ids=l_cell_ids)
             l_data = self.enc_bn1[l](l_data)
             l_data = F.relu(l_data, inplace=True)
 
             # conv2 + BN + ReLU
-            l_data = self.hconv_enc[l].Convol_torch(l_data, self.enc_w2[l])
+            l_data = self.hconv_enc[l].Convol_torch(l_data,
+                                                    self.enc_w2[l],
+                                                    cell_ids=l_cell_ids)
             l_data = self.enc_bn2[l](l_data)
             l_data = F.relu(l_data, inplace=True)
 
@@ -290,9 +321,17 @@ class HealpixUNet(nn.Module):
 
             # downsample (except bottom level) -> ensure output is on runtime_device
             if l < len(self.chanlist) - 1:
-                l_data, _ = self.f.ud_grade_2(
-                    l_data, cell_ids=self.l_cell_ids[l], nside=current_nside
+                #l_data, l_cell_ids = self.f.ud_grade_2(
+                #    l_data, cell_ids=t_cell_ids[l], nside=current_nside
+                #)
+                l_data, l_cell_ids = self.hconv_enc[l].Down(
+                    l_data, cell_ids=t_cell_ids[l], nside=current_nside
                 )
+                if cell_ids is not None:
+                    t_cell_ids[l+1]=l_cell_ids
+                else:
+                    l_cell_ids=None
+                    
                 if isinstance(l_data, torch.Tensor) and l_data.device != self.runtime_device:
                     l_data = l_data.to(self.runtime_device)
                 current_nside //= 2
@@ -308,13 +347,22 @@ class HealpixUNet(nn.Module):
                 tgt_nside = self.enc_nsides[level]        # next finer (== src*2)
                 # Foscat up_grade signature expects current (coarse) ids in `cell_ids`
                 # and target (fine) ids in `o_cell_ids` (matching original UNET code).
+                '''
                 l_data = self.f.up_grade(
                     l_data,
                     tgt_nside,
-                    cell_ids=self.l_cell_ids[level + 1],  # source (coarser) ids
-                    o_cell_ids=self.l_cell_ids[level],     # target (finer) ids
+                    cell_ids=t_cell_ids[level + 1],  # source (coarser) ids
+                    o_cell_ids=t_cell_ids[level],     # target (finer) ids
                     nside=src_nside,
                 )
+                '''
+                l_data = self.hconv_enc[l].Up(
+                    l_data,
+                    cell_ids=t_cell_ids[level + 1],  # source (coarser) ids
+                    o_cell_ids=t_cell_ids[level],     # target (finer) ids
+                    nside=src_nside,
+                )
+                
                 if isinstance(l_data, torch.Tensor) and l_data.device != self.runtime_device:
                     l_data = l_data.to(self.runtime_device)
 
@@ -322,13 +370,22 @@ class HealpixUNet(nn.Module):
             concat = self.f.backend.bk_concat([skips[level], l_data], 1)
             l_data = concat.to(self.runtime_device) if torch.is_tensor(concat) else concat
 
+            if cell_ids is not None:
+                l_cell_ids = t_cell_ids[level]
+                
             # apply decoder convs on this grid
             hc = self.hconv_dec[d]
-            l_data = hc.Convol_torch(l_data, self.dec_w1[d])
+            l_data = hc.Convol_torch(l_data,
+                                     self.dec_w1[d],
+                                     cell_ids=l_cell_ids)
+            
             l_data = self.dec_bn1[d](l_data)
             l_data = F.relu(l_data, inplace=True)
 
-            l_data = hc.Convol_torch(l_data, self.dec_w2[d])
+            l_data = hc.Convol_torch(l_data,
+                                     self.dec_w2[d],
+                                     cell_ids=l_cell_ids)
+            
             l_data = self.dec_bn2[d](l_data)
             l_data = F.relu(l_data, inplace=True)
 
@@ -344,11 +401,16 @@ class HealpixUNet(nn.Module):
 
     # -------------------------- utilities --------------------------
     @torch.no_grad()
-    def predict(self, x: torch.Tensor, batch_size: int = 8) -> torch.Tensor:
+    def predict(self, x: torch.Tensor, batch_size: int = 8,cell_ids: Optional[np.ndarray ] = None) -> torch.Tensor:
         self.eval()
         outs = []
         for i in range(0, x.shape[0], batch_size):
-            outs.append(self.forward(x[i : i + batch_size]))
+            if cell_ids is not None:
+                outs.append(self.forward(x[i : i + batch_size],
+                                         cell_ids=cell_ids[i : i + batch_size]))
+            else:
+                outs.append(self.forward(x[i : i + batch_size]))
+                
         return torch.cat(outs, dim=0)
 
     # -----------------------------
@@ -513,7 +575,7 @@ if __name__ == "__main__":
 
         def test_forward_shape(self):
             # random input
-            x = np.random.randn(self.batch, self.channels, self.npix).astype(np.float32)
+            x = np.random.randn(self.batch, self.channels, self.npix).astype(self.np_dtype)
             x = self.net.f.backend.bk_cast(x)
             y = self.net.eval(x)
             # expected output: same npix, 1 channel at the very top
@@ -525,7 +587,7 @@ if __name__ == "__main__":
             self.assertFalse(np.isnan(y_np).any())
 
         def test_param_roundtrip_and_determinism(self):
-            x = np.random.randn(self.batch, self.channels, self.npix).astype(np.float32)
+            x = np.random.randn(self.batch, self.channels, self.npix).astype(self.np_dtype)
             x = self.net.f.backend.bk_cast(x)
 
             # forward twice -> identical outputs with fixed params

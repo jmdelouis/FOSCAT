@@ -63,70 +63,113 @@ class BkTorch(BackendBase.BackendBase):
             torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
         )
 
-    import torch
 
     def binned_mean(self, data, cell_ids):
         """
-        Compute the mean over groups of 4 nested HEALPix cells (nside → nside/2).
+        Moyenne par groupes de 4 pixels HEALPix nested (nside -> nside/2),
+        fonctionne avec un sous-ensemble arbitraire de pixels.
 
-        Args:
-            data (torch.Tensor): Tensor of shape [..., N], where N is the number of HEALPix cells.
-            cell_ids (torch.LongTensor): Tensor of shape [N], with cell indices (nested ordering).
+        Args
+        ----
+        data: torch.Tensor | np.ndarray, shape [..., N]  ou  [B, ..., N]
+        cell_ids: torch.LongTensor | np.ndarray, shape [N] ou [B, N] (nested)
 
-        Returns:
-            torch.Tensor: Tensor of shape [..., n_bins], with averaged values per group of 4 cells.
+        Returns
+        -------
+        mean: torch.Tensor, shape [..., G] ou [B, ..., G]
+        groups_out: torch.LongTensor, shape [G]  (ids HEALPix parents à nside/2)
         """
+
+        # --- to tensors on device ---
         if isinstance(data, np.ndarray):
-            data = torch.from_numpy(data).to(
-                dtype=torch.float32, device=self.torch_device
-            )
+            data = torch.from_numpy(data).to(dtype=torch.float32, device=self.torch_device)
         if isinstance(cell_ids, np.ndarray):
-            cell_ids = torch.from_numpy(cell_ids).to(
-                dtype=torch.long, device=self.torch_device
-            )
+            cell_ids = torch.from_numpy(cell_ids).to(dtype=torch.long, device=self.torch_device)
+        data = data.to(self.torch_device)
+        cell_ids = cell_ids.to(self.torch_device, dtype=torch.long)
 
-        # Compute supercell ids by grouping 4 nested cells together
-        groups = cell_ids // 4
-
-        # Get unique group ids and inverse mapping
-        unique_groups, inverse_indices = torch.unique(groups, return_inverse=True)
-        n_bins = unique_groups.shape[0]
-
-        # Flatten all leading dimensions into a single batch dimension
-        original_shape = data.shape[:-1]
+        # --- shapes ---
+        if data.ndim < 1:
+            raise ValueError("`data` must have at least 1 dim; last is N.")
         N = data.shape[-1]
-        data_flat = data.reshape(-1, N)  # Shape: [B, N]
+        if N % 4 != 0:
+            raise ValueError(f"N={N} must be divisible by 4 for nested groups of 4.")
 
-        # Prepare to compute sums using scatter_add
-        B = data_flat.shape[0]
+        # --- parent groups @ nside/2, accept [N] or [B,N] ---
+        if cell_ids.ndim == 1:
+            if cell_ids.shape[0] != N:
+                raise ValueError(f"cell_ids shape {tuple(cell_ids.shape)} incompatible with N={N}.")
+            groups_parent = (cell_ids // 4).long()                  # [N]
+            # densification -> [0..G-1]
+            unique_groups, inverse = torch.unique(groups_parent, return_inverse=True)  # [G], [N]
+            # mapping identique pour toutes les lignes/rows de data
+            B_ids = 1
+        elif cell_ids.ndim == 2:
+            B_ids, N_ids = cell_ids.shape
+            if N_ids != N:
+                raise ValueError(f"cell_ids last dim {N_ids} must equal N={N}.")
+            # vérif compatibilité batch (data doit commencer par B ou par un multiple de B)
+            leading = data.shape[:-1]
+            if len(leading) == 0:
+                raise ValueError("`data` must have a leading dim to match [B, N] cell_ids.")
+            B_data = leading[0]
+            if B_data % B_ids != 0:
+                raise ValueError(f"Leading batch of data ({B_data}) must be a multiple of cell_ids batch ({B_ids}).")
 
-        # Repeat inverse indices for each batch element
-        idx = inverse_indices.repeat(B, 1)  # Shape: [B, N]
+            # Construire un mapping DENSE par batch, mais on impose que la topologie
+            # des parents soit la même pour tous les batches -> on se base sur le batch 0
+            groups_parent0 = (cell_ids[0] // 4).long()              # [N]
+            unique_groups, inverse0 = torch.unique(groups_parent0, return_inverse=True)  # [G], [N]
 
-        # Offset indices to simulate a per-batch scatter into [B * n_bins]
-        batch_offsets = torch.arange(B, device=data.device).unsqueeze(1) * n_bins
-        idx_offset = idx + batch_offsets  # Shape: [B, N]
+            # Vérification (optionnelle mais sûre) : chaque batch a les mêmes parents (ordre potentiellement différent OK)
+            # -> ici on exige même l'égalité stricte pour éviter les surprises ;
+            #    sinon on pourrait densifier par-batch et retourner une liste de groups_out.
+            for b in range(1, B_ids):
+                if not torch.equal(groups_parent0, (cell_ids[b] // 4).long()):
+                    raise ValueError("All batches in cell_ids must share the same parent groups (order & content).")
 
-        # Flatten everything for scatter
-        idx_offset_flat = idx_offset.flatten()
-        data_flat_flat = data_flat.flatten()
+            # Construire l'inverse pour tous les batches en répliquant celui du batch 0
+            inverse = inverse0.unsqueeze(0).expand(B_ids, -1)       # [B_ids, N]
+        else:
+            raise ValueError("`cell_ids` must be [N] or [B, N].")
 
-        # Accumulate sums per bin
-        out = torch.zeros(B * n_bins, dtype=data.dtype, device=data.device)
-        out = out.scatter_add(0, idx_offset_flat, data_flat_flat)
+        G = unique_groups.numel()  # nb de groupes parents (nside/2)
 
-        # Count number of elements per bin (to compute mean)
-        ones = torch.ones_like(data_flat_flat)
-        counts = torch.zeros(B * n_bins, dtype=data.dtype, device=data.device)
-        counts = counts.scatter_add(0, idx_offset_flat, ones)
+        # --- aplatir data en lignes ---
+        original_shape = data.shape[:-1]                            # e.g. [B, D1, ...]
+        R = int(np.prod(original_shape)) if original_shape else 1
+        data_flat = data.reshape(R, N)                              # [R, N]
 
-        # Compute mean
-        mean = out / counts  # Shape: [B * n_bins]
-        mean = mean.view(B, n_bins)
+        # --- construire indices de bins par ligne ---
+        if cell_ids.ndim == 1:
+            idx = inverse.expand(R, -1)                             # [R, N], dans [0..G-1]
+        else:
+            # cell_ids est [B_ids, N]; on doit « étirer » chaque ligne de mapping
+            # pour couvrir les R lignes de data_flat en respectant la 1ère dim (B_data)
+            B_data = original_shape[0]
+            T = R // B_data                                         # répétitions par batch-row
+            idx = inverse.repeat_interleave(T, dim=0)               # [B_ids*T, N] == [R, N]
 
-        # Restore original leading dimensions
-        return mean.view(*original_shape, n_bins), unique_groups
+        # --- scatter add (somme et compte) par ligne ---
+        device = data.device
+        row_offsets = torch.arange(R, device=device).unsqueeze(1) * G
+        idx_offset = idx.to(torch.long) + row_offsets               # [R,N]
+        idx_offset_flat = idx_offset.reshape(-1)
+        vals_flat = data_flat.reshape(-1)
 
+        out_sum = torch.zeros(R * G, dtype=data.dtype, device=device)
+        out_sum.scatter_add_(0, idx_offset_flat, vals_flat)
+
+        ones = torch.ones_like(vals_flat, dtype=data.dtype, device=device)
+        out_cnt = torch.zeros(R * G, dtype=data.dtype, device=device)
+        out_cnt.scatter_add_(0, idx_offset_flat, ones)
+        out_cnt = torch.clamp(out_cnt, min=1)
+
+        mean = (out_sum / out_cnt).view(R, G).view(*original_shape, G)
+
+        # On retourne les VRAIS ids HEALPix parents à nside/2
+        return mean, unique_groups
+    
     def average_by_cell_group(data, cell_ids):
         """
         data: tensor of shape [..., N, ...] (ex: [B, N, C])

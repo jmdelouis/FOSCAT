@@ -3,16 +3,36 @@ import matplotlib.pyplot as plt
 import healpy as hp
 from scipy.sparse import csr_array
 import torch
+import foscat.scat_cov as sc
 from scipy.spatial import cKDTree
 
 class HOrientedConvol:
-    def __init__(self,nside,KERNELSZ,cell_ids=None,nest=True):
+    def __init__(self,
+                 nside,
+                 KERNELSZ,
+                 cell_ids=None,
+                 nest=True,
+                 device='cuda',
+                 dtype='float64',
+                 polar=False,
+                 gamma=1.0,
+                 allow_extrapolation=True,
+                 no_cell_ids=False,
+                 ):
+
+        if dtype=='float64':
+            self.dtype=torch.float64
+        else:
+            self.dtype=torch.float32
         
         if KERNELSZ % 2 == 0:
             raise ValueError(f"N must be odd so that coordinates are integers from -K..K; got N={KERNELSZ}.")
 
         self.local_test=False
-        
+
+        if no_cell_ids==True:
+            cell_ids=np.arange(10)
+            
         if cell_ids is None:
             self.cell_ids=np.arange(12*nside**2)
             
@@ -28,38 +48,84 @@ class HOrientedConvol:
                 self.cell_ids=cell_ids
                 
             self.local_test=True
-            
-            idx_nn = self.knn_healpix_ckdtree(self.cell_ids, 
-                KERNELSZ*KERNELSZ, 
-                nside,
-                nest=nest,
-            )
 
-            
-        mat_pt=self.rotation_matrices_from_healpix(nside,self.cell_ids,nest=nest)
-
-        if self.local_test:
-            t,p = hp.pix2ang(nside,self.cell_ids[idx_nn],nest=True)
-        else:
-            t,p = hp.pix2ang(nside,idx_nn,nest=True)
-            
-        vec_orig=hp.ang2vec(t,p)
-
-        self.vec_rot = np.einsum('mki,ijk->kmj', vec_orig,mat_pt)
-
-        '''
-        if self.local_test:
-            idx_nn=self.remap_by_first_column(idx_nn)
-        '''
+            if self.cell_ids.ndim==1:
+                idx_nn = self.knn_healpix_ckdtree(self.cell_ids, 
+                                                  KERNELSZ*KERNELSZ, 
+                                                  nside,
+                                                  nest=nest,
+                                                  )
+            else:
+                idx_nn = []
+                for k in range(self.cell_ids.shape[0]):
+                    idx_nn.append(self.knn_healpix_ckdtree(self.cell_ids[k], 
+                                                           KERNELSZ*KERNELSZ, 
+                                                           nside,
+                                                           nest=nest,
+                                                           ))
+                idx_nn=np.stack(idx_nn,0)
         
-        del mat_pt
-        del vec_orig
-        self.t=t[:,0]
-        self.p=p[:,0]
+        if self.cell_ids.ndim==1:
+            mat_pt=self.rotation_matrices_from_healpix(nside,self.cell_ids,nest=nest)
+            
+            if self.local_test:
+                t,p = hp.pix2ang(nside,self.cell_ids[idx_nn],nest=True)
+            else:
+                t,p = hp.pix2ang(nside,idx_nn,nest=True)
+                    
+            self.t=t[:,0]
+            self.p=p[:,0]
+            vec_orig=hp.ang2vec(t,p)
+
+            self.vec_rot = np.einsum('mki,ijk->kmj', vec_orig,mat_pt)
+
+            '''
+            if self.local_test:
+            idx_nn=self.remap_by_first_column(idx_nn)
+            '''
+            
+            del mat_pt
+            del vec_orig
+        else:
+            
+            t,p,vec_rot = [],[],[]
+            
+            for k in range(self.cell_ids.shape[0]):
+                mat_pt=self.rotation_matrices_from_healpix(nside,self.cell_ids[k],nest=nest)
+                
+                lt,lp = hp.pix2ang(nside,self.cell_ids[k,idx_nn[k]],nest=True)
+                
+                vec_orig=hp.ang2vec(lt,lp)
+                
+                l_vec_rot=np.einsum('mki,ijk->kmj', vec_orig,mat_pt)
+                vec_rot.append(l_vec_rot)
+                
+                del vec_orig
+                del mat_pt
+                
+                t.append(lt[:,0])
+                p.append(lp[:,0])
+
+                    
+            self.t=np.stack(t,0)
+            self.p=np.stack(p,0)
+            self.vec_rot=np.stack(vec_rot,0)
+
+            del t
+            del p
+            del vec_rot
+                
+        self.polar=polar
+        self.gamma=gamma
+        self.device=device
+        self.allow_extrapolation=allow_extrapolation
+        self.w_idx=None
+        
         self.idx_nn=idx_nn
         self.nside=nside
         self.KERNELSZ=KERNELSZ
         self.nest=nest
+        self.f=None
 
     def remap_by_first_column(self,idx: np.ndarray) -> np.ndarray:
         """
@@ -291,20 +357,53 @@ class HOrientedConvol:
         
         return csr_array((w, (indice_1_0, indice_1_1)), shape=(12*self.nside**2, 12*self.nside**2*NORIENT))
 
-    def make_idx_weights_from_cell_ids(self,cell_ids,
+    def make_idx_weights_from_cell_ids(self,i_cell_ids,
                                        polar=False,
                                        gamma=1.0,
                                        device='cuda',
                                        allow_extrapolation=True):
-        idx_nn = self.knn_healpix_ckdtree(self.cell_ids, 
-                self.KERNELSZ*self.KERNELSZ, 
-                self.nside,
-                nest=self.nest,
-            )
+        if len(i_cell_ids.shape)<2:
+            cell_ids=i_cell_ids
+            n_cids=1
+        else:
+            cell_ids=i_cell_ids[0]
+            n_cids=i_cell_ids.shape[0]
+            
+        idx_nn,w_idx,w_w    = [],[],[]
         
-        mat_pt=self.rotation_matrices_from_healpix(nside,cell_ids,nest=self.nest)
+        for k in range(n_cids):
+            cell_ids=i_cell_ids[k]
+            l_idx_nn,l_w_idx,l_w_w = self.make_idx_weights_from_one_cell_ids(cell_ids,
+                                                                       polar=polar,
+                                                                       gamma=gamma,
+                                                                       device=device,
+                                                                       allow_extrapolation=allow_extrapolation)
+            idx_nn.append(l_idx_nn)
+            w_idx.append(l_w_idx)
+            w_w.append(l_w_w)
+            
+        idx_nn = torch.Tensor(np.stack(idx_nn,0)).to(device=device, dtype=torch.long)
+        w_idx  = torch.Tensor(np.stack(w_idx,0)).to(device=device, dtype=torch.long)
+        w_w    = torch.Tensor(np.stack(w_w,0)).to(device=device, dtype=self.dtype)
+        
+        return idx_nn,w_idx,w_w
+        
+    def make_idx_weights_from_one_cell_ids(self,
+                                           cell_ids,
+                                           polar=False,
+                                           gamma=1.0,
+                                           device='cuda',
+                                           allow_extrapolation=True):
 
-        t,p = hp.pix2ang(nside,cell_ids[idx_nn],nest=self.nest)
+        idx_nn = self.knn_healpix_ckdtree(cell_ids, 
+                                          self.KERNELSZ*self.KERNELSZ, 
+                                          self.nside,
+                                          nest=self.nest,
+                                          )
+        
+        mat_pt=self.rotation_matrices_from_healpix(self.nside,cell_ids,nest=self.nest)
+
+        t,p = hp.pix2ang(self.nside,cell_ids[idx_nn],nest=self.nest)
             
         vec_orig=hp.ang2vec(t,p)
 
@@ -333,27 +432,20 @@ class HOrientedConvol:
         del xx
         del yy
         
-        if return_index:
-            return idx_nn,w_idx,w_w
-    
+        return idx_nn,w_idx,w_w
+        
     def make_idx_weights(self,polar=False,gamma=1.0,device='cuda',allow_extrapolation=True,return_index=False):
         
-        rotate=2*((self.t<np.pi/2)-0.5)[:,None]
-        if polar:
-            xx=np.cos(self.p)[:,None]*self.vec_rot[:,:,0]-rotate*np.sin(self.p)[:,None]*self.vec_rot[:,:,1]
-            yy=-np.sin(self.p)[:,None]*self.vec_rot[:,:,0]-rotate*np.cos(self.p)[:,None]*self.vec_rot[:,:,1]
-        else:
-            xx=self.vec_rot[:,:,0]
-            yy=self.vec_rot[:,:,1]
-        
-        self.w_idx,self.w_w = self.bilinear_weights_NxN(xx*self.nside*gamma,
-                                                        yy*self.nside*gamma,
-                                                        allow_extrapolation=allow_extrapolation)
+        idx_nn,w_idx,w_w = self.make_idx_weights_from_one_cell_ids(self.cell_ids,
+                                                                  polar=polar,
+                                                                  gamma=gamma,
+                                                                  device=device,
+                                                                  allow_extrapolation=allow_extrapolation)
         
         # Ensure types/devices
-        self.idx_nn = torch.Tensor(self.idx_nn).to(device=device, dtype=torch.long)
-        self.w_idx  = torch.Tensor(self.w_idx).to(device=device, dtype=torch.long)
-        self.w_w    = torch.Tensor(self.w_w).to(device=device, dtype=torch.float64)
+        self.idx_nn = torch.Tensor(idx_nn).to(device=device, dtype=torch.long)
+        self.w_idx  = torch.Tensor(w_idx).to(device=device, dtype=torch.long)
+        self.w_w    = torch.Tensor(w_w).to(device=device, dtype=self.dtype)
     
     def _grid_index(self, xi, yi):
         """
@@ -456,7 +548,184 @@ class HOrientedConvol:
     
         return idx, w
 
-    def Convol_torch(self, im, ww,cell_ids=None):
+    def Convol_torch(self, im, ww, cell_ids=None, nside=None):
+        """
+        Batched KERNELSZxKERNELSZ neighborhood aggregation in pure PyTorch (generalization of the 3x3 case).
+
+        Parameters
+        ----------
+        im : Tensor, shape (B, C_i, Npix)
+        ww : Tensor, shapes supported:
+             (C_i, C_o, M) | (C_i, C_o, M, S) | (B, C_i, C_o, M) | (B, C_i, C_o, M, S)
+        cell_ids : ndarray or Tensor
+            - None: use precomputed self.idx_nn / self.w_idx / self.w_w (shared for batch).
+            - (Npix,): recompute once (shared for batch).
+            - (B, Npix): recompute per-sample (different for each b).
+
+        Returns
+        -------
+        out : Tensor, shape (B, C_o, Npix)
+        """
+        import torch
+
+        # ---- Basic checks / casting ----
+        if not isinstance(im, torch.Tensor):
+            im = torch.as_tensor(im, device=self.device, dtype=self.dtype)
+        if not isinstance(ww, torch.Tensor):
+            ww = torch.as_tensor(ww, device=self.device, dtype=self.dtype)
+
+        assert im.ndim == 3, f"`im` must be (B, C_i, Npix), got {tuple(im.shape)}"
+        B, C_i, Npix = im.shape
+        device = im.device
+        dtype  = im.dtype
+
+        # ---- Recompute (idx_nn, w_idx, w_w) depending on cell_ids shape ----
+        # target shapes:
+        #   idx_nn_eff : (B, Npix, P)
+        #   w_idx_eff  : (B, Npix, S, P)
+        #   w_w_eff    : (B, Npix, S, P)
+        if cell_ids is not None:
+            # to numpy for your make_idx_weights_from_cell_ids helper if needed
+            if isinstance(cell_ids, torch.Tensor):
+                cid = cell_ids.detach().to("cpu").numpy()
+            else:
+                cid = cell_ids
+
+            if cid.ndim == 1:
+                # single set of ids for the whole batch
+                idx_nn, w_idx, w_w = self.make_idx_weights_from_cell_ids(cid, nside, device=device)
+                assert idx_nn.ndim == 2, "idx_nn expected (Npix,P)"
+                P = idx_nn.shape[1]
+                if w_idx.ndim == 2:
+                    # (Npix,P) -> (B,Npix,1,P)
+                    S = 1
+                    w_idx_eff = w_idx[None, :, None, :].expand(B, -1, -1, -1)
+                    w_w_eff   =  w_w[None, :, None, :].expand(B, -1, -1, -1)
+                elif w_idx.ndim == 3:
+                    # (Npix,S,P) -> (B,Npix,S,P)
+                    S = w_idx.shape[1]
+                    w_idx_eff = w_idx[None, ...].expand(B, -1, -1, -1)
+                    w_w_eff   =  w_w[None, ...].expand(B, -1, -1, -1)
+                else:
+                    raise ValueError(f"Unsupported w_idx shape {tuple(w_idx.shape)}")
+                idx_nn_eff = idx_nn[None, ...].expand(B, -1, -1)  # (B,Npix,P)
+
+            elif cid.ndim == 2:
+                # per-sample ids
+                assert cid.shape[0] == B and cid.shape[1] == Npix, \
+                    f"cell_ids must be (B,Npix) with B={B},Npix={Npix}, got {cid.shape}"
+                S_ref = None
+                
+                idx_nn_eff, w_idx_eff, w_w_eff = self.make_idx_weights_from_cell_ids(cid,
+                                                                          nside,
+                                                                          device=device)
+                P = idx_nn_eff.shape[-1]
+                S = w_idx_eff.shape[-2]
+
+            else:
+                raise ValueError(f"Unsupported cell_ids shape {cid.shape}")
+
+            # ensure tensors on right device/dtype
+            idx_nn_eff = torch.as_tensor(idx_nn_eff, device=device, dtype=torch.long)
+            w_idx_eff  = torch.as_tensor(w_idx_eff,  device=device, dtype=torch.long)
+            w_w_eff    = torch.as_tensor(w_w_eff,    device=device, dtype=dtype)
+
+        else:
+            # Use precomputed (shared for batch)
+            if self.w_idx is None:
+                
+                if self.cell_ids.ndim==1:
+                    l_cell=self.cell_ids[None,:]
+                else:
+                    l_cell=self.cell_ids
+                    
+                idx_nn,w_idx,w_w = self.make_idx_weights_from_cell_ids(
+                    l_cell,
+                    polar=self.polar,
+                    gamma=self.gamma,
+                    device=self.device,
+                    allow_extrapolation=self.allow_extrapolation)
+
+                self.idx_nn = idx_nn
+                self.w_idx  = w_idx
+                self.w_w    = w_w
+            else:
+                idx_nn = self.idx_nn          # (Npix,P)
+                w_idx  = self.w_idx           # (Npix,P) or (Npix,S,P)
+                w_w    = self.w_w             # (Npix,P) or (Npix,S,P)
+
+            #assert idx_nn.ndim == 3 and idx_nn.size(1) == Npix, \
+            #    f"`idx_nn` must be (B,Npix,P) with Npix={Npix}, got {tuple(idx_nn.shape)}"
+
+            P = idx_nn.size(-1)
+
+            if w_idx.ndim == 3:
+                S = 1
+                w_idx_eff = w_idx[:, :, None, :]  # (B,Npix,1,P)
+                w_w_eff   = w_w[:, :, None, :]    # (B,Npix,1,P)
+            elif w_idx.ndim == 4:
+                S = w_idx.size(2)
+                w_idx_eff = w_idx    # (B,Npix,S,P)
+                w_w_eff   =  w_w    # (B,Npix,S,P)
+            else:
+                raise ValueError(f"Unsupported `w_idx` shape {tuple(w_idx.shape)}; expected (Npix,P) or (Npix,S,P)")
+            idx_nn_eff = idx_nn               # (B,Npix,P)
+
+        # ---- 1) Gather neighbor values from im along Npix -> (B, C_i, Npix, P)
+        rim = torch.take_along_dim(
+            im.unsqueeze(-1),                  # (B, C_i, Npix, 1)
+            idx_nn_eff[:, None, :, :],         # (B, 1, Npix, P)
+            dim=2
+        )
+
+        # ---- 2) Normalize ww to (B, C_i, C_o, M, S)
+        if ww.ndim == 3:
+            C_i_w, C_o, M = ww.shape
+            assert C_i_w == C_i, f"ww C_i mismatch: {C_i_w} vs im {C_i}"
+            ww_eff = ww.unsqueeze(0).unsqueeze(-1).expand(B, -1, -1, -1, S)
+        elif ww.ndim == 4:
+            if ww.shape[0] == C_i and ww.shape[1] != C_i:
+                # (C_i, C_o, M, S)
+                C_i_w, C_o, M, S_w = ww.shape
+                assert C_i_w == C_i, f"ww C_i mismatch: {C_i_w} vs im {C_i}"
+                assert S_w == S, f"ww S mismatch: {S_w} vs w_idx S {S}"
+                ww_eff = ww.unsqueeze(0).expand(B, -1, -1, -1, -1)
+            elif ww.shape[0] == B:
+                # (B, C_i, C_o, M)
+                _, C_i_w, C_o, M = ww.shape
+                assert C_i_w == C_i, f"ww C_i mismatch: {C_i_w} vs im {C_i}"
+                ww_eff = ww.unsqueeze(-1).expand(-1, -1, -1, -1, S)
+            else:
+                raise ValueError(f"Ambiguous 4D ww shape {tuple(ww.shape)}; expected (C_i,C_o,M,S) or (B,C_i,C_o,M)")
+        elif ww.ndim == 5:
+            # (B, C_i, C_o, M, S)
+            assert ww.shape[0] == B and ww.shape[1] == C_i, "ww batch/C_i mismatch"
+            _, _, _, M, S_w = ww.shape
+            assert S_w == S, f"ww S mismatch: {S_w} vs w_idx S {S}"
+            ww_eff = ww
+        else:
+            raise ValueError(f"Unsupported ww shape {tuple(ww.shape)}")
+        
+        # --- Sanitize shapes: ensure w_idx_eff / w_w_eff == (B, Npix, S, P)
+        
+        # ---- 3) Gather along M using w_idx_eff -> (B, C_i, C_o, Npix, S, P)
+        idx_exp = w_idx_eff[:, None, None, :, :, :]            # (B,1,1,Npix,S,P)
+        rw = torch.take_along_dim(
+            ww_eff.unsqueeze(-1),                               # (B,C_i,C_o,M,S,1)
+            idx_exp,                                           # (B,1,1,Npix,S,P)
+            dim=3                                              # gather along M
+        )  # -> (B, C_i, C_o, Npix, S, P)
+        # ---- 4) Apply extra neighbor weights ----
+        rw = rw * w_w_eff[:, None, None, :, :, :]              # (B, C_i, C_o, Npix, S, P)
+        # ---- 5) Combine neighbor values and weights ----
+        rim_exp = rim[:, :, None, :, None, :]                  # (B, C_i, 1, Npix, 1, P)
+        out_ci  = (rim_exp * rw).sum(dim=-1)                   # sum over P -> (B, C_i, C_o, Npix, S)
+        out_ci  = out_ci.sum(dim=-1)                           # sum over S -> (B, C_i, C_o, Npix)
+        out     = out_ci.sum(dim=1)                            # sum over C_i -> (B, C_o, Npix)
+
+        return out
+
+    def Convol_torch_old(self, im, ww,cell_ids=None,nside=None):
         """
         Batched KERNELSZxKERNELSZ neighborhood aggregation in pure PyTorch (generalization of the 3x3 case).
     
@@ -492,20 +761,26 @@ class HOrientedConvol:
             Aggregated output per center pixel for each batch sample.
         """
         # ---- Basic checks ----
+        if not isinstance(im,torch.Tensor):
+            im=torch.Tensor(im).to(device=self.device, dtype=self.dtype)
+        if not isinstance(ww,torch.Tensor):
+            ww=torch.Tensor(ww).to(device=self.device, dtype=self.dtype)
+            
         assert im.ndim == 3, f"`im` must be (B, C_i, Npix), got {tuple(im.shape)}"
+        
         assert ww.shape[2]==self.KERNELSZ*self.KERNELSZ, f"`ww` must be (C_i, C_o, KERNELSZ*KERNELSZ), got {tuple(ww.shape)}"
         
         B, C_i, Npix = im.shape
         device = im.device
         dtype  = im.dtype
 
-        if cell_ids is None:
-            # Align class tensors to device/dtype
-            idx_nn = self.idx_nn.to(device=device, dtype=torch.long)  # (Npix, P)
-            w_idx  = self.w_idx.to(device=device, dtype=torch.long)   # (Npix, P) or (Npix, S, P)
-            w_w    = self.w_w.to(device=device, dtype=dtype)          # (Npix, P) or (Npix, S, P)
+        if cell_ids is not None:
+        
+            idx_nn,w_idx,w_w = self.make_idx_weights_from_cell_ids(cell_ids,nside,device=device)
         else:
-            idx_nn,w_idx,w_w = self.make_idx_weights_from_cell_ids(cell_ids,device=device)
+            idx_nn = self.idx_nn  # (Npix, P)
+            w_idx  = self.w_idx   # (Npix, P) or (Npix, S, P)
+            w_w    = self.w_w     # (Npix, P) or (Npix, S, P)
             
         # Neighbor count P inferred from idx_nn
         assert idx_nn.ndim == 2 and idx_nn.size(0) == Npix, \
@@ -593,6 +868,83 @@ class HOrientedConvol:
         out     = out_ci.sum(dim=1)             # (B, C_o, Npix)
     
         return out
+
+    def Down(self, im, cell_ids=None,nside=None):
+        if self.f is None:
+            if self.dtype==torch.float64:
+                self.f=sc.funct(KERNELSZ=self.KERNELSZ,all_type='float64')
+            else:
+                self.f=sc.funct(KERNELSZ=self.KERNELSZ,all_type='float32')
+
+        if cell_ids is None:
+            dim,_ = self.f.ud_grade_2(im,cell_ids=self.cell_ids,nside=self.nside)
+            return dim
+        else:
+            if nside is None:
+                nside=self.nside
+            if len(cell_ids.shape)==1:
+                return self.f.ud_grade_2(im,cell_ids=cell_ids,nside=nside)
+            else:
+                assert im.shape[0] == cell_ids.shape[0], \
+                    f"cell_ids and data should have the same batch size (first column), got data={im.shape},cell_ids={cell_ids.shape}"
+
+                result,result_cell_ids = [],[]
+                
+                for k in range(im.shape[0]):
+                    r,c = self.f.ud_grade_2(im[k],cell_ids=cell_ids[k],nside=nside)
+                    result.append(r)
+                    result_cell_ids.append(c)
+                    
+                result = torch.stack(result, dim=0)  # (B,...,Npix)
+                result_cell_ids  = torch.stack(result_cell_ids, dim=0) # (B,Npix)
+                return result,result_cell_ids
+                
+    def Up(self, im, cell_ids=None,nside=None,o_cell_ids=None):
+        if self.f is None:
+            if self.dtype==torch.float64:
+                self.f=sc.funct(KERNELSZ=self.KERNELSZ,all_type='float64')
+            else:
+                self.f=sc.funct(KERNELSZ=self.KERNELSZ,all_type='float32')
+
+        if cell_ids is None:
+            dim = self.f.up_grade(im,self.nside*2,cell_ids=self.cell_ids,nside=self.nside)
+            return dim
+        else:
+            if nside is None:
+                nside=self.nside
+            if nside is None:
+                nside=self.nside
+            if len(cell_ids.shape)==1:
+                return self.f.up_grade(im,nside*2,cell_ids=cell_ids,nside=nside,o_cell_ids=o_cell_ids)
+            else:
+                assert im.shape[0] == cell_ids.shape[0], \
+                    f"cell_ids and data should have the same batch size (first column), got data={im.shape},cell_ids={cell_ids.shape}"
+
+                assert im.shape[0] == o_cell_ids.shape[0], \
+                    f"cell_ids and data should have the same batch size (first column), got data={im.shape},o_cell_ids={o_cell_ids.shape}"
+
+                result = []
+                
+                for k in range(im.shape[0]):
+                    r= self.f.up_grade(im[k],nside*2,cell_ids=cell_ids[k],nside=nside,o_cell_ids=o_cell_ids[k])
+                    result.append(r)
+                    
+                result = torch.stack(result, dim=0)  # (B,...,Npix)
+                return result
+        
+    def to_tensor(self,x):
+        if self.f is None:
+            if self.dtype==torch.float64:
+                self.f=sc.funct(KERNELSZ=self.KERNELSZ,all_type='float64')
+            else:
+                self.f=sc.funct(KERNELSZ=self.KERNELSZ,all_type='float32')
+        return self.f.backend.bk_cast(x)
+    
+    def to_numpy(self,x):
+        if isinstance(x,np.ndarray):
+            return x
+        return x.cpu().numpy()
+        
 
    
         
