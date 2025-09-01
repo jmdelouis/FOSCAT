@@ -63,7 +63,156 @@ class BkTorch(BackendBase.BackendBase):
             torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
         )
 
+    # ---------------------------------
+    # HEALPix binning utilities (nested)
+    # ---------------------------------
+    # Robust binned_mean that supports arbitrary subsets (N not divisible by 4)
+    # and batched cell_ids of shape [B, N]. It returns compact per-parent means
+    # even when some parents are missing (sparse coverage).
 
+    def binned_mean(self, data, cell_ids, *, padded: bool = False, fill_value: float = float("nan")):
+        """Average values over parent HEALPix pixels (nested) when downgrading nside→nside/2.
+
+        Works with full-sky or sparse subsets (no need for N to be divisible by 4).
+
+        Parameters
+        ----------
+        data : torch.Tensor or np.ndarray
+            Shape ``[..., N]`` or ``[B, ..., N]``.
+        cell_ids : torch.LongTensor or np.ndarray
+            Shape ``[N]`` or ``[B, N]`` (nested indexing at the *child* resolution).
+        padded : bool, optional (default: False)
+            Only used when ``cell_ids`` is ``[B, N]``. If ``False``, returns Python
+            lists (ragged) of per-batch results. If ``True``, returns padded tensors
+            plus a boolean mask of valid bins.
+        fill_value : float, optional
+            Value used for padding when ``padded=True``.
+
+        Returns
+        -------
+        If ``cell_ids`` is ``[N]``:
+            mean  : torch.Tensor, shape ``[..., n_bins]``
+            groups: torch.LongTensor, shape ``[n_bins]``  (sorted unique parents)
+
+        If ``cell_ids`` is ``[B, N]`` and ``padded=False``:
+            means_list  : List[torch.Tensor] of length B, each shape ``[T, n_bins_b]``
+                          where ``T = prod(data.shape[1:-1])`` (or 1 if none).
+            groups_list : List[torch.LongTensor] of length B, each shape ``[n_bins_b]``
+
+        If ``cell_ids`` is ``[B, N]`` and ``padded=True``:
+            mean_padded : torch.Tensor, shape ``[B, T, max_bins]`` (or ``[B, max_bins]`` if T==1)
+            groups_pad  : torch.LongTensor, shape ``[B, max_bins]`` (parents, padded with -1)
+            mask        : torch.BoolTensor, shape ``[B, max_bins]`` (True where valid)
+        """
+        import torch, numpy as np
+
+        # ---- Tensorize & device/dtype plumbing ----
+        if isinstance(data, np.ndarray):
+            data = torch.from_numpy(data).to(dtype=torch.float32, device=getattr(self, 'torch_device', 'cpu'))
+        if isinstance(cell_ids, np.ndarray):
+            cell_ids = torch.from_numpy(cell_ids).to(dtype=torch.long, device=data.device)
+
+        data = data.to(device=getattr(self, 'torch_device', data.device))
+        cell_ids = cell_ids.to(device=data.device, dtype=torch.long)
+
+        if data.ndim < 1:
+            raise ValueError("`data` must have at least 1 dimension (last is N).")
+        N = data.shape[-1]
+
+        # Flatten leading dims (rows) for scatter convenience
+        orig = data.shape[:-1]
+        T = int(np.prod(orig[1:])) if len(orig) > 1 else 1  # repeats per batch row
+        if cell_ids.ndim == 1:
+            # Shared mapping for all rows
+            groups = (cell_ids // 4).to(torch.long)  # [N]
+            # Unique parent ids + inverse indices
+            parents, inv = torch.unique(groups, sorted=True, return_inverse=True)
+            n_bins = parents.numel()
+
+            R = int(np.prod(orig)) if len(orig) > 0 else 1
+            data_flat = data.reshape(R, N)  # [R, N]
+
+            # Row offsets -> independent bins per row
+            row_offsets = torch.arange(R, device=data.device).unsqueeze(1) * n_bins  # [R,1]
+            idx = inv.unsqueeze(0).expand(R, -1) + row_offsets                         # [R,N]
+
+            vals_flat = data_flat.reshape(-1)
+            idx_flat  = idx.reshape(-1)
+
+            out_sum = torch.zeros(R * n_bins, dtype=data.dtype, device=data.device)
+            out_cnt = torch.zeros_like(out_sum)
+            out_sum.scatter_add_(0, idx_flat, vals_flat)
+            out_cnt.scatter_add_(0, idx_flat, torch.ones_like(vals_flat))
+            out_cnt.clamp_(min=1)
+
+            mean = (out_sum / out_cnt).view(*orig, n_bins)
+            return mean, parents
+
+        elif cell_ids.ndim == 2:
+            B = cell_ids.shape[0]
+            if data.shape[0] % B != 0:
+                raise ValueError(f"Leading dim of data ({data.shape[0]}) must be a multiple of cell_ids batch ({B}).")
+            R = int(np.prod(orig)) if len(orig) > 0 else 1
+            data_flat = data.reshape(R, N)  # [R, N]
+            B_data = data.shape[0]
+            T = R // B_data                 # repeats per batch row (product of extra leading dims)
+
+            means_list, groups_list = [], []
+            max_bins = 0
+            # First pass: compute per-batch parents/inv and scatter means
+            for b in range(B):
+                groups_b = (cell_ids[b] // 4).to(torch.long)  # [N]
+                parents_b, inv_b = torch.unique(groups_b, sorted=True, return_inverse=True)
+                n_bins_b = parents_b.numel()
+                max_bins = max(max_bins, n_bins_b)
+
+                # rows for this batch in data_flat
+                start = b * T
+                stop  = (b + 1) * T
+                rows  = slice(start, stop)                    # T rows
+
+                row_offsets = (torch.arange(T, device=data.device).unsqueeze(1) * n_bins_b)
+                idx = inv_b.unsqueeze(0).expand(T, -1) + row_offsets  # [T, N]
+
+                vals_flat = data_flat[rows].reshape(-1)
+                idx_flat  = idx.reshape(-1)
+
+                out_sum = torch.zeros(T * n_bins_b, dtype=data.dtype, device=data.device)
+                out_cnt = torch.zeros_like(out_sum)
+                out_sum.scatter_add_(0, idx_flat, vals_flat)
+                out_cnt.scatter_add_(0, idx_flat, torch.ones_like(vals_flat))
+                out_cnt.clamp_(min=1)
+                mean_bt = (out_sum / out_cnt).view(T, n_bins_b)  # [T, n_bins_b]
+
+                means_list.append(mean_bt)
+                groups_list.append(parents_b)
+
+            if not padded:
+                return means_list, groups_list
+
+            # Padded output
+            # mean_padded: [B, T, max_bins]; groups_pad: [B, max_bins]; mask: [B, max_bins]
+            mean_pad = torch.full((B, T, max_bins), fill_value, dtype=data.dtype, device=data.device)
+            groups_pad = torch.full((B, max_bins), -1, dtype=torch.long, device=data.device)
+            mask = torch.zeros((B, max_bins), dtype=torch.bool, device=data.device)
+            for b, (m_b, g_b) in enumerate(zip(means_list, groups_list)):
+                nb = g_b.numel()
+                mean_pad[b, :, :nb] = m_b
+                groups_pad[b, :nb] = g_b
+                mask[b, :nb] = True
+
+            # Reshape back to [B, (*extra leading dims), max_bins] if needed
+            if len(orig) > 1:
+                extra = orig[1:]  # e.g., (D1, D2, ...)
+                mean_pad = mean_pad.view(B, *extra, max_bins)
+            else:
+                mean_pad = mean_pad.view(B, max_bins)
+
+            return mean_pad, groups_pad, mask
+
+        else:
+            raise ValueError("`cell_ids` must be of shape [N] or [B, N].")
+    '''
     def binned_mean(self, data, cell_ids):
         """
         Moyenne par groupes de 4 pixels HEALPix nested (nside -> nside/2),
@@ -169,7 +318,7 @@ class BkTorch(BackendBase.BackendBase):
 
         # On retourne les VRAIS ids HEALPix parents à nside/2
         return mean, unique_groups
-    
+    '''
     def average_by_cell_group(data, cell_ids):
         """
         data: tensor of shape [..., N, ...] (ex: [B, N, C])
