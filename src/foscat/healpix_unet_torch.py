@@ -708,7 +708,7 @@ def fit(
 
             epoch_loss /= max(1, n_samples)
             history.append(epoch_loss)
-            if verbose and (epoch*n_inter+k+1)%view_epoch==0:
+            if verbose and ((epoch*n_inter+k+1)%view_epoch==0 or epoch*n_inter+k==0):
                 print(f"[epoch {epoch*n_inter+k+1}/{l_n_epoch*n_inter}] loss={epoch_loss:.6f}")
 
     return {"loss": history}

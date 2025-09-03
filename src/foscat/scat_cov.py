@@ -6325,7 +6325,7 @@ class funct(FOC.FoCUS):
         seed=1234,
         Jmax=None,
         edge=False,
-        to_gaussian=True,
+        to_gaussian=False,
         use_variance=True,
         synthesised_N=1,
         input_image=None,
