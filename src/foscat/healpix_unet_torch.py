@@ -494,6 +494,9 @@ class HealpixUNet(nn.Module):
     def predict(self, x: torch.Tensor, batch_size: int = 8,cell_ids: Optional[np.ndarray ] = None) -> torch.Tensor:
         self.eval()
         outs = []
+        if isinstance(x,np.ndarray):
+            x=self.to_Tensor(x)
+            
         if not isinstance(x, torch.Tensor):
             for i in range(len(x)):
                 if cell_ids is not None:
@@ -510,6 +513,10 @@ class HealpixUNet(nn.Module):
                 
         return torch.cat(outs, dim=0)
 
+    #-------------------------- internal cast ----------------------
+    def to_Tensor(self,x):
+        return self.hconv_enc[0].f.backend.bk_cast(x)
+        
     # -----------------------------
     # Kernel extraction & plotting
     # -----------------------------
