@@ -648,7 +648,7 @@ class FoCUS:
         return rim
 
     # --------------------------------------------------------
-    def ud_grade_2(self, im, axis=0, cell_ids=None, nside=None):
+    def ud_grade_2(self, im, axis=0, cell_ids=None, nside=None,max_poll=False):
 
         if self.use_2D:
             ishape = list(im.shape)
@@ -711,12 +711,21 @@ class FoCUS:
 
         else:
             shape = list(im.shape)
-            if cell_ids is not None:
-                sim, new_cell_ids = self.backend.binned_mean(im, cell_ids)
-                return sim, new_cell_ids
+            if max_poll:
+                if cell_ids is not None:
+                    sim, new_cell_ids = self.backend.binned_mean(im, cell_ids,reduce='max')
+                    return sim, new_cell_ids
             
-            return self.backend.bk_reduce_mean(
-                self.backend.bk_reshape(im, shape[0:-1]+[shape[-1]//4,4]), axis=-1
+                return self.backend.bk_reduce_max(
+                    self.backend.bk_reshape(im, shape[0:-1]+[shape[-1]//4,4]), axis=-1
+                ),None
+            else:
+                if cell_ids is not None:
+                    sim, new_cell_ids = self.backend.binned_mean(im, cell_ids)
+                    return sim, new_cell_ids
+            
+                return self.backend.bk_reduce_mean(
+                    self.backend.bk_reshape(im, shape[0:-1]+[shape[-1]//4,4]), axis=-1
                 ),None
 
     # --------------------------------------------------------

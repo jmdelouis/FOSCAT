@@ -50,6 +50,8 @@ class HealpixUNet(nn.Module):
     device : str | torch.device | None, default: 'cuda' if available else 'cpu'
         Preferred device. The module will probe whether Foscat ops can run on CUDA; if not,
         it will fallback to CPU and keep all parameters/buffers on CPU for consistency.
+    down_type:
+        {"mean","max"}, default "max". Equivalent of max poll during down  
     prefer_foscat_gpu : bool, default True
         When device is CUDA, try to move Foscat operators (internal tensors) to CUDA and do a dry-run.
         If the dry-run fails, everything falls back to CPU.
@@ -75,10 +77,11 @@ class HealpixUNet(nn.Module):
             final_activation: Optional[Literal['none', 'sigmoid', 'softmax']] = None,
             device: Optional[torch.device | str] = None,
             prefer_foscat_gpu: bool = True,
+            down_type: Optional[Literal['mean','max']] = 'max',  
             dtype: Literal['float32','float64'] = 'float32'
     ) -> None:
         super().__init__()
-
+        
         self.dtype=dtype
         if dtype=='float32':
             self.np_dtype=np.float32
@@ -97,7 +100,11 @@ class HealpixUNet(nn.Module):
         self.task = task
         self.out_channels = int(out_channels)
         self.prefer_foscat_gpu = bool(prefer_foscat_gpu)
-
+        if down_type == 'mean':
+            self.max_poll = True
+        else:
+            self.max_poll = False
+        
         # Choose default final activation if not given
         if final_activation is None:
             if task == 'regression':
@@ -142,7 +149,7 @@ class HealpixUNet(nn.Module):
             
             # downsample once to get next level ids and new data shape
             l_data, next_ids = hc.Down(
-                l_data, cell_ids=self.l_cell_ids[l], nside=current_nside
+                l_data, cell_ids=self.l_cell_ids[l], nside=current_nside,max_poll=self.max_poll
             )
             self.l_cell_ids[l + 1] = self.f.backend.to_numpy(next_ids)
             current_nside //= 2
@@ -419,7 +426,7 @@ class HealpixUNet(nn.Module):
                 #    l_data, cell_ids=t_cell_ids[l], nside=current_nside
                 #)
                 l_data, l_cell_ids = self.hconv_enc[l].Down(
-                    l_data, cell_ids=t_cell_ids[l], nside=current_nside
+                    l_data, cell_ids=t_cell_ids[l], nside=current_nside,max_poll=self.max_poll
                 )
                 l_data = self._as_tensor_batch(l_data)
                 if cell_ids is not None:

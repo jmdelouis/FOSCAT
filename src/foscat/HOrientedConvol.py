@@ -806,7 +806,7 @@ class HOrientedConvol:
             return False
         return False
 
-    def Down(self, im, cell_ids=None, nside=None):
+    def Down(self, im, cell_ids=None, nside=None,max_poll=False):
         """
         If `cell_ids` is a single set of ids -> return a single (Tensor, Tensor).
         If `cell_ids` is a list (var-length)           -> return (list[Tensor], list[Tensor]).
@@ -818,7 +818,7 @@ class HOrientedConvol:
                 self.f=sc.funct(KERNELSZ=self.KERNELSZ,all_type='float32')
                 
         if cell_ids is None:
-            dim,cdim = self.f.ud_grade_2(im,cell_ids=self.cell_ids,nside=self.nside)
+            dim,cdim = self.f.ud_grade_2(im,cell_ids=self.cell_ids,nside=self.nside,max_poll=False)
             return dim,cdim
         
         if nside is None:
@@ -833,19 +833,19 @@ class HOrientedConvol:
                 # extraire le bon échantillon d'`im`
                 if torch.is_tensor(im):
                     xb = im[b:b+1]  # (1, C, N_b)
-                    yb, ids_b = self.f.ud_grade_2(xb, cell_ids=cid_b, nside=nside)
+                    yb, ids_b = self.f.ud_grade_2(xb, cell_ids=cid_b, nside=nside,max_poll=max_poll)
                     outs.append(yb.squeeze(0))  # (C, N_b')
                 else:
                     # si im est déjà une liste de (C, N_b)
                     xb = im[b]
-                    yb, ids_b = self.f.ud_grade_2(xb[None, ...], cell_ids=cid_b, nside=nside)
+                    yb, ids_b = self.f.ud_grade_2(xb[None, ...], cell_ids=cid_b, nside=nside,max_poll=max_poll)
                     outs.append(yb.squeeze(0))
                 outs_ids.append(torch.as_tensor(ids_b, device=outs[-1].device, dtype=torch.long))
             return outs, outs_ids
 
         # grille commune (un seul vecteur d'ids)
         cid = self._to_numpy_1d(cell_ids)
-        return self.f.ud_grade_2(im, cell_ids=cid, nside=nside)
+        return self.f.ud_grade_2(im, cell_ids=cid, nside=nside,max_poll=False)
 
     def Up(self, im, cell_ids=None, nside=None, o_cell_ids=None):
         """
