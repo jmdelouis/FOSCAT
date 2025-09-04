@@ -725,6 +725,7 @@ class FoCUS:
                  nouty=None,
                  cell_ids=None,
                  o_cell_ids=None,
+                 force_init_index=False,
                  nside=None):
 
         ishape = list(im.shape)
@@ -806,7 +807,7 @@ class FoCUS:
             else:
                 lout = nside
                 
-            if (lout,nout) not in self.pix_interp_val:
+            if (lout,nout) not in self.pix_interp_val or force_init_index:
                 if not self.silent:
                     print("compute lout nout", lout, nout)
                 if cell_ids is None:
@@ -848,12 +849,9 @@ class FoCUS:
                         o_cell_ids=np.tile(cell_ids,ratio)*ratio+np.repeat(np.arange(ratio),cell_ids.shape[0])
                     i_npix=cell_ids.shape[0]
 
-                    #level=int(np.log2(lout)) # nside=128
-
-                    #sp = HS.heal_spline(level,gamma=2.0)
-
+                    
                     th, ph = hp.pix2ang(
-                        nout, o_cell_ids, nest=True
+                        nout, self.backend.to_numpy(o_cell_ids), nest=True
                     )
 
                     all_idx,www=hp.get_interp_weights(lout,th,ph,nest=True)
@@ -866,7 +864,7 @@ class FoCUS:
                     sorter = np.argsort(hidx)
                     
                     index=sorter[np.searchsorted(hidx,
-                                                 cell_ids,
+                                                 self.backend.to_numpy(cell_ids),
                                                  sorter=sorter)]
                     
                     mask        = -np.ones([hidx.shape[0]])

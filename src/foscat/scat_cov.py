@@ -2702,6 +2702,8 @@ class funct(FOC.FoCUS):
                 nside = int(np.sqrt(npix // 12))
 
             J = int(np.log(nside) / np.log(2))  # Number of j scales
+            if cell_ids is not None:
+                J=np.min([J,int(np.log(cell_ids.shape[0]) / (2*np.log(2)))-1])
 
         if (self.use_2D or self.use_1D) and self.KERNELSZ > 3:
             J -= 1
