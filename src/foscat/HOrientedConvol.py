@@ -689,7 +689,6 @@ class HOrientedConvol:
         else:
             # Use precomputed (shared for batch)
             if self.w_idx is None:
-                
                 if self.cell_ids.ndim==1:
                     l_cell=self.cell_ids[None,:]
                 else:

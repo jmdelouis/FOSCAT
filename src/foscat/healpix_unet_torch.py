@@ -100,7 +100,7 @@ class HealpixUNet(nn.Module):
         self.task = task
         self.out_channels = int(out_channels)
         self.prefer_foscat_gpu = bool(prefer_foscat_gpu)
-        if down_type == 'mean':
+        if down_type == 'max':
             self.max_poll = True
         else:
             self.max_poll = False
@@ -337,7 +337,7 @@ class HealpixUNet(nn.Module):
         return x
     
     # --- replace your current `forward` signature/body with a dispatcher ---
-    def forward(self, x, cell_ids: Optional[np.ndarray] = None):
+    def forward_any(self, x, cell_ids: Optional[np.ndarray] = None):
         """
         If `x` is a Tensor (B,C,N): standard batched path (requires same N for all).
         If `x` is a list of Tensors: variable-length per-sample path, returns a list of outputs.
@@ -479,7 +479,7 @@ class HealpixUNet(nn.Module):
             l_data = F.relu(l_data, inplace=True)
 
         # Head on finest grid
-        out = self.head_hconv.Convol_torch(l_data, self.head_w)
+        out = self.head_hconv.Convol_torch(l_data, self.head_w,cell_ids=l_cell_ids)
         out = self._as_tensor_batch(out) 
         if self.head_bn is not None:
             out = self.head_bn(out)
@@ -494,12 +494,19 @@ class HealpixUNet(nn.Module):
     def predict(self, x: torch.Tensor, batch_size: int = 8,cell_ids: Optional[np.ndarray ] = None) -> torch.Tensor:
         self.eval()
         outs = []
-        for i in range(0, x.shape[0], batch_size):
-            if cell_ids is not None:
-                outs.append(self.forward(x[i : i + batch_size],
-                                         cell_ids=cell_ids[i : i + batch_size]))
-            else:
-                outs.append(self.forward(x[i : i + batch_size]))
+        if not isinstance(x, torch.Tensor):
+            for i in range(len(x)):
+                if cell_ids is not None:
+                    outs.append(self.forward(x[i][None,:],cell_ids=cell_ids[i][None,:]))
+                else:
+                    outs.append(self.forward(x[i][None,:]))
+        else:
+            for i in range(0, x.shape[0], batch_size):
+                if cell_ids is not None:
+                    outs.append(self.forward(x[i : i + batch_size],
+                                             cell_ids=cell_ids[i : i + batch_size]))
+                else:
+                    outs.append(self.forward(x[i : i + batch_size]))
                 
         return torch.cat(outs, dim=0)
 

@@ -244,7 +244,7 @@ class BkTorch(BackendBase.BackendBase):
             # idem à ta doc existante, mais la valeur est une moyenne (reduce="mean")
             # ou un maximum (reduce="max").
         """
-
+        
         # ---- Tensorize & device/dtype plumbing ----
         if isinstance(data, np.ndarray):
             data = torch.from_numpy(data).to(
