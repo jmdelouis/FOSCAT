@@ -7,8 +7,8 @@ def lgnomproject(
     data,                   # array-like (N,), values per cell id
     nside: int,
     rot=None,               # (lon0_deg, lat0_deg, psi_deg). If None: auto-center from cell_ids (pix centers)
-    xsize: int = 800,
-    ysize: int = 800,
+    xsize: int = 400,
+    ysize: int = 400,
     reso: float = None,     # deg/pixel on tangent plane; if None, use fov_deg
     fov_deg=10.0,           # full FoV deg (scalar or (fx,fy))
     nest: bool = True,      # True if your cell_ids are NESTED (and ang2pix to be done in NEST)
@@ -176,7 +176,7 @@ def lgnomproject(
     # Axes in approx. "gnomonic degrees" (atan of plane coords)
     x_deg = np.degrees(np.arctan(xs))
     y_deg = np.degrees(np.arctan(ys))
-    
+
     longitude_min=x_deg[0]/np.cos(np.deg2rad(lat0_deg))+lon0_deg
     longitude_max=x_deg[-1]/np.cos(np.deg2rad(lat0_deg))+lon0_deg
     
@@ -199,7 +199,7 @@ def lgnomproject(
         cmap=cmap,
         vmin=vmin, vmax=vmax,
         interpolation="nearest",
-        aspect="equal"
+        aspect="auto"
     )
     if not notext:
         ax.set_xlabel("Longitude (deg)")
@@ -216,7 +216,7 @@ def lgnomproject(
             cb = fig.colorbar(im, ax=ax)
             cb.set_label("value")
         else:
-            plt.colorbar(im, ax=ax, orientation="vertical", label="value")
+            plt.colorbar(im, ax=ax, orientation="horizontal", label="value")
         
     plt.tight_layout()
     if hold:
