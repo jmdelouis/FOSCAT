@@ -52,9 +52,9 @@ class HealBili:
 
     Parameters
     ----------
-    src_theta : np.ndarray, shape (H, W)
+    src_theta : np.ndarray, shape (H, W) or (N)
         Source **colatitude** (radians) at each grid node.
-    src_phi : np.ndarray, shape (H, W)
+    src_phi : np.ndarray, shape (H, W) or (N)
         Source **longitude** (radians) at each grid node.
     prefer_kdtree : bool, default False
         If True and SciPy is available, use cKDTree on unit vectors for a faster nearest-neighbor seed.
@@ -66,7 +66,12 @@ class HealBili:
             raise ValueError("src_theta and src_phi must have the same 2D shape (H, W)")
         self.src_theta = np.asarray(src_theta, dtype=float)
         self.src_phi = np.asarray(src_phi, dtype=float)
-        self.H, self.W = self.src_theta.shape
+        if src_theta.ndim==2:
+            self.H, self.W = self.src_theta.shape
+        else:
+            self.H=1
+            self.W=self.src_theta.shape[0]
+            
         # Precompute unit vectors of source grid nodes
         self._Vsrc = self._sph_to_vec(self.src_theta.ravel(), self.src_phi.ravel())  # (H*W, 3)
         self.prefer_kdtree = bool(prefer_kdtree) and _HAVE_SCIPY
