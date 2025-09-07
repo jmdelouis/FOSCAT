@@ -473,18 +473,22 @@ class HOrientedConvol:
 
         # calib : [Npix, K]
         calib = np.zeros((w_idx.shape[0], w_idx.shape[2]))
-
-        # Vectorisation de l'accumulation
-        # w_idx : [Npix, M, K]
-        # w_w   : [Npix, M, K]
-        np.add.at(calib, 
-                  (np.repeat(np.arange(w_idx.shape[0]), w_idx.shape[1]*w_idx.shape[2]),
-                   w_idx.reshape(-1)), 
-                  w_w.reshape(-1))
-
-        # norm_a : valeurs récupérées depuis calib selon w_idx
-        norm_a = calib[np.arange(w_idx.shape[0])[:, None, None], w_idx]
+        # Hypothèses : 
+        # w_idx.shape == (Npix, M, K)  et  w_w.shape == (Npix, M, K)
+        Npix, M, K = w_idx.shape
+        nb_cols = K
         
+        # 1) Accumulation par "bincount" avec décalage de ligne
+        row_ids = np.arange(Npix, dtype=np.int64)[:, None, None] * nb_cols
+        flat_idx = (row_ids + w_idx).ravel()           # indices dans [0, Npix*9)
+        weights  = w_w.ravel().astype(np.float64)      # ou dtype de ton choix
+        
+        calib = np.bincount(flat_idx, weights, minlength=Npix*nb_cols)\
+                  .reshape(Npix, nb_cols)
+        
+        # 2) Réinjection dans norm_a selon w_idx
+        norm_a = calib[np.arange(Npix)[:, None, None], w_idx]
+
         w_w /= norm_a
         w_w  = np.clip(w_w,0.0,1.0)
         w_w[np.isnan(w_w)]=0.0
