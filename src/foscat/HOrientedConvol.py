@@ -471,6 +471,23 @@ class HOrientedConvol:
                                               yy*self.nside*gamma,
                                               allow_extrapolation=allow_extrapolation)
 
+        # calib : [Npix, 9]
+        calib = np.zeros((w_idx.shape[0], 9))
+
+        # Vectorisation de l'accumulation
+        # w_idx : [Npix, M, K]
+        # w_w   : [Npix, M, K]
+        np.add.at(calib, 
+                  (np.repeat(np.arange(w_idx.shape[0]), w_idx.shape[1]*w_idx.shape[2]),
+                   w_idx.reshape(-1)), 
+                  w_w.reshape(-1))
+
+        # norm_a : valeurs récupérées depuis calib selon w_idx
+        norm_a = calib[np.arange(w_idx.shape[0])[:, None, None], w_idx]
+        
+        w_w/=norm_a
+        w_w=np.clip(w_w,0,1)
+        
         del xx
         del yy
         
