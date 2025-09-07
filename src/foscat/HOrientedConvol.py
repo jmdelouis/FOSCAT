@@ -472,7 +472,7 @@ class HOrientedConvol:
                                               allow_extrapolation=allow_extrapolation)
 
         # calib : [Npix, 9]
-        calib = np.zeros((w_idx.shape[0], 9))
+        calib = np.zeros((w_idx.shape[0], w_idx.shape[2]))
 
         # Vectorisation de l'accumulation
         # w_idx : [Npix, M, K]
