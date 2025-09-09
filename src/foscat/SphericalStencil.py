@@ -5,484 +5,393 @@ import healpy as hp
 import foscat.scat_cov as sc
 import torch
 
+import numpy as np
+import torch
+import healpy as hp
+
 
 class SphericalStencil:
     """
-    Memory-friendly HEALPix convolution scaffolding with reusable geometry.
-    - Step A (NumPy): build rotated stencil + HEALPix neighbors/weights for targets
-    - Step B (Torch): map neighbors onto a sparse support and normalize weights
-    - Step C (Torch): apply multi-channel kernel on batched sparse maps
+    GPU-accelerated spherical stencil operator for HEALPix convolutions.
 
-    API summary
-    -----------
-    st = SphericalStencil(nside, kernel_sz, gauge='dual', ...)
-    st.prepare_numpy(th, ph)                      # A: once per (targets, gauge, nside, kernel_sz)
-    st.bind_support_torch(ids_sorted_np, device, dtype)   # B: once per sparse support (ids order)
-    out = st.apply(data_sorted_t, kernel_t)       # C: many times; data_sorted: (B,Ci,K); kernel: (Ci,Co,P)
+    This class implements three phases:
+      A) Geometry preparation: build local rotated stencil vectors for each target
+         pixel, compute HEALPix neighbor indices and interpolation weights.
+      B) Sparse binding: map neighbor indices/weights to available data samples
+         (sorted ids), and normalize weights.
+      C) Convolution: apply multi-channel kernels to sparse gathered data.
 
-    Shapes
-    ------
-    - targets: K = len(th) = len(ph)  (also the length of `ids_sorted_np`)
-    - data_sorted_t: (B, Ci, K)  ️ aligned to `ids_sorted_np` (same pixel order)
-    - kernel_t:      (Ci, Co, P) with P = kernel_sz**2
-    - output:        (B, Co, K)
+    Once A+B are prepared, multiple convolutions (C) can be applied efficiently
+    on the GPU.
+
+    Parameters
+    ----------
+    nside : int
+        HEALPix resolution parameter.
+    kernel_sz : int
+        Size of local stencil (must be odd, e.g. 3, 5, 7).
+    gauge : str
+        Gauge type for local orientation: 'phi', 'axis', 'dual'. (Default 'dual')
+    axisA, axisB : tuple of float
+        Reference axes for axis/dual gauges.
+    blend : bool
+        Whether to blend smoothly between axisA and axisB (dual gauge).
+    power : float
+        Sharpness of blend transition (dual gauge).
+    nest : bool
+        Use nested ordering if True (default), else ring ordering.
+    cell_ids : np.ndarray | torch.Tensor | None
+        If given, initialize Step A immediately for these targets.
+    device : torch.device | str | None
+        Default device (if None, 'cuda' if available else 'cpu').
+    dtype : torch.dtype | None
+        Default dtype (float32 if None).
     """
-    # ---- Replace your current __init__ with this one (or merge the additions) ----
+
     def __init__(
         self,
         nside: int,
         kernel_sz: int,
         *,
-        gauge: str = 'dual',       # 'phi' | 'axis' | 'dual'
-        axisA=(1.0, 0.0, 0.0),     # for 'axis'/'dual' gauges
-        axisB=(0.0, 1.0, 0.0),     # for 'dual' gauge
-        blend: bool = True,        # soft blend for 'dual'
-        power: float = 4.0,        # blend sharpness
+        gauge: str = 'dual',
+        axisA=(1.0, 0.0, 0.0),
+        axisB=(0.0, 1.0, 0.0),
+        blend: bool = True,
+        power: float = 4.0,
         nest: bool = True,
-        # NEW:
-        cell_ids: np.ndarray | torch.Tensor | None = None,
-        device = 'cuda',
-        dtype = torch.float32,
-        sort_ids: bool = True,
+        cell_ids=None,
+        device=None,
+        dtype=None,
+            scat_op=None,
     ):
         assert kernel_sz >= 1 and int(kernel_sz) == kernel_sz
-        self.nside     = int(nside)
-        # Keep both names to stay compatible with your other code
-        self.kernel_sz = int(kernel_sz)
-        self.KERNELSZ  = self.kernel_sz
-        self.P         = self.kernel_sz * self.kernel_sz
+        assert kernel_sz % 2 == 1, "kernel_sz must be odd"
 
-        self.gauge     = gauge
-        self.axisA     = np.asarray(axisA, float) / np.linalg.norm(axisA)
-        self.axisB     = np.asarray(axisB, float) / np.linalg.norm(axisB)
-        self.blend     = bool(blend)
-        self.power     = float(power)
-        self.nest      = bool(nest)
-
-        # Geometry (NumPy) — filled by prepare_numpy
-        self.Kb = None
-        self.idx_np = None  # (4, K*P)
-        self.w_np   = None  # (4, K*P)
-
-        # Sparse mapping (Torch) — filled by bind_support_torch
-        self.ids_sorted_np = None
-        self.device = None
-        self.dtype  = None
-        self.pos_safe_t = None  # (4, K*P) long
-        self.w_norm_t   = None  # (4, K*P) float
-        self.present_t  = None  # (4, K*P) bool
-
-        # If you still rely on self.f elsewhere, keep it:
-        self.f = None
-
-        # ---------- Helper: default device/dtype ----------
-        def _pick_device_dtype(dev_in, dt_in):
-            dev = torch.device(
-                dev_in if dev_in is not None else ('cuda' if torch.cuda.is_available() else 'cpu')
-            )
-            dt = dt_in if dt_in is not None else torch.float32
-            return dev, dt
-
-        # ---------- Optional immediate precompute A+B ----------
-        if cell_ids is not None:
-            # to numpy
-            if isinstance(cell_ids, torch.Tensor):
-                cell_ids_np = cell_ids.detach().cpu().numpy().astype(np.int64, copy=False)
-            else:
-                cell_ids_np = np.asarray(cell_ids, dtype=np.int64)
-
-            # Step A: geometry for these targets (NumPy)
-            th, ph = hp.pix2ang(self.nside, cell_ids_np, nest=self.nest)
-            self.prepare_numpy(th, ph)  # fills self.idx_np, self.w_np, self.Kb
-
-            # Choose sorted ids (recommended for fast searchsorted)
-            if sort_ids:
-                order = np.argsort(cell_ids_np)
-                self.ids_sorted_np = cell_ids_np[order]
-            else:
-                self.ids_sorted_np = cell_ids_np
-
-            # Step B: bind support on chosen device/dtype
-            dev, dt = _pick_device_dtype(device, dtype)
-            self.bind_support_torch(
-                self.ids_sorted_np,
-                device=dev,
-                dtype=dt,
-            )
-            # Now the class is fully ready for fast convolutions on this support.
-    '''
-    # ------------------------- ctor -------------------------
-    def __init__(
-        self,
-        nside: int,
-        kernel_sz: int,
-        *,
-        gauge: str = 'dual',       # 'phi' | 'axis' | 'dual'
-        axisA=(1.0, 0.0, 0.0),     # for 'axis'/'dual' gauges
-        axisB=(0.0, 1.0, 0.0),     # for 'dual' gauge
-        blend: bool = True,        # soft blend for 'dual'
-        power: float = 4.0,        # blend sharpness
-        nest: bool = True,
-    ):
-        assert kernel_sz >= 1 and int(kernel_sz) == kernel_sz
-        self.nside     = int(nside)
+        self.nside = int(nside)
         self.KERNELSZ = int(kernel_sz)
-        self.P         = self.KERNELSZ * self.KERNELSZ
-        self.gauge     = gauge
-        self.axisA     = np.asarray(axisA, float) / np.linalg.norm(axisA)
-        self.axisB     = np.asarray(axisB, float) / np.linalg.norm(axisB)
-        self.blend     = bool(blend)
-        self.power     = float(power)
-        self.nest      = bool(nest)
+        self.P = self.KERNELSZ * self.KERNELSZ
 
-        # Geometry (NumPy) — filled by prepare_numpy
-        self.Kb = None          # number of targets
-        self.idx_np = None      # (4, Kb*P) neighbor ids per stencil column
-        self.w_np   = None      # (4, Kb*P) barycentric weights
-
-        # Sparse mapping (Torch) — filled by bind_support_torch
-        self.ids_sorted_np = None
-        self.device = None
-        self.dtype  = None
-        self.pos_safe_t = None  # (4, Kb*P) torch.long
-        self.w_norm_t   = None  # (4, Kb*P) torch.float
-        self.present_t  = None  # (4, Kb*P) torch.bool
-
-        self.f = None
-
-    '''
-    # ==================== Step A: NumPy geometry ====================
-
-    def prepare_numpy(self, th, ph):
-        """
-        Build rotated stencil at each target (NumPy) and get HEALPix 4-neighbor
-        indices + interpolation weights for each stencil point.
-
-        Parameters
-        ----------
-        th, ph : array-like (K,)
-            Target colatitude/longitude in radians.
-
-        Fills
-        -----
-        self.Kb, self.idx_np, self.w_np
-        """
-        th = np.asarray(th, float)
-        ph = np.asarray(ph, float)
-        assert th.shape == ph.shape
-        self.Kb = th.size
-
-        # Local stencil in the pole-tangent frame
-        vec = np.zeros((self.P, 3), dtype=float)
-        grid = (np.arange(self.KERNELSZ) - self.KERNELSZ // 2) / self.nside
-        vec[:, 0] = np.tile(grid, self.KERNELSZ)
-        vec[:, 1] = np.repeat(grid, self.KERNELSZ)
-        vec[:, 2] = 1.0 - np.sqrt(vec[:, 0]**2 + vec[:, 1]**2)
-
-        # Rotate the stencil to each (th,ph) according to the selected gauge
-        R = self._rotation_total(th, ph)                 # (K,3,3)
-        rotated = np.einsum('kij,pj->kpi', R, vec)       # (K,P,3)
-
-        # Query HEALPix: 4 neighbors + weights per stencil column
-        t2, p2 = hp.vec2ang(rotated.reshape(-1, 3))
-        self.idx_np, self.w_np = hp.get_interp_weights(self.nside, t2, p2, nest=self.nest)
-        return self.idx_np, self.w_np  # handy return
-
-    # ==================== Step B: Torch sparse binding ====================
-
-    def bind_support_torch(
-        self,
-        ids_sorted_np: np.ndarray,
-        *,
-        ref_rule: str = 'same_as_before',
-        device: torch.device | None = None,
-        dtype: torch.dtype | None = None,
-    ):
-        """
-        Map (idx_np, w_np) onto the compact sparse support given by ids_sorted_np,
-        fix empty columns, and column-normalize weights — all on GPU.
-
-        Parameters
-        ----------
-        ids_sorted_np : (K,) numpy.int64
-            Sorted HEALPix pixel ids of your sparse map (must align with data[..., K]).
-        ref_rule : str
-            'same_as_before' -> fallback reference = kernel_sz + kernel_sz//2
-            else uses center P//2.
-        device, dtype : torch device/dtype (defaults: cuda / float32)
-
-        Fills
-        -----
-        self.pos_safe_t : (4, K*P) torch.long
-        self.w_norm_t   : (4, K*P) torch.float
-        self.present_t  : (4, K*P) torch.bool
-        """
-        assert self.idx_np is not None and self.w_np is not None and self.Kb is not None, \
-            "Call prepare_numpy(th, ph) before bind_support_torch(...)"
-
+        self.gauge = gauge
+        self.axisA = np.asarray(axisA, float) / np.linalg.norm(axisA)
+        self.axisB = np.asarray(axisB, float) / np.linalg.norm(axisB)
+        self.blend = bool(blend)
+        self.power = float(power)
+        self.nest = bool(nest)
+        if scat_op is None:
+            self.f=sc.funct(KERNELSZ=self.KERNELSZ)
+        else:
+            self.f=scat_op
+            
+        # Torch defaults
         if device is None:
             device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         if dtype is None:
             dtype = torch.float32
+        self.device = torch.device(device)
+        self.dtype = dtype
 
-        self.ids_sorted_np = np.asarray(ids_sorted_np, dtype=np.int64)
-        assert self.ids_sorted_np.ndim == 1 and self.ids_sorted_np.size == self.Kb, \
-            "ids_sorted_np must have length K == number of targets"
+        # Geometry cache
+        self.Kb = None
+        self.idx_t = None   # (4, K*P) neighbor indices
+        self.w_t   = None   # (4, K*P) interpolation weights
+        self.ids_sorted_np = None
+        self.pos_safe_t = None
+        self.w_norm_t   = None
+        self.present_t  = None
 
-        # Move inputs to GPU
-        ids_sorted = torch.as_tensor(self.ids_sorted_np, device=device, dtype=torch.long)
-        idx = torch.as_tensor(self.idx_np, device=device, dtype=torch.long)     # (4, K*P)
-        w   = torch.as_tensor(self.w_np,   device=device, dtype=dtype)          # (4, K*P)
+        # Optionnel : on garde une copie des ids par défaut si fournis
+        self.cell_ids_default = None
 
-        M = self.Kb * self.P
+        # Optional immediate preparation
+        if cell_ids is not None:
+            cid = np.asarray(cell_ids, dtype=np.int64).reshape(-1)
+            self.cell_ids_default = cid.copy()          # mémoriser la grille par défaut
 
-        # Locate neighbors (GPU)
-        idx_flat = idx.reshape(-1)                                              # (4*M,)
-        pos = torch.searchsorted(ids_sorted, idx_flat, right=False)
-        in_range = pos < ids_sorted.numel()
-        cmp = torch.full_like(idx_flat, -1, device=device)
-        cmp[in_range] = ids_sorted[pos[in_range]]
-        present_flat = in_range & (cmp == idx_flat)
+            # Step A (Torch) : géométrie pour cette grille
+            th, ph = hp.pix2ang(self.nside, cid, nest=self.nest)
+            self.prepare_torch(th, ph)
 
-        pos = pos.view(4, M)
-        present = present_flat.view(4, M)
+            # Step B (Torch) : bind épars pour ces ids (triés)
+            order = np.argsort(cid)
+            self.ids_sorted_np = cid[order]             # cache pour fast-path
+            self.bind_support_torch(self.ids_sorted_np, device=self.device, dtype=self.dtype)
 
-        # Handle empty columns
-        empty_cols = ~present.any(dim=0)
-        if empty_cols.any():
-            if ref_rule == 'same_as_before':
-                ref = self.KERNELSZ + self.KERNELSZ // 2
-            else:
-                ref = (self.P // 2)
 
-            k_id = torch.arange(M, device=device, dtype=torch.long) // self.P
-            ref_cols = k_id * self.P + ref
-            src = ref_cols[empty_cols]
-
-            idx[:, empty_cols] = idx[:, src]
-            w[:,   empty_cols] = w[:,   src]
-
-            # recompute presence/pos for those columns
-            idx_e = idx[:, empty_cols].reshape(-1)
-            pos_e = torch.searchsorted(ids_sorted, idx_e, right=False)
-            inr_e = pos_e < ids_sorted.numel()
-            cmp_e = torch.full_like(idx_e, -1, device=device)
-            cmp_e[inr_e] = ids_sorted[pos_e[inr_e]]
-            present[:, empty_cols] = (inr_e & (cmp_e == idx_e)).view(4, -1)
-            pos[:, empty_cols] = pos_e.view(4, -1)
-
-        # Normalize weights column-wise (zero missing neighbors)
-        w = w * present
-        colsum = w.sum(dim=0)
-        nz = colsum > 0
-        if nz.any():
-            w[:, nz] = w[:, nz] / colsum[nz].unsqueeze(0)
-
-        pos_safe = torch.where(present, pos, torch.zeros_like(pos))  # 0 where missing
-
-        # Store on the class
-        self.device = device
-        self.dtype  = dtype
-        self.pos_safe_t = pos_safe.to(torch.long)
-        self.w_norm_t   = w.to(dtype)
-        self.present_t  = present
-        return self.pos_safe_t, self.w_norm_t
-
-    # ==================== Step C: Torch apply ====================
-
-    def apply(self, data_sorted_t: torch.Tensor, kernel_t: torch.Tensor) -> torch.Tensor:
+    # ------------------------------------------------------------------
+    # Rotation construction in Torch
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _rotation_total_torch(th, ph, alpha=None, device=None, dtype=None):
         """
-        Apply the (Ci,Co,P) kernel to batched sparse data (B,Ci,K) using precomputed
-        (pos_safe, w_norm). Everything runs on GPU.
+        Build batch of rotation matrices R_tot for each (theta, phi, alpha).
+
+        Column-vector convention: v' = R @ v.
 
         Parameters
         ----------
-        data_sorted_t : (B, Ci, K) torch.float  (device must match self.device)
-            Sparse map aligned to ids_sorted_np (same order as in bind_support_torch).
-        kernel_t      : (Ci, Co, P) torch.float (device must match self.device)
+        th : array-like (N,)
+            Colatitude.
+        ph : array-like (N,)
+            Longitude.
+        alpha : array-like (N,) or None
+            Gauge rotation angle around local normal. If None, set to zero.
+        device, dtype : Torch device/dtype.
 
         Returns
         -------
-        out : (B, Co, K) torch.float
+        R_tot : torch.Tensor, shape (N, 3, 3)
         """
-        assert self.pos_safe_t is not None and self.w_norm_t is not None, \
-            "Call bind_support_torch(...) before apply(...)"
+        th = torch.as_tensor(th, device=device, dtype=dtype).view(-1)
+        ph = torch.as_tensor(ph, device=device, dtype=dtype).view(-1)
+        if alpha is None:
+            alpha = torch.zeros_like(th)
+        else:
+            alpha = torch.as_tensor(alpha, device=device, dtype=dtype).view(-1)
+        N = th.shape[0]
 
-        assert data_sorted_t.device == self.device
-        assert kernel_t.device      == self.device
-        assert data_sorted_t.dtype  == self.dtype
-        assert kernel_t.dtype       == self.dtype
+        ct, st = torch.cos(th), torch.sin(th)
+        cp, sp = torch.cos(ph), torch.sin(ph)
 
-        B, Ci, K = data_sorted_t.shape
-        Ci_k, Co, P_k = kernel_t.shape
-        assert K == self.Kb, "data last dimension must match number of targets"
-        assert Ci_k == Ci,  "kernel input channels must match data channels"
-        assert P_k == self.P, "kernel P must equal kernel_sz**2"
+        R_base = torch.zeros((N, 3, 3), device=device, dtype=dtype)
+        R_base[:, 0, 0] = cp * ct
+        R_base[:, 0, 1] = -sp
+        R_base[:, 0, 2] = cp * st
+        R_base[:, 1, 0] = sp * ct
+        R_base[:, 1, 1] = cp
+        R_base[:, 1, 2] = sp * st
+        R_base[:, 2, 0] = -st
+        R_base[:, 2, 1] = 0.0
+        R_base[:, 2, 2] = ct
+
+        # local normal
+        n = R_base[:, :, 2]
+        n = n / torch.linalg.norm(n, dim=1, keepdim=True).clamp_min(1e-12)
+        nx, ny, nz = n[:, 0], n[:, 1], n[:, 2]
+
+        ca, sa = torch.cos(alpha), torch.sin(alpha)
+        K = torch.zeros((N, 3, 3), device=device, dtype=dtype)
+        K[:, 0, 1] = -nz; K[:, 0, 2] = ny
+        K[:, 1, 0] = nz;  K[:, 1, 2] = -nx
+        K[:, 2, 0] = -ny; K[:, 2, 1] = nx
+
+        outer = n.unsqueeze(2) * n.unsqueeze(1)
+        I = torch.eye(3, device=device, dtype=dtype).expand(N, 3, 3)
+
+        R_gauge = I * ca.view(N, 1, 1) + K * sa.view(N, 1, 1) + \
+                  outer * (1.0 - ca).view(N, 1, 1)
+
+        R_tot = torch.matmul(R_gauge, R_base)
+        return R_tot
+
+    # ------------------------------------------------------------------
+    # Torch-based get_interp_weights wrapper
+    # ------------------------------------------------------------------
+    @staticmethod
+    def get_interp_weights_from_vec_torch(
+        nside: int,
+        vec,
+        *,
+        nest: bool = True,
+        device=None,
+        dtype=None,
+        chunk_size=1_000_000,
+    ):
+        """
+        Torch wrapper for healpy.get_interp_weights using input vectors.
+
+        Parameters
+        ----------
+        nside : int
+            HEALPix resolution.
+        vec : torch.Tensor (...,3)
+            Direction vectors (not necessarily normalized).
+        nest : bool
+            Nested ordering if True (default).
+        device, dtype : Torch device/dtype.
+        chunk_size : int
+            Number of points per healpy call on CPU.
+
+        Returns
+        -------
+        idx_t : LongTensor (4, *leading)
+        w_t   : Tensor (4, *leading)
+        """
+        if not isinstance(vec, torch.Tensor):
+            vec = torch.as_tensor(vec, device=device, dtype=dtype)
+        else:
+            device = vec.device if device is None else device
+            dtype  = vec.dtype if dtype is None else dtype
+            vec = vec.to(device=device, dtype=dtype)
+
+        orig_shape = vec.shape[:-1]
+        M = int(np.prod(orig_shape)) if len(orig_shape) else 1
+        v = vec.reshape(M, 3)
+
+        eps = torch.finfo(vec.dtype).eps
+        r = torch.linalg.norm(v, dim=1, keepdim=True).clamp_min(eps)
+        v_unit = v / r
+        x, y, z = v_unit[:, 0], v_unit[:, 1], v_unit[:, 2]
+
+        theta = torch.acos(z.clamp(-1.0, 1.0))
+        phi = torch.atan2(y, x)
+        two_pi = torch.tensor(2*np.pi, device=device, dtype=dtype)
+        phi = (phi % two_pi)
+
+        theta_np = theta.detach().cpu().numpy()
+        phi_np   = phi.detach().cpu().numpy()
+
+        idx_accum, w_accum = [], []
+        for start in range(0, M, chunk_size):
+            stop = min(start + chunk_size, M)
+            t_chunk, p_chunk = theta_np[start:stop], phi_np[start:stop]
+            idx_np, w_np = hp.get_interp_weights(nside, t_chunk, p_chunk, nest=nest)
+            idx_accum.append(idx_np)
+            w_accum.append(w_np)
+
+        idx_np_all = np.concatenate(idx_accum, axis=1) if len(idx_accum) > 1 else idx_accum[0]
+        w_np_all   = np.concatenate(w_accum,   axis=1) if len(w_accum) > 1 else w_accum[0]
+
+        idx_t = torch.as_tensor(idx_np_all, device=device, dtype=torch.long)
+        w_t   = torch.as_tensor(w_np_all,   device=device, dtype=dtype)
+
+        if len(orig_shape):
+            idx_t = idx_t.view(4, *orig_shape)
+            w_t   = w_t.view(4, *orig_shape)
+
+        return idx_t, w_t
+
+    # ------------------------------------------------------------------
+    # Step A: geometry preparation fully in Torch
+    # ------------------------------------------------------------------
+    def prepare_torch(self, th, ph, alpha=None):
+        """
+        Prepare rotated stencil vectors and neighbor indices/weights in Torch.
+
+        Parameters
+        ----------
+        th, ph : array-like (K,)
+            Target colatitudes/longitudes.
+        alpha : array-like (K,) or None
+            Gauge rotation angles (default 0).
+
+        Side effects
+        ------------
+        Sets self.Kb, self.idx_t, self.w_t
+        """
+        th = np.asarray(th, float)
+        ph = np.asarray(ph, float)
+        self.Kb = th.size
+
+        # Build local stencil (P,3) once
+        vec_np = np.zeros((self.P, 3), dtype=float)
+        grid = (np.arange(self.KERNELSZ) - self.KERNELSZ // 2) / self.nside
+        vec_np[:, 0] = np.tile(grid, self.KERNELSZ)
+        vec_np[:, 1] = np.repeat(grid, self.KERNELSZ)
+        vec_np[:, 2] = 1.0 - np.sqrt(vec_np[:, 0]**2 + vec_np[:, 1]**2)
+        vec_t = torch.as_tensor(vec_np, device=self.device, dtype=self.dtype)
+
+        # Rotation matrices for all targets
+        R_t = self._rotation_total_torch(th, ph, alpha, device=self.device, dtype=self.dtype)
+
+        # Rotate stencil for each target
+        rotated_t = torch.einsum('kij,pj->kpi', R_t, vec_t)   # (K,P,3)
+
+        # Get neighbors/weights in Torch
+        idx_t, w_t = self.get_interp_weights_from_vec_torch(
+            self.nside,
+            rotated_t.reshape(-1, 3),
+            nest=self.nest,
+            device=self.device,
+            dtype=self.dtype,
+        )
+
+        self.idx_t = idx_t
+        self.w_t   = w_t
+        return idx_t, w_t
+
+    # ------------------------------------------------------------------
+    # Step B: bind support Torch
+    # ------------------------------------------------------------------
+    def bind_support_torch(self, ids_sorted_np, *, device=None, dtype=None):
+        """
+        Map HEALPix neighbor indices (from Step A) to actual data samples
+        sorted by pixel id. Produces pos_safe and normalized weights.
+
+        Parameters
+        ----------
+        ids_sorted_np : np.ndarray (K,)
+            Sorted pixel ids for available data.
+        device, dtype : Torch device/dtype for results.
+        """
+        if device is None:
+            device = self.device
+        if dtype is None:
+            dtype = self.dtype
+
+        self.ids_sorted_np = np.asarray(ids_sorted_np, dtype=np.int64)
+        ids_sorted = torch.as_tensor(self.ids_sorted_np, device=device, dtype=torch.long)
+
+        idx = self.idx_t.to(device=device, dtype=torch.long)
+        w   = self.w_t.to(device=device, dtype=dtype)
 
         M = self.Kb * self.P
+        idx = idx.view(4, M)
+        w   = w.view(4, M)
 
-        # Gather 4 neighbors (tiny loop of 4 is fine)
+        pos = torch.searchsorted(ids_sorted, idx.reshape(-1)).view(4, M)
+        in_range = pos < ids_sorted.shape[0]
+        cmp_vals = torch.full_like(idx, -1)
+        cmp_vals[in_range] = ids_sorted[pos[in_range]]
+        present = (cmp_vals == idx)
+
+        w = w * present
+        colsum = w.sum(dim=0, keepdim=True).clamp_min(1e-12)
+        w_norm = w / colsum
+
+        self.pos_safe_t = torch.where(present, pos, torch.zeros_like(pos))
+        self.w_norm_t   = w_norm
+        self.present_t  = present
+        self.device = device
+        self.dtype  = dtype
+
+    # ------------------------------------------------------------------
+    # Step C: apply convolution (already Torch in your code)
+    # ------------------------------------------------------------------
+    def apply(self, data_sorted_t, kernel_t):
+        """
+        Apply the (Ci,Co,P) kernel to batched sparse data (B,Ci,K)
+        using precomputed pos_safe and w_norm. Runs fully on GPU.
+
+        Parameters
+        ----------
+        data_sorted_t : torch.Tensor (B,Ci,K)
+            Input data aligned with ids_sorted.
+        kernel_t : torch.Tensor (Ci,Co,P)
+            Convolution kernel.
+
+        Returns
+        -------
+        out : torch.Tensor (B,Co,K)
+        """
+        assert self.pos_safe_t is not None and self.w_norm_t is not None
+        B, Ci, K = data_sorted_t.shape
+        Ci_k, Co, P = kernel_t.shape
+        assert Ci_k == Ci and P == self.P
+
         vals = []
         for j in range(4):
-            vj = data_sorted_t[..., self.pos_safe_t[j]]     # (B, Ci, M)
-            vals.append(vj)
-        vals = torch.stack(vals, dim=2)                     # (B, Ci, 4, M)
+            vj = data_sorted_t.index_select(2, self.pos_safe_t[j].reshape(-1))
+            vj = vj.view(B, Ci, K, P)
+            vals.append(vj * self.w_norm_t[j].view(1, 1, K, P))
+        tmp = sum(vals)   # (B,Ci,K,P)
 
-        # Weighted sum over neighbors → (B, Ci, M) then reshape → (B, Ci, K, P)
-        tmp_cols = (vals * self.w_norm_t[None, None, :, :]).sum(dim=2)  # (B, Ci, M)
-        tmp = tmp_cols.view(B, Ci, self.Kb, self.P)                     # (B, Ci, K, P)
-
-        # Spatial + channel contraction
-        out = torch.einsum('bckp,cop->bok', tmp, kernel_t)  # (B, Co, K)
+        out = torch.einsum('bckp,cop->bok', tmp, kernel_t)
         return out
-
-    # ---------------- rotations + gauges (NumPy, internal) ----------------
-
-    def _rotation_total(self, th, ph):
-        """Build R_tot(K,3,3) in NumPy according to selected gauge."""
-        if self.gauge == 'phi':
-            return self._rotation_total_phi(th, ph)
-        elif self.gauge == 'axis':
-            return self._rotation_total_axis(th, ph, self.axisA)
-        elif self.gauge == 'dual':
-            return self._rotation_total_dual(th, ph, self.axisA, self.axisB, self.blend, self.power)
-        raise ValueError("gauge must be 'phi', 'axis', or 'dual'")
-
-    @staticmethod
-    def _Rz_batch(phi):
-        c, s = np.cos(phi), np.sin(phi)
-        R = np.zeros((phi.size, 3, 3), dtype=float)
-        R[:, 0, 0] = c;  R[:, 0, 1] = -s
-        R[:, 1, 0] = s;  R[:, 1, 1] =  c
-        R[:, 2, 2] = 1.0
-        return R
-
-    @staticmethod
-    def _Ry_batch(th):
-        c, s = np.cos(th), np.sin(th)
-        R = np.zeros((th.size, 3, 3), dtype=float)
-        R[:, 0, 0] = c;  R[:, 0, 2] = s
-        R[:, 1, 1] = 1.0
-        R[:, 2, 0] = -s; R[:, 2, 2] = c
-        return R
-
-    @staticmethod
-    def _rodrigues_about_axes(n, alpha):
-        n = n / np.linalg.norm(n, axis=1, keepdims=True)
-        ca, sa = np.cos(alpha), np.sin(alpha)
-        I = np.eye(3)[None, :, :]
-        nx, ny, nz = n[:, 0], n[:, 1], n[:, 2]
-        Kmat = np.zeros((n.shape[0], 3, 3))
-        Kmat[:, 0, 1] = -nz; Kmat[:, 0, 2] =  ny
-        Kmat[:, 1, 0] =  nz; Kmat[:, 1, 2] = -nx
-        Kmat[:, 2, 0] = -ny; Kmat[:, 2, 1] =  nx
-        outer = n[:, :, None] * n[:, None, :]
-        return I * ca[:, None, None] + sa[:, None, None] * Kmat + (1.0 - ca)[:, None, None] * outer
-
-    def _rotation_total_phi(self, th, ph):
-        Rb = self._Rz_batch(ph) @ self._Ry_batch(th)
-        n  = (Rb @ np.array([0.0, 0.0, 1.0])).reshape(-1, 3)
-        Rg = self._rodrigues_about_axes(n, ph)
-        return np.einsum('kij,kjl->kil', Rg, Rb)
-
-    def _rotation_total_axis(self, th, ph, axis, eps=1e-12):
-        axis = np.asarray(axis, float) / np.linalg.norm(axis)
-        Rb = self._Rz_batch(ph) @ self._Ry_batch(th)
-        ez = np.array([0.0, 0.0, 1.0])
-        ex = np.array([1.0, 0.0, 0.0])
-        n  = (Rb @ ez).reshape(-1, 3)
-        ux = (Rb @ ex).reshape(-1, 3)
-        a_dot_n = (axis[None, :] * n).sum(axis=1)
-        e1 = axis[None, :] - a_dot_n[:, None] * n
-        e1 /= np.maximum(np.linalg.norm(e1, axis=1, keepdims=True), eps)
-        s = (n * np.cross(ux, e1)).sum(axis=1)
-        c = (ux * e1).sum(axis=1)
-        alpha = np.arctan2(s, c)
-        Rg = self._rodrigues_about_axes(n, alpha)
-        return np.einsum('kij,kjl->kil', Rg, Rb)
-
-    @staticmethod
-    def _rot_to_quat(R):
-        K = R.shape[0]
-        q = np.empty((K, 4), dtype=float)
-        tr = np.trace(R, axis1=1, axis2=2)
-        for i in range(K):
-            if tr[i] > 0:
-                S = np.sqrt(tr[i] + 1.0) * 2.0
-                q[i, 0] = 0.25 * S
-                q[i, 1] = (R[i, 2, 1] - R[i, 1, 2]) / S
-                q[i, 2] = (R[i, 0, 2] - R[i, 2, 0]) / S
-                q[i, 3] = (R[i, 1, 0] - R[i, 0, 1]) / S
-            else:
-                j = np.argmax(np.diag(R[i]))
-                if j == 0:
-                    S = np.sqrt(1.0 + R[i, 0, 0] - R[i, 1, 1] - R[i, 2, 2]) * 2.0
-                    q[i, 0] = (R[i, 2, 1] - R[i, 1, 2]) / S
-                    q[i, 1] = 0.25 * S
-                    q[i, 2] = (R[i, 0, 1] + R[i, 1, 0]) / S
-                    q[i, 3] = (R[i, 0, 2] + R[i, 2, 0]) / S
-                elif j == 1:
-                    S = np.sqrt(1.0 - R[i, 0, 0] + R[i, 1, 1] - R[i, 2, 2]) * 2.0
-                    q[i, 0] = (R[i, 0, 2] - R[i, 2, 0]) / S
-                    q[i, 1] = (R[i, 0, 1] + R[i, 1, 0]) / S
-                    q[i, 2] = 0.25 * S
-                    q[i, 3] = (R[i, 1, 2] + R[i, 2, 1]) / S
-                else:
-                    S = np.sqrt(1.0 - R[i, 0, 0] - R[i, 1, 1] + R[i, 2, 2]) * 2.0
-                    q[i, 0] = (R[i, 1, 0] - R[i, 0, 1]) / S
-                    q[i, 1] = (R[i, 0, 2] + R[i, 2, 0]) / S
-                    q[i, 2] = (R[i, 1, 2] + R[i, 2, 1]) / S
-                    q[i, 3] = 0.25 * S
-        q /= np.linalg.norm(q, axis=1, keepdims=True)
-        return q
-
-    @staticmethod
-    def _quat_to_rot(q):
-        w, x, y, z = q[:, 0], q[:, 1], q[:, 2], q[:, 3]
-        R = np.empty((q.shape[0], 3, 3), dtype=float)
-        R[:, 0, 0] = 1 - 2 * (y*y + z*z)
-        R[:, 0, 1] = 2 * (x*y - z*w)
-        R[:, 0, 2] = 2 * (x*z + y*w)
-        R[:, 1, 0] = 2 * (x*y + z*w)
-        R[:, 1, 1] = 1 - 2 * (x*x + z*z)
-        R[:, 1, 2] = 2 * (y*z - x*w)
-        R[:, 2, 0] = 2 * (x*z - y*w)
-        R[:, 2, 1] = 2 * (y*z + x*w)
-        R[:, 2, 2] = 1 - 2 * (x*x + y*y)
-        return R
-
-    def _rotation_total_dual(self, th, ph, axisA, axisB, blend, power):
-        Rb = self._Rz_batch(ph) @ self._Ry_batch(th)
-        n = (Rb @ np.array([0.0, 0.0, 1.0])).reshape(-1, 3)
-        aA = axisA / np.linalg.norm(axisA)
-        aB = axisB / np.linalg.norm(axisB)
-        qA = np.linalg.norm(np.cross(aA[None, :], n), axis=1)
-        qB = np.linalg.norm(np.cross(aB[None, :], n), axis=1)
-
-        if not blend:
-            useA = qA >= qB
-            R = np.empty((th.size, 3, 3), dtype=float)
-            if np.any(useA):
-                R[useA]  = self._rotation_total_axis(th[useA],  ph[useA],  aA)
-            if np.any(~useA):
-                R[~useA] = self._rotation_total_axis(th[~useA], ph[~useA], aB)
-            return R
-
-        wA = (qA ** power); wB = (qB ** power)
-        wsum = np.clip(wA + wB, 1e-12, None)
-        wA /= wsum; wB /= wsum
-
-        RA = self._rotation_total_axis(th, ph, aA)
-        RB = self._rotation_total_axis(th, ph, aB)
-        qA_ = self._rot_to_quat(RA); qB_ = self._rot_to_quat(RB)
-        q = wA[:, None] * qA_ + wB[:, None] * qB_
-        q /= np.linalg.norm(q, axis=1, keepdims=True)
-        return self._quat_to_rot(q)
 
     def _Convol_Torch(self, data: torch.Tensor, kernel: torch.Tensor, cell_ids=None) -> torch.Tensor:
         """
         Convenience entry point:
-          - If cell_ids is None: use cached geometry (prepare_numpy) and sparse mapping
+          - If cell_ids is None: use cached geometry (prepare_torch) and sparse mapping
             (bind_support_torch) already stored in the class, then apply.
           - If cell_ids is provided: compute geometry + sparse mapping for these cells
             (using the class' gauge and options), reorder `data` accordingly, and apply.
@@ -522,7 +431,7 @@ class SphericalStencil:
             th, ph = hp.pix2ang(self.nside, cell_ids_np, nest=self.nest)
 
             # A) NumPy: neighbors/weights w.r.t. class gauge/options
-            self.prepare_numpy(th, ph)
+            self.prepare_torch(th, ph)
 
             # B) Torch: sort ids and reorder data last axis to match ids_sorted
             order = np.argsort(cell_ids_np)
@@ -570,7 +479,7 @@ class SphericalStencil:
                 dtype=data.dtype,
             )
         return self.apply(data, kernel)
-
+    
     def Convol_torch(self, im, ww, cell_ids=None, nside=None):
         """
         Batched KERNELSZ x KERNELSZ aggregation (dispatcher).
@@ -619,6 +528,7 @@ class SphericalStencil:
 
             with _NsideContext(self, nside):
                 # Fast path: no ids provided -> ensure Step B is bound to this device/dtype
+                
                 if cell_ids is None:
                     assert self.ids_sorted_np is not None, \
                         "No cached targets. Pass `cell_ids` once (or init the class with `cell_ids=`)."
@@ -998,7 +908,7 @@ class SphericalStencil:
                 self.f=sc.funct(KERNELSZ=self.KERNELSZ,all_type='float64')
             else:
                 self.f=sc.funct(KERNELSZ=self.KERNELSZ,all_type='float32')
-                
+            
         if cell_ids is None:
             dim,cdim = self.f.ud_grade_2(im,cell_ids=self.cell_ids,nside=self.nside,max_poll=max_poll)
             return dim,cdim
@@ -1076,12 +986,7 @@ class SphericalStencil:
 
 
     def to_tensor(self,x):
-        if self.f is None:
-            if self.dtype==torch.float64:
-                self.f=sc.funct(KERNELSZ=self.KERNELSZ,all_type='float64')
-            else:
-                self.f=sc.funct(KERNELSZ=self.KERNELSZ,all_type='float32')
-        return self.f.backend.bk_cast(x)
+        return torch.tensor(x,device=self.device,dtype=self.dtype)
     
     def to_numpy(self,x):
         if isinstance(x,np.ndarray):
