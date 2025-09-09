@@ -24,7 +24,7 @@ All tensors follow the Foscat backend shape `(batch, channels, npix)`.
 Dependencies
 ------------
 - foscat.scat_cov as `sc`
-- foscat.HOrientedConvol as `hs`
+- foscat.SphericalStencil as `hs`
 
 Example
 -------
@@ -52,7 +52,7 @@ from typing import Dict, Optional
 import numpy as np
 
 import foscat.scat_cov as sc
-import foscat.HOrientedConvol as hs
+import foscat.SphericalPencil as hs
 
 
 class UNET:
@@ -99,7 +99,7 @@ class UNET:
     wconv, t_wconv : Dict[int, int]
         Offsets into the flat parameter vector `self.x` for encoder/decoder
         convolutions respectively.
-    hconv, t_hconv : Dict[int, hs.HOrientedConvol]
+    hconv, t_hconv : Dict[int, hs.SphericalPencil]
         Per-level oriented convolution operators for encoder/decoder.
     l_cell_ids : Dict[int, np.ndarray]
         Per-level cell ids for downsampled grids (encoder side).
@@ -148,7 +148,7 @@ class UNET:
         # Internal registries
         n = 0  # running offset in the flat parameter vector
         wconv: Dict[int, int] = {}  # encoder weight offsets
-        hconv: Dict[int, hs.HOrientedConvol] = {}  # encoder conv operators
+        hconv: Dict[int, hs.SphericalPencil] = {}  # encoder conv operators
         l_cell_ids: Dict[int, np.ndarray] = {}  # encoder level cell ids
         self.KERNELSZ = KERNELSZ
         kernelsz = self.KERNELSZ
@@ -181,7 +181,7 @@ class UNET:
             n += nw
 
             # Build oriented convolution operator for this level
-            hconvol = hs.HOrientedConvol(l_nside, 3, cell_ids=l_cell_ids[l])
+            hconvol = hs.SphericalPencil(l_nside, 3, cell_ids=l_cell_ids[l])
             hconvol.make_idx_weights()  # precompute indices/weights once
             hconv[l] = hconvol
 
@@ -207,7 +207,7 @@ class UNET:
         m_cell_ids: Dict[int, np.ndarray] = {}
         m_cell_ids[0] = l_cell_ids[nlayer]
         t_wconv: Dict[int, int] = {}  # decoder weight offsets
-        t_hconv: Dict[int, hs.HOrientedConvol] = {}  # decoder conv operators
+        t_hconv: Dict[int, hs.SphericalPencil] = {}  # decoder conv operators
 
         for l in range(nlayer):
             # Upsample features to the previous (finer) resolution
@@ -240,7 +240,7 @@ class UNET:
             n += nw
 
             # Build oriented convolution operator for this decoder level
-            hconvol = hs.HOrientedConvol(l_nside, 3, cell_ids=m_cell_ids[l])
+            hconvol = hs.SphericalPencil(l_nside, 3, cell_ids=m_cell_ids[l])
             hconvol.make_idx_weights()
             t_hconv[l] = hconvol
 
@@ -400,6 +400,20 @@ class UNET:
         return l_data
 
 
+    def to_tensor(self,x):
+        if self.f is None:
+            if self.dtype==torch.float64:
+                self.f=sc.funct(KERNELSZ=self.KERNELSZ,all_type='float64')
+            else:
+                self.f=sc.funct(KERNELSZ=self.KERNELSZ,all_type='float32')
+        return self.f.backend.bk_cast(x)
+    
+    def to_numpy(self,x):
+        if isinstance(x,np.ndarray):
+            return x
+        return x.cpu().numpy()
+
+    
 # -----------------------------
 # Unit tests (smoke tests)
 # -----------------------------

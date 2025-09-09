@@ -6,11 +6,11 @@ GPU by default (when available), with graceful CPU fallback if Foscat ops are CP
 - ReLU + BatchNorm after each convolution (encoder & decoder)
 - Segmentation/Regression heads with optional final activation
 - PyTorch-ified: inherits from nn.Module, standard state_dict
-- Device management: tries CUDA first; if Foscat HOrientedConvol cannot run on CUDA, falls back to CPU
+- Device management: tries CUDA first; if Foscat SphericalStencil cannot run on CUDA, falls back to CPU
 
 Shape convention: (B, C, Npix)
 
-Requirements: foscat (scat_cov.funct + HOrientedConvol.Convol_torch must be differentiable on torch tensors)
+Requirements: foscat (scat_cov.funct + SphericalStencil.Convol_torch must be differentiable on torch tensors)
 """
 from __future__ import annotations
 from typing import List, Optional, Literal, Tuple
@@ -22,7 +22,7 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader, TensorDataset
 
 import foscat.scat_cov as sc
-import foscat.HOrientedConvol as ho
+import foscat.SphericalStencil as ho
 import matplotlib.pyplot as plt
 
 class HealpixUNet(nn.Module):
@@ -60,7 +60,7 @@ class HealpixUNet(nn.Module):
     -----
     - Two oriented convolutions per level. After each conv: BatchNorm1d + ReLU.
     - Downsampling uses foscat ``ud_grade_2``; upsampling uses ``up_grade``.
-    - Convolution kernels are explicit parameters (shape [C_in, C_out, K*K]) and applied via ``HOrientedConvol.Convol_torch``.
+    - Convolution kernels are explicit parameters (shape [C_in, C_out, K*K]) and applied via ``SphericalStencil.Convol_torch``.
     - Foscat ops device is auto-probed to avoid CPU/CUDA mismatches.
     """
 
@@ -85,8 +85,10 @@ class HealpixUNet(nn.Module):
         self.dtype=dtype
         if dtype=='float32':
             self.np_dtype=np.float32
+            self.torch_dtype=torch.float32
         else:
             self.np_dtype=np.float64
+            self.torch_dtype=torch.float32
             
         if cell_ids is None:
             raise ValueError("cell_ids must be provided for the finest resolution.")
@@ -131,18 +133,18 @@ class HealpixUNet(nn.Module):
         current_nside = self.in_nside
 
         # ---------- Oriented convolutions per level (encoder & decoder) ----------
-        self.hconv_enc: List[ho.HOrientedConvol] = []
-        self.hconv_dec: List[ho.HOrientedConvol] = []
+        self.hconv_enc: List[ho.SphericalStencil] = []
+        self.hconv_dec: List[ho.SphericalStencil] = []
         
         # dummy data to propagate shapes/ids through ud_grade_2
         l_data = self.f.backend.bk_cast(np.zeros((1, 1, cell_ids.shape[0]), dtype=self.np_dtype))
 
         for l in range(depth):
             # operator at encoder level l
-            hc = ho.HOrientedConvol(current_nside,
+            hc = ho.SphericalStencil(current_nside,
                                     self.KERNELSZ,
                                     cell_ids=self.l_cell_ids[l],
-                                    dtype=self.dtype)
+                                    dtype=self.torch_dtype)
             #hc.make_idx_weights()
             
             self.hconv_enc.append(hc)
@@ -188,10 +190,10 @@ class HealpixUNet(nn.Module):
 
         for d in range(depth):
             level = depth - 1 - d  # encoder level we are going back to
-            hc = ho.HOrientedConvol(self.enc_nsides[level],
+            hc = ho.SphericalStencil(self.enc_nsides[level],
                                     self.KERNELSZ,
                                     cell_ids=self.l_cell_ids[level],
-                                    dtype=self.dtype)
+                                    dtype=self.torch_dtype)
             #hc.make_idx_weights()
             self.hconv_dec.append(hc)
 
@@ -211,10 +213,10 @@ class HealpixUNet(nn.Module):
             self.dec_bn2.append(self._norm_1d(outC_dec,kind="group"))
 
         # Output head (on finest grid, channels = chanlist[0])
-        self.head_hconv = ho.HOrientedConvol(self.in_nside,
+        self.head_hconv = ho.SphericalStencil(self.in_nside,
                                              self.KERNELSZ,
                                              cell_ids=self.l_cell_ids[0],
-                                             dtype=self.dtype)
+                                             dtype=self.torch_dtype)
         
         head_inC = self.chanlist[0]
         self.head_w = nn.Parameter(torch.empty(head_inC, self.out_channels, self.KERNELSZ * self.KERNELSZ))
@@ -245,8 +247,8 @@ class HealpixUNet(nn.Module):
             raise ValueError(f"Unknown norm kind: {kind}")
             
     # -------------------------- device plumbing --------------------------
-    def _move_hconv_tensors(self, hc: ho.HOrientedConvol, device: torch.device) -> None:
-        """Best-effort: move any torch.Tensor attribute of HOrientedConvol to device."""
+    def _move_hconv_tensors(self, hc: ho.SphericalStencil, device: torch.device) -> None:
+        """Best-effort: move any torch.Tensor attribute of SphericalStencil to device."""
         for name, val in list(vars(hc).items()):
             try:
                 if torch.is_tensor(val):
@@ -500,7 +502,7 @@ class HealpixUNet(nn.Module):
         if not isinstance(x, torch.Tensor):
             for i in range(len(x)):
                 if cell_ids is not None:
-                    outs.append(self.forward(x[i][None,:],cell_ids=cell_ids[i][None,:]))
+                    outs.append(self.forward(x[i][None,:],cell_ids=cell_ids[i][:]))
                 else:
                     outs.append(self.forward(x[i][None,:]))
         else:
@@ -513,10 +515,14 @@ class HealpixUNet(nn.Module):
                 
         return torch.cat(outs, dim=0)
 
-    #-------------------------- internal cast ----------------------
-    def to_Tensor(self,x):
+    def to_tensor(self,x):
         return self.hconv_enc[0].f.backend.bk_cast(x)
-        
+    
+    def to_numpy(self,x):
+        if isinstance(x,np.ndarray):
+            return x
+        return x.cpu().numpy()
+    
     # -----------------------------
     # Kernel extraction & plotting
     # -----------------------------

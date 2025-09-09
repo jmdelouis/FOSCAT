@@ -20,6 +20,7 @@ class HOrientedConvol:
                  no_cell_ids=False,
                  ):
 
+
         if dtype=='float64':
             self.dtype=torch.float64
         else:
@@ -470,7 +471,7 @@ class HOrientedConvol:
         w_idx,w_w = self.bilinear_weights_NxN(xx*self.nside*gamma,
                                               yy*self.nside*gamma,
                                               allow_extrapolation=allow_extrapolation)
-
+        '''
         # calib : [Npix, K]
         calib = np.zeros((w_idx.shape[0], w_idx.shape[2]))
         # Hypothèses : 
@@ -491,11 +492,13 @@ class HOrientedConvol:
 
         w_w /= norm_a
         w_w  = np.clip(w_w,0.0,1.0)
+
         w_w[np.isnan(w_w)]=0.0
-        del xx
-        del yy
+        '''
+        #del xx
+        #del yy
         
-        return idx_nn,w_idx,w_w
+        return idx_nn,w_idx,w_w,xx,yy
         
     def make_idx_weights(self,polar=False,gamma=1.0,device='cuda',allow_extrapolation=True,return_index=False):
         
@@ -912,36 +915,6 @@ class HOrientedConvol:
         return self.f.up_grade(im, nside*2, cell_ids=cid, nside=nside,
                                o_cell_ids=ocid, force_init_index=True)
 
-    '''
-    def Up(self, im, cell_ids=None,nside=None,o_cell_ids=None):
-
-        if cell_ids is None:
-            dim = self.f.up_grade(im,self.nside*2,cell_ids=self.cell_ids,nside=self.nside)
-            return dim
-        else:
-            if nside is None:
-                nside=self.nside
-            if nside is None:
-                nside=self.nside
-            size = 2 if isinstance(cell_ids, list) else len(cell_ids.shape)
-            if size==1:
-                return self.f.up_grade(im,nside*2,cell_ids=cell_ids,nside=nside,o_cell_ids=o_cell_ids,force_init_index=True)
-            else:
-                assert im.shape[0] == cell_ids.shape[0], \
-                    f"cell_ids and data should have the same batch size (first column), got data={im.shape},cell_ids={cell_ids.shape}"
-
-                assert im.shape[0] == o_cell_ids.shape[0], \
-                    f"cell_ids and data should have the same batch size (first column), got data={im.shape},o_cell_ids={o_cell_ids.shape}"
-
-                result = []
-                
-                for k in range(im.shape[0]):
-                    r= self.f.up_grade(im[k],nside*2,cell_ids=cell_ids[k],nside=nside,o_cell_ids=o_cell_ids[k],force_init_index=True)
-                    result.append(r)
-                    
-                #result = torch.stack(result, dim=0)  # (B,...,Npix)
-                return result
-    '''
     def to_tensor(self,x):
         if self.f is None:
             if self.dtype==torch.float64:

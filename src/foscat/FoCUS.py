@@ -721,7 +721,7 @@ class FoCUS:
                 ),None
             else:
                 if cell_ids is not None:
-                    sim, new_cell_ids = self.backend.binned_mean(im, cell_ids)
+                    sim, new_cell_ids = self.backend.binned_mean(im, cell_ids,reduce='mean')
                     return sim, new_cell_ids
             
                 return self.backend.bk_reduce_mean(
