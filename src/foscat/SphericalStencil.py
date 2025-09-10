@@ -31,9 +31,11 @@ class SphericalStencil:
     kernel_sz : int
         Size of local stencil (must be odd, e.g. 3, 5, 7).
     gauge : str
-        Gauge type for local orientation: 'phi', 'axis', 'dual'. (Default 'dual')
+        Gauge type for local orientation: 'phi', 'axis', 'cosmo','dual'. (Default 'cosmo')
     axisA, axisB : tuple of float
         Reference axes for axis/dual gauges.
+    phi_gauge : float
+        Rotation reference for cosmo gauge in radians.
     blend : bool
         Whether to blend smoothly between axisA and axisB (dual gauge).
     power : float
@@ -49,19 +51,20 @@ class SphericalStencil:
     """
 
     def __init__(
-        self,
-        nside: int,
-        kernel_sz: int,
-        *,
-        gauge: str = 'dual',
-        axisA=(1.0, 0.0, 0.0),
-        axisB=(0.0, 1.0, 0.0),
-        blend: bool = True,
-        power: float = 4.0,
-        nest: bool = True,
-        cell_ids=None,
-        device=None,
-        dtype=None,
+            self,
+            nside: int,
+            kernel_sz: int,
+            *,
+            gauge: str = 'dual',
+            axisA=(1.0, 0.0, 0.0),
+            axisB=(0.0, 1.0, 0.0),
+            blend: bool = True,
+            power: float = 4.0,
+            nest: bool = True,
+            cell_ids=None,
+            device=None,
+            dtype=None,
+            phi_gauge=0.0,
             scat_op=None,
     ):
         assert kernel_sz >= 1 and int(kernel_sz) == kernel_sz
@@ -72,6 +75,7 @@ class SphericalStencil:
         self.P = self.KERNELSZ * self.KERNELSZ
 
         self.gauge = gauge
+        
         self.axisA = np.asarray(axisA, float) / np.linalg.norm(axisA)
         self.axisB = np.asarray(axisB, float) / np.linalg.norm(axisB)
         self.blend = bool(blend)
@@ -98,6 +102,7 @@ class SphericalStencil:
         self.pos_safe_t = None
         self.w_norm_t   = None
         self.present_t  = None
+        self.phi_gauge = phi_gauge
 
         # Optionnel : on garde une copie des ids par défaut si fournis
         self.cell_ids_default = None
@@ -120,6 +125,7 @@ class SphericalStencil:
     # ------------------------------------------------------------------
     # Rotation construction in Torch
     # ------------------------------------------------------------------
+    
     @staticmethod
     def _rotation_total_torch(th, ph, alpha=None, device=None, dtype=None):
         """
@@ -291,7 +297,11 @@ class SphericalStencil:
         vec_t = torch.as_tensor(vec_np, device=self.device, dtype=self.dtype)
 
         # Rotation matrices for all targets
-        R_t = self._rotation_total_torch(th, ph, alpha, device=self.device, dtype=self.dtype)
+        if alpha is None:
+            alpha=2*((th>np.pi/2)-0.5)*(ph+self.phi_gauge) 
+            
+        R_t = self._rotation_total_torch(th, ph,alpha,
+                                         device=self.device, dtype=self.dtype)
 
         # Rotate stencil for each target
         rotated_t = torch.einsum('kij,pj->kpi', R_t, vec_t)   # (K,P,3)
