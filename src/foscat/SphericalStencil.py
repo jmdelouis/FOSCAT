@@ -30,12 +30,8 @@ class SphericalStencil:
         HEALPix resolution parameter.
     kernel_sz : int
         Size of local stencil (must be odd, e.g. 3, 5, 7).
-    gauge : str
-        Gauge type for local orientation: 'phi', 'axis', 'cosmo','dual'. (Default 'cosmo')
-    axisA, axisB : tuple of float
-        Reference axes for axis/dual gauges.
-    phi_gauge : float
-        Rotation reference for cosmo gauge in radians.
+    n_gauge : float
+        Number of oriented gauges (Default 1).
     blend : bool
         Whether to blend smoothly between axisA and axisB (dual gauge).
     power : float
@@ -55,16 +51,11 @@ class SphericalStencil:
             nside: int,
             kernel_sz: int,
             *,
-            gauge: str = 'dual',
-            axisA=(1.0, 0.0, 0.0),
-            axisB=(0.0, 1.0, 0.0),
-            blend: bool = True,
-            power: float = 4.0,
             nest: bool = True,
             cell_ids=None,
             device=None,
             dtype=None,
-            phi_gauge=0.0,
+            n_gauges=1,
             scat_op=None,
     ):
         assert kernel_sz >= 1 and int(kernel_sz) == kernel_sz
@@ -74,12 +65,7 @@ class SphericalStencil:
         self.KERNELSZ = int(kernel_sz)
         self.P = self.KERNELSZ * self.KERNELSZ
 
-        self.gauge = gauge
-        
-        self.axisA = np.asarray(axisA, float) / np.linalg.norm(axisA)
-        self.axisB = np.asarray(axisB, float) / np.linalg.norm(axisB)
-        self.blend = bool(blend)
-        self.power = float(power)
+        self.G = n_gauges
         self.nest = bool(nest)
         if scat_op is None:
             self.f=sc.funct(KERNELSZ=self.KERNELSZ)
@@ -102,34 +88,47 @@ class SphericalStencil:
         self.pos_safe_t = None
         self.w_norm_t   = None
         self.present_t  = None
-        self.phi_gauge = phi_gauge
 
         # Optionnel : on garde une copie des ids par défaut si fournis
         self.cell_ids_default = None
 
-        # Optional immediate preparation
+        # ---- Optional immediate preparation (Step A+B at init) ----
         if cell_ids is not None:
+            # Keep a copy of the default target grid (fast-path later)
             cid = np.asarray(cell_ids, dtype=np.int64).reshape(-1)
-            self.cell_ids_default = cid.copy()          # mémoriser la grille par défaut
+            self.cell_ids_default = cid.copy()
 
-            # Step A (Torch) : géométrie pour cette grille
+            # Step A (Torch): build geometry for this grid with G gauges
             th, ph = hp.pix2ang(self.nside, cid, nest=self.nest)
-            self.prepare_torch(th, ph)
+            self.prepare_torch(th, ph, G=self.G)   # fills idx_t/_multi and w_t/_multi
 
-            # Step B (Torch) : bind épars pour ces ids (triés)
+            # Step B (Torch): bind sparse mapping on the class device/dtype
             order = np.argsort(cid)
-            self.ids_sorted_np = cid[order]             # cache pour fast-path
-            self.bind_support_torch(self.ids_sorted_np, device=self.device, dtype=self.dtype)
+            self.ids_sorted_np = cid[order]        # cache for fast-path
+
+            if self.G > 1:
+                # Multi-gauge binding (produces pos_safe_t_multi, w_norm_t_multi)
+                self.bind_support_torch_multi(
+                    self.ids_sorted_np,
+                    device=self.device,
+                    dtype=self.dtype,
+                )
+            else:
+                # Single-gauge binding (produces pos_safe_t, w_norm_t)
+                self.bind_support_torch(
+                    self.ids_sorted_np,
+                    device=self.device,
+                    dtype=self.dtype,
+                )
 
 
     # ------------------------------------------------------------------
     # Rotation construction in Torch
     # ------------------------------------------------------------------
-    
     @staticmethod
-    def _rotation_total_torch(th, ph, alpha=None, device=None, dtype=None):
+    def _rotation_total_torch(th, ph, alpha=None, G: int = 1, device=None, dtype=None):
         """
-        Build batch of rotation matrices R_tot for each (theta, phi, alpha).
+        Build a batch of rotation matrices with *G gauges* per target.
 
         Column-vector convention: v' = R @ v.
 
@@ -139,54 +138,88 @@ class SphericalStencil:
             Colatitude.
         ph : array-like (N,)
             Longitude.
-        alpha : array-like (N,) or None
-            Gauge rotation angle around local normal. If None, set to zero.
-        device, dtype : Torch device/dtype.
+        alpha : array-like (N,) or scalar or None
+            Base gauge rotation angle around the local normal.
+            If None -> 0. For each gauge g in [0..G-1], we add g*pi/G.
+        G : int
+            Number of gauges to generate per target (>=1).
+        device, dtype : torch device/dtype
 
         Returns
         -------
-        R_tot : torch.Tensor, shape (N, 3, 3)
+        R_tot : torch.Tensor, shape (N, G, 3, 3)
+            For each target i and gauge g, the matrix:
+              R_tot[i,g] = R_gauge(alpha[i] + g*pi/G) @ Rz(ph[i]) @ Ry(th[i])
         """
+        assert G >= 1, "G must be >= 1"
+
+        # ---- to torch 1D
         th = torch.as_tensor(th, device=device, dtype=dtype).view(-1)
         ph = torch.as_tensor(ph, device=device, dtype=dtype).view(-1)
         if alpha is None:
             alpha = torch.zeros_like(th)
         else:
             alpha = torch.as_tensor(alpha, device=device, dtype=dtype).view(-1)
+
+        device = th.device
+        dtype  = th.dtype
         N = th.shape[0]
 
+        # ---- base rotation R_base = Rz(ph) @ Ry(th), shape (N,3,3)
         ct, st = torch.cos(th), torch.sin(th)
         cp, sp = torch.cos(ph), torch.sin(ph)
 
         R_base = torch.zeros((N, 3, 3), device=device, dtype=dtype)
+        # row 0
         R_base[:, 0, 0] = cp * ct
         R_base[:, 0, 1] = -sp
         R_base[:, 0, 2] = cp * st
+        # row 1
         R_base[:, 1, 0] = sp * ct
         R_base[:, 1, 1] = cp
         R_base[:, 1, 2] = sp * st
+        # row 2
         R_base[:, 2, 0] = -st
         R_base[:, 2, 1] = 0.0
         R_base[:, 2, 2] = ct
 
-        # local normal
+        # local normal n = third column of R_base, shape (N,3)
         n = R_base[:, :, 2]
-        n = n / torch.linalg.norm(n, dim=1, keepdim=True).clamp_min(1e-12)
-        nx, ny, nz = n[:, 0], n[:, 1], n[:, 2]
+        n = n / torch.linalg.norm(n, dim=1, keepdim=True).clamp_min(1e-12)  # safe normalize
+        
+        # per-target sign: +1 if th <= pi/2 else -1
+        sign = torch.where(th <= (np.pi/2), torch.ones_like(th), -torch.ones_like(th))  # (N,)
 
-        ca, sa = torch.cos(alpha), torch.sin(alpha)
-        K = torch.zeros((N, 3, 3), device=device, dtype=dtype)
-        K[:, 0, 1] = -nz; K[:, 0, 2] = ny
-        K[:, 1, 0] = nz;  K[:, 1, 2] = -nx
-        K[:, 2, 0] = -ny; K[:, 2, 1] = nx
+        # base gauge shifts (always positive)
+        g_shifts = torch.arange(G, device=device, dtype=dtype) * (np.pi / G)            # (G,)
 
-        outer = n.unsqueeze(2) * n.unsqueeze(1)
-        I = torch.eye(3, device=device, dtype=dtype).expand(N, 3, 3)
+        # broadcast with sign: (N,G)
+        alpha_g = alpha[:, None] + sign[:, None] * g_shifts[None, :]
 
-        R_gauge = I * ca.view(N, 1, 1) + K * sa.view(N, 1, 1) + \
-                  outer * (1.0 - ca).view(N, 1, 1)
+        ca = torch.cos(alpha_g)  # (N,G)
+        sa = torch.sin(alpha_g)  # (N,G)
 
-        R_tot = torch.matmul(R_gauge, R_base)
+        # ---- expand normal to (N,G,3)
+        n_g = n[:, None, :].expand(N, G, 3)         # (N,G,3)
+        nx, ny, nz = n_g[..., 0], n_g[..., 1], n_g[..., 2]
+
+        # skew-symmetric K(n_g), shape (N,G,3,3)
+        K = torch.zeros((N, G, 3, 3), device=device, dtype=dtype)
+        K[..., 0, 1] = -nz; K[..., 0, 2] =  ny
+        K[..., 1, 0] =  nz; K[..., 1, 2] = -nx
+        K[..., 2, 0] = -ny; K[..., 2, 1] =  nx
+
+        # outer(n,n) and identity
+        outer = n_g.unsqueeze(-1) * n_g.unsqueeze(-2)    # (N,G,3,3)
+        I = torch.eye(3, device=device, dtype=dtype).view(1,1,3,3).expand(N, G, 3, 3)
+
+        # ---- Rodrigues per gauge: R_gauge(N,G,3,3)
+        R_gauge = I * ca.view(N, G, 1, 1) + K * sa.view(N, G, 1, 1) + \
+                  outer * (1.0 - ca).view(N, G, 1, 1)
+
+        # ---- broadcast multiply with base: R_base_g(N,G,3,3)
+        R_base_g = R_base.unsqueeze(1).expand(N, G, 3, 3)
+        R_tot = torch.matmul(R_gauge, R_base_g)          # (N,G,3,3)
         return R_tot
 
     # ------------------------------------------------------------------
@@ -269,56 +302,163 @@ class SphericalStencil:
     # ------------------------------------------------------------------
     # Step A: geometry preparation fully in Torch
     # ------------------------------------------------------------------
-    def prepare_torch(self, th, ph, alpha=None):
+    def prepare_torch(self, th, ph, alpha=None, G: int = 1):
         """
-        Prepare rotated stencil vectors and neighbor indices/weights in Torch.
+        Prepare rotated stencil and HEALPix neighbors/weights in Torch for *G gauges*.
 
         Parameters
         ----------
-        th, ph : array-like (K,)
+        th, ph : array-like, shape (K,)
             Target colatitudes/longitudes.
-        alpha : array-like (K,) or None
-            Gauge rotation angles (default 0).
+        alpha : array-like (K,) or scalar or None
+            Base gauge angle about the local normal at each target. If None -> 0.
+            For each gauge g in [0..G-1], the effective angle is alpha + g*pi/G.
+        G : int (>=1)
+            Number of gauges to generate per target.
 
         Side effects
         ------------
-        Sets self.Kb, self.idx_t, self.w_t
-        """
-        th = np.asarray(th, float)
-        ph = np.asarray(ph, float)
-        self.Kb = th.size
+        Sets:
+          - self.Kb = K
+          - self.G  = G
+          - self.idx_t_multi : (G, 4, K*P) LongTensor (neighbors per gauge)
+          - self.w_t_multi   : (G, 4, K*P) Tensor     (weights   per gauge)
+          - For backward compat when G==1:
+              self.idx_t : (4, K*P)
+              self.w_t   : (4, K*P)
 
-        # Build local stencil (P,3) once
-        vec_np = np.zeros((self.P, 3), dtype=float)
+        Returns
+        -------
+        idx_t_multi : torch.LongTensor, shape (G, 4, K*P)
+        w_t_multi   : torch.Tensor,     shape (G, 4, K*P)
+        """
+        # --- sanitize inputs on CPU (angles) then use class device/dtype
+        th = np.asarray(th, float).reshape(-1)
+        ph = np.asarray(ph, float).reshape(-1)
+        K = th.size
+        self.Kb = K
+        self.G  = int(G)
+        assert self.G >= 1, "G must be >= 1"
+
+        # --- build the local (P,3) stencil once on device
+        P = self.P
+        vec_np = np.zeros((P, 3), dtype=float)
         grid = (np.arange(self.KERNELSZ) - self.KERNELSZ // 2) / self.nside
         vec_np[:, 0] = np.tile(grid, self.KERNELSZ)
         vec_np[:, 1] = np.repeat(grid, self.KERNELSZ)
         vec_np[:, 2] = 1.0 - np.sqrt(vec_np[:, 0]**2 + vec_np[:, 1]**2)
-        vec_t = torch.as_tensor(vec_np, device=self.device, dtype=self.dtype)
+        vec_t = torch.as_tensor(vec_np, device=self.device, dtype=self.dtype)     # (P,3)
 
-        # Rotation matrices for all targets
+        # --- rotation matrices for all targets & gauges: (K,G,3,3)
         if alpha is None:
-            alpha=2*((th>np.pi/2)-0.5)*(ph+self.phi_gauge) 
+            alpha=2*((th>np.pi/2)-0.5)*ph
             
-        R_t = self._rotation_total_torch(th, ph,alpha,
-                                         device=self.device, dtype=self.dtype)
+        R_t = self._rotation_total_torch(
+            th, ph, alpha, G=self.G, device=self.device, dtype=self.dtype
+        )  # shape (K,G,3,3)
 
-        # Rotate stencil for each target
-        rotated_t = torch.einsum('kij,pj->kpi', R_t, vec_t)   # (K,P,3)
+        # --- rotate stencil for each (target, gauge): (K,G,P,3)
+        #     einsum over local stencil (P,3) with rotation (K,G,3,3)
+        rotated = torch.einsum('kgij,pj->kgpi', R_t, vec_t)  # (K,G,P,3)
 
-        # Get neighbors/weights in Torch
+        # --- query HEALPix (neighbors+weights) in one call over (K*G*P)
+        rotated_flat = rotated.reshape(-1, 3)  # (K*G*P, 3)
         idx_t, w_t = self.get_interp_weights_from_vec_torch(
             self.nside,
-            rotated_t.reshape(-1, 3),
+            rotated_flat,
             nest=self.nest,
             device=self.device,
             dtype=self.dtype,
-        )
+        )  # each (4, K*G*P)
 
-        self.idx_t = idx_t
-        self.w_t   = w_t
-        return idx_t, w_t
+        # --- reshape back to split gauges:
+        # current: (4, K*G*P) -> (4, K, G, P) -> (G, 4, K, P) -> (G, 4, K*P)
+        idx_t = idx_t.view(4, K, self.G, P).permute(2, 0, 1, 3).reshape(self.G, 4, K*P)
+        w_t   = w_t.view(4, K, self.G, P).permute(2, 0, 1, 3).reshape(self.G, 4, K*P)
 
+        # --- cache multi-gauge versions
+        self.idx_t_multi = idx_t   # (G, 4, K*P)
+        self.w_t_multi   = w_t     # (G, 4, K*P)
+
+        # --- backward compatibility: when G==1, also fill single-gauge fields
+        if self.G == 1:
+            self.idx_t = idx_t[0]  # (4, K*P)
+            self.w_t   = w_t[0]    # (4, K*P)
+        else:
+            # when multi-gauge, you can pick a default (e.g., gauge 0) if legacy code asks
+            # but better to adapt bind/apply to consume the multi-gauge tensors.
+            self.idx_t = None
+            self.w_t   = None
+
+        return self.idx_t_multi, self.w_t_multi
+
+    def bind_support_torch_multi(self, ids_sorted_np, *, device=None, dtype=None):
+        """
+        Multi-gauge sparse binding (Step B).
+        Uses self.idx_t_multi / self.w_t_multi prepared by prepare_torch(..., G>1)
+        and builds, for each gauge g, (pos_safe, w_norm, present).
+
+        Parameters
+        ----------
+        ids_sorted_np : np.ndarray (K,)
+            Sorted pixel ids for available samples (matches the last axis of your data).
+        device, dtype : torch device/dtype for the produced mapping tensors.
+
+        Side effects
+        ------------
+        Sets:
+          - self.ids_sorted_np  : (K,)
+          - self.pos_safe_t_multi : (G, 4, K*P)  LongTensor
+          - self.w_norm_t_multi   : (G, 4, K*P)  Tensor
+          - self.present_t_multi  : (G, 4, K*P)  BoolTensor
+          - (and mirrors device/dtype in self.device/self.dtype)
+        """
+        assert hasattr(self, 'idx_t_multi') and self.idx_t_multi is not None, \
+            "Call prepare_torch(..., G>0) before bind_support_torch_multi(...)"
+        assert hasattr(self, 'w_t_multi') and self.w_t_multi is not None
+
+        if device is None: device = self.device
+        if dtype  is None: dtype  = self.dtype
+
+        self.ids_sorted_np = np.asarray(ids_sorted_np, dtype=np.int64).reshape(-1)
+        ids_sorted = torch.as_tensor(self.ids_sorted_np, device=device, dtype=torch.long)
+
+        G, _, M = self.idx_t_multi.shape
+        K = self.Kb
+        P = self.P
+        assert M == K*P, "idx_t_multi second axis must have K*P columns"
+
+        pos_list, present_list, wnorm_list = [], [], []
+
+        for g in range(G):
+            idx = self.idx_t_multi[g].to(device=device, dtype=torch.long)   # (4, M)
+            w   = self.w_t_multi[g].to(device=device, dtype=dtype)          # (4, M)
+
+            pos = torch.searchsorted(ids_sorted, idx.reshape(-1)).view(4, M)
+            in_range = pos < ids_sorted.numel()
+            cmp_vals = torch.full_like(idx, -1)
+            cmp_vals[in_range] = ids_sorted[pos[in_range]]
+            present = (cmp_vals == idx)
+
+            # normalize weights per column after masking
+            w = w * present
+            colsum = w.sum(dim=0, keepdim=True).clamp_min(1e-12)
+            w_norm = w / colsum
+
+            pos_safe = torch.where(present, pos, torch.zeros_like(pos))
+
+            pos_list.append(pos_safe)
+            present_list.append(present)
+            wnorm_list.append(w_norm)
+
+        self.pos_safe_t_multi = torch.stack(pos_list, dim=0)     # (G, 4, M)
+        self.present_t_multi  = torch.stack(present_list, dim=0) # (G, 4, M)
+        self.w_norm_t_multi   = torch.stack(wnorm_list, dim=0)   # (G, 4, M)
+
+        # mirror runtime placement
+        self.device = device
+        self.dtype  = dtype
+    
     # ------------------------------------------------------------------
     # Step B: bind support Torch
     # ------------------------------------------------------------------
@@ -367,6 +507,59 @@ class SphericalStencil:
     # ------------------------------------------------------------------
     # Step C: apply convolution (already Torch in your code)
     # ------------------------------------------------------------------
+    def apply_multi(self, data_sorted_t: torch.Tensor, kernel_t: torch.Tensor):
+        """
+        Apply multi-gauge convolution.
+
+        Inputs
+        ------
+        data_sorted_t : (B, Ci, K)  torch.Tensor on self.device/self.dtype
+        kernel_t      : either
+                        - (Ci, Co_g, P)         : shared kernel for all gauges
+                        - (G, Ci, Co_g, P)      : per-gauge kernels
+
+        Returns
+        -------
+        out : (B, G*Co_g, K) torch.Tensor
+        """
+        assert hasattr(self, 'pos_safe_t_multi') and self.pos_safe_t_multi is not None, \
+            "Call bind_support_torch_multi(...) before apply_multi(...)"
+        B, Ci, K = data_sorted_t.shape
+        G, _, M = self.pos_safe_t_multi.shape
+        assert M == K * self.P
+
+        # normalize kernel to per-gauge
+        if kernel_t.dim() == 3:
+            Ci_k, Co_g, P = kernel_t.shape
+            assert Ci_k == Ci and P == self.P
+            kernel_g = kernel_t[None, ...].expand(G, -1, -1, -1)   # (G, Ci, Co_g, P)
+        elif kernel_t.dim() == 4:
+            Gk, Ci_k, Co_g, P = kernel_t.shape
+            assert Gk == G and Ci_k == Ci and P == self.P
+            kernel_g = kernel_t
+        else:
+            raise ValueError("kernel_t must be (Ci,Co_g,P) or (G,Ci,Co_g,P)")
+
+        outs = []
+        for g in range(G):
+            pos_safe = self.pos_safe_t_multi[g]             # (4, K*P)
+            w_norm   = self.w_norm_t_multi[g]               # (4, K*P)
+
+            # gather four neighbors then weight -> (B,Ci,K,P)
+            vals_g = []
+            for j in range(4):
+                vj = data_sorted_t.index_select(2, pos_safe[j].reshape(-1))   # (B,Ci,K*P)
+                vj = vj.view(B, Ci, K, self.P)
+                vals_g.append(vj * w_norm[j].view(1, 1, K, self.P))
+            tmp = sum(vals_g)   # (B,Ci,K,P)
+
+            # spatial+channel mixing with kernel of this gauge -> (B,Co_g,K)
+            yg = torch.einsum('bckp,cop->bok', tmp, kernel_g[g])
+            outs.append(yg)
+
+        # concat the gauges along channel dimension: (B, G*Co_g, K)
+        return torch.cat(outs, dim=1)
+
     def apply(self, data_sorted_t, kernel_t):
         """
         Apply the (Ci,Co,P) kernel to batched sparse data (B,Ci,K)
@@ -400,24 +593,34 @@ class SphericalStencil:
 
     def _Convol_Torch(self, data: torch.Tensor, kernel: torch.Tensor, cell_ids=None) -> torch.Tensor:
         """
-        Convenience entry point:
-          - If cell_ids is None: use cached geometry (prepare_torch) and sparse mapping
-            (bind_support_torch) already stored in the class, then apply.
-          - If cell_ids is provided: compute geometry + sparse mapping for these cells
-            (using the class' gauge and options), reorder `data` accordingly, and apply.
+        Convenience entry point with automatic single- or multi-gauge dispatch.
+
+        Behavior
+        --------
+        - If `cell_ids is None`: use cached geometry (prepare_torch) and sparse mapping
+          (bind_support_torch or bind_support_torch_multi) already stored in the class,
+          re-binding Step-B to `data`'s device/dtype when needed, then apply.
+        - If `cell_ids` is provided: compute geometry + sparse mapping for these cells
+          using the class' gauge setup (including the number of gauges G prepared by
+          `prepare_torch(..., G)`), reorder `data` to match the sorted ids, apply
+          (single or multi), and finally unsort to the original `cell_ids` order.
 
         Parameters
         ----------
-        data :  (B, Ci, K) torch.float on self.device
-            Sparse map values (last axis must match the number of target pixels).
-        kernel : (Ci, Co, P) torch.float on self.device
-            Spatial kernel per (input, output) channel pair (P = kernel_sz**2).
+        data :  (B, Ci, K) torch.float
+            Sparse map values. Last axis K must equal the number of target pixels.
+        kernel : torch.Tensor
+            - Single-gauge path: (Ci, Co, P) where P = kernel_sz**2.
+            - Multi-gauge path:  (Ci, Co_g, P)   shared kernel for all gauges, OR
+                                 (G, Ci, Co_g, P) per-gauge kernels.
+              The output channels will be Co (single) or G*Co_g (multi).
         cell_ids : Optional[np.ndarray | torch.Tensor], shape (K,)
             Target HEALPix pixels. If None, re-use the class' cached targets.
 
         Returns
         -------
-        out : (B, Co, K) torch.float
+        out : torch.Tensor, shape (B, Co, K)
+              Co = Co (single gauge) or Co = G*Co_g (multi-gauge).
         """
         assert isinstance(data, torch.Tensor) and isinstance(kernel, torch.Tensor), \
             "data and kernel must be torch.Tensors"
@@ -425,71 +628,82 @@ class SphericalStencil:
         dtype  = data.dtype
 
         B, Ci, K_data = data.shape
-        Ci_k, Co, P_k = kernel.shape
-        assert P_k == self.P, f"kernel P={P_k} must equal kernel_sz**2 = {self.P}"
-        assert Ci_k == Ci,    f"kernel Ci={Ci_k} must match data Ci={Ci}"
+        P = self.P
+        P_k = kernel.shape[-1]
+        assert P_k == P, f"kernel P={P_k} must equal kernel_sz**2 = {P}"
 
-        # Case 1: cell_ids provided -> compute everything for these targets
+        def _to_np_1d(ids):
+            if isinstance(ids, torch.Tensor):
+                return ids.detach().cpu().numpy().astype(np.int64, copy=False)
+            return np.asarray(ids, dtype=np.int64).reshape(-1)
+
+        def _has_multi_bind():
+            return (getattr(self, 'G', 1) > 1 and
+                    getattr(self, 'pos_safe_t_multi', None) is not None and
+                    getattr(self, 'w_norm_t_multi',   None) is not None)
+
+        # ----------------------------
+        # Case 1: new target ids given
+        # ----------------------------
         if cell_ids is not None:
-            # to numpy 1D array
-            if isinstance(cell_ids, torch.Tensor):
-                cell_ids_np = cell_ids.detach().cpu().numpy().astype(np.int64, copy=False)
-            else:
-                cell_ids_np = np.asarray(cell_ids, dtype=np.int64)
+            cell_ids_np = _to_np_1d(cell_ids)
 
-            # angles for the new targets
+            # A) geometry with class' G (defaults to 1 if not set)
+            G = getattr(self, 'G', 1)
             th, ph = hp.pix2ang(self.nside, cell_ids_np, nest=self.nest)
+            self.prepare_torch(th, ph, alpha=None, G=G)   # fills idx_t/_multi, w_t/_multi
 
-            # A) NumPy: neighbors/weights w.r.t. class gauge/options
-            self.prepare_torch(th, ph)
-
-            # B) Torch: sort ids and reorder data last axis to match ids_sorted
+            # B) sort ids and reorder data accordingly
             order = np.argsort(cell_ids_np)
             ids_sorted_np = cell_ids_np[order]
             assert K_data == ids_sorted_np.size, \
                 "data last dimension must equal number of provided cell_ids"
 
-            # Reorder data to match sorted ids on last axis (in-place view-safe)
-            data_sorted_t = data[..., torch.as_tensor(order, device=device, dtype=torch.long)]
+            order_t = torch.as_tensor(order, device=device, dtype=torch.long)
+            data_sorted_t = data[..., order_t]            # (B, Ci, K) aligned with ids_sorted_np
 
-            # Bind sparse support on GPU
-            self.bind_support_torch(
-                ids_sorted_np,
-                device=device,
-                dtype=dtype,
-            )
+            # C) bind sparse support
+            if G > 1:
+                self.bind_support_torch_multi(ids_sorted_np, device=device, dtype=dtype)
+                out_sorted = self.apply_multi(data_sorted_t, kernel)   # (B, G*Co_g, K)
+            else:
+                self.bind_support_torch(ids_sorted_np, device=device, dtype=dtype)
+                out_sorted = self.apply(data_sorted_t, kernel)         # (B, Co, K)
 
-            # C) Torch apply
-            out = self.apply(data_sorted_t, kernel)   # (B, Co, K)
-            # Return in the same order as input cell_ids (unsort to original order)
+            # D) unsort back to original order
             inv_order = np.empty_like(order)
             inv_order[order] = np.arange(order.size)
             inv_idx = torch.as_tensor(inv_order, device=device, dtype=torch.long)
-            out = out[..., inv_idx]                   # back to original cell_ids order
-            return out
+            return out_sorted[..., inv_idx]
 
-    
-        # Case 2: cell_ids is None -> use cached geometry & mapping
-        # Fast path: utiliser la géométrie/mapping en cache.
-        # Si le mapping n’existe pas encore OU s’il n’est pas au bon device/dtype,
-        # on refait uniquement l’étape B (bind_support_torch) avec le device/dtype des données.
-        assert self.ids_sorted_np is not None, \
-            "No cached targets. Either pass `cell_ids` or initialize the class with `cell_ids=`."
+        # -----------------------------------------------
+        # Case 2: fast path on cached geometry + mapping
+        # -----------------------------------------------
+        if self.ids_sorted_np is None:
+            if getattr(self, 'cell_ids_default', None) is not None:
+                self.ids_sorted_np = np.sort(self.cell_ids_default)
+            else:
+                raise AssertionError(
+                    "No cached targets. Either pass `cell_ids` once or initialize the class with `cell_ids=`."
+                )
 
+        if _has_multi_bind():
+            # rebind if device/dtype changed
+            if (self.device != device) or (self.dtype != dtype):
+                self.bind_support_torch_multi(self.ids_sorted_np, device=device, dtype=dtype)
+            return self.apply_multi(data, kernel)
+
+        # single-gauge cached path
         need_rebind = (
-            self.pos_safe_t is None or
-            self.w_norm_t   is None or
-            self.device != data.device or
-            self.dtype  != data.dtype
+            getattr(self, 'pos_safe_t', None) is None or
+            getattr(self, 'w_norm_t',   None) is None or
+            self.device != device or
+            self.dtype  != dtype
         )
         if need_rebind:
-            self.bind_support_torch(
-                self.ids_sorted_np,
-                device=data.device,
-                dtype=data.dtype,
-            )
+            self.bind_support_torch(self.ids_sorted_np, device=device, dtype=dtype)
         return self.apply(data, kernel)
-    
+
     def Convol_torch(self, im, ww, cell_ids=None, nside=None):
         """
         Batched KERNELSZ x KERNELSZ aggregation (dispatcher).
@@ -501,6 +715,14 @@ class SphericalStencil:
               * cell_ids is 2D (B, K)         -> per-sample grids, same length; returns (B, Co, K)
               * cell_ids is list/tuple        -> per-sample grids (var-length allowed)
           - im: list/tuple of Tensors, each (Ci, K_b) with cell_ids list/tuple
+
+        Notes
+        -----
+        - Kernel shapes accepted:
+            * single/multi shared:     (Ci, Co_g, P)
+            * per-gauge kernels:       (G, Ci, Co_g, P)
+          The low-level _Convol_Torch will choose between apply/apply_multi
+          depending on the class state (G>1 and multi-bind present).
         """
         import numpy as np
         import torch
@@ -537,26 +759,19 @@ class SphericalStencil:
             kernel = _prepare_kernel(ww, device, dtype)
 
             with _NsideContext(self, nside):
-                # Fast path: no ids provided -> ensure Step B is bound to this device/dtype
-                
+                # (A) Fast path: no ids provided -> delegate fully to _Convol_Torch
                 if cell_ids is None:
-                    assert self.ids_sorted_np is not None, \
-                        "No cached targets. Pass `cell_ids` once (or init the class with `cell_ids=`)."
-                    if (self.pos_safe_t is None or self.w_norm_t is None or
-                        self.device != im.device or self.dtype != im.dtype):
-                        self.bind_support_torch(self.ids_sorted_np, device=im.device, dtype=im.dtype)
                     return self._Convol_Torch(im, kernel, cell_ids=None)
 
-                # Normalize numpy/tensor cell_ids
+                # Normalise numpy/tensor ragged inputs
                 if isinstance(cell_ids, np.ndarray) and cell_ids.dtype == object:
-                    # ragged -> treat as list
                     cell_ids = list(cell_ids)
 
-                # One shared grid for entire batch: 1-D
+                # (B) One shared grid for entire batch: 1-D ids
                 if isinstance(cell_ids, (np.ndarray, torch.Tensor)) and getattr(cell_ids, "ndim", 1) == 1:
                     return self._Convol_Torch(im, kernel, cell_ids=_to_np_ids(cell_ids))
 
-                # Per-sample grids, same length: 2-D (B, K)
+                # (C) Per-sample grids, same length: 2-D ids (B, K)
                 if isinstance(cell_ids, (np.ndarray, torch.Tensor)) and getattr(cell_ids, "ndim", 0) == 2:
                     B = im.shape[0]
                     if isinstance(cell_ids, torch.Tensor):
@@ -568,29 +783,28 @@ class SphericalStencil:
 
                     outs = []
                     for b in range(B):
-                        x_b   = im[b:b+1]                  # (1, Ci, K_b)
-                        ids_b = ids2d[b]                   # (K_b,)
+                        x_b   = im[b:b+1]                       # (1, Ci, K_b)
+                        ids_b = ids2d[b]                        # (K_b,)
                         y_b   = self._Convol_Torch(x_b, kernel, cell_ids=ids_b)  # (1, Co, K_b)
                         outs.append(y_b)
-                    return torch.cat(outs, dim=0)         # (B, Co, K)
+                    return torch.cat(outs, dim=0)              # (B, Co, K)
 
-                # Per-sample grids, variable length: list/tuple
+                # (D) Per-sample grids, variable length: list/tuple
                 if isinstance(cell_ids, (list, tuple)):
                     B = im.shape[0]
                     assert len(cell_ids) == B, "cell_ids list length must match batch size B"
                     outs = []
-                    # Try to detect if all lengths are equal -> stack; else return list
                     lengths = []
                     for b in range(B):
                         ids_b_np = _to_np_ids(cell_ids[b])
                         lengths.append(ids_b_np.size)
-                        x_b   = im[b:b+1]
-                        y_b   = self._Convol_Torch(x_b, kernel, cell_ids=ids_b_np)  # (1, Co, K_b)
+                        x_b = im[b:b+1]                        # (1, Ci, K_b)
+                        y_b = self._Convol_Torch(x_b, kernel, cell_ids=ids_b_np)  # (1, Co, K_b)
                         outs.append(y_b)
                     if len(set(lengths)) == 1:
-                        return torch.cat(outs, dim=0)     # (B, Co, K)
+                        return torch.cat(outs, dim=0)          # (B, Co, K)
                     else:
-                        return [y.squeeze(0) for y in outs]  # list[(Co, K_b)]
+                        return [y.squeeze(0) for y in outs]    # list[(Co, K_b)]
 
                 raise TypeError("Unsupported type for cell_ids with tensor input.")
 
@@ -605,7 +819,6 @@ class SphericalStencil:
 
             outs = []
             with _NsideContext(self, nside):
-                # detect equal lengths to stack
                 lengths = []
                 tmp = []
                 for x_b, ids_b in zip(im, cell_ids):
@@ -623,109 +836,7 @@ class SphericalStencil:
 
         raise TypeError("`im` must be either a torch.Tensor (B,Ci,K) or a list of (Ci,K_b) tensors.")
 
-    '''
-    def Convol_torch(self, im, ww, cell_ids=None, nside=None):
-        """
-        Batched KERNELSZ x KERNELSZ aggregation (dispatcher).
-
-        Accepts either:
-          1) im: Tensor (B, Ci, K)
-             - cell_ids is None              -> use class-cached targets (prepare_numpy + bind_support_torch already done)
-             - cell_ids is 1D (K,)           -> one shared grid for the whole batch
-             - cell_ids is list[(K_b,)]      -> per-sample grids (var-length allowed)
-
-          2) im: list/tuple of Tensors, each (Ci, K_b)
-             - cell_ids must be list/tuple of same length with matching lengths per sample
-
-        Returns
-        -------
-          - If a single common grid is used: Tensor (B, Co, K_out)
-          - If var-length per sample:       list[ Tensor (Co, K_b_out) ]
-        """
-        import numpy as np
-        import torch
-
-        # ---- helpers local to this method (no pollution of the class API)
-        def _dev_dtype_like(x: torch.Tensor):
-            if not isinstance(x, torch.Tensor):
-                raise TypeError("Expected a torch.Tensor for device/dtype inference.")
-            return x.device, x.dtype
-
-        def _prepare_kernel(k: torch.Tensor, device, dtype):
-            if not isinstance(k, torch.Tensor):
-                raise TypeError("kernel (ww) must be a torch.Tensor")
-            return k.to(device=device, dtype=dtype)
-
-        def _to_np_ids(ids):
-            if isinstance(ids, torch.Tensor):
-                return ids.detach().cpu().numpy().astype(np.int64, copy=False)
-            return np.asarray(ids, dtype=np.int64)
-
-        class _NsideContext:
-            """Temporarily override self.nside during this call (restored on exit)."""
-            def __init__(self, obj, nside_new):
-                self.obj = obj
-                self.nside_old = obj.nside
-                self.nside_new = int(nside_new) if nside_new is not None else obj.nside
-            def __enter__(self):
-                self.obj.nside = self.nside_new
-                return self
-            def __exit__(self, exc_type, exc, tb):
-                self.obj.nside = self.nside_old
-
-        # ---------------- main dispatcher ----------------
-        if isinstance(im, torch.Tensor):
-            # Case 1: im is (B, Ci, K) tensor
-            device, dtype = _dev_dtype_like(im)
-            kernel = _prepare_kernel(ww, device, dtype)
-
-            with _NsideContext(self, nside):
-                if cell_ids is None:
-                    # Use cached geometry/mapping
-                    return self._Convol_Torch(im, kernel, cell_ids=None)
-
-                # One shared grid for entire batch
-                if isinstance(cell_ids, (np.ndarray, torch.Tensor)) and getattr(cell_ids, "ndim", 1) == 1:
-                    return self._Convol_Torch(im, kernel, cell_ids=_to_np_ids(cell_ids))
-
-                # Per-sample grids (list/tuple)
-                if isinstance(cell_ids, (list, tuple)):
-                    B = im.shape[0]
-                    assert len(cell_ids) == B, "cell_ids list length must match batch size B"
-                    outs = []
-                    for b in range(B):
-                        x_b   = im[b:b+1]                   # (1, Ci, K_b)
-                        ids_b = _to_np_ids(cell_ids[b])     # (K_b,)
-                        y_b   = self._Convol_Torch(x_b, kernel, cell_ids=ids_b)  # (1, Co, K_b_out)
-                        outs.append(y_b.squeeze(0))         # (Co, K_b_out)
-                    return torch.stack(outs)
-
-                raise TypeError("Unsupported type for cell_ids with tensor input.")
-
-        # Case 2: im is list/tuple of (Ci, K_b) tensors (var-length samples)
-        if isinstance(im, (list, tuple)):
-            assert isinstance(cell_ids, (list, tuple)) and len(cell_ids) == len(im), \
-                "When im is a list, cell_ids must be a list of same length."
-            assert len(im) > 0, "Empty list for `im`."
-
-            # Infer device/dtype from the first sample
-            device, dtype = _dev_dtype_like(im[0])
-            kernel = _prepare_kernel(ww, device, dtype)
-
-            outs = []
-            with _NsideContext(self, nside):
-                for x_b, ids_b in zip(im, cell_ids):
-                    assert isinstance(x_b, torch.Tensor), "Each sample in `im` must be a torch.Tensor"
-                    assert x_b.device == device and x_b.dtype == dtype, "All samples must share device/dtype."
-                    # Promote (Ci,K_b) -> (1,Ci,K_b) and dispatch
-                    x_b   = x_b.unsqueeze(0)
-                    ids_b = _to_np_ids(ids_b)
-                    y_b   = self._Convol_Torch(x_b, kernel, cell_ids=ids_b)  # (1, Co, K_b_out)
-                    outs.append(y_b.squeeze(0))                               # (Co, K_b_out)
-            return torch.stack(outs,0)
-
-        raise TypeError("`im` must be either a torch.Tensor (B,Ci,K) or a list of (Ci,K_b) tensors.")
-    '''
+    
     def make_sparse_matrix(
         self,
         cell_ids,

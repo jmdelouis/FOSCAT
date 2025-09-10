@@ -18,6 +18,8 @@ import numpy as np
 
 import torch
 import torch.nn as nn
+import healpy as hp
+
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader, TensorDataset
 
@@ -40,6 +42,8 @@ class HealpixUNet(nn.Module):
         Cell indices for the finest resolution (nside = in_nside) in nested scheme.
     KERNELSZ : int, default 3
         Spatial kernel size K (K x K) for oriented convolution.
+    G : int, default 1
+        Number of gauges for the orientation definition.
     task : {'regression','segmentation'}, default 'regression'
         Chooses the head and default activation.
     out_channels : int, default 1
@@ -77,9 +81,10 @@ class HealpixUNet(nn.Module):
             final_activation: Optional[Literal['none', 'sigmoid', 'softmax']] = None,
             device: Optional[torch.device | str] = None,
             prefer_foscat_gpu: bool = True,
+            G: int =1,
             down_type: Optional[Literal['mean','max']] = 'max',  
             dtype: Literal['float32','float64'] = 'float32',
-            axisA=(1.0,0.0,0.0)
+            head_reduce: Literal['mean','sum','learned']='sum'
     ) -> None:
         super().__init__()
         
@@ -90,7 +95,12 @@ class HealpixUNet(nn.Module):
         else:
             self.np_dtype=np.float64
             self.torch_dtype=torch.float32
-            
+
+        self.G = int(G)
+
+        if self.G < 1:
+            raise ValueError("G must be >= 1")
+    
         if cell_ids is None:
             raise ValueError("cell_ids must be provided for the finest resolution.")
         if len(chanlist) == 0:
@@ -99,9 +109,10 @@ class HealpixUNet(nn.Module):
         self.in_nside = int(in_nside)
         self.n_chan_in = int(n_chan_in)
         self.chanlist = list(map(int, chanlist))
+        self.chanlist = [self.chanlist[k]*self.G for k in range(len(self.chanlist))]
         self.KERNELSZ = int(KERNELSZ)
         self.task = task
-        self.out_channels = int(out_channels)
+        self.out_channels = int(out_channels)*self.G
         self.prefer_foscat_gpu = bool(prefer_foscat_gpu)
         if down_type == 'max':
             self.max_poll = True
@@ -144,11 +155,9 @@ class HealpixUNet(nn.Module):
             # operator at encoder level l
             hc = ho.SphericalStencil(current_nside,
                                      self.KERNELSZ,
+                                     n_gauges = self.G,
                                      cell_ids=self.l_cell_ids[l],
-                                     gauge='axis',
-                                     axisA=axisA,
                                      dtype=self.torch_dtype)
-            #hc.make_idx_weights()
             
             self.hconv_enc.append(hc)
             
@@ -170,20 +179,23 @@ class HealpixUNet(nn.Module):
         
         inC = self.n_chan_in
         for l, outC in enumerate(self.chanlist):
+            if outC % self.G != 0:
+                raise ValueError(f"chanlist[{l}] = {outC} must be divisible by G={self.G}")
+            outC_g = outC // self.G
 
-            # conv1: inC -> outC
-            w1 = torch.empty(inC, outC, self.KERNELSZ * self.KERNELSZ)
-            nn.init.kaiming_uniform_(w1.view(inC * outC, -1), a=np.sqrt(5))
+            # conv1: inC -> outC (via multi-gauge => noyau (Ci, Co_g, P))
+            w1 = torch.empty(inC, outC_g, self.KERNELSZ * self.KERNELSZ)
+            nn.init.kaiming_uniform_(w1.view(inC * outC_g, -1), a=np.sqrt(5))
             self.enc_w1.append(nn.Parameter(w1))
-            self.enc_bn1.append(self._norm_1d(outC,kind="group"))
+            self.enc_bn1.append(self._norm_1d(outC, kind="group"))
 
-            # conv2: outC -> outC
-            w2 = torch.empty(outC, outC, self.KERNELSZ * self.KERNELSZ)
-            nn.init.kaiming_uniform_(w2.view(outC * outC, -1), a=np.sqrt(5))
+            # conv2: outC -> outC  (entrée = total outC ; noyau (outC, outC_g, P))
+            w2 = torch.empty(outC, outC_g, self.KERNELSZ * self.KERNELSZ)
+            nn.init.kaiming_uniform_(w2.view(outC * outC_g, -1), a=np.sqrt(5))
             self.enc_w2.append(nn.Parameter(w2))
-            self.enc_bn2.append(self._norm_1d(outC,kind="group"))
+            self.enc_bn2.append(self._norm_1d(outC, kind="group"))
 
-            inC = outC  # next level input channels
+            inC = outC  # next layer sees total channels
 
         # decoder conv weights and BN (mirrored levels)
         self.dec_w1 = nn.ParameterList()
@@ -194,38 +206,59 @@ class HealpixUNet(nn.Module):
         for d in range(depth):
             level = depth - 1 - d  # encoder level we are going back to
             hc = ho.SphericalStencil(self.enc_nsides[level],
-                                    self.KERNELSZ,
-                                    cell_ids=self.l_cell_ids[level],
-                                    dtype=self.torch_dtype)
+                                     self.KERNELSZ,
+                                     n_gauges = self.G,
+                                     cell_ids=self.l_cell_ids[level],
+                                     dtype=self.torch_dtype)
             #hc.make_idx_weights()
             self.hconv_dec.append(hc)
 
             upC = self.chanlist[level + 1] if level + 1 < depth else self.chanlist[level]
             skipC = self.chanlist[level]
-            inC_dec = upC + skipC
-            outC_dec = skipC
+            inC_dec  = upC + skipC           # total en entrée
+            outC_dec = skipC                 # total en sortie (ce que tu avais déjà)
 
-            w1 = torch.empty(inC_dec, outC_dec, self.KERNELSZ * self.KERNELSZ)
-            nn.init.kaiming_uniform_(w1.view(inC_dec * outC_dec, -1), a=np.sqrt(5))
+            if outC_dec % self.G != 0:
+                raise ValueError(f"decoder outC at level {level} = {outC_dec} must be divisible by G={self.G}")
+            outC_dec_g = outC_dec // self.G
+
+            w1 = torch.empty(inC_dec, outC_dec_g, self.KERNELSZ * self.KERNELSZ)
+            nn.init.kaiming_uniform_(w1.view(inC_dec * outC_dec_g, -1), a=np.sqrt(5))
             self.dec_w1.append(nn.Parameter(w1))
-            self.dec_bn1.append(self._norm_1d(outC_dec,kind="group"))
+            self.dec_bn1.append(self._norm_1d(outC_dec, kind="group"))
 
-            w2 = torch.empty(outC_dec, outC_dec, self.KERNELSZ * self.KERNELSZ)
-            nn.init.kaiming_uniform_(w2.view(outC_dec * outC_dec, -1), a=np.sqrt(5))
+            w2 = torch.empty(outC_dec, outC_dec_g, self.KERNELSZ * self.KERNELSZ)
+            nn.init.kaiming_uniform_(w2.view(outC_dec * outC_dec_g, -1), a=np.sqrt(5))
             self.dec_w2.append(nn.Parameter(w2))
-            self.dec_bn2.append(self._norm_1d(outC_dec,kind="group"))
+            self.dec_bn2.append(self._norm_1d(outC_dec, kind="group"))
 
         # Output head (on finest grid, channels = chanlist[0])
         self.head_hconv = ho.SphericalStencil(self.in_nside,
-                                             self.KERNELSZ,
-                                             cell_ids=self.l_cell_ids[0],
-                                             dtype=self.torch_dtype)
-        
-        head_inC = self.chanlist[0]
-        self.head_w = nn.Parameter(torch.empty(head_inC, self.out_channels, self.KERNELSZ * self.KERNELSZ))
-        nn.init.kaiming_uniform_(self.head_w.view(head_inC * self.out_channels, -1), a=np.sqrt(5))
-        self.head_bn = self._norm_1d(self.out_channels,kind="group") if self.task == 'segmentation' else None
+                                              self.KERNELSZ,
+                                              n_gauges=self.G,   #Mandatory for the output
+                                              cell_ids=self.l_cell_ids[0],
+                                              dtype=self.torch_dtype)
 
+        head_inC = self.chanlist[0]
+        if self.out_channels % self.G != 0:
+            raise ValueError(f"out_channels={self.out_channels} must be divisible by G={self.G}")
+        outC_head_g = self.out_channels // self.G
+
+        self.head_w = nn.Parameter(
+            torch.empty(head_inC, outC_head_g, self.KERNELSZ * self.KERNELSZ)
+        )
+        nn.init.kaiming_uniform_(self.head_w.view(head_inC * outC_head_g, -1), a=np.sqrt(5))
+        self.head_bn = self._norm_1d(self.out_channels, kind="group") if self.task == 'segmentation' else None
+        
+        # Choose how to reduce across gauges at head:
+        # 'sum' (default), 'mean', or 'learned' (via 1x1 conv).
+        self.head_reduce = getattr(self, 'head_reduce', 'sum')  # you can turn this into a ctor arg if you like
+        if self.head_reduce == 'learned':
+            # Mixer takes G*outC_head_g -> out_channels (K-wise 1x1)
+            self.head_mixer = nn.Conv1d(self.G * outC_head_g, self.out_channels, kernel_size=1, bias=True)
+        else:
+            self.head_mixer = None
+    
         # ---- Decide runtime device (probe Foscat on CUDA, else CPU) ----
         self.runtime_device = self._probe_and_set_runtime_device(self.device)
 
@@ -427,9 +460,6 @@ class HealpixUNet(nn.Module):
 
             # downsample (except bottom level) -> ensure output is on runtime_device
             if l < len(self.chanlist) - 1:
-                #l_data, l_cell_ids = self.f.ud_grade_2(
-                #    l_data, cell_ids=t_cell_ids[l], nside=current_nside
-                #)
                 l_data, l_cell_ids = self.hconv_enc[l].Down(
                     l_data, cell_ids=t_cell_ids[l], nside=current_nside,max_poll=self.max_poll
                 )
@@ -450,7 +480,6 @@ class HealpixUNet(nn.Module):
             if level < len(self.chanlist) - 1:
                 # upsample: from encoder level (level+1) [coarser] -> level [finer]
                 src_nside = self.enc_nsides[level + 1]    # coarse
-                # tgt_nside = self.enc_nsides[level]      # fine (not used directly by Up here)
 
                 # Use the **decoder** operator at this step (consistent with your hconv_dec stack)
                 l_data = self.hconv_dec[d].Up(
@@ -484,15 +513,39 @@ class HealpixUNet(nn.Module):
             l_data = F.relu(l_data, inplace=True)
 
         # Head on finest grid
-        out = self.head_hconv.Convol_torch(l_data, self.head_w,cell_ids=l_cell_ids)
-        out = self._as_tensor_batch(out) 
-        if self.head_bn is not None:
-            out = self.head_bn(out)
+        # y_head_raw: (B, G*outC_head_g, K)
+        y_head_raw = self.head_hconv.Convol_torch(l_data, self.head_w, cell_ids=l_cell_ids)
+
+        B, Ctot, K = y_head_raw.shape
+        outC_head_g = int(self.out_channels)//self.G
+        assert Ctot == self.G * outC_head_g, \
+            f"Head expects G*outC_head_g channels, got {Ctot} != {self.G}*{outC_head_g}"
+
+        if self.head_mixer is not None and self.head_reduce == 'learned':
+            # 1x1 learned mixing across G*outC_head_g -> out_channels
+            y = self.head_mixer(y_head_raw)  # (B, out_channels, K)
+        else:
+            # reshape to (B, G, outC_head_g, K) then reduce across G
+            y_g = y_head_raw.view(B, self.G, outC_head_g, K)
+            if self.head_reduce == 'mean':
+                y = y_g.mean(dim=1)   # (B, outC_head_g, K)
+            else:
+                # default: 'sum'
+                y = y_g.sum(dim=1)    # (B, outC_head_g, K)
+
+        y = self._as_tensor_batch(y)
+        
+        # Optional BN + activation as before
+        if self.task == 'segmentation' and self.head_bn is not None:
+            y = self.head_bn(y)
+            
         if self.final_activation == 'sigmoid':
-            out = torch.sigmoid(out)
+            y = torch.sigmoid(y)
+            
         elif self.final_activation == 'softmax':
-            out = torch.softmax(out, dim=1)
-        return out
+            y = torch.softmax(y, dim=1)
+            
+        return y
 
     # -------------------------- utilities --------------------------
     @torch.no_grad()
