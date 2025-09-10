@@ -78,7 +78,8 @@ class HealpixUNet(nn.Module):
             device: Optional[torch.device | str] = None,
             prefer_foscat_gpu: bool = True,
             down_type: Optional[Literal['mean','max']] = 'max',  
-            dtype: Literal['float32','float64'] = 'float32'
+            dtype: Literal['float32','float64'] = 'float32',
+            axisA=(1.0,0.0,0.0)
     ) -> None:
         super().__init__()
         
@@ -142,9 +143,11 @@ class HealpixUNet(nn.Module):
         for l in range(depth):
             # operator at encoder level l
             hc = ho.SphericalStencil(current_nside,
-                                    self.KERNELSZ,
-                                    cell_ids=self.l_cell_ids[l],
-                                    dtype=self.torch_dtype)
+                                     self.KERNELSZ,
+                                     cell_ids=self.l_cell_ids[l],
+                                     gauge='axis',
+                                     axisA=axisA,
+                                     dtype=self.torch_dtype)
             #hc.make_idx_weights()
             
             self.hconv_enc.append(hc)
