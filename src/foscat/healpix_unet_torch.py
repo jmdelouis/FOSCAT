@@ -84,7 +84,7 @@ class HealpixUNet(nn.Module):
             G: int =1,
             down_type: Optional[Literal['mean','max']] = 'max',  
             dtype: Literal['float32','float64'] = 'float32',
-            head_reduce: Literal['mean','sum','learned']='sum'
+            head_reduce: Literal['mean','learned']='mean'
     ) -> None:
         super().__init__()
         
@@ -252,7 +252,7 @@ class HealpixUNet(nn.Module):
         
         # Choose how to reduce across gauges at head:
         # 'sum' (default), 'mean', or 'learned' (via 1x1 conv).
-        self.head_reduce = getattr(self, 'head_reduce', 'sum')  # you can turn this into a ctor arg if you like
+        self.head_reduce = getattr(self, 'head_reduce', 'mean')  # you can turn this into a ctor arg if you like
         if self.head_reduce == 'learned':
             # Mixer takes G*outC_head_g -> out_channels (K-wise 1x1)
             self.head_mixer = nn.Conv1d(self.G * outC_head_g, self.out_channels, kernel_size=1, bias=True)
@@ -527,11 +527,8 @@ class HealpixUNet(nn.Module):
         else:
             # reshape to (B, G, outC_head_g, K) then reduce across G
             y_g = y_head_raw.view(B, self.G, outC_head_g, K)
-            if self.head_reduce == 'mean':
-                y = y_g.mean(dim=1)   # (B, outC_head_g, K)
-            else:
-                # default: 'sum'
-                y = y_g.sum(dim=1)    # (B, outC_head_g, K)
+
+            y = y_g.mean(dim=1)   # (B, outC_head_g, K)
 
         y = self._as_tensor_batch(y)
         
