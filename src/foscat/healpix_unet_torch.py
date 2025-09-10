@@ -42,6 +42,11 @@ class HealpixUNet(nn.Module):
         Cell indices for the finest resolution (nside = in_nside) in nested scheme.
     KERNELSZ : int, default 3
         Spatial kernel size K (K x K) for oriented convolution.
+    gauge_type : str
+        Type of gauge :
+        'cosmo' use the same definition than
+           https://www.aanda.org/articles/aa/abs/2022/12/aa44566-22/aa44566-22.html
+        'phi' is define at the pole, could be better for earth observation not using intensivly the pole
     G : int, default 1
         Number of gauges for the orientation definition.
     task : {'regression','segmentation'}, default 'regression'
@@ -81,6 +86,7 @@ class HealpixUNet(nn.Module):
             final_activation: Optional[Literal['none', 'sigmoid', 'softmax']] = None,
             device: Optional[torch.device | str] = None,
             prefer_foscat_gpu: bool = True,
+            gauge_type: Optional[Literal['cosmo','phi']] = 'cosmo',
             G: int =1,
             down_type: Optional[Literal['mean','max']] = 'max',  
             dtype: Literal['float32','float64'] = 'float32',
@@ -96,6 +102,7 @@ class HealpixUNet(nn.Module):
             self.np_dtype=np.float64
             self.torch_dtype=torch.float32
 
+        self.gauge_type=gauge_type
         self.G = int(G)
 
         if self.G < 1:
@@ -156,6 +163,7 @@ class HealpixUNet(nn.Module):
             hc = ho.SphericalStencil(current_nside,
                                      self.KERNELSZ,
                                      n_gauges = self.G,
+                                     gauge_type=self.gauge_type,
                                      cell_ids=self.l_cell_ids[l],
                                      dtype=self.torch_dtype)
             
@@ -208,6 +216,7 @@ class HealpixUNet(nn.Module):
             hc = ho.SphericalStencil(self.enc_nsides[level],
                                      self.KERNELSZ,
                                      n_gauges = self.G,
+                                     gauge_type=self.gauge_type,
                                      cell_ids=self.l_cell_ids[level],
                                      dtype=self.torch_dtype)
             #hc.make_idx_weights()
@@ -236,6 +245,7 @@ class HealpixUNet(nn.Module):
         self.head_hconv = ho.SphericalStencil(self.in_nside,
                                               self.KERNELSZ,
                                               n_gauges=self.G,   #Mandatory for the output
+                                              gauge_type=self.gauge_type,
                                               cell_ids=self.l_cell_ids[0],
                                               dtype=self.torch_dtype)
 

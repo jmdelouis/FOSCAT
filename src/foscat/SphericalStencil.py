@@ -30,6 +30,11 @@ class SphericalStencil:
         HEALPix resolution parameter.
     kernel_sz : int
         Size of local stencil (must be odd, e.g. 3, 5, 7).
+    gauge_type : str
+        Type of gauge :
+        'cosmo' use the same definition than
+           https://www.aanda.org/articles/aa/abs/2022/12/aa44566-22/aa44566-22.html
+        'phi' is define at the pole, could be better for earth observation not using intensivly the pole
     n_gauge : float
         Number of oriented gauges (Default 1).
     blend : bool
@@ -56,6 +61,7 @@ class SphericalStencil:
             device=None,
             dtype=None,
             n_gauges=1,
+            gauge_type='cosmo',
             scat_op=None,
     ):
         assert kernel_sz >= 1 and int(kernel_sz) == kernel_sz
@@ -66,6 +72,8 @@ class SphericalStencil:
         self.P = self.KERNELSZ * self.KERNELSZ
 
         self.G = n_gauges
+        self.gauge_type=gauge_type
+        
         self.nest = bool(nest)
         if scat_op is None:
             self.f=sc.funct(KERNELSZ=self.KERNELSZ)
@@ -126,7 +134,7 @@ class SphericalStencil:
     # Rotation construction in Torch
     # ------------------------------------------------------------------
     @staticmethod
-    def _rotation_total_torch(th, ph, alpha=None, G: int = 1, device=None, dtype=None):
+    def _rotation_total_torch(th, ph, alpha=None, G: int = 1, gauge_cosmo=True,device=None, dtype=None):
         """
         Build a batch of rotation matrices with *G gauges* per target.
 
@@ -194,7 +202,10 @@ class SphericalStencil:
         g_shifts = torch.arange(G, device=device, dtype=dtype) * (np.pi / G)            # (G,)
 
         # broadcast with sign: (N,G)
-        alpha_g = alpha[:, None] + sign[:, None] * g_shifts[None, :]
+        if gauge_cosmo:
+            alpha_g = alpha[:, None] + sign[:, None] * g_shifts[None, :]
+        else:
+            alpha_g = alpha[:, None] +  g_shifts[None, :]
 
         ca = torch.cos(alpha_g)  # (N,G)
         sa = torch.sin(alpha_g)  # (N,G)
@@ -351,10 +362,14 @@ class SphericalStencil:
 
         # --- rotation matrices for all targets & gauges: (K,G,3,3)
         if alpha is None:
-            alpha=2*((th>np.pi/2)-0.5)*ph
+            if self.gauge_type=='cosmo':
+                alpha=2*((th>np.pi/2)-0.5)*ph
+            else:
+                alpha=0.0*th
             
         R_t = self._rotation_total_torch(
-            th, ph, alpha, G=self.G, device=self.device, dtype=self.dtype
+            th, ph, alpha, G=self.G, gauge_cosmo=(self.gauge_type=='cosmo'),
+            device=self.device, dtype=self.dtype
         )  # shape (K,G,3,3)
 
         # --- rotate stencil for each (target, gauge): (K,G,P,3)
