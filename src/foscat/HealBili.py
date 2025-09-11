@@ -80,17 +80,16 @@ class HealBili:
     # Public API
     # -----------------------------
     def compute_weights(
-        self,
+            self,
             level,
-        Vell_ids: np.ndarray,
-        heal_phi: np.ndarray,
+            cell_ids: np.ndarray,
     ) -> Tuple[np.ndarray, np.ndarray]:
         """Compute bilinear weights/indices for target HEALPix angles.
 
         Parameters
         ----------
-        heal_theta, heal_phi : np.ndarray, shape (N,)
-            Target **colatitude** and **longitude** in radians.
+        cell_ids : np.ndarray, shape (N,)
+            Target **cell_ids** .
 
         Returns
         -------
