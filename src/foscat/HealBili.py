@@ -52,9 +52,9 @@ class HealBili:
 
     Parameters
     ----------
-    src_theta : np.ndarray, shape (H, W) or (N)
+    src_theta : np.ndarray, shape (H, W)
         Source **colatitude** (radians) at each grid node.
-    src_phi : np.ndarray, shape (H, W) or (N)
+    src_phi : np.ndarray, shape (H, W)
         Source **longitude** (radians) at each grid node.
     prefer_kdtree : bool, default False
         If True and SciPy is available, use cKDTree on unit vectors for a faster nearest-neighbor seed.
@@ -66,12 +66,7 @@ class HealBili:
             raise ValueError("src_theta and src_phi must have the same 2D shape (H, W)")
         self.src_theta = np.asarray(src_theta, dtype=float)
         self.src_phi = np.asarray(src_phi, dtype=float)
-        if src_theta.ndim==2:
-            self.H, self.W = self.src_theta.shape
-        else:
-            self.H=1
-            self.W=self.src_theta.shape[0]
-            
+        self.H, self.W = self.src_theta.shape
         # Precompute unit vectors of source grid nodes
         self._Vsrc = self._sph_to_vec(self.src_theta.ravel(), self.src_phi.ravel())  # (H*W, 3)
         self.prefer_kdtree = bool(prefer_kdtree) and _HAVE_SCIPY
@@ -85,7 +80,7 @@ class HealBili:
     # -----------------------------
     def compute_weights(
         self,
-        heal_theta: np.ndarray,
+        Vell_ids: np.ndarray,
         heal_phi: np.ndarray,
     ) -> Tuple[np.ndarray, np.ndarray]:
         """Compute bilinear weights/indices for target HEALPix angles.
@@ -103,6 +98,9 @@ class HealBili:
             Bilinear weights aligned with `I`. Weights are set to 0.0 for invalid corners and normalized to sum to 1
             when at least one corner is valid.
         """
+        #compute the coordinate of the selected cell_ids
+        heal_theta, heal_phi = hp.pix2ang(2**level,cell_ids,nest=True)
+
         ht = np.asarray(heal_theta, dtype=float).ravel()
         hp = np.asarray(heal_phi, dtype=float).ravel()
         if ht.shape != hp.shape:

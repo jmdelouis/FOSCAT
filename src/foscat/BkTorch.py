@@ -413,7 +413,7 @@ class BkTorch(BackendBase.BackendBase):
         return S.numel()
     
     def bk_SparseTensor(self, indice, w, dense_shape=[]):
-        return self.backend.sparse_coo_tensor(indice.T, w, dense_shape).to_sparse_csr().to(self.torch_device)
+        return self.backend.sparse_coo_tensor(indice, w, dense_shape).to_sparse_csr().to(self.torch_device)
 
     def bk_stack(self, list, axis=0):
         return self.backend.stack(list, axis=axis).to(self.torch_device)

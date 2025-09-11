@@ -6,7 +6,7 @@ import numpy as np
 import foscat.HealSpline as HS
 from scipy.interpolate import griddata
 
-TMPFILE_VERSION = "V7_0"
+TMPFILE_VERSION = "V8_0"
 
 
 class FoCUS:
@@ -1324,16 +1324,7 @@ class FoCUS:
                                             nside,
                                         )
                                     )
-
-                    '''
-                    nn=self.NORIENT*12*nside**2
-                    idxEB=np.concatenate([tmp,tmp,tmp,tmp],0)
-                    idxEB[tmp.shape[0]:2*tmp.shape[0],0]+=12*nside**2
-                    idxEB[3*tmp.shape[0]:,0]+=12*nside**2
-                    idxEB[2*tmp.shape[0]:,1]+=nn
-
-                    tmpEB=np.zeros([tmpw.shape[0]*4],dtype='complex')
-                    '''
+                    
                     import foscat.HOrientedConvol as hs
 
                     hconvol=hs.HOrientedConvol(nside,3*self.KERNELSZ,cell_ids=cell_ids)
@@ -1439,23 +1430,6 @@ class FoCUS:
                     for k in range(self.NORIENT):
                         indice_1_0[(4*k+2)*ndata:(4*k+4)*ndata]+=self.NORIENT*l_cell_ids.shape[0]
                         indice_1_0[(4*k)*ndata:(4*k+4)*ndata]+=k*l_cell_ids.shape[0]
-                    '''
-                    import matplotlib.pyplot as plt
-                    plt.figure()
-                    plt.subplot(2,2,1)
-                    plt.plot(indice_1_0)
-                    plt.subplot(2,2,2)
-                    plt.plot(indice_1_1)
-                    plt.subplot(2,2,3)
-                    plt.plot(wav.real)
-                    plt.subplot(2,2,4)
-                    plt.plot(abs(wav))
-                    
-                    iarg=np.argsort(indice_1_0)
-                    indice_1_1=indice_1_1[iarg]
-                    indice_1_0=indice_1_0[iarg]
-                    wav=wav[iarg]
-                    '''
                     
                     indice=np.concatenate([indice_1_1[:,None],indice_1_0[:,None]],1)
                     
@@ -1464,52 +1438,9 @@ class FoCUS:
                     indice_2_1[3*ndata:4*ndata]+=l_cell_ids.shape[0]
                     indice_2_0=np.tile(np.repeat(np.arange(l_cell_ids.shape[0]),nvalid),4)
                     indice_2_0[2*ndata:]+=l_cell_ids.shape[0]
-                    '''
-                    plt.figure()
-                    plt.subplot(2,2,1)
-                    plt.plot(indice_2_0)
-                    plt.subplot(2,2,2)
-                    plt.plot(indice_2_1)
-                    plt.subplot(2,2,3)
-                    plt.plot(wav.real)
-                    plt.subplot(2,2,4)
-                    plt.plot(wwav)
                     
-                    iarg=np.argsort(indice_2_0)
-                    indice_2_1=indice_2_1[iarg]
-                    indice_2_0=indice_2_0[iarg]
-                    wwav=wwav[iarg]
-                    '''
                     indice2=np.concatenate([indice_2_1[:,None],indice_2_0[:,None]],1)
                     
-                    '''
-                    for k in range(self.NORIENT*12*nside**2):
-                        if k%(nside**2)==0:
-                            print('Init index 1/2 spin=%d Please wait %d done against %d nside=%d kernel=%d'%(spin,k//(nside**2),
-                                                                                                              self.NORIENT*12,
-                                                                                                              nside,
-                                                                                                              self.KERNELSZ))
-                        idx=np.where(tmp[:,1]==k)[0]
-
-                        im=np.zeros([12*nside**2])
-                        im[tmp[idx,0]]=tmpw[idx].real
-                        almR=hp.map2alm(hp.reorder(im,n2r=True))
-                        im[tmp[idx,0]]=tmpw[idx].imag
-                        almI=hp.map2alm(hp.reorder(im,n2r=True))
-
-                        i,q,u=hp.alm2map_spin([almR,almR*0,0*almR],nside,spin,3*nside-1)
-                        i2,q2,u2=hp.alm2map_spin([almI,0*almI,0*almI],nside,spin,3*nside-1)
-
-                        tmpEB[idx]=hp.reorder(i,r2n=True)[tmp[idx,0]]+1J*hp.reorder(i2,r2n=True)[tmp[idx,0]]
-                        tmpEB[idx+tmp.shape[0]]=hp.reorder(q,r2n=True)[tmp[idx,0]]+1J*hp.reorder(q2,r2n=True)[tmp[idx,0]]
-
-                        i,q,u=hp.alm2map_spin([0*almR,almR,0*almR],nside,spin,3*nside-1)
-                        i2,q2,u2=hp.alm2map_spin([0*almI,almI,0*almI],nside,spin,3*nside-1)
-
-                        tmpEB[idx+2*tmp.shape[0]]=hp.reorder(i,r2n=True)[tmp[idx,0]]+1J*hp.reorder(i2,r2n=True)[tmp[idx,0]]
-                        tmpEB[idx+3*tmp.shape[0]]=hp.reorder(q,r2n=True)[tmp[idx,0]]+1J*hp.reorder(q2,r2n=True)[tmp[idx,0]]
-
-                    '''
                     self.save_index("%s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN%d.fst"% (self.TEMPLATE_PATH,
                                                                        self.TMPFILE_VERSION,
                                                                        self.KERNELSZ**2,
@@ -1528,49 +1459,6 @@ class FoCUS:
                                                                        ),
                                     wav
                                     )
-                    '''
-                    tmp = self.read_index(
-                            "%s/FOSCAT_%s_W%d_%d_%d_PIDX2-SPIN0.fst"
-                            % (
-                                self.TEMPLATE_PATH,
-                                TMPFILE_VERSION,
-                                l_kernel**2,
-                                self.NORIENT,
-                                nside
-                            )
-                        )
-                        
-                    tmpw = self.read_index("%s/FOSCAT_%s_W%d_%d_%d_SMOO-SPIN0.fst"% (
-                                            self.TEMPLATE_PATH,
-                                            self.TMPFILE_VERSION,
-                                            self.KERNELSZ**2,
-                                            self.NORIENT,
-                                            nside,
-                                        )
-                                    )
-                    for k in range(12*nside**2):
-                        if k%(nside**2)==0:
-                            print('Init index 2/2 spin=%d Please wait %d done against %d nside=%d kernel=%d'%(spin,k//(nside**2),
-                                                                                                              12,
-                                                                                                              nside,
-                                                                                                              self.KERNELSZ))
-                        idx=np.where(tmp[:,1]==k)[0]
-
-                        im=np.zeros([12*nside**2])
-                        im[tmp[idx,0]]=tmpw[idx]
-                        almR=hp.map2alm(hp.reorder(im,n2r=True))
-
-                        i,q,u=hp.alm2map_spin([almR,almR*0,0*almR],nside,spin,3*nside-1)
-
-                        tmpEB[idx]=hp.reorder(i,r2n=True)[tmp[idx,0]]
-                        tmpEB[idx+tmp.shape[0]]=hp.reorder(q,r2n=True)[tmp[idx,0]]
-
-                        i,q,u=hp.alm2map_spin([0*almR,almR,0*almR],nside,spin,3*nside-1)
-
-                        tmpEB[idx+2*tmp.shape[0]]=hp.reorder(i,r2n=True)[tmp[idx,0]]
-                        tmpEB[idx+3*tmp.shape[0]]=hp.reorder(q,r2n=True)[tmp[idx,0]]
-
-                    '''
                     self.save_index("%s/FOSCAT_%s_W%d_%d_%d_PIDX2-SPIN%d.fst"% (self.TEMPLATE_PATH,
                                                                        self.TMPFILE_VERSION,
                                                                        self.KERNELSZ**2,
@@ -1591,7 +1479,7 @@ class FoCUS:
                                     )
                     
                 else:
-                    '''
+                    
                     if l_kernel == 5:
                         pw = 0.5
                         pw2 = 0.5
@@ -1606,144 +1494,50 @@ class FoCUS:
                         pw = 0.5
                         pw2 = 0.25
                         threshold = 4e-5
-                    '''
-                    import foscat.HOrientedConvol as hs
-
-                    hconvol=hs.HOrientedConvol(nside,l_kernel,cell_ids=cell_ids)
-                    
-                    orientations=np.pi*np.arange(self.NORIENT)/self.NORIENT
-                    
-                    wav,indice,wwav,indice2=hconvol.make_wavelet_matrix(orientations,
-                                                                        polar=True,
-                                                                        return_index=True,
-                                                                        return_smooth=True)
-                    
-                    '''
-                    if cell_ids is not None and nside>256:
-                        if not isinstance(cell_ids, np.ndarray):
-                            cell_ids = self.backend.to_numpy(cell_ids)
-                        th, ph = hp.pix2ang(nside, cell_ids, nest=True)
-                        x, y, z = hp.pix2vec(nside, cell_ids, nest=True)
-
-                        t, p = hp.pix2ang(nside, cell_ids, nest=True)
-                        phi = [p[k] / np.pi * 180 for k in range(ncell)]
-                        thi = [t[k] / np.pi * 180 for k in range(ncell)]
-
-                        indice2 = np.zeros([ncell * 64, 2], dtype="int")
-                        indice = np.zeros([ncell * 64 * self.NORIENT, 2], dtype="int")
-                        wav = np.zeros([ncell * 64 * self.NORIENT], dtype="complex")
-                        wwav = np.zeros([ncell * 64 * self.NORIENT], dtype="float")
-
-                    else:
-
-                        th, ph = hp.pix2ang(nside, np.arange(12 * nside**2), nest=True)
-                        x, y, z = hp.pix2vec(nside, np.arange(12 * nside**2), nest=True)
-
-                        t, p = hp.pix2ang(nside, np.arange(12 * nside * nside), nest=True)
-                        phi = [p[k] / np.pi * 180 for k in range(12 * nside * nside)]
-                        thi = [t[k] / np.pi * 180 for k in range(12 * nside * nside)]
-
-                        indice2 = np.zeros([12 * nside * nside * 64, 2],
-                                           dtype="int")
                         
-                        indice = np.zeros(
-                            [12 * nside * nside * 64 * self.NORIENT, 2],
-                            dtype="int"
-                        )
-                        wav = np.zeros(
-                            [12 * nside * nside * 64 * self.NORIENT],
-                            dtype="complex"
-                        )
-                        wwav = np.zeros(
-                            [12 * nside * nside * 64 * self.NORIENT],
-                            dtype="float"
-                        )
-                    iv = 0
-                    iv2 = 0
+                    import foscat.SphericalStencil as hs
 
-                    for iii in range(ncell):
-                        if cell_ids is None:
-                            if iii % (nside * nside) == nside * nside - 1:
-                                if not self.silent:
-                                    print(
-                                        "Pre-compute nside=%6d %.2f%%"
-                                        % (nside, 100 * iii / (12 * nside * nside))
-                                    )
+                    if cell_ids is None:
+                        l_cell_ids=np.arange(12*nside**2)
+                    else:
+                        l_cell_ids=cell_ids
+                        
+                    hconvol=hs.SphericalStencil(nside,
+                                                l_kernel,
+                                                cell_ids=l_cell_ids,
+                                                n_gauges=self.NORIENT,
+                                                gauge_type='cosmo')
+                    
+                    xx=np.tile(np.arange(self.KERNELSZ)-self.KERNELSZ//2,self.KERNELSZ).reshape(self.KERNELSZ*self.KERNELSZ)
+                    
+                    wwr=hconvol.to_tensor((np.exp(-pw2*(xx**2+(xx.T)**2))*np.cos(pw*xx*np.pi)).reshape(1,1,self.KERNELSZ*self.KERNELSZ))
+                    wwr-=wwr.mean()
+                    wwi=hconvol.to_tensor((np.exp(-pw2*(xx**2+(xx.T)**2))*np.sin(pw*xx*np.pi)).reshape(1,1,self.KERNELSZ*self.KERNELSZ))
+                    wwi-=wwi.mean()
+                    wwr/=(abs(wwr+1J*wwi)).sum()
+                    wwi/=(abs(wwr+1J*wwi)).sum()
+                    
+                    wavr,indice,mshape=hconvol.make_matrix(wwr)
+                    wavi,indice,mshape=hconvol.make_matrix(wwi)
 
-                        if cell_ids is not None:
-                            hidx = np.where(
-                                (x - x[iii]) ** 2 + (y - y[iii]) ** 2 + (z - z[iii]) ** 2
-                                < (2 * np.pi / nside) ** 2
-                            )[0]
-                        else:
-                            hidx = hp.query_disc(
-                                nside,
-                                [x[iii], y[iii], z[iii]],
-                                2 * np.pi / nside,
-                                nest=True,
-                            )
+                    wav=hconvol.to_numpy(wavr)+1J*hconvol.to_numpy(wavi)
+                    indice=hconvol.to_numpy(indice)
 
-                        R = hp.Rotator(rot=[phi[iii], -thi[iii]], eulertype="ZYZ")
+                    
+                    hconvol=hs.SphericalStencil(nside,
+                                                l_kernel,
+                                                cell_ids=l_cell_ids,
+                                                n_gauges=1,
+                                                gauge_type='cosmo')
+                    
+                    
+                    ww=hconvol.to_tensor((np.exp(-pw2*(xx**2+(xx.T)**2))).reshape(1,1,self.KERNELSZ*self.KERNELSZ))
+                    ww/=ww.sum()
+                    
+                    wwav,indice2,mshape=hconvol.make_matrix(ww)
 
-                        t2, p2 = R(th[hidx], ph[hidx])
-
-                        vec2 = hp.ang2vec(t2, p2)
-
-                        x2 = vec2[:, 0]
-                        y2 = vec2[:, 1]
-                        z2 = vec2[:, 2]
-
-                        ww = np.exp(
-                            -pw2
-                            * ((nside) ** 2)
-                            * ((x2) ** 2 + (y2) ** 2 + (z2 - 1.0) ** 2)
-                        )
-                        idx = np.where((ww**2) > threshold)[0]
-                        nval2 = len(idx)
-                        indice2[iv2 : iv2 + nval2, 1] = iii
-                        indice2[iv2 : iv2 + nval2, 0] = hidx[idx]
-                        wwav[iv2 : iv2 + nval2] = ww[idx] / np.sum(ww[idx])
-                        iv2 += nval2
-
-                        for l_rotation in range(self.NORIENT):
-
-                            angle = (
-                                l_rotation / 4.0 * np.pi
-                                - phi[iii] / 180.0 * np.pi * (z[hidx] > 0)
-                                - (180.0 - phi[iii]) / 180.0 * np.pi * (z[hidx] < 0)
-                            )
-
-                            # posi=2*(0.5-(z[hidx]<0))
-
-                            axes = y2 * np.cos(angle) - x2 * np.sin(angle)
-                            wresr = ww * np.cos(pw * axes * (nside) * np.pi)
-                            wresi = ww * np.sin(pw * axes * (nside) * np.pi)
-
-                            vnorm = wresr * wresr + wresi * wresi
-                            idx = np.where(vnorm > threshold)[0]
-
-                            nval = len(idx)
-                            indice[iv : iv + nval, 1] = iii + l_rotation * ncell
-                            indice[iv : iv + nval, 0] = hidx[idx]
-                            # print([hidx[k] for k in idx])
-                            # print(hp.query_disc(nside, [x[iii],y[iii],z[iii]], np.pi/nside,nest=True))
-                            normr = np.mean(wresr[idx])
-                            normi = np.mean(wresi[idx])
-
-                            val = wresr[idx] - normr + 1j * (wresi[idx] - normi)
-                            r = abs(val).sum()
-
-                            if r > 0:
-                                val = val / r
-
-                            wav[iv : iv + nval] = val
-                            iv += nval
-
-                    indice = indice[:iv, :]
-                    wav = wav[:iv]
-                    indice2 = indice2[:iv2, :]
-                    wwav = wwav[:iv2]
-                    '''
+                    wwav=hconvol.to_numpy(wwav)
+                    indice2=hconvol.to_numpy(indice2)
 
                     if cell_ids is None:
                         if not self.silent:
@@ -1948,6 +1742,7 @@ class FoCUS:
 
             
         if spin==0:
+            
             wr = self.backend.bk_SparseTensor(
                 self.backend.bk_constant(tmp),
                 self.backend.bk_constant(self.backend.bk_cast(wr)),

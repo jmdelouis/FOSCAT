@@ -851,163 +851,216 @@ class SphericalStencil:
 
         raise TypeError("`im` must be either a torch.Tensor (B,Ci,K) or a list of (Ci,K_b) tensors.")
 
-    
-    def make_sparse_matrix(
+    def make_matrix(
         self,
-        cell_ids,
         kernel: torch.Tensor,
+        cell_ids=None,
         *,
         return_sparse_tensor: bool = False,
         chunk_k: int = 4096,
     ):
         """
-        Build the sparse COO matrix M so that, for each batch, applying M to
-        vec(data) (flattened along channels then pixels) yields vec(out) for the
-        same (cell_ids, kernel) as _Convol_Torch.
+        Build the sparse COO matrix M such that applying M to vec(data) reproduces
+        the spherical convolution performed by Convol_torch/_Convol_Torch.
+
+        Supports single- and multi-gauge:
+          - kernel shape (Ci, Co_g, P)       -> shared across G gauges, output Co = G*Co_g
+          - kernel shape (G, Ci, Co_g, P)    -> per-gauge kernels, same output Co = G*Co_g
 
         Parameters
         ----------
-        cell_ids : array-like (K,)
-            Target HEALPix pixel ids (NESTED if self.nest=True).
-            If these differ from the current cached targets, geometry and sparse
-            mapping will be (re)computed using the class' gauge/options.
-        kernel : (Ci, Co, P) torch.float on self.device
-            Spatial kernel per (input, output) channel pair.
-            P must equal self.P (kernel_sz**2).
-        return_sparse_tensor : bool
-            If True, returns a coalesced torch.sparse_coo_tensor instead of (indices, weights).
-        chunk_k : int
-            Number of target pixels to process per chunk (controls memory).
+        kernel : torch.Tensor
+            (Ci, Co_g, P) or (G, Ci, Co_g, P) with P = kernel_sz**2.
+            Must be on the device/dtype where you want the resulting matrix.
+        cell_ids : array-like of shape (K,) or torch.Tensor, optional
+            Target pixel IDs (NESTED if self.nest=True).
+            If None, uses the grid already cached in the class (fast path).
+            If provided, we prepare geometry & sparse binding for these ids.
+        return_sparse_tensor : bool, default False
+            If True, return a coalesced torch.sparse_coo_tensor of shape (Co*K, Ci*K).
+            Else, return (weights, indices, shape) where:
+              - indices is a LongTensor of shape (2, nnz) with [row; col]
+              - weights is a Tensor of shape (nnz,)
+              - shape is the (rows, cols) tuple
+        chunk_k : int, default 4096
+            Chunk size over target pixels to limit peak memory.
 
         Returns
         -------
-        If return_sparse_tensor=False:
-            (indices, weights, shape)
-            indices : (2, nnz) torch.long   with [row; col]
-            weights : (nnz,) torch.float
-            shape   : tuple (Co*K, Ci*K)
-        If return_sparse_tensor=True:
-            M : torch.sparse_coo_tensor  (Co*K, Ci*K), coalesced
-        """
-        device = self.device or torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-        # ---- Ensure kernel on device and valid shape
-        assert isinstance(kernel, torch.Tensor), "kernel must be a torch.Tensor"
-        kernel = kernel.to(device)
-        Ci_k, Co, P_k = kernel.shape
-        assert P_k == self.P, f"kernel P={P_k} must equal kernel_sz**2={self.P}"
-
-        # ---- Prepare geometry + sparse mapping for the requested cell_ids
-        # Convert ids to numpy
-        if isinstance(cell_ids, torch.Tensor):
-            cell_ids_np = cell_ids.detach().cpu().numpy().astype(np.int64, copy=False)
+        If return_sparse_tensor:
+            M : torch.sparse_coo_tensor of shape (Co*K, Ci*K), coalesced
         else:
-            cell_ids_np = np.asarray(cell_ids, dtype=np.int64)
+            weights : torch.Tensor (nnz,)
+            indices : torch.LongTensor (2, nnz)   with [row; col]
+            shape   : tuple[int, int]  (Co*K, Ci*K)
 
-        # Angles
-        th, ph = hp.pix2ang(self.nside, cell_ids_np, nest=self.nest)
-        # A) NumPy geometry for these targets
-        self.prepare_numpy(th, ph)
+        Notes
+        -----
+        - The resulting matrix implements the same interpolation-and-mixing as the
+          GPU path (gather 4 neighbors -> normalize -> apply spatial+channel kernel),
+          and matches the output of Convol_torch for the same (kernel, cell_ids).
+        - For multi-gauge, rows are grouped as concatenated gauges: first all
+          Co_g channels for gauge 0 over all K, then gauge 1, etc.
+        """
+        import numpy as np
+        import torch
+        import healpy as hp
 
-        # B) Torch sparse binding for these targets (sorted order)
-        order = np.argsort(cell_ids_np)
-        ids_sorted_np = cell_ids_np[order]
-        self.bind_support_torch(ids_sorted_np, device=device, dtype=kernel.dtype)
+        device = kernel.device
+        k_dtype = kernel.dtype
 
-        # K size (targets) and bases for rows/cols
-        K = self.Kb
-        Ci = Ci_k
+        # --- validate kernel & normalize shapes
+        if kernel.dim() == 3:
+            # shared across gauges
+            Ci, Co_g, P = kernel.shape
+            per_gauge = False
+        elif kernel.dim() == 4:
+            Gk, Ci, Co_g, P = kernel.shape
+            per_gauge = True
+            if hasattr(self, 'G'):
+                assert Gk == self.G, f"kernel first dim G={Gk} must match self.G={self.G}"
+            else:
+                self.G = int(Gk)
+        else:
+            raise ValueError("kernel must be (Ci,Co_g,P) or (G,Ci,Co_g,P)")
 
-        # Precompute channel row/col bases
-        # row for (co, k_out): row = co*K + k_out
-        # col for (ci, k_in) : col = ci*K + k_in
-        co_base = (torch.arange(Co, device=device, dtype=torch.long) * K)[:, None]  # (Co,1)
-        ci_base = (torch.arange(Ci, device=device, dtype=torch.long) * K)[:, None]  # (Ci,1)
+        assert P == self.P, f"kernel P={P} must equal kernel_sz**2={self.P}"
 
-        # We'll build lists of chunk-level indices/values and concat, then coalesce
-        rows_all = []
-        cols_all = []
-        vals_all = []
+        # --- geometry + binding for these ids (or use cached)
+        def _to_np_ids(ids):
+            if ids is None:
+                return None
+            if isinstance(ids, torch.Tensor):
+                return ids.detach().cpu().numpy().astype(np.int64, copy=False).reshape(-1)
+            return np.asarray(ids, dtype=np.int64).reshape(-1)
 
-        # Convenience views of precomputed (4, K*P)
-        pos_all = self.pos_safe_t          # long
-        w_all   = self.w_norm_t            # float
+        cell_ids_np = _to_np_ids(cell_ids)
 
-        # Loop over chunks of target pixels to avoid huge intermediates
-        for start in range(0, K, chunk_k):
-            stop = min(start + chunk_k, K)
-            Kb = stop - start
-            # slice over columns belonging to these k in [start,stop)
-            # For each k, its P columns occupy [k*P, (k+1)*P)
-            col_span = torch.arange(start * self.P, stop * self.P, device=device, dtype=torch.long)
+        if cell_ids_np is not None:
+            # Step A: geometry (Torch) with the class' number of gauges
+            G = int(getattr(self, 'G', 1))
+            th, ph = hp.pix2ang(self.nside, cell_ids_np, nest=self.nest)
+            self.prepare_torch(th, ph, alpha=None, G=G)
 
-            pos = pos_all[:, col_span]   # (4, Kb*P)
-            w   = w_all[:, col_span]     # (4, Kb*P)
+            # Step B: bind on sorted ids, and remember K
+            order = np.argsort(cell_ids_np)
+            ids_sorted_np = cell_ids_np[order]
+            K = ids_sorted_np.size
 
-            # reshape as (4, Kb, P)
-            pos = pos.view(4, Kb, self.P)
-            w   = w.view( 4, Kb, self.P)
+            if G > 1:
+                self.bind_support_torch_multi(ids_sorted_np, device=device, dtype=k_dtype)
+            else:
+                self.bind_support_torch(ids_sorted_np, device=device, dtype=k_dtype)
+        else:
+            # use cached mapping
+            if getattr(self, 'ids_sorted_np', None) is None:
+                raise AssertionError("No cached targets; pass `cell_ids` or init the class with `cell_ids=`.")
+            K = self.ids_sorted_np.size
+            # rebind to the kernel device/dtype if needed
+            if getattr(self, 'G', 1) > 1:
+                if (self.device != device) or (self.dtype != k_dtype):
+                    self.bind_support_torch_multi(self.ids_sorted_np, device=device, dtype=k_dtype)
+            else:
+                if (self.device != device) or (self.dtype != k_dtype):
+                    self.bind_support_torch(self.ids_sorted_np, device=device, dtype=k_dtype)
 
-            # -----------------------------
-            # Build COO entries:
-            # For every (co, k_out, ci, j, p), we add:
-            #   row = co*K + (start + k_out)
-            #   col = ci*K + pos[j, k_out, p]
-            #   val = kernel[ci, co, p] * w[j, k_out, p]
-            # -----------------------------
+        G = int(getattr(self, 'G', 1))
+        Co_total = (G * Co_g)  # output channels including gauges
+        shape = (Co_total * K, Ci * K)
 
-            # rows: shape (Co, Kb, Ci, 4, P) after broadcasting
-            rows = co_base + (start + torch.arange(Kb, device=device, dtype=torch.long))[None, :]
-            rows = rows[:, :, None, None, None]                   # (Co,Kb,1,1,1)
-            rows = rows.expand(Co, Kb, Ci, 4, self.P)             # (Co,Kb,Ci,4,P)
+        # --- choose mapping tensors (multi vs single)
+        is_multi = (G > 1) and (getattr(self, 'pos_safe_t_multi', None) is not None)
+        if is_multi:
+            pos_all_g = self.pos_safe_t_multi.to(device=device)   # (G,4,K*P)
+            w_all_g   = self.w_norm_t_multi.to(device=device, dtype=k_dtype)
+        else:
+            pos_all   = self.pos_safe_t.to(device=device)         # (4,K*P)
+            w_all     = self.w_norm_t.to(device=device, dtype=k_dtype)
 
-            # cols: base from pos (4,Kb,P) -> (1,Kb,1,4,P) then add channel base
-            cols_pix = pos[None, :, :]                            # (1,4,Kb,P)
-            cols_pix = cols_pix.permute(0, 2, 0+1, 1, 3)          # (1,Kb,4,P) -> to align later
-            # Easier: expand step-by-step
-            cols_pix = pos.permute(1, 0, 2)                       # (Kb,4,P)
-            cols_pix = cols_pix[None, :, None, :, :]              # (1,Kb,1,4,P)
-            cols = ci_base + cols_pix                              # (Ci, Kb, 1, 4, P)
-            cols = cols.permute(2, 1, 0, 3, 4)                    # (1,Kb,Ci,4,P) for broadcasting
-            cols = cols.expand(Co, Kb, Ci, 4, self.P)             # match rows shape
+        # --- precompute channel row/col bases
+        # rows: for (co_total, k_out) -> co_total*K + k_out
+        # cols: for (ci, k_in)        -> ci*K       + k_in
+        row_base = (torch.arange(Co_total, device=device, dtype=torch.long) * K)[:, None]  # (Co_total, 1)
+        col_base = (torch.arange(Ci,       device=device, dtype=torch.long) * K)[:, None]  # (Ci, 1)
+        
 
-            # values: kernel (Ci,Co,P) and w (4,Kb,P)
-            k_cp = kernel.permute(1, 0, 2).transpose(0,1)         # no-op; keep (Ci,Co,P)
-            k_cp = kernel                                          # (Ci,Co,P)
-            k_exp = k_cp[None, :, :, None, :]                      # (1,Ci,Co,1,P)
-            k_exp = k_exp.permute(2, 0, 1, 3, 4)                   # (Co,1,Ci,1,P)
+        rows_all, cols_all, vals_all = [], [], []
 
-            w_exp = w[None, :, :, :]                               # (1,4,Kb,P)
-            w_exp = w_exp.permute(0, 2, 1, 0, 3)                   # -> (1,Kb,4,1,P)
-            w_exp = w_exp.permute(0, 1, 3, 2, 4)                   # (1,Kb,1,4,P)
-            w_exp = w_exp.expand(Co, Kb, Ci, 4, self.P)            # (Co,Kb,Ci,4,P)
+        # --- helper to add one gauge block (gauge g -> Co_g*K rows)
+        def _accumulate_for_gauge(g, pos_g, w_g, ker_g):
+            """
+            pos_g : (4, K*P) long
+            w_g   : (4, K*P) float
+            ker_g : (Ci, Co_g, P)
+            """
+            # process by chunks in k to control memory
+            for start in range(0, K, chunk_k):
+                stop = min(start + chunk_k, K)
+                Kb = stop - start
+                cols_span = torch.arange(start * self.P, stop * self.P, device=device, dtype=torch.long)
 
-            vals = k_exp * w_exp                                   # (Co,Kb,Ci,4,P)
+                pos = pos_g[:, cols_span].view(4, Kb, self.P)   # (4, Kb, P)
+                w   = w_g[:, cols_span].view(4, Kb, self.P)     # (4, Kb, P)
 
-            # Flatten all dims to 1D COO triplets
-            rows = rows.reshape(-1)                                 # (nnz_chunk,)
-            cols = cols.reshape(-1)
-            vals = vals.reshape(-1)
+                # rows_gauge: indices de lignes pour cette jauge g
+                # Chaque jauge occupe un bloc de Co_g canaux de sortie pour CHAQUE pixel (K)
+                # donc offset = g*Co_g
+                rows_gauge = (torch.arange(Co_g, device=device, dtype=torch.long) + g*Co_g)[:, None] * K \
+                           + (start + torch.arange(Kb, device=device, dtype=torch.long))[None, :]
+                # -> shape (Co_g, Kb)
+                rows = rows_gauge[:, :, None, None, None]               # (Co_g, Kb,1,1,1)
+                rows = rows.expand(Co_g, Kb, Ci, 4, self.P)              # (Co_g, Kb, Ci, 4, P)
 
-            rows_all.append(rows)
-            cols_all.append(cols)
-            vals_all.append(vals)
+                # cols: indices colonnes = (ci*K + pix)
+                cols_pix = pos.permute(1, 0, 2)                          # (Kb, 4, P)
+                cols_pix = cols_pix[None, :, None, :, :]                  # (1, Kb, 1, 4, P)
+                cols = col_base + cols_pix                                # (Ci, Kb, 1, 4, P)
+                cols = cols.permute(2, 1, 0, 3, 4)                         # (1, Kb, Ci, 4, P)
+                cols = cols.expand(Co_g, Kb, Ci, 4, self.P)
 
-        # Concatenate all chunks
+                # values = kernel(ci, co_g, p) * w(4,kb,p)
+                k_exp = ker_g.permute(1, 0, 2)                 # (Co_g, Ci, P)
+                k_exp = k_exp[:, None, :, None, :]             # (Co_g, 1, Ci, 1, P)
+
+                # CORRECTION: remettre les axes de w en (Kb,4,P) avant broadcast
+                w_exp = w.permute(1, 0, 2)[None, :, None, :, :]  # (1, Kb, 1, 4, P)
+                w_exp = w_exp.expand(Co_g, Kb, Ci, 4, self.P)    # (Co_g, Kb, Ci, 4, P)
+
+                vals = k_exp * w_exp                           # (Co_g, Kb, Ci, 4, P)
+
+                rows_all.append(rows.reshape(-1))
+                cols_all.append(cols.reshape(-1))
+                vals_all.append(vals.reshape(-1))
+                
+
+        # --- accumulate either single- or multi-gauge
+        if is_multi:
+            # (a) shared kernel (Ci, Co_g, P) -> repeat over gauges
+            if not per_gauge and kernel.dim() == 3:
+                for g in range(G):
+                    _accumulate_for_gauge(g, pos_all_g[g], w_all_g[g], kernel.to(device=device, dtype=k_dtype))
+            # (b) per-gauge kernel (G, Ci, Co_g, P)
+            else:
+                for g in range(G):
+                    _accumulate_for_gauge(g, pos_all_g[g], w_all_g[g], kernel[g].to(device=device, dtype=k_dtype))
+        else:
+            # G == 1 (single-gauge path)
+            g = 0
+            _accumulate_for_gauge(g, pos_all, w_all, kernel if kernel.dim() == 3 else kernel[0])
+
         rows = torch.cat(rows_all, dim=0)
         cols = torch.cat(cols_all, dim=0)
         vals = torch.cat(vals_all, dim=0)
 
-        # Build sparse COO and coalesce to sum duplicates (same (row,col))
-        indices = torch.stack([rows, cols], dim=0)                 # (2, nnz)
-        shape = (Co * K, Ci * K)
-        M = torch.sparse_coo_tensor(indices, vals, size=shape, device=device, dtype=kernel.dtype).coalesce()
+        
+        indices = torch.stack([cols, rows], dim=0)             # (2, nnz) invert rows/cols for foscat needs
 
         if return_sparse_tensor:
+            M = torch.sparse_coo_tensor(indices, vals, size=shape, device=device, dtype=k_dtype).coalesce()
             return M
         else:
-            # return coalesced indices/values/shape
-            return M.indices(), M.values(), M.shape
+            return vals, indices, shape
+
 
     def _to_numpy_1d(self, ids):
         """Return a 1D numpy array of int64 for a single set of cell ids."""
