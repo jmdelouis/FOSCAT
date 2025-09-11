@@ -103,13 +103,13 @@ class HealBili:
         heal_theta, heal_phi = hp.pix2ang(2**level,cell_ids,nest=True)
 
         ht = np.asarray(heal_theta, dtype=float).ravel()
-        hp = np.asarray(heal_phi, dtype=float).ravel()
-        if ht.shape != hp.shape:
+        hpt = np.asarray(heal_phi, dtype=float).ravel()
+        if ht.shape != hpt.shape:
             raise ValueError("heal_theta and heal_phi must have the same 1D shape (N,)")
         N = ht.size
 
         # Target unit vectors
-        Vtgt = self._sph_to_vec(ht, hp)  # (N,3)
+        Vtgt = self._sph_to_vec(ht, hpt)  # (N,3)
 
         # 1) Choose a seed node for each target (nearest source grid node on the sphere)
         seed_flat = self._nearest_source_indices(Vtgt)
