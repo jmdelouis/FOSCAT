@@ -1479,7 +1479,6 @@ class FoCUS:
                                     )
                     
                 else:
-                    
                     if l_kernel == 5:
                         pw = 0.5
                         pw2 = 0.5
@@ -1496,11 +1495,15 @@ class FoCUS:
                         threshold = 4e-5
                         
                     import foscat.SphericalStencil as hs
-
+                    import torch
+                    
                     if cell_ids is None:
                         l_cell_ids=np.arange(12*nside**2)
                     else:
                         l_cell_ids=cell_ids
+
+                    if isinstance(l_cell_ids,torch.Tensor):
+                        l_cell_ids=self.backend.to_numpy(l_cell_ids)
                         
                     hconvol=hs.SphericalStencil(nside,
                                                 l_kernel,
@@ -1538,7 +1541,7 @@ class FoCUS:
 
                     wwav=hconvol.to_numpy(wwav)
                     indice2=hconvol.to_numpy(indice2)
-
+                    '''
                     if cell_ids is None:
                         if not self.silent:
                             print(
@@ -1596,6 +1599,7 @@ class FoCUS:
                             ),
                             wwav,
                         )
+                    '''
             if self.use_2D:
                 if l_kernel**2 == 9:
                     if self.rank == 0:
@@ -1612,7 +1616,7 @@ class FoCUS:
                             )
                         return None
 
-        if cell_ids is None or spin!=0:
+        if cell_ids is None and spin!=0:
             self.barrier()
             if self.use_2D:
                 tmp = self.read_index(
@@ -1680,7 +1684,7 @@ class FoCUS:
                     spin,
                 )
             )
-                                        
+            '''                           
             if cell_ids is not None:
                 idx_map=-np.ones([12*nside**2],dtype='int32')
                 lcell_ids=cell_ids
@@ -1732,6 +1736,7 @@ class FoCUS:
                 ww=np.bincount(tmp[:,1],weights=np.sqrt(wr*wr+wi*wi))
                 wr/=ww[tmp[:,1]]
                 wi/=ww[tmp[:,1]]
+            '''
                 
         else:
             tmp = indice

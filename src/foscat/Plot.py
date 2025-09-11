@@ -10,7 +10,7 @@ def lgnomproject(
     xsize: int = 400,
     ysize: int = 400,
     reso: float = None,     # deg/pixel on tangent plane; if None, use fov_deg
-    fov_deg=10.0,           # full FoV deg (scalar or (fx,fy))
+    fov_deg=None,           # full FoV deg (scalar or (fx,fy))
     nest: bool = True,      # True if your cell_ids are NESTED (and ang2pix to be done in NEST)
     reduce: str = "mean",   # 'mean'|'median'|'sum'|'first' when duplicates in cell_ids
     mask_outside: bool = True,
@@ -118,6 +118,9 @@ def lgnomproject(
         half_x = 0.5 * xsize * dx
         half_y = 0.5 * ysize * dy
     else:
+        if fov_deg is None:
+            fov_deg=np.rad2deg(np.sqrt(cell_ids.shape[0])/nside)*1.4
+            
         if np.isscalar(fov_deg):
             fx, fy = float(fov_deg), float(fov_deg)
         else:

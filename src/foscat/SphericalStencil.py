@@ -409,6 +409,168 @@ class SphericalStencil:
 
     def bind_support_torch_multi(self, ids_sorted_np, *, device=None, dtype=None):
         """
+        Multi-gauge sparse binding (Step B) AVEC logique 'domaine réduit':
+          - poids des voisins hors domaine mis à 0
+          - renormalisation par colonne à 1
+          - si colonne vide: fallback sur le pixel cible (centre du stencil)
+
+        Produit:
+          self.pos_safe_t_multi : (G, 4, K*P)
+          self.w_norm_t_multi   : (G, 4, K*P)
+          self.present_t_multi  : (G, 4, K*P)
+        """
+        assert hasattr(self, 'idx_t_multi') and self.idx_t_multi is not None, \
+            "Call prepare_torch(..., G>0) before bind_support_torch_multi(...)"
+        assert hasattr(self, 'w_t_multi') and self.w_t_multi is not None
+
+        if device is None: device = self.device
+        if dtype  is None: dtype  = self.dtype
+
+        self.ids_sorted_np = np.asarray(ids_sorted_np, dtype=np.int64).reshape(-1)
+        ids_sorted = torch.as_tensor(self.ids_sorted_np, device=device, dtype=torch.long)
+
+        G, _, M = self.idx_t_multi.shape
+        K = self.Kb
+        P = self.P
+        assert M == K*P, "idx_t_multi second axis must have K*P columns"
+
+        # index du centre du stencil (en flatten P)
+        p_ref = (self.KERNELSZ // 2) * (self.KERNELSZ + 1)  # ex. 5 -> 12
+
+        pos_list, present_list, wnorm_list = [], [], []
+
+        for g in range(G):
+            idx = self.idx_t_multi[g].to(device=device, dtype=torch.long)   # (4, M)
+            w   = self.w_t_multi[g].to(device=device, dtype=dtype)          # (4, M)
+
+            # positions dans ids_sorted
+            pos = torch.searchsorted(ids_sorted, idx.reshape(-1)).view(4, M)
+            in_range = pos < ids_sorted.numel()
+            cmp_vals = torch.full_like(idx, -1)
+            cmp_vals[in_range] = ids_sorted[pos[in_range]]
+            present = (cmp_vals == idx)                                     # (4, M) bool
+
+            # Colonnes sans AUCUN voisin présent
+            empty_cols = ~present.any(dim=0)                                # (M,)
+            if empty_cols.any():
+                p_ref = (self.KERNELSZ // 2) * (self.KERNELSZ + 1)
+                k_id = torch.div(torch.arange(M, device=device), P, rounding_mode='floor')  # (M,)
+                ref_cols = k_id * P + p_ref
+                src = ref_cols[empty_cols]
+
+                # copie idx/w de la colonne 'centre'
+                idx[:, empty_cols] = idx[:, src]
+                w[:,   empty_cols] = w[:,   src]
+
+                # --- Recompute presence/pos safely on those columns
+                idx_e = idx[:, empty_cols].reshape(-1)           # (4*M_empty,)
+                pos_e = torch.searchsorted(ids_sorted, idx_e)    # (4*M_empty,)
+                valid_e = pos_e < ids_sorted.numel()
+                pos_e_clipped = pos_e.clamp_max(max(ids_sorted.numel()-1, 0)).to(torch.long)
+                cmp_e = ids_sorted[pos_e_clipped]
+                present_e = valid_e & (cmp_e == idx_e)          # (4*M_empty,)
+
+                present[:, empty_cols] = present_e.view(4, -1)
+                pos[:,      empty_cols] = pos_e_clipped.view(4, -1)
+
+            # Met à zéro les poids absents puis renormalise à 1 par colonne
+            w = w * present
+            colsum = w.sum(dim=0, keepdim=True)
+            zero_cols = (colsum == 0)
+            if zero_cols.any():
+                w[0, zero_cols[0]] = present[0, zero_cols[0]].to(w.dtype)
+                colsum = w.sum(dim=0, keepdim=True)
+            w_norm = w / colsum.clamp_min(1e-12)
+
+            pos_safe = torch.where(present, pos, torch.zeros_like(pos))
+
+            pos_list.append(pos_safe)
+            present_list.append(present)
+            wnorm_list.append(w_norm)
+
+        self.pos_safe_t_multi = torch.stack(pos_list, dim=0)     # (G, 4, M)
+        self.present_t_multi  = torch.stack(present_list, dim=0) # (G, 4, M)
+        self.w_norm_t_multi   = torch.stack(wnorm_list, dim=0)   # (G, 4, M)
+
+        # miroir device/dtype runtime
+        self.device = device
+        self.dtype  = dtype
+
+    def bind_support_torch(self, ids_sorted_np, *, device=None, dtype=None):
+        """
+        Single-gauge sparse binding (Step B) AVEC logique 'domaine réduit':
+          - poids des voisins hors domaine mis à 0
+          - renormalisation par colonne à 1
+          - si colonne vide: fallback sur le pixel cible (centre du stencil)
+        """
+        if device is None:
+            device = self.device
+        if dtype is None:
+            dtype = self.dtype
+
+        self.ids_sorted_np = np.asarray(ids_sorted_np, dtype=np.int64)
+        ids_sorted = torch.as_tensor(self.ids_sorted_np, device=device, dtype=torch.long)
+
+        idx = self.idx_t.to(device=device, dtype=torch.long)    # (4, K*P)
+        w   = self.w_t.to(device=device, dtype=dtype)           # (4, K*P)
+
+        K = self.Kb
+        P = self.P
+        M = K * P
+
+        # positions dans ids_sorted
+        pos = torch.searchsorted(ids_sorted, idx.reshape(-1)).view(4, M)
+        in_range = pos < ids_sorted.shape[0]
+        cmp_vals = torch.full_like(idx, -1)
+        cmp_vals[in_range] = ids_sorted[pos[in_range]]
+        present = (cmp_vals == idx)                              # (4, M)
+
+        # Fallback colonnes vides -> centre du stencil
+        p_ref = (self.KERNELSZ // 2) * (self.KERNELSZ + 1)
+        empty_cols = ~present.any(dim=0)                         # (M,)
+        if empty_cols.any():
+            k_id = torch.div(torch.arange(M, device=device), P, rounding_mode='floor')  # (M,)
+            ref_cols = k_id * P + p_ref
+            src = ref_cols[empty_cols]
+
+            # copie idx/w de la colonne 'centre'
+            idx[:, empty_cols] = idx[:, src]
+            w[:,   empty_cols] = w[:,   src]
+
+            # --- Recompute presence/pos safely on those columns
+            idx_e = idx[:, empty_cols].reshape(-1)               # (4*M_empty,)
+            pos_e = torch.searchsorted(ids_sorted, idx_e)        # (4*M_empty,)
+            # valid positions strictly inside [0, len)
+            valid_e = pos_e < ids_sorted.numel()
+            pos_e_clipped = pos_e.clamp_max(max(ids_sorted.numel()-1, 0)).to(torch.long)
+            cmp_e = ids_sorted[pos_e_clipped]
+            present_e = valid_e & (cmp_e == idx_e)               # (4*M_empty,)
+
+            # reshape back
+            present[:, empty_cols] = present_e.view(4, -1)
+            pos[:,      empty_cols] = pos_e_clipped.view(4, -1)
+
+        # Zéro poids absents + renormalisation à 1
+        w = w * present
+        colsum = w.sum(dim=0, keepdim=True)
+        zero_cols = (colsum == 0)
+        if zero_cols.any():
+            # force 1 sur la première ligne disponible (ici ligne 0)
+            w[0, zero_cols[0]] = present[0, zero_cols[0]].to(w.dtype)
+            colsum = w.sum(dim=0, keepdim=True)
+        w_norm = w / colsum.clamp_min(1e-12)
+
+        self.pos_safe_t = torch.where(present, pos, torch.zeros_like(pos))
+        self.w_norm_t   = w_norm
+        self.present_t  = present
+
+        self.device = device
+        self.dtype  = dtype
+
+    
+    '''
+    def bind_support_torch_multi(self, ids_sorted_np, *, device=None, dtype=None):
+        """
         Multi-gauge sparse binding (Step B).
         Uses self.idx_t_multi / self.w_t_multi prepared by prepare_torch(..., G>1)
         and builds, for each gauge g, (pos_safe, w_norm, present).
@@ -518,7 +680,7 @@ class SphericalStencil:
         self.present_t  = present
         self.device = device
         self.dtype  = dtype
-
+    '''
     # ------------------------------------------------------------------
     # Step C: apply convolution (already Torch in your code)
     # ------------------------------------------------------------------
