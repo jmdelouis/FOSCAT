@@ -37,6 +37,7 @@ All angles must be in **radians**. theta is colatitude (0 at north pole), phi is
 from __future__ import annotations
 
 from typing import Tuple
+import healpy as hp
 import numpy as np
 
 try:
