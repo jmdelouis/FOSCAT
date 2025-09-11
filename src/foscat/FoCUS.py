@@ -847,7 +847,7 @@ class FoCUS:
                     
                     self.pix_interp_val[(lout,nout)] = 1
                     self.weight_interp_val[(lout,nout)] = self.backend.bk_SparseTensor(
-                        self.backend.bk_constant(indice),
+                        self.backend.bk_constant(indice.T),
                         self.backend.bk_constant(self.backend.bk_cast(w)),
                         dense_shape=[i_npix,o_cell_ids.shape[0]],
                     )
@@ -899,7 +899,7 @@ class FoCUS:
                     
                     self.pix_interp_val[(lout,nout)] = 1
                     self.weight_interp_val[(lout,nout)] = self.backend.bk_SparseTensor(
-                        self.backend.bk_constant(indice),
+                        self.backend.bk_constant(indice.T),
                         self.backend.bk_constant(self.backend.bk_cast(w)),
                         dense_shape=[i_npix,o_cell_ids.shape[0]],
                     )
