@@ -81,6 +81,7 @@ class HealBili:
     # -----------------------------
     def compute_weights(
         self,
+            level,
         Vell_ids: np.ndarray,
         heal_phi: np.ndarray,
     ) -> Tuple[np.ndarray, np.ndarray]:
