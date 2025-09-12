@@ -6,7 +6,7 @@ import numpy as np
 import foscat.HealSpline as HS
 from scipy.interpolate import griddata
 
-TMPFILE_VERSION = "V8_0"
+TMPFILE_VERSION = "V9_0"
 
 
 class FoCUS:
@@ -1541,7 +1541,7 @@ class FoCUS:
 
                     wwav=hconvol.to_numpy(wwav)
                     indice2=hconvol.to_numpy(indice2)
-                    '''
+                    
                     if cell_ids is None:
                         if not self.silent:
                             print(
@@ -1599,7 +1599,7 @@ class FoCUS:
                             ),
                             wwav,
                         )
-                    '''
+                    
             if self.use_2D:
                 if l_kernel**2 == 9:
                     if self.rank == 0:
@@ -1616,7 +1616,7 @@ class FoCUS:
                             )
                         return None
 
-        if cell_ids is None and spin!=0:
+        if cell_ids is None or spin!=0:
             self.barrier()
             if self.use_2D:
                 tmp = self.read_index(
