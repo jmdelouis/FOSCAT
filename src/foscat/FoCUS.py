@@ -1327,7 +1327,7 @@ class FoCUS:
                     
                     import foscat.HOrientedConvol as hs
 
-                    hconvol=hs.HOrientedConvol(nside,3*self.KERNELSZ,cell_ids=cell_ids)
+                    hconvol=hs.HOrientedConvol(nside,4*self.KERNELSZ+1,cell_ids=cell_ids)
                     
                     if cell_ids is None:
                         l_cell_ids=np.arange(12*nside**2)
@@ -1448,7 +1448,7 @@ class FoCUS:
                                                                        nside,
                                                                        spin
                                                                        ),
-                                    indice
+                                    indice.T
                                     )
                     self.save_index("%s/FOSCAT_%s_W%d_%d_%d_WAVE-SPIN%d.fst"% (self.TEMPLATE_PATH,
                                                                        self.TMPFILE_VERSION,
@@ -1466,7 +1466,7 @@ class FoCUS:
                                                                        nside,
                                                                        spin
                                                                        ),
-                                    indice2
+                                    indice2.T
                                     )
                     self.save_index("%s/FOSCAT_%s_W%d_%d_%d_SMOO-SPIN%d.fst"% (self.TEMPLATE_PATH,
                                                                        self.TMPFILE_VERSION,
