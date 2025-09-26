@@ -26,6 +26,7 @@ def lgnomproject(
         interp: bool = False,
         sub=(1,1,1),
         cbar: bool = False,
+        unit: str = "Value",
         rgb_clip=(0.0, 1.0),    # clip range for RGB
 ):
     """
@@ -304,7 +305,7 @@ def lgnomproject(
                 cb = fig.colorbar(shown, ax=ax)
                 cb.set_label("value")
             else:
-                plt.colorbar(shown, ax=ax, orientation="horizontal", label="value")
+                plt.colorbar(shown, ax=ax, orientation="horizontal", label=unit)
 
     if not notext:
         ax.set_xlabel("Longitude (deg)")
@@ -970,3 +971,328 @@ def conjugate_gradient_normal_equation(data, x0, www, all_idx,
         rs_old = rs_new
 
     return x
+
+
+def spectrum_polar_to_cartesian(
+    w,
+    scales=None,                    # radial *values* (see scale_kind)
+    orientations=None,              # angles in radians (uniform)
+    n_pixels=512,
+    r_max=None,
+    method="bilinear",
+    fill_value=0.0,
+    *,
+    scale_kind="frequency",         # "frequency" or "size"
+    size_to_freq_factor=1.0,        # if scale_kind="size": freq = size_to_freq_factor / size
+):
+    """
+    If scale_kind == "frequency":
+        `scales` are already radii in frequency units, strictly increasing (low->high freq).
+    If scale_kind == "size":
+        `scales` are spatial sizes (e.g., km, px), strictly increasing (small->large size),
+        and they are converted to frequency radii by: freq = size_to_freq_factor / size.
+        Choose size_to_freq_factor to get the units you want (e.g., 1.0 for cycles/size).
+    """
+    from math import pi
+    w = np.asarray(w)
+    if w.ndim != 2:
+        raise ValueError("w must be (Nscale, Norientation)")
+    ns, no = w.shape
+
+    # ---- handle scales ----
+    if scales is None:
+        # default dyadic: sizes OR frequencies depending on scale_kind
+        base = 2.0 ** np.arange(ns, dtype=float)
+        if scale_kind == "frequency":
+            scales = base                     # 1,2,4,... as frequencies
+        elif scale_kind == "size":
+            # sizes: 1,2,4,...  -> convert to frequency
+            scales = size_to_freq_factor / base
+        else:
+            raise ValueError("scale_kind must be 'frequency' or 'size'")
+    else:
+        scales = np.asarray(scales, dtype=float)
+        if len(scales) != ns:
+            raise ValueError("len(scales) must match Nscale")
+        if scale_kind == "frequency":
+            pass  # already radii
+        elif scale_kind == "size":
+            # convert sizes -> frequency radii
+            scales = size_to_freq_factor / scales
+        else:
+            raise ValueError("scale_kind must be 'frequency' or 'size'")
+
+    # After conversion, we need strictly increasing radii (low->high frequency)
+    if not np.all(np.diff(scales) > 0):
+        # If your provided sizes were increasing, 1/size is decreasing => reverse order
+        # and reorder w accordingly along the radial axis.
+        order = np.argsort(scales)
+        scales = scales[order]
+        w = w[order, :]
+
+    # ---- orientations (uniform over [0, 2π) ) ----
+    if orientations is None:
+        orientations = np.linspace(0.0, 2*np.pi, no, endpoint=False)
+    else:
+        orientations = np.asarray(orientations, dtype=float)
+        if len(orientations) != no:
+            raise ValueError("len(orientations) must match Norientation")
+
+    # ---- call the previous core (unchanged) ----
+    return _spectrum_polar_to_cartesian_core(
+        w, scales, orientations, n_pixels, r_max, method, fill_value
+    )
+
+def _spectrum_polar_to_cartesian_core(
+    w, scales, orientations, n_pixels, r_max, method, fill_value
+):
+    """Core function from before (unchanged logic), expects increasing frequency radii."""
+    ns, no = w.shape
+    if r_max is None:
+        r_max = float(np.max(scales))
+
+    kx = np.linspace(-r_max, r_max, n_pixels, dtype=float)
+    ky = np.linspace(-r_max, r_max, n_pixels, dtype=float)
+    KX, KY = np.meshgrid(kx, ky, indexing="xy")
+    R = np.hypot(KX, KY)
+    Theta = -np.mod(np.arctan2(KY, KX), 2.0*np.pi)
+
+    radial_index = np.interp(R, scales, np.arange(ns, dtype=float),
+                             left=np.nan, right=np.nan)
+    dtheta = (2.0*np.pi) / no
+    angular_index = Theta / dtheta
+
+    valid = np.isfinite(radial_index)
+    try:
+        from scipy.ndimage import map_coordinates
+        order = 3 if method.lower() == "bicubic" else 1
+        coords = np.vstack([radial_index.ravel(), angular_index.ravel()])
+        eps = 1e-6
+        coords[0, :] = np.where(np.isfinite(coords[0, :]),
+                                np.clip(coords[0, :], 0.0+eps, (ns-1)-eps), 0.0)
+        sampled = map_coordinates(
+            w, coords, order=order, mode="wrap", cval=fill_value, prefilter=True
+        ).reshape(n_pixels, n_pixels)
+        img = np.where(valid, sampled, fill_value)
+    except Exception:
+        # bilinear fallback
+        r_idx = np.floor(radial_index).astype(np.int64)
+        t_idx = np.floor(angular_index).astype(np.int64)
+        r_idx = np.clip(r_idx, 0, ns-2)
+        t0 = np.mod(t_idx, no)
+        t1 = np.mod(t_idx+1, no)
+        tr = np.clip(radial_index - r_idx, 0.0, 1.0)
+        ta = np.clip(angular_index - t_idx, 0.0, 1.0)
+        f00 = w[r_idx,     t0]
+        f01 = w[r_idx,     t1]
+        f10 = w[r_idx+1,   t0]
+        f11 = w[r_idx+1,   t1]
+        g0 = (1.0 - ta) * f00 + ta * f01
+        g1 = (1.0 - ta) * f10 + ta * f11
+        img = (1.0 - tr) * g0 + tr * g1
+        img = np.where(valid, img, fill_value)
+
+    return img, kx, ky
+
+def plot_wave(wave,title="spectrum",unit="Amplitude",cmap="viridis"):
+    img, kx, ky = spectrum_polar_to_cartesian(
+        wave,
+        scales=2**np.arange(wave.shape[0]),                 # tailles croissantes
+        scale_kind="size",            # conversion automatique vers fréquence
+        size_to_freq_factor=50.0,      # cycles / (unit of size) (Sentinel-2 10m résolution ~to 20m resoltuion for smaller scale; equiv. 50 cycles/km
+        method="bicubic",
+        n_pixels=512,
+    )
+    plt.imshow(
+            img,
+            extent=[kx[0], kx[-1], ky[0], ky[-1]],
+            origin="lower",
+            aspect="equal",
+            cmap=cmap,
+    )
+    plt.colorbar(label=unit)
+    plt.xlabel(r"$k_x$ [cycles / km]")
+    plt.ylabel(r"$k_y$ [cycles / km]")
+    plt.title(title)
+
+def lonlat_edges_from_ref(shape, ref_lon, ref_lat, dlon, dlat, anchor="center"):
+    """
+    Build lon/lat *edges* (H+1, W+1) for a regular, axis-aligned grid.
+
+    Parameters
+    ----------
+    shape : tuple(int, int)
+        (H, W) of the image.
+    ref_lon, ref_lat : float
+        Reference coordinate in degrees. Interpreted according to `anchor`.
+    dlon, dlat : float
+        Pixel size in degrees along x (lon) and y (lat). Use positives.
+    anchor : {"center","topleft","topright","bottomleft","bottomright"}
+        Where (ref_lon, ref_lat) sits relative to the image.
+
+    Returns
+    -------
+    lon_edges, lat_edges : 2D arrays of shape (H+1, W+1)
+        Corner coordinates suitable for `pcolormesh`.
+    """
+    H, W = shape
+    dlon = float(dlon)
+    dlat = float(dlat)
+
+    # center of the grid in lon/lat
+    if anchor == "center":
+        lon0 = ref_lon
+        lat0 = ref_lat
+    elif anchor == "topleft":
+        lon0 = ref_lon + (W/2.0 - 0.5) * dlon
+        lat0 = ref_lat - (H/2.0 - 0.5) * dlat
+    elif anchor == "topright":
+        lon0 = ref_lon - (W/2.0 - 0.5) * dlon
+        lat0 = ref_lat - (H/2.0 - 0.5) * dlat
+    elif anchor == "bottomleft":
+        lon0 = ref_lon + (W/2.0 - 0.5) * dlon
+        lat0 = ref_lat + (H/2.0 - 0.5) * dlat
+    elif anchor == "bottomright":
+        lon0 = ref_lon - (W/2.0 - 0.5) * dlon
+        lat0 = ref_lat + (H/2.0 - 0.5) * dlat
+    else:
+        raise ValueError("anchor must be one of: center/topleft/topright/bottomleft/bottomright")
+
+    # 1D edges (corners) along lon/lat, centered on (lon0, lat0)
+    lon_edges_1d = lon0 + (np.arange(W + 1) - W/2.0) * dlon
+    lat_edges_1d = lat0 + (np.arange(H + 1) - H/2.0) * dlat
+
+    # 2D corner grids (H+1, W+1)
+    lon_edges, lat_edges = np.meshgrid(lon_edges_1d, lat_edges_1d, indexing="xy")
+    return lon_edges, lat_edges
+
+
+def plot_image_lonlat(img, lon_edges, lat_edges, cmap="viridis", vmin=None, vmax=None):
+    """
+    Plot a 2D image on a lon/lat grid using pcolormesh (no reprojection).
+    """
+    #fig, ax = plt.subplots(figsize=(7, 5))
+    m = plt.pcolormesh(lon_edges, lat_edges, img, cmap=cmap, vmin=vmin, vmax=vmax, shading="flat")
+    #plt.colorbar(m, ax=ax, label="Intensity")
+    #ax.set_xlabel("Longitude (deg)")
+    #ax.set_ylabel("Latitude (deg)")
+    #ax.set_aspect("equal")  # keeps degrees square; remove if you prefer auto
+    # add a small margin
+    #ax.set_xlim(lon_edges.min(), lon_edges.max())
+    #ax.set_ylim(lat_edges.min(), lat_edges.max())
+    return fig, ax
+
+import matplotlib.tri as mtri
+
+def _edges_from_centers_2d(C):
+    """
+    Compute (H+1, W+1) cell-corner coordinates from a 2D array of cell centers (H, W).
+    This works for a *structured* grid indexed by (i, j) even if the physical spacing
+    is non-uniform and warped.
+
+    Strategy (robust and common in geosciences):
+      1) Extrapolate one ghost cell around the array using first-order linear extrapolation.
+      2) Corners are the mean of the 2x2 block of surrounding centers in the padded array.
+
+    Parameters
+    ----------
+    C : (H, W) ndarray
+        2D field of *centers* (e.g., lat or lon at pixel centers).
+
+    Returns
+    -------
+    E : (H+1, W+1) ndarray
+        2D field of *edges* (corners), suitable for pcolormesh.
+    """
+    C = np.asarray(C)
+    H, W = C.shape
+
+    # 1) Pad by one cell on all sides using linear extrapolation
+    Cp = np.empty((H + 2, W + 2), dtype=C.dtype)
+    Cp[1:-1, 1:-1] = C
+
+    # Edges (extrapolate outward along each axis)
+    Cp[0, 1:-1]  = 2*C[0, :]  - C[1, :]     # top row
+    Cp[-1, 1:-1] = 2*C[-1, :] - C[-2, :]    # bottom row
+    Cp[1:-1, 0]  = 2*C[:, 0]  - C[:, 1]     # left col
+    Cp[1:-1, -1] = 2*C[:, -1] - C[:, -2]    # right col
+
+    # Corners of the padded array: extrapolate diagonally
+    Cp[0, 0]     = 2*C[0, 0]   - C[1, 1]
+    Cp[0, -1]    = 2*C[0, -1]  - C[1, -2]
+    Cp[-1, 0]    = 2*C[-1, 0]  - C[-2, 1]
+    Cp[-1, -1]   = 2*C[-1, -1] - C[-2, -2]
+
+    # 2) Average 2x2 blocks to get corners (H+1, W+1)
+    E = 0.25 * (Cp[:-1, :-1] + Cp[1:, :-1] + Cp[:-1, 1:] + Cp[1:, 1:])
+    return E
+
+
+def plot_image_latlon(fig,ax,img, lat, lon, mode="structured", cmap="viridis", vmin=None, vmax=None,
+                      shading="flat", aspect="equal"):
+    """
+    Plot an image given per-pixel lat/lon coordinates.
+
+    Parameters
+    ----------
+    img : (H, W) ndarray
+        Image values per pixel.
+    lat, lon : (H, W) ndarray
+        Latitude and longitude at *pixel centers* (same shape as `img`).
+    mode : {"structured", "scattered"}
+        - "structured": (i, j) grid is regular (rectangular index space), possibly warped.
+                        We'll compute per-cell corners and use pcolormesh.
+        - "scattered" : pixels are not on a regular (i, j) grid. We'll triangulate points and use tripcolor.
+    cmap, vmin, vmax : matplotlib colormap settings.
+    shading : {"flat","gouraud"} for pcolormesh/tripcolor. "flat" = one color per cell/triangle.
+    aspect : matplotlib aspect for axes, e.g. "equal" or "auto".
+
+    Returns
+    -------
+    fig, ax : matplotlib Figure and Axes
+    artist  : QuadMesh (structured) or PolyCollection (scattered)
+    """
+    img = np.asarray(img)
+    lat = np.asarray(lat)
+    lon = np.asarray(lon)
+
+    if mode == "structured":
+        if img.shape != lat.shape or img.shape != lon.shape:
+            raise ValueError("For 'structured' mode, img, lat, lon must have the same (H, W) shape.")
+
+        # Compute *corner* grids (H+1, W+1) from center grids (H, W)
+        lat_edges = _edges_from_centers_2d(lat)
+        lon_edges = _edges_from_centers_2d(lon)
+
+        m = ax.pcolormesh(lon_edges, lat_edges, img, cmap=cmap, vmin=vmin, vmax=vmax, shading=shading)
+        plt.colorbar(m, ax=ax, label="reflectance",shrink=0.5)
+        ax.set_xlabel("Longitude (deg)")
+        ax.set_ylabel("Latitude (deg)")
+        ax.set_aspect(aspect)
+        ax.set_xlim(np.nanmin(lon_edges), np.nanmax(lon_edges))
+        ax.set_ylim(np.nanmin(lat_edges), np.nanmax(lat_edges))
+        return fig, ax, m
+
+    elif mode == "scattered":
+        # Flatten and remove NaNs before triangulation
+        z = img.ravel()
+        x = lon.ravel()
+        y = lat.ravel()
+        mask = np.isfinite(x) & np.isfinite(y) & np.isfinite(z)
+        x, y, z = x[mask], y[mask], z[mask]
+
+        # Triangulate in lon/lat plane
+        tri = mtri.Triangulation(x, y)
+
+        fig, ax = plt.subplots(figsize=(7, 5))
+        m = ax.tripcolor(tri, z, cmap=cmap, vmin=vmin, vmax=vmax, shading=shading)
+        plt.colorbar(m, ax=ax, label="reflectance",shrink=0.5)
+        ax.set_xlabel("Longitude (deg)")
+        ax.set_ylabel("Latitude (deg)")
+        ax.set_aspect(aspect)
+        ax.set_xlim(np.nanmin(x), np.nanmax(x))
+        ax.set_ylim(np.nanmin(y), np.nanmax(y))
+        return m
+
+    else:
+        raise ValueError("mode must be 'structured' or 'scattered'")
