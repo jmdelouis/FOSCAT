@@ -1110,7 +1110,7 @@ def plot_wave(wave,title="spectrum",unit="Amplitude",cmap="viridis"):
             aspect="equal",
             cmap=cmap,
     )
-    plt.colorbar(label=unit)
+    plt.colorbar(label=unit,shrink=0.5)
     plt.xlabel(r"$k_x$ [cycles / km]")
     plt.ylabel(r"$k_y$ [cycles / km]")
     plt.title(title)

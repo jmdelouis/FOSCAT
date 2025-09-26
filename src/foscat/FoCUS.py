@@ -36,7 +36,7 @@ class FoCUS:
             mpi_rank=0
     ):
 
-        self.__version__ = "2025.09.3"
+        self.__version__ = "2025.09.4"
         # P00 coeff for normalization for scat_cov
         self.TMPFILE_VERSION = TMPFILE_VERSION
         self.P1_dic = None
@@ -123,6 +123,7 @@ class FoCUS:
                 silent=self.silent,
             )
         elif BACKEND == "tensorflow":
+            '''
             from foscat.BkTensorflow import BkTensorflow
 
             self.backend = BkTensorflow(
@@ -131,7 +132,10 @@ class FoCUS:
                 gpupos=gpupos,
                 silent=self.silent,
             )
+            '''
+            raise 'TENSORFLOW BACKEND Not anymore maintained'
         else:
+            '''
             from foscat.BkNumpy import BkNumpy
 
             self.backend = BkNumpy(
@@ -140,6 +144,8 @@ class FoCUS:
                 gpupos=gpupos,
                 silent=self.silent,
             )
+            '''
+            raise 'NUMPY BACKEND Not anymore maintained'
 
         self.all_bk_type = self.backend.all_bk_type
         self.all_cbk_type = self.backend.all_cbk_type
