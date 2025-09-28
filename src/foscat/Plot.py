@@ -1065,28 +1065,69 @@ def _spectrum_polar_to_cartesian_core(
     valid = np.isfinite(radial_index)
     try:
         from scipy.ndimage import map_coordinates
-        order = 3 if method.lower() == "bicubic" else 1
-        coords = np.vstack([radial_index.ravel(), angular_index.ravel()])
-        eps = 1e-6
-        coords[0, :] = np.where(np.isfinite(coords[0, :]),
-                                np.clip(coords[0, :], 0.0+eps, (ns-1)-eps), 0.0)
-        sampled = map_coordinates(
-            w, coords, order=order, mode="wrap", cval=fill_value, prefilter=True
-        ).reshape(n_pixels, n_pixels)
-        img = np.where(valid, sampled, fill_value)
+
+        if method.lower() == "bicubic":
+            # ===== Bicubic with circular angular wrap =====
+            # Pad the angular axis by K columns on both sides so that the cubic kernel
+            # has valid neighbors across the 0°/360° seam. K=2 is enough for a cubic kernel.
+            K = 2
+            # w has shape (Nscale, Norient)
+            w_pad = np.concatenate([w[:, -K:], w, w[:, :K]], axis=1)  # (ns, no+2K)
+
+            # Build coordinates for map_coordinates on the padded array:
+            # - radial index stays the same, clipped to [0, ns-1] (no wrap)
+            # - angular index is shifted by +K and wrapped into [0, no) before querying
+            order = 3
+            coords = np.vstack([radial_index.ravel(), angular_index.ravel()])
+
+            # clip the radial coordinate to the valid [eps, ns-1-eps] band
+            eps = 1e-6
+            coords[0, :] = np.where(
+                np.isfinite(coords[0, :]),
+                np.clip(coords[0, :], 0.0 + eps, (ns - 1) - eps),
+                0.0,
+            )
+
+            # wrap angular coordinate to [0, no) then shift by +K to address the padded array
+            ang = np.mod(coords[1, :], float(no)) + K  # [K, no+K)
+            coords[1, :] = ang
+
+            # Now sample the padded array; 'nearest' mode is fine thanks to explicit padding
+            sampled = map_coordinates(
+                w_pad, coords, order=order, mode="nearest", cval=fill_value, prefilter=True
+            ).reshape(n_pixels, n_pixels)
+
+            img = np.where(valid, sampled, fill_value)
+
+        else:
+            # ===== Bilinear (or other) without special padding =====
+            order = 1
+            coords = np.vstack([radial_index.ravel(), angular_index.ravel()])
+            eps = 1e-6
+            coords[0, :] = np.where(
+                np.isfinite(coords[0, :]),
+                np.clip(coords[0, :], 0.0 + eps, (ns - 1) - eps),
+                0.0,
+            )
+            # For non-bicubic, SciPy's mode="wrap" is sufficient on the angular axis
+            sampled = map_coordinates(
+                w, coords, order=order, mode="wrap", cval=fill_value, prefilter=True
+            ).reshape(n_pixels, n_pixels)
+            img = np.where(valid, sampled, fill_value)
+
     except Exception:
-        # bilinear fallback
+        # ---- Vectorized bilinear fallback with explicit angular wrap ----
         r_idx = np.floor(radial_index).astype(np.int64)
         t_idx = np.floor(angular_index).astype(np.int64)
-        r_idx = np.clip(r_idx, 0, ns-2)
+        r_idx = np.clip(r_idx, 0, ns - 2)
         t0 = np.mod(t_idx, no)
-        t1 = np.mod(t_idx+1, no)
+        t1 = np.mod(t_idx + 1, no)
         tr = np.clip(radial_index - r_idx, 0.0, 1.0)
         ta = np.clip(angular_index - t_idx, 0.0, 1.0)
         f00 = w[r_idx,     t0]
         f01 = w[r_idx,     t1]
-        f10 = w[r_idx+1,   t0]
-        f11 = w[r_idx+1,   t1]
+        f10 = w[r_idx + 1, t0]
+        f11 = w[r_idx + 1, t1]
         g0 = (1.0 - ta) * f00 + ta * f01
         g1 = (1.0 - ta) * f10 + ta * f11
         img = (1.0 - tr) * g0 + tr * g1
