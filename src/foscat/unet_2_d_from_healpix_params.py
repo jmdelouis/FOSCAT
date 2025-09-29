@@ -201,60 +201,69 @@ class PlanarUNet(nn.Module):
         return torch.cat(outs, dim=0)
 
     @torch.no_grad()
-    def predict(
-            self,
-            x: torch.Tensor,
-            batch_size: int = 8,
-            *,
-            amp: bool = False,
-            out_device: Optional[str] = 'cpu',
-            out_dtype: Literal['float32','float16'] = 'float32',
-            show_pbar: bool = False,
-    ) -> torch.Tensor:
-        """Memory-safe prediction.
-        - Streams mini-batches with torch.inference_mode() and optional AMP.
-        - Moves outputs to `out_device` (default CPU) to **free GPU memory**.
-        - Avoids keeping computation graph and GPU tensors around.
-        """
-        self.eval()
-        out_list = []
-        x = x if torch.is_tensor(x) else torch.as_tensor(x)
-        n = x.shape[0]
-        dtype_map = {'float32': torch.float32, 'float16': torch.float16}
-        out_dtype_t = dtype_map[out_dtype]
-        
-        
-        use_cuda = self.device.type == 'cuda'
-        if use_cuda:
-            torch.backends.cudnn.benchmark = True
+def predict(
+        self,
+        x: torch.Tensor,
+        batch_size: int = 8,
+        *,
+        amp: bool = False,
+        out_device: Optional[str] = 'cpu',
+        out_dtype: Literal['float32','float16'] = 'float32',
+        show_pbar: bool = False,
+) -> torch.Tensor:
+    """Memory-safe prediction.
+    - Streams mini-batches avec torch.inference_mode() + AMP optionnel.
+    - Déplace chaque batch de sorties sur `out_device` (CPU par défaut) pour libérer la VRAM.
+    - Vérifie et explicite les erreurs de shape.
+    """
+    self.eval()
 
-            
-            from math import ceil
-            nb = ceil(n / batch_size)
-            rng = range(0, n, batch_size)
-            if show_pbar:
-                try:
-                    from tqdm import tqdm # type: ignore
-                    rng = tqdm(rng, total=nb, desc='predict')
-                except Exception:
-                    pass
+    # --- checks & normalisation d'entrée ---
+    x = x if torch.is_tensor(x) else torch.as_tensor(x)
+    if x.ndim != 4:
+        raise ValueError(f"predict expects (N,C,H,W), got {tuple(getattr(x,'shape',()))}")
+    if x.shape[1] != self.n_chan_in:
+        raise ValueError(f"predict expected {self.n_chan_in} channels, got {x.shape[1]}")
+    n = int(x.shape[0])
+    if n == 0:
+        H, W = int(x.shape[-2]), int(x.shape[-1])
+        return torch.empty((0, self.out_channels, H, W), device=out_device or self.device)
 
+    # --- préparation ---
+    dtype_map = {'float32': torch.float32, 'float16': torch.float16}
+    out_dtype_t = dtype_map[out_dtype]
+    use_cuda = (self.device.type == 'cuda')
+    if use_cuda:
+        torch.backends.cudnn.benchmark = True
 
-        with torch.inference_mode():
-            autocast_ctx = (
-                torch.cuda.amp.autocast() if (amp and use_cuda) else nullcontext()
-            )
-            for i in rng:
-                xb = x[i:i+batch_size]
-                xb = xb.to(self.device, dtype=self.dtype, non_blocking=True)
-                with autocast_ctx:
-                    yb = self.forward(xb)
-                # Move to out_device to free VRAM
-                if out_device is not None:
-                    yb = yb.to(out_device, dtype=out_dtype_t)
-                else:
-                    yb = yb.to(dtype=out_dtype_t)
-        return torch.cat(out_list, dim=0)
+    from math import ceil
+    nb = ceil(n / batch_size)
+    rng = range(0, n, batch_size)
+    if show_pbar:
+        try:
+            from tqdm import tqdm  # type: ignore
+            rng = tqdm(rng, total=nb, desc='predict')
+        except Exception:
+            pass
+
+    # --- inférence batch par batch ---
+    out_list: List[torch.Tensor] = []
+    with torch.inference_mode():
+        ctx = (torch.cuda.amp.autocast() if (amp and use_cuda) else nullcontext())
+        for i in rng:
+            xb = x[i:i+batch_size].to(self.device, dtype=self.dtype, non_blocking=True)
+            with ctx:
+                yb = self.forward(xb)
+            # Déplacer la sortie vers l'appareil voulu (CPU par défaut)
+            yb = yb.to(out_device, dtype=out_dtype_t) if out_device is not None else yb.to(dtype=out_dtype_t)
+            out_list.append(yb)
+            del xb, yb
+            if use_cuda:
+                torch.cuda.empty_cache()
+
+    if not out_list:
+        raise RuntimeError(f"predict produced no outputs; check input shape {tuple(x.shape)} and batch_size={batch_size}")
+    return torch.cat(out_list, dim=0)
 
 # -----------------------------
 # Helpers
