@@ -222,6 +222,114 @@ def _pad_to_match(x: torch.Tensor, H: int, W: int) -> torch.Tensor:
 
 
 # -----------------------------
+# Training utilities (mirror of Healpix fit)
+# -----------------------------
+from typing import Union
+import numpy as np
+from torch.utils.data import DataLoader, TensorDataset
+
+def fit(
+        model: nn.Module,
+        x_train: Union[torch.Tensor, np.ndarray],
+        y_train: Union[torch.Tensor, np.ndarray],
+        *,
+        n_epoch: int = 10,
+        view_epoch: int = 10,
+        batch_size: int = 16,
+        lr: float = 1e-3,
+        weight_decay: float = 0.0,
+        clip_grad_norm: Optional[float] = None,
+        verbose: bool = True,
+        optimizer: Literal['ADAM', 'LBFGS'] = 'ADAM',
+    ) -> dict:
+    """Training loop *miroir* de `healpix_unet_torch.fit`, adapté aux images 2D.
+
+    - Entrées fixes: tensors/ndarrays de même taille (B, C, H, W) avec H=3*nside, W=4*nside
+    - Perte: MSE (regression) / BCE(BCEWithLogits si final_activation='none') / CrossEntropy (multiclasses)
+    - Optimiseur: ADAM ou LBFGS avec closure
+    - Logs: renvoie {"loss": history}
+    """
+    device = next(model.parameters()).device
+    model.to(device)
+
+    # ---- DataLoader
+    x_t = torch.as_tensor(x_train, dtype=torch.float32, device=device)
+    y_is_class = (getattr(model, 'task', 'regression') != 'regression' and getattr(model, 'out_channels', 1) > 1)
+    y_dtype = torch.long if y_is_class and (not torch.is_tensor(y_train) or y_train.ndim == x_t.ndim - 1) else torch.float32
+    y_t = torch.as_tensor(y_train, dtype=y_dtype, device=device)
+
+    ds = TensorDataset(x_t, y_t)
+    loader = DataLoader(ds, batch_size=batch_size, shuffle=True, drop_last=False)
+
+    # ---- Loss
+    if getattr(model, 'task', 'regression') == 'regression':
+        criterion = nn.MSELoss(reduction='mean')
+        seg_multiclass = False
+    else:
+        if getattr(model, 'out_channels', 1) == 1:
+            criterion = nn.BCEWithLogitsLoss() if getattr(model, 'final_activation', 'none') == 'none' else nn.BCELoss()
+            seg_multiclass = False
+        else:
+            criterion = nn.CrossEntropyLoss()
+            seg_multiclass = True
+
+    # ---- Optim
+    if optimizer.upper() == 'ADAM':
+        optim = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+        outer, inner = n_epoch, 1
+    elif optimizer.upper() == 'LBFGS':
+        optim = torch.optim.LBFGS(model.parameters(), lr=lr, max_iter=20, history_size=50, line_search_fn='strong_wolfe')
+        outer, inner = max(1, n_epoch // 20), 20
+    else:
+        raise ValueError("optimizer must be 'ADAM' or 'LBFGS'")
+
+    # ---- Train
+    history: List[float] = []
+    model.train()
+
+    for epoch in range(outer):
+        for _ in range(inner):
+            epoch_loss, n_samples = 0.0, 0
+            for xb, yb in loader:
+                xb = xb.to(device, dtype=torch.float32, non_blocking=True)
+                yb = yb.to(device, non_blocking=True)
+
+                if isinstance(optim, torch.optim.LBFGS):
+                    def closure():
+                        optim.zero_grad(set_to_none=True)
+                        preds = model(xb)
+                        if seg_multiclass:
+                            loss = criterion(preds, yb)
+                        else:
+                            loss = criterion(preds, yb)
+                        loss.backward()
+                        return loss
+                    loss_val = float(optim.step(closure).item())
+                else:
+                    optim.zero_grad(set_to_none=True)
+                    preds = model(xb)
+                    if seg_multiclass:
+                        loss = criterion(preds, yb)
+                    else:
+                        loss = criterion(preds, yb)
+                    loss.backward()
+                    if clip_grad_norm is not None:
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad_norm)
+                    optim.step()
+                    loss_val = float(loss.item())
+
+                epoch_loss += loss_val * xb.shape[0]
+                n_samples  += xb.shape[0]
+
+            epoch_loss /= max(1, n_samples)
+            history.append(epoch_loss)
+            if verbose and ((len(history) % view_epoch == 0) or (len(history) == 1)):
+                print(f"[epoch {len(history)}] loss={epoch_loss:.6f}")
+
+    return {"loss": history}
+
+
+# -----------------------------
 # Minimal smoke test
 # -----------------------------
 if __name__ == "__main__":
