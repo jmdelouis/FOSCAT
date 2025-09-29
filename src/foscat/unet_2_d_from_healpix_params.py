@@ -191,15 +191,24 @@ class PlanarUNet(nn.Module):
         return y
 
     @torch.no_grad()
+    def predict(self, x: torch.Tensor, batch_size: int = 8) -> torch.Tensor:
+        self.eval()
+        outs = []
+        for i in range(0, x.shape[0], batch_size):
+            xb = x[i:i+batch_size]
+            outs.append(self.forward(xb))
+        return torch.cat(outs, dim=0)
+
+    @torch.no_grad()
     def predict(
-        self,
-        x: torch.Tensor,
-        batch_size: int = 8,
-        *,
-        amp: bool = False,
-        out_device: Optional[str] = 'cpu',
-        out_dtype: Literal['float32','float16'] = 'float32',
-        show_pbar: bool = False,
+            self,
+            x: torch.Tensor,
+            batch_size: int = 8,
+            *,
+            amp: bool = False,
+            out_device: Optional[str] = 'cpu',
+            out_dtype: Literal['float32','float16'] = 'float32',
+            show_pbar: bool = False,
     ) -> torch.Tensor:
         """Memory-safe prediction.
         - Streams mini-batches with torch.inference_mode() and optional AMP.
@@ -212,20 +221,23 @@ class PlanarUNet(nn.Module):
         n = x.shape[0]
         dtype_map = {'float32': torch.float32, 'float16': torch.float16}
         out_dtype_t = dtype_map[out_dtype]
-
+        
+        
         use_cuda = self.device.type == 'cuda'
         if use_cuda:
             torch.backends.cudnn.benchmark = True
 
-        from math import ceil
-        nb = ceil(n / batch_size)
-        rng = range(0, n, batch_size)
-        if show_pbar:
-            try:
-                from tqdm import tqdm  # type: ignore
-                rng = tqdm(rng, total=nb, desc='predict')
-            except Exception:
-                pass
+            
+            from math import ceil
+            nb = ceil(n / batch_size)
+            rng = range(0, n, batch_size)
+            if show_pbar:
+                try:
+                    from tqdm import tqdm # type: ignore
+                    rng = tqdm(rng, total=nb, desc='predict')
+                except Exception:
+                    pass
+
 
         with torch.inference_mode():
             autocast_ctx = (
@@ -241,13 +253,7 @@ class PlanarUNet(nn.Module):
                     yb = yb.to(out_device, dtype=out_dtype_t)
                 else:
                     yb = yb.to(dtype=out_dtype_t)
-                out_list.append(yb)
-                del xb
-                if use_cuda:
-                    torch.cuda.empty_cache()
         return torch.cat(out_list, dim=0)
-
-
 
 # -----------------------------
 # Helpers
@@ -278,85 +284,11 @@ def _pad_to_match(x: torch.Tensor, H: int, W: int) -> torch.Tensor:
 
 
 # -----------------------------
-# Inference utilities
-# -----------------------------
-from contextlib import nullcontext as _nullcontext
-from math import ceil
-
-@torch.no_grad()
-def predict_iter(
-    model: nn.Module,
-    x: torch.Tensor | np.ndarray,
-    *,
-    batch_size: int = 8,
-    amp: bool = False,
-    out_device: str = 'cpu',
-    out_dtype: Literal['float32','float16'] = 'float32',
-):
-    """Generator that yields predictions batch-by-batch to avoid big concatenations.
-    Useful when outputs are huge (e.g., large HxW or many classes).
-    """
-    model.eval()
-    x = x if torch.is_tensor(x) else torch.as_tensor(x)
-    n = x.shape[0]
-    use_cuda = next(model.parameters()).is_cuda
-    dtype_map = {'float32': torch.float32, 'float16': torch.float16}
-    out_dtype_t = dtype_map[out_dtype]
-    if use_cuda:
-        torch.backends.cudnn.benchmark = True
-
-    with torch.inference_mode():
-        autocast_ctx = (
-            torch.cuda.amp.autocast() if (amp and use_cuda) else _nullcontext()
-        )
-        for i in range(0, n, batch_size):
-            xb = x[i:i+batch_size]
-            xb = xb.to(next(model.parameters()).device, dtype=next(model.parameters()).dtype, non_blocking=True)
-            with autocast_ctx:
-                yb = model(xb)
-            yb = yb.to(out_device, dtype=out_dtype_t)
-            yield yb.cpu() if out_device == 'cpu' else yb
-            del xb, yb
-            if use_cuda:
-                torch.cuda.empty_cache()
-
-# -----------------------------
 # Training utilities (mirror of Healpix fit)
 # -----------------------------
 from typing import Union
 import numpy as np
 from torch.utils.data import DataLoader, TensorDataset
-
-
-def _prepare_targets(y: torch.Tensor, *, seg_multiclass: bool, n_classes: int) -> torch.Tensor:
-    """Normalize target shapes/dtypes for losses.
-    - Multiclass CE expects (N,H,W) with dtype long and values in [0, C-1].
-    - Binary BCE/BCEWithLogits expects (N,1,H,W) float in [0,1].
-    Accepts the following forms and converts accordingly:
-      * (N,1,H,W) -> squeeze to (N,H,W) and cast long (clamped)
-      * (N,C,H,W) one-hot/proba -> argmax along dim=1
-      * (N,H,W) -> cast long
-    """
-    if seg_multiclass:
-        # Accept (N,C,H,W) one-hot/proba
-        if y.ndim == 4 and y.shape[1] == n_classes:
-            y = y.argmax(dim=1)
-        # Accept (N,1,H,W)
-        if y.ndim == 4 and y.shape[1] == 1:
-            y = y[:, 0]
-        # Expect (N,H,W) now
-        if y.ndim != 3:
-            raise RuntimeError(f"For multiclass targets, expected (N,H,W), got shape {tuple(y.shape)}")
-        if y.dtype != torch.long:
-            y = y.long().clamp_(0, max(0, n_classes-1))
-        return y
-    else:
-        # Binary/Regression path keeps shape (N,1,H,W)
-        if y.ndim == 3:
-            y = y.unsqueeze(1)
-        if y.ndim != 4 or y.shape[1] != 1:
-            raise RuntimeError(f"For binary/regression targets, expected (N,1,H,W), got {tuple(y.shape)}")
-        return y
 
 def fit(
         model: nn.Module,
@@ -384,10 +316,12 @@ def fit(
 
     # ---- DataLoader
     x_t = torch.as_tensor(x_train, dtype=torch.float32, device=device)
-    y_t = torch.as_tensor(y_train, device=device)
+    y_is_class = (getattr(model, 'task', 'regression') != 'regression' and getattr(model, 'out_channels', 1) > 1)
+    y_dtype = torch.long if y_is_class and (not torch.is_tensor(y_train) or y_train.ndim == x_t.ndim - 1) else torch.float32
+    y_t = torch.as_tensor(y_train, dtype=y_dtype, device=device)
 
     ds = TensorDataset(x_t, y_t)
-    loader = DataLoader(ds, batch_size=batch_size, shuffle=True, drop_last=False) = DataLoader(ds, batch_size=batch_size, shuffle=True, drop_last=False)
+    loader = DataLoader(ds, batch_size=batch_size, shuffle=True, drop_last=False)
 
     # ---- Loss
     if getattr(model, 'task', 'regression') == 'regression':
@@ -395,11 +329,9 @@ def fit(
         seg_multiclass = False
     else:
         if getattr(model, 'out_channels', 1) == 1:
-            # Binary segmentation
             criterion = nn.BCEWithLogitsLoss() if getattr(model, 'final_activation', 'none') == 'none' else nn.BCELoss()
             seg_multiclass = False
         else:
-            # Multiclass segmentation
             criterion = nn.CrossEntropyLoss()
             seg_multiclass = True
 
@@ -424,21 +356,24 @@ def fit(
                 xb = xb.to(device, dtype=torch.float32, non_blocking=True)
                 yb = yb.to(device, non_blocking=True)
 
-                # Normalize targets to what criterion expects
-                yb = _prepare_targets(yb, seg_multiclass=seg_multiclass, n_classes=getattr(model, 'out_channels', 1))
-
                 if isinstance(optim, torch.optim.LBFGS):
                     def closure():
                         optim.zero_grad(set_to_none=True)
                         preds = model(xb)
-                        loss = criterion(preds, yb)
+                        if seg_multiclass:
+                            loss = criterion(preds, yb)
+                        else:
+                            loss = criterion(preds, yb)
                         loss.backward()
                         return loss
                     loss_val = float(optim.step(closure).item())
                 else:
                     optim.zero_grad(set_to_none=True)
                     preds = model(xb)
-                    loss = criterion(preds, yb)
+                    if seg_multiclass:
+                        loss = criterion(preds, yb)
+                    else:
+                        loss = criterion(preds, yb)
                     loss.backward()
                     if clip_grad_norm is not None:
                         torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad_norm)
@@ -454,7 +389,6 @@ def fit(
                 print(f"[epoch {len(history)}] loss={epoch_loss:.6f}")
 
     return {"loss": history}
-
 
 
 # -----------------------------
