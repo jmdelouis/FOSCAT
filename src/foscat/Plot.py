@@ -1155,7 +1155,7 @@ def plot_wave(wave,title="spectrum",unit="Amplitude",cmap="viridis"):
     plt.xlabel(r"$k_x$ [cycles / km]")
     plt.ylabel(r"$k_y$ [cycles / km]")
     plt.title(title)
-
+    
 def lonlat_edges_from_ref(shape, ref_lon, ref_lat, dlon, dlat, anchor="center"):
     """
     Build lon/lat *edges* (H+1, W+1) for a regular, axis-aligned grid.
