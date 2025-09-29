@@ -3,6 +3,7 @@ from typing import List, Optional, Literal, Tuple
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from contextlib import nullcontext
 
 class PlanarUNet(nn.Module):
     """
@@ -241,7 +242,7 @@ class PlanarUNet(nn.Module):
 
         with torch.inference_mode():
             autocast_ctx = (
-                torch.cuda.amp.autocast() if (amp and use_cuda) else _nullcontext()
+                torch.cuda.amp.autocast() if (amp and use_cuda) else nullcontext()
             )
             for i in rng:
                 xb = x[i:i+batch_size]
