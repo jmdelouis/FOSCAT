@@ -4,7 +4,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
 class PlanarUNet(nn.Module):
     """
     U-Net 2D (images HxW) mirroring the parameterization of the HealpixUNet.
@@ -59,7 +58,7 @@ class PlanarUNet(nn.Module):
         self.down_type = down_type
         self.dtype = torch.float32 if dtype == 'float32' else torch.float64
         self.head_reduce = head_reduce
-
+        
         # default final activation consistent with HealpixUNet
         if final_activation is None:
             if task == 'regression':
@@ -145,7 +144,7 @@ class PlanarUNet(nn.Module):
         self.to(self.device, dtype=self.dtype)
 
     def to_tensor(self,x):
-        return self.hconv_enc[0].f.backend.bk_cast(x)
+        return torch.tensor(x,device=self.device)
     
     def to_numpy(self,x):
         if isinstance(x,np.ndarray):
