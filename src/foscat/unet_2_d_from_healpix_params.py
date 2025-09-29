@@ -144,6 +144,14 @@ class PlanarUNet(nn.Module):
 
         self.to(self.device, dtype=self.dtype)
 
+    def to_tensor(self,x):
+        return self.hconv_enc[0].f.backend.bk_cast(x)
+    
+    def to_numpy(self,x):
+        if isinstance(x,np.ndarray):
+            return x
+        return x.cpu().numpy()
+    
     # -------------------------- forward --------------------------
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """x: (B, C_in, H, W) with H=3*in_nside, W=4*in_nside"""
