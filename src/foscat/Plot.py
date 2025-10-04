@@ -959,8 +959,9 @@ def conjugate_gradient_normal_equation(data, x0, www, all_idx,
 
         rs_new = np.dot(r, r)
 
-        if verbose and i % 50 == 0:
-            print(f"Iter {i:03d}: residual = {np.sqrt(rs_new):.3e}")
+        if verbose and i % 10 == 0:
+            v=np.mean((LP(p, www, all_idx)-data)**2)
+            print(f"Iter {i:03d}: residual = {np.sqrt(rs_new):.3e},{np.sqrt(v):.3e}")
 
         if np.sqrt(rs_new) < tol:
             if verbose:
