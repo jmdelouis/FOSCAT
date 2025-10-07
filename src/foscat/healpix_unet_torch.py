@@ -1205,7 +1205,7 @@ def fit(
             history.append(epoch_loss)
             # print every view_epoch logical step
             if verbose and ((len(history) % view_epoch == 0) or (len(history) == 1)):
-                if x_valid is noe None:
+                if x_valid is not None:
                     preds=model.predict(model.to_tensor(x_valid)).cpu().numpy()
                     valid_loss=np.mean((preds-y_valid)**2)
                     if save_model:
