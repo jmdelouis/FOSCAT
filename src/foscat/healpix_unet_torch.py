@@ -982,6 +982,9 @@ def fit(
         n_epoch: int = 10,
         view_epoch: int = 10,
         batch_size: int = 16,
+        x_valid: Union[torch.Tensor, np.ndarray, List[Union[torch.Tensor, np.ndarray]]]= None,
+        y_valid: Union[torch.Tensor, np.ndarray, List[Union[torch.Tensor, np.ndarray]]]= None,
+        save_model: bool = False,
         lr: float = 1e-3,
         weight_decay: float = 0.0,
         clip_grad_norm: Optional[float] = None,
@@ -1004,6 +1007,11 @@ def fit(
     """
     device = model.runtime_device if hasattr(model, "runtime_device") else (torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"))
     model.to(device)
+
+    if save_model:
+        assert x_valid is None, "If save_mode=True x_valid should not be None"
+        assert y_valid is None, "If save_mode=True y_valid should not be None"
+        best_valid=1E30
 
     # Detect variable-length mode
     varlen_mode = isinstance(x_train, (list, tuple))
@@ -1197,6 +1205,14 @@ def fit(
             history.append(epoch_loss)
             # print every view_epoch logical step
             if verbose and ((len(history) % view_epoch == 0) or (len(history) == 1)):
-                print(f"[epoch {len(history)}] loss={epoch_loss:.6f}")
+                if x_valid is noe None:
+                    preds=model.predict(model.to_tensor(x_valid)).cpu().numpy()
+                    valid_loss=np.mean((preds-y_valid)**2)
+                    if save_model:
+                        if best_valid>valid_loss:
+                            torch.save({"model": self.state_dict(), "cfg": CFG}, os.path.join(CFG["save_dir"], "best.pt"))
+                    print(f"[epoch {len(history)}] loss={epoch_loss:.4f} loss_valid={valid_loss:.4f}")
+                else:
+                    print(f"[epoch {len(history)}] loss={epoch_loss:.4f}")
 
     return {"loss": history}
