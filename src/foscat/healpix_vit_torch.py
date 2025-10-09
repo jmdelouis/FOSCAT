@@ -303,6 +303,12 @@ class HealpixViT(nn.Module):
         self._foscat_device = cpu
         return cpu
 
+    def _to_numpy_ids(self, ids):
+        """Return ids as a NumPy array on CPU (handles torch.Tensor on CUDA)."""
+        if torch.is_tensor(ids):
+            return ids.detach().cpu().numpy()
+        return np.asarray(ids)
+
     # ---------------- helpers ----------------
     def _as_tensor_batch(self, x):
         if isinstance(x, list):
@@ -328,7 +334,9 @@ class HealpixViT(nn.Module):
             raise ValueError("Input must be (B, Cin, Npix)")
         if x.shape[1] != self.n_chan_in:
             raise ValueError(f"Expected {self.n_chan_in} channels, got {x.shape[1]}")
-
+        if runtime_ids is not None:
+            runtime_ids = self._to_numpy_ids(runtime_ids)
+            
         x = x.to(self.runtime_device)
 
         # -------- Patch embedding Cin -> C_fine --------
@@ -351,9 +359,7 @@ class HealpixViT(nn.Module):
         for i, hc in enumerate(self.hconv_levels):
             # save skip BEFORE going down (channels = C_i, grid = current level)
             skips.append(self._as_tensor_batch(l_data))
-            ids_list.append(
-                        np.asarray(l_cell_ids.cpu()) if torch.is_tensor(l_cell_ids) else np.asarray(l_cell_ids)
-                        )
+            ids_list.append(self._to_numpy_ids(l_cell_ids))
 
             # conv to next channels C_{i+1} at same grid
             w_enc = self.enc_w[i]
@@ -407,7 +413,8 @@ class HealpixViT(nn.Module):
             ids_chain.append(self.f.backend.to_numpy(_next))
             nside_tmp //= 2
 
-        tok_ids_np = token_ids if isinstance(token_ids, np.ndarray) else np.asarray(token_ids)
+        tok_ids_np = self._to_numpy_ids(token_ids)
+        
         assert tok_feat.shape[-1] == tok_ids_np.shape[0], "Token count mismatch."
         assert np.array_equal(tok_ids_np, ids_chain[-1]), "Token ids mismatch with runtime chain."
 
