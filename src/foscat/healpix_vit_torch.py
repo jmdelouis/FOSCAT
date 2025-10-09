@@ -12,7 +12,7 @@ import foscat.scat_cov as sc
 import foscat.SphericalStencil as ho
 
 
-class HealpixViTVarLevels(nn.Module):
+class HealpixViT(nn.Module):
     """
     HEALPix Vision Transformer (Foscat-based) with *variable channel widths per level*
     and a U-Net-like spherical decoder.
