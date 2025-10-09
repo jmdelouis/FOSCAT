@@ -351,7 +351,9 @@ class HealpixViT(nn.Module):
         for i, hc in enumerate(self.hconv_levels):
             # save skip BEFORE going down (channels = C_i, grid = current level)
             skips.append(self._as_tensor_batch(l_data))
-            ids_list.append(np.asarray(l_cell_ids))
+            ids_list.append(
+                        np.asarray(l_cell_ids.cpu()) if torch.is_tensor(l_cell_ids) else np.asarray(l_cell_ids)
+                        )
 
             # conv to next channels C_{i+1} at same grid
             w_enc = self.enc_w[i]
