@@ -1487,7 +1487,7 @@ class FoCUS:
                 else:
                     print('compute kernel')
                     if l_kernel == 5:
-                        pw = 0.75
+                        pw = 0.5
                         pw2 = 1.0
                         threshold = 2e-5
 
@@ -1526,10 +1526,10 @@ class FoCUS:
                     wwi=(np.exp(-pw2*(xx**2+(xx.T)**2))*np.sin(pw*xx*np.pi)).reshape(1,1,self.KERNELSZ*self.KERNELSZ)
                     print(wwi.mean())
                     wwi-=wwi.mean()
-                    amp=(abs(wwr+1J*wwi)).sum()
+                    amp=self.KERNELSZ*self.KERNELSZ*np.std(wwr+1J*wwi)
                     
-                    wwr/=np.std(wwr)
-                    wwi/=np.std(wwi)
+                    wwr/=amp
+                    wwi/=amp
                     
                     wwr=hconvol.to_tensor(wwr)
                     wwi=hconvol.to_tensor(wwi)
