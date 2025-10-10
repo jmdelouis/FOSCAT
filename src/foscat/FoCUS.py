@@ -1527,9 +1527,9 @@ class FoCUS:
                     print(wwi.mean())
                     wwi-=wwi.mean()
                     amp=(abs(wwr+1J*wwi)).sum()
-                    print(amp)
-                    wwr/=amp
-                    wwi/=amp
+                    
+                    wwr/=np.std(wwr)
+                    wwi/=np.std(wwi)
                     
                     wavr,indice,mshape=hconvol.make_matrix(wwr)
                     wavi,indice,mshape=hconvol.make_matrix(wwi)
