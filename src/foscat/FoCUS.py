@@ -1260,7 +1260,7 @@ class FoCUS:
                         ))
                     '''
                     tmp = self.read_index(
-                        "%s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN%d.fst"
+                        "%s/FOSCATxxx_%s_W%d_%d_%d_PIDX-SPIN%d.fst"
                         % (
                             self.TEMPLATE_PATH,
                             TMPFILE_VERSION,
@@ -1485,10 +1485,11 @@ class FoCUS:
                                     )
                     
                 else:
+                    print('compute kernel')
                     if l_kernel == 5:
-                        pw = 0.5
+                        pw = 0.75
                         pw2 = 0.5
-                        threshold = 2e-4
+                        threshold = 2e-5
 
                     elif l_kernel == 3:
                         pw = 1.0 / np.sqrt(2)
@@ -1496,9 +1497,9 @@ class FoCUS:
                         threshold = 1e-3
 
                     elif l_kernel == 7:
-                        pw = 0.5
+                        pw = 0.75
                         pw2 = 0.25
-                        threshold = 4e-5
+                        threshold = 2e-5
                         
                     import foscat.SphericalStencil as hs
                     import torch
