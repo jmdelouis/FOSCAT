@@ -255,10 +255,12 @@ class HealpixViT(nn.Module):
         if self.task == "global":
             self.global_head = nn.Linear(self.embed_dim, self.out_channels)
         else:
+            self.C_fine = self.level_dims[0]
+
             if self.out_channels % self.G != 0:
                 raise ValueError(f"out_channels={self.out_channels} must be divisible by G={self.G}")
-            out_g = self.out_channels // self.G
-            self.head_w = nn.Parameter(torch.empty(self.out_channels, out_g, self.KERNELSZ * self.KERNELSZ))
+            out_g = self.C_fine//self.G
+            self.head_w = nn.Parameter(torch.empty(out_g, self.out_channels, self.KERNELSZ * self.KERNELSZ))
             nn.init.kaiming_uniform_(self.head_w.view(self.out_channels * out_g, -1), a=np.sqrt(5))
             self.head_bn = (nn.GroupNorm(num_groups=min(8, self.out_channels if self.out_channels > 1 else 1),
                                          num_channels=self.out_channels)
