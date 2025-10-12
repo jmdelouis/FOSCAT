@@ -1487,8 +1487,8 @@ class FoCUS:
                 else:
                     print('compute kernel')
                     if l_kernel == 5:
-                        pw = 0.25
-                        pw2 = 2.0
+                        pw = 0.5
+                        pw2 = 0.5
                         threshold = 2e-5
 
                     elif l_kernel == 3:
