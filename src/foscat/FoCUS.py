@@ -1493,7 +1493,7 @@ class FoCUS:
 
                     elif l_kernel == 3:
                         pw = 1.0 / np.sqrt(2)
-                        pw2 = 2.0
+                        pw2 = 1.0
                         threshold = 1e-3
 
                     elif l_kernel == 7:
