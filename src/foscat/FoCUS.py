@@ -1521,6 +1521,7 @@ class FoCUS:
                     xx=np.tile(np.arange(self.KERNELSZ)-self.KERNELSZ//2,self.KERNELSZ).reshape(self.KERNELSZ*self.KERNELSZ)
                     
                     wwr=(np.exp(-pw2*(xx**2+(xx.T)**2))*np.cos(pw*xx*np.pi)).reshape(1,1,self.KERNELSZ*self.KERNELSZ)
+                    print(xx.reshape(self.KERNELSZ,self.KERNELSZ))
                     print(wwr.reshape(self.KERNELSZ,self.KERNELSZ))
                     print(wwr.mean())
                     wwr-=wwr.mean()
