@@ -36,7 +36,7 @@ class FoCUS:
             mpi_rank=0
     ):
 
-        self.__version__ = "2025.10.1"
+        self.__version__ = "2025.10.2"
         # P00 coeff for normalization for scat_cov
         self.TMPFILE_VERSION = TMPFILE_VERSION
         self.P1_dic = None
@@ -1260,7 +1260,7 @@ class FoCUS:
                         ))
                     '''
                     tmp = self.read_index(
-                        "%s/FOSCATxxx_%s_W%d_%d_%d_PIDX-SPIN%d.fst"
+                        "%s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN%d.fst"
                         % (
                             self.TEMPLATE_PATH,
                             TMPFILE_VERSION,
