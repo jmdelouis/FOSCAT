@@ -6,7 +6,7 @@ import numpy as np
 import foscat.HealSpline as HS
 from scipy.interpolate import griddata
 
-TMPFILE_VERSION = "V9_0"
+TMPFILE_VERSION = "V10_0"
 
 
 class FoCUS:
@@ -1487,7 +1487,7 @@ class FoCUS:
                 else:
                     print('compute kernel')
                     if l_kernel == 5:
-                        pw = 0.5
+                        pw = 0.75
                         pw2 = 0.5
                         threshold = 2e-5
 
