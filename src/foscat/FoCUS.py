@@ -1488,7 +1488,7 @@ class FoCUS:
                     print('compute kernel')
                     if l_kernel == 5:
                         pw = 0.5
-                        pw2 = 0.5
+                        pw2 = 2.0
                         threshold = 2e-5
 
                     elif l_kernel == 3:
@@ -1521,6 +1521,7 @@ class FoCUS:
                     xx=np.tile(np.arange(self.KERNELSZ)-self.KERNELSZ//2,self.KERNELSZ).reshape(self.KERNELSZ*self.KERNELSZ)
                     
                     wwr=(np.exp(-pw2*(xx**2+(xx.T)**2))*np.cos(pw*xx*np.pi)).reshape(1,1,self.KERNELSZ*self.KERNELSZ)
+                    print(wwr.reshape(KERNELSZ,KERNELSZ))
                     print(wwr.mean())
                     wwr-=wwr.mean()
                     wwi=(np.exp(-pw2*(xx**2+(xx.T)**2))*np.sin(pw*xx*np.pi)).reshape(1,1,self.KERNELSZ*self.KERNELSZ)
