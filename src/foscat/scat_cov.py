@@ -2636,7 +2636,7 @@ class funct(FOC.FoCUS):
         if mask is not None:
             if self.use_2D:
                 if (
-                    image1.shape[-2] != mask.shape[-1]
+                    image1.shape[-2] != mask.shape[-2]
                     or image1.shape[-1] != mask.shape[-1]
                 ):
                     print(
