@@ -350,7 +350,7 @@ class scat_cov:
                             self.backend.bk_flattenR(self.S3[0]),
                             self.backend.bk_flattenR(self.S4[0]),
                         ],
-                        0,
+                       0,
                     )
                 else:
                     tmp = self.backend.bk_concat(

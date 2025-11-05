@@ -28,8 +28,8 @@ class FoCUS:
             use_2D=False,
             use_1D=False,
             return_data=False,
-            JmaxDelta=0,
             DODIV=False,
+            use_median=False,
             InitWave=None,
             silent=True,
             mpi_size=1,
@@ -50,6 +50,7 @@ class FoCUS:
         self.mpi_rank = mpi_rank
         self.return_data = return_data
         self.silent = silent
+        self.use_median = use_median
 
         self.kernel_smooth = {}
         self.padding_smooth = {}
@@ -89,13 +90,6 @@ class FoCUS:
         self.nlog = 0
         self.padding = padding
 
-        if JmaxDelta != 0:
-            print(
-                "OPTION JmaxDelta is not avialable anymore after version 3.6.2. Please use Jmax option in eval function"
-            )
-            return None
-
-        self.OSTEP = JmaxDelta
         self.use_2D = use_2D
         self.use_1D = use_1D
 
@@ -673,13 +667,20 @@ class FoCUS:
             tim = self.backend.bk_reshape(
                 self.backend.bk_cast(im), [ndata, npix, npiy, 1]
             )
+            '''
             tim = self.backend.bk_reshape(
                 tim[:, 0 : 2 * (npix // 2), 0 : 2 * (npiy // 2), :],
                 [ndata, npix // 2, 2, npiy // 2, 2, 1],
             )
-
-            res = self.backend.bk_reduce_sum(self.backend.bk_reduce_sum(tim, 4), 2) / 4
-
+            
+            #res = self.backend.bk_reduce_sum(self.backend.bk_reduce_sum(tim, 4), 2) / 4
+            '''
+            
+            if self.use_median:
+                res = self.backend.downsample_median_2x2(tim)
+            else:
+                res = self.backend.downsample_mean_2x2(tim)
+    
             if len(ishape) == 2:
                 return (
                     self.backend.bk_reshape(
@@ -711,13 +712,26 @@ class FoCUS:
                 self.backend.bk_cast(im), [ndata, npix // 2, 2]
             )
 
-            res = self.backend.bk_reduce_mean(tim, -1)
+            if self.use_median:
+                res=self.backend.bk_reduce_median(tim,axis=-1)
+            else:
+                res=self.backend.bk_reduce_mean(tim,axis=-1)
 
             return self.backend.bk_reshape(res, ishape[0:-1] + [npix // 2]), None
 
         else:
             shape = list(im.shape)
-            if max_poll:
+            if self.use_median:
+                if cell_ids is not None:
+                    sim, new_cell_ids = self.backend.binned_mean(im, cell_ids,reduce='median')
+                    return sim, new_cell_ids
+            
+                return self.backend.bk_reduce_median(
+                    self.backend.bk_reshape(im, shape[0:-1]+[shape[-1]//4,4]), axis=-1
+                ),None
+            
+            elif max_poll:
+            
                 if cell_ids is not None:
                     sim, new_cell_ids = self.backend.binned_mean(im, cell_ids,reduce='max')
                     return sim, new_cell_ids
@@ -2185,17 +2199,21 @@ class FoCUS:
             #    mtmp = l_mask[:,self.KERNELSZ // 2 : -self.KERNELSZ // 2,self.KERNELSZ // 2 : -self.KERNELSZ // 2,:]
             #    vtmp = l_x[:,self.KERNELSZ // 2 : -self.KERNELSZ // 2,self.KERNELSZ // 2 : -self.KERNELSZ // 2,:]
 
-            v1 = self.backend.bk_reduce_sum(
-                self.backend.bk_reduce_sum(mtmp * vtmp, axis=-1), -1
-            )
-            v2 = self.backend.bk_reduce_sum(
-                self.backend.bk_reduce_sum(mtmp * vtmp * vtmp, axis=-1), -1
-            )
-            vh = self.backend.bk_reduce_sum(
-                self.backend.bk_reduce_sum(mtmp, axis=-1), -1
-            )
+            if self.use_median:
+                res,res2  = self.backend.bk_masked_median_2d_weiszfeld(vtmp, mtmp)
+            else:
+                v1 = self.backend.bk_reduce_sum(
+                    self.backend.bk_reduce_sum(mtmp * vtmp, axis=-1), -1
+                )
+                v2 = self.backend.bk_reduce_sum(
+                    self.backend.bk_reduce_sum(mtmp * vtmp * vtmp, axis=-1), -1
+                )
+                vh = self.backend.bk_reduce_sum(
+                    self.backend.bk_reduce_sum(mtmp, axis=-1), -1
+                )
 
-            res = v1 / vh
+                res = v1 / vh
+                res2= v2 / vh
 
             oshape = [x.shape[0]] + [mask.shape[0]]
             if len(x.shape) > 3:
@@ -2204,22 +2222,26 @@ class FoCUS:
                 oshape = oshape + [1]
                 
             if calc_var:
+                if self.use_median:
+                    vh = self.backend.bk_reduce_sum(
+                        self.backend.bk_reduce_sum(mtmp, axis=-1), -1
+                    )
                 if self.backend.bk_is_complex(vtmp):
                     res2 = self.backend.bk_sqrt(
                         (
                             (
-                                self.backend.bk_real(v2) / self.backend.bk_real(vh)
+                                self.backend.bk_real(res2)
                                 - self.backend.bk_real(res) * self.backend.bk_real(res)
                             )
                             + (
-                                self.backend.bk_imag(v2) / self.backend.bk_real(vh)
+                                self.backend.bk_imag(res2)
                                 - self.backend.bk_imag(res) * self.backend.bk_imag(res)
                             )
                         )
                         / self.backend.bk_real(vh)
                     )
                 else:
-                    res2 = self.backend.bk_sqrt((v2 / vh - res * res) / (vh))
+                    res2 = self.backend.bk_sqrt((res2 - res * res) / (vh))
 
                 res = self.backend.bk_reshape(res, oshape)
                 res2 = self.backend.bk_reshape(res2, oshape)
@@ -2231,11 +2253,16 @@ class FoCUS:
         elif self.use_1D:
             mtmp = l_mask
             vtmp = l_x
-            v1 = self.backend.bk_reduce_sum(l_mask * vtmp, axis=-1)
-            v2 = self.backend.bk_reduce_sum(l_mask * vtmp * vtmp, axis=-1)
-            vh = self.backend.bk_reduce_sum(l_mask , axis=-1)
+            
+            if self.use_median:
+                res,res2  = self.backend.bk_masked_median(l_x, l_mask)
+            else:
+                v1 = self.backend.bk_reduce_sum(l_mask * l_x, axis=-1)
+                v2 = self.backend.bk_reduce_sum(l_mask * l_x * l_x, axis=-1)
+                vh = self.backend.bk_reduce_sum(l_mask, axis=-1)
 
-            res = v1 / vh
+                res = v1 / vh
+                res2= v2 / vh
 
             oshape = [x.shape[0]] + [mask.shape[0]]
             if len(x.shape) > 1:
@@ -2244,35 +2271,42 @@ class FoCUS:
                 oshape = oshape + [1]
 
             if calc_var:
+                if self.use_median:
+                    vh = self.backend.bk_reduce_sum(l_mask, axis=-1)
+                    
                 if self.backend.bk_is_complex(vtmp):
                     res2 = self.backend.bk_sqrt(
                         (
                             (
-                                self.backend.bk_real(v2) / self.backend.bk_real(vh)
+                                self.backend.bk_real(res2)
                                 - self.backend.bk_real(res) * self.backend.bk_real(res)
                             )
                             + (
-                                self.backend.bk_imag(v2) / self.backend.bk_real(vh)
+                                self.backend.bk_imag(res2)
                                 - self.backend.bk_imag(res) * self.backend.bk_imag(res)
                             )
                         )
                         / self.backend.bk_real(vh)
                     )
                 else:
-                    res2 = self.backend.bk_sqrt((v2 / vh - res * res) / (vh))
+                    res2 = self.backend.bk_sqrt((res2 - res * res) / (vh))
+                    
                 res = self.backend.bk_reshape(res, oshape)
                 res2 = self.backend.bk_reshape(res2, oshape)
                 return res, res2
             else:
                 res = self.backend.bk_reshape(res, oshape)
                 return res
-
         else:
-            v1 = self.backend.bk_reduce_sum(l_mask * l_x, axis=-1)
-            v2 = self.backend.bk_reduce_sum(l_mask * l_x * l_x, axis=-1)
-            vh = self.backend.bk_reduce_sum(l_mask, axis=-1)
+            if self.use_median:
+                res,res2  = self.backend.bk_masked_median(l_x, l_mask)
+            else:
+                v1 = self.backend.bk_reduce_sum(l_mask * l_x, axis=-1)
+                v2 = self.backend.bk_reduce_sum(l_mask * l_x * l_x, axis=-1)
+                vh = self.backend.bk_reduce_sum(l_mask, axis=-1)
 
-            res = v1 / vh
+                res = v1 / vh
+                res2= v2 / vh
 
             oshape = []
             if len(shape) > 1:
@@ -2281,24 +2315,27 @@ class FoCUS:
                 oshape = [1]
                 
             oshape = oshape + [mask.shape[0]]
+
             if len(shape) > 2:
                 oshape = oshape + shape[1:-1]
             else:
                 oshape = oshape + [1]
 
             if calc_var:
+                if self.use_median:
+                    vh = self.backend.bk_reduce_sum(l_mask, axis=-1)
                 if self.backend.bk_is_complex(l_x):
                     res2 = self.backend.bk_sqrt(
                         (
-                            self.backend.bk_real(v2) / self.backend.bk_real(vh)
+                            self.backend.bk_real(res2)
                             - self.backend.bk_real(res) * self.backend.bk_real(res)
-                            + self.backend.bk_imag(v2) / self.backend.bk_real(vh)
+                            + self.backend.bk_imag(res2)
                             - self.backend.bk_imag(res) * self.backend.bk_imag(res)
                         )
                         / self.backend.bk_real(vh)
                     )
                 else:
-                    res2 = self.backend.bk_sqrt((v2 / vh - res * res) / (vh))
+                    res2 = self.backend.bk_sqrt((res2 - res * res) / (vh))
 
                 res = self.backend.bk_reshape(res, oshape)
                 res2 = self.backend.bk_reshape(res2, oshape)
