@@ -2567,9 +2567,75 @@ class funct(FOC.FoCUS):
             if k < l_nside - 1:
                 tmp, _ = self.ud_grade_2(tmp)
                 if image2 is not None:
-                    tmpi2, _ = self.ud_grade_2(tmpi)
+                    tmpi2, _ = self.ud_grade_2(tmpi2)
         return cmat, cmat2
 
+    def stat_cfft_cell_ids(self, im, image2=None, upscale=False, smooth_scale=0, spin=0, cell_ids=None):
+        """
+        Full-sky stat_cfft + per-scale slicing by cell_ids.
+        If cell_ids is None, identical to stat_cfft.
+        If provided, cell_ids must be NEST indices at the input resolution.
+        """
+        import numpy as np
+    
+        # --- 0) Cast inputs to backend tensors to avoid numpy/torch mixups
+        im_b   = self.backend.bk_cast(im)
+        img2_b = None if image2 is None else self.backend.bk_cast(image2)
+    
+        # --- 1) Compute the canonical full-sky orientation matrices (unchanged math)
+        cmat_full, cmat2_full = self.stat_cfft(
+            im_b, image2=img2_b, upscale=upscale, smooth_scale=smooth_scale, spin=spin
+        )
+    
+        # Fast path: no slicing requested
+        if cell_ids is None:
+            return cmat_full, cmat2_full
+    
+        # --- 2) Prepare the subset at the starting resolution
+        ids = np.asarray(cell_ids, dtype=np.int64)
+        if upscale:
+            # If caller asked for upscale=True, stat_cfft started at 2×nside.
+            # Expand parents to their 4 children in NEST so we slice the right resolution.
+            ids = (ids.reshape(-1, 1) * 4 + np.arange(4, dtype=np.int64)).reshape(-1)
+    
+        # Helper: slice last axis, staying on device when possible
+        def _slice_last(x, idx_np):
+            try:
+                import torch
+                if isinstance(x, torch.Tensor):
+                    return x.index_select(-1, torch.as_tensor(idx_np, device=x.device, dtype=torch.long))
+            except Exception:
+                pass
+            to_np  = getattr(self.backend, "to_numpy", lambda t: t)
+            bkcast = self.backend.bk_cast
+            return bkcast(to_np(x)[..., idx_np])
+    
+        # Helper: advance cell_ids to next coarser scale using FoCUS.ud_grade_2 mapping
+        def _coarsen_ids(curr_ids, npix_cur):
+            # Build a tiny dummy tensor with the proper last-dim so ud_grade_2 can compute new_cell_ids
+            dummy = self.backend.bk_cast(np.zeros((1, npix_cur), dtype=np.float32))
+            _, new_ids = self.ud_grade_2(dummy, cell_ids=curr_ids)
+            # new_ids can be backend tensor or numpy; normalize to numpy int64
+            to_np = getattr(self.backend, "to_numpy", lambda t: t)
+            new_ids = to_np(new_ids)
+            return np.asarray(new_ids, dtype=np.int64)
+    
+        # --- 3) Per-scale slicing + id evolution consistent with FoCUS
+        cmat_s, cmat2_s = {}, {}
+        nscale = len(cmat_full)
+        for k in range(nscale):
+            npix_k = cmat_full[k].shape[-1]  # full-sky length at this scale
+            cmat_s[k]  = _slice_last(cmat_full[k],  ids)
+            cmat2_s[k] = _slice_last(cmat2_full[k], ids)
+    
+            # Prepare ids for next scale the same way FoCUS downscales maps
+            if k < nscale - 1:
+                ids = _coarsen_ids(ids, npix_k)
+    
+        return cmat_s, cmat2_s
+
+
+    
     def div_norm(self, complex_value, float_value):
         return self.backend.bk_complex(
             self.backend.bk_real(complex_value) / float_value,
