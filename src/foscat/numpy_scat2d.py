@@ -6,6 +6,7 @@ S0/S1/S2 scattering steps using only NumPy.  It mirrors the ordering and shapes
 expected from :mod:`foscat.scat_cov2D` so it can be plugged into the test
 scripts without importing the rest of the library.
 """
+
 from __future__ import annotations
 
 import math
@@ -47,7 +48,9 @@ class NumpyScat2D:
         self.DODIV = DODIV
         self.use_median = use_median
 
-        self.real_filters, self.imag_filters, self.smooth_filter = self._build_wavelets()
+        self.real_filters, self.imag_filters, self.smooth_filter = (
+            self._build_wavelets()
+        )
 
     # ------------------------------------------------------------------
     # Wavelet construction (ported from FoCUS.__init__)
@@ -68,10 +71,14 @@ class NumpyScat2D:
             yy = (3 / float(k)) * self.LAMBDA * y
             if k == 5:
                 w_smooth = np.exp(-(xx**2 + yy**2))
-                tmp = np.exp(-2 * (xx**2 + yy**2)) - 0.25 * np.exp(-0.5 * (xx**2 + yy**2))
+                tmp = np.exp(-2 * (xx**2 + yy**2)) - 0.25 * np.exp(
+                    -0.5 * (xx**2 + yy**2)
+                )
             else:
                 w_smooth = np.exp(-0.5 * (xx**2 + yy**2))
-                tmp = np.exp(-2 * (xx**2 + yy**2)) - 0.25 * np.exp(-0.5 * (xx**2 + yy**2))
+                tmp = np.exp(-2 * (xx**2 + yy**2)) - 0.25 * np.exp(
+                    -0.5 * (xx**2 + yy**2)
+                )
 
             wwc[0] = tmp.flatten() - tmp.mean()
             wws[0] = np.zeros_like(tmp).flatten()
@@ -90,7 +97,9 @@ class NumpyScat2D:
                     yy = (3 / 5) * self.LAMBDA * (x * np.sin(a) - y * np.cos(a))
 
                 if k == 5:
-                    w_smooth = np.exp(-2 * ((3.0 / float(k) * xx) ** 2 + (3.0 / float(k) * yy) ** 2))
+                    w_smooth = np.exp(
+                        -2 * ((3.0 / float(k) * xx) ** 2 + (3.0 / float(k) * yy) ** 2)
+                    )
                 else:
                     w_smooth = np.exp(-0.5 * (xx**2 + yy**2))
 
@@ -244,17 +253,19 @@ class NumpyScat2D:
             if l2_image is None:
                 l2_image = conj_mag[:, None, :, :, :]
             else:
-                l2_image = np.concatenate([conj_mag[:, None, :, :, :], l2_image], axis=1)
+                l2_image = np.concatenate(
+                    [conj_mag[:, None, :, :, :], l2_image], axis=1
+                )
 
             b, jc, io, h, w = l2_image.shape
             flat = l2_image.reshape(b * jc * io, h, w)
 
-            c2_pos = self._conv2d(self._relu(flat), self.real_filters) + 1j * self._conv2d(
-                self._relu(flat), self.imag_filters
-            )
-            c2_neg = self._conv2d(self._relu(-flat), self.real_filters) + 1j * self._conv2d(
-                self._relu(-flat), self.imag_filters
-            )
+            c2_pos = self._conv2d(
+                self._relu(flat), self.real_filters
+            ) + 1j * self._conv2d(self._relu(flat), self.imag_filters)
+            c2_neg = self._conv2d(
+                self._relu(-flat), self.real_filters
+            ) + 1j * self._conv2d(self._relu(-flat), self.imag_filters)
 
             c2_pos = c2_pos.reshape(b, jc, io, self.NORIENT, h, w)
             c2_neg = c2_neg.reshape(b, jc, io, self.NORIENT, h, w)
@@ -265,8 +276,14 @@ class NumpyScat2D:
             conj2p_l1 = np.sqrt(np.abs(conj2p))
             conj2m_l1 = np.sqrt(np.abs(conj2m))
 
-            l_s2 = (conj2p - conj2m).mean(axis=(-2, -1)).reshape(b, jc * io, self.NORIENT)
-            l_s2l1 = (conj2p_l1 - conj2m_l1).mean(axis=(-2, -1)).reshape(b, jc * io, self.NORIENT)
+            l_s2 = (
+                (conj2p - conj2m).mean(axis=(-2, -1)).reshape(b, jc * io, self.NORIENT)
+            )
+            l_s2l1 = (
+                (conj2p_l1 - conj2m_l1)
+                .mean(axis=(-2, -1))
+                .reshape(b, jc * io, self.NORIENT)
+            )
 
             s2_blocks.append(l_s2l1)
             s2l_blocks.append(l_s2)

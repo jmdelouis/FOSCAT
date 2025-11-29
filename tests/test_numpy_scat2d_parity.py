@@ -9,7 +9,6 @@ sys.path.append(str(pathlib.Path(__file__).resolve().parents[1] / "src"))
 from foscat import scat_cov2D
 from foscat.numpy_scat2d import compute_scattering
 
-
 torch = pytest.importorskip("torch", reason="torch backend required for parity check")
 
 
