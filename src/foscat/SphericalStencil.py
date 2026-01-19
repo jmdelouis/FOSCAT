@@ -2,12 +2,7 @@
 # Author: J.-M. Delouis
 import numpy as np
 import healpy as hp
-import foscat.scat_cov as sc
 import torch
-
-import numpy as np
-import torch
-import healpy as hp
 
 
 class SphericalStencil:
@@ -61,8 +56,7 @@ class SphericalStencil:
             device=None,
             dtype=None,
             n_gauges=1,
-            gauge_type='cosmo',
-            scat_op=None,
+            gauge_type='phi',
     ):
         assert kernel_sz >= 1 and int(kernel_sz) == kernel_sz
         assert kernel_sz % 2 == 1, "kernel_sz must be odd"
@@ -75,10 +69,6 @@ class SphericalStencil:
         self.gauge_type=gauge_type
         
         self.nest = bool(nest)
-        if scat_op is None:
-            self.f=sc.funct(KERNELSZ=self.KERNELSZ)
-        else:
-            self.f=scat_op
             
         # Torch defaults
         if device is None:
@@ -354,10 +344,27 @@ class SphericalStencil:
         # --- build the local (P,3) stencil once on device
         P = self.P
         vec_np = np.zeros((P, 3), dtype=float)
-        grid = (np.arange(self.KERNELSZ) - self.KERNELSZ // 2) / self.nside
-        vec_np[:, 0] = np.tile(grid, self.KERNELSZ)
-        vec_np[:, 1] = np.repeat(grid, self.KERNELSZ)
-        vec_np[:, 2] = 1.0 - np.sqrt(vec_np[:, 0]**2 + vec_np[:, 1]**2)
+        grid = (np.arange(self.KERNELSZ) - self.KERNELSZ // 2)
+         
+        # NEW: angular offsets
+        xx,yy=np.meshgrid(grid,grid)
+        s=1.0 # could be modified
+        alpha_pix = hp.nside2resol(self.nside, arcmin=False)  # ~ taille angulaire typique
+        dtheta = (np.sqrt(xx**2+yy**2) * alpha_pix * s).ravel()
+        dphi   = (np.arctan2(yy,xx)).ravel()
+        # local spherical displacement
+        # convert to unit vectors
+        x = np.sin(dtheta) * np.cos(dphi)
+        y = np.sin(dtheta) * np.sin(dphi)
+        z = np.cos(dtheta)  
+        #print(self.nside*x.reshape(self.KERNELSZ,self.KERNELSZ))
+        #print(self.nside*y.reshape(self.KERNELSZ,self.KERNELSZ))
+        #print(self.nside*z.reshape(self.KERNELSZ,self.KERNELSZ))
+        vec_np = np.stack([x, y, z], axis=-1)
+        
+        #vec_np[:, 0] = np.tile(grid, self.KERNELSZ)
+        #vec_np[:, 1] = np.repeat(grid, self.KERNELSZ)
+        #vec_np[:, 2] = 1.0 - np.sqrt(vec_np[:, 0]**2 + vec_np[:, 1]**2)
         vec_t = torch.as_tensor(vec_np, device=self.device, dtype=self.dtype)     # (P,3)
 
         # --- rotation matrices for all targets & gauges: (K,G,3,3)
@@ -371,7 +378,7 @@ class SphericalStencil:
             th, ph, alpha, G=self.G, gauge_cosmo=(self.gauge_type=='cosmo'),
             device=self.device, dtype=self.dtype
         )  # shape (K,G,3,3)
-
+        
         # --- rotate stencil for each (target, gauge): (K,G,P,3)
         #     einsum over local stencil (P,3) with rotation (K,G,3,3)
         rotated = torch.einsum('kgij,pj->kgpi', R_t, vec_t)  # (K,G,P,3)
@@ -568,119 +575,6 @@ class SphericalStencil:
         self.dtype  = dtype
 
     
-    '''
-    def bind_support_torch_multi(self, ids_sorted_np, *, device=None, dtype=None):
-        """
-        Multi-gauge sparse binding (Step B).
-        Uses self.idx_t_multi / self.w_t_multi prepared by prepare_torch(..., G>1)
-        and builds, for each gauge g, (pos_safe, w_norm, present).
-
-        Parameters
-        ----------
-        ids_sorted_np : np.ndarray (K,)
-            Sorted pixel ids for available samples (matches the last axis of your data).
-        device, dtype : torch device/dtype for the produced mapping tensors.
-
-        Side effects
-        ------------
-        Sets:
-          - self.ids_sorted_np  : (K,)
-          - self.pos_safe_t_multi : (G, 4, K*P)  LongTensor
-          - self.w_norm_t_multi   : (G, 4, K*P)  Tensor
-          - self.present_t_multi  : (G, 4, K*P)  BoolTensor
-          - (and mirrors device/dtype in self.device/self.dtype)
-        """
-        assert hasattr(self, 'idx_t_multi') and self.idx_t_multi is not None, \
-            "Call prepare_torch(..., G>0) before bind_support_torch_multi(...)"
-        assert hasattr(self, 'w_t_multi') and self.w_t_multi is not None
-
-        if device is None: device = self.device
-        if dtype  is None: dtype  = self.dtype
-
-        self.ids_sorted_np = np.asarray(ids_sorted_np, dtype=np.int64).reshape(-1)
-        ids_sorted = torch.as_tensor(self.ids_sorted_np, device=device, dtype=torch.long)
-
-        G, _, M = self.idx_t_multi.shape
-        K = self.Kb
-        P = self.P
-        assert M == K*P, "idx_t_multi second axis must have K*P columns"
-
-        pos_list, present_list, wnorm_list = [], [], []
-
-        for g in range(G):
-            idx = self.idx_t_multi[g].to(device=device, dtype=torch.long)   # (4, M)
-            w   = self.w_t_multi[g].to(device=device, dtype=dtype)          # (4, M)
-
-            pos = torch.searchsorted(ids_sorted, idx.reshape(-1)).view(4, M)
-            in_range = pos < ids_sorted.numel()
-            cmp_vals = torch.full_like(idx, -1)
-            cmp_vals[in_range] = ids_sorted[pos[in_range]]
-            present = (cmp_vals == idx)
-
-            # normalize weights per column after masking
-            w = w * present
-            colsum = w.sum(dim=0, keepdim=True).clamp_min(1e-12)
-            w_norm = w / colsum
-
-            pos_safe = torch.where(present, pos, torch.zeros_like(pos))
-
-            pos_list.append(pos_safe)
-            present_list.append(present)
-            wnorm_list.append(w_norm)
-
-        self.pos_safe_t_multi = torch.stack(pos_list, dim=0)     # (G, 4, M)
-        self.present_t_multi  = torch.stack(present_list, dim=0) # (G, 4, M)
-        self.w_norm_t_multi   = torch.stack(wnorm_list, dim=0)   # (G, 4, M)
-
-        # mirror runtime placement
-        self.device = device
-        self.dtype  = dtype
-    
-    # ------------------------------------------------------------------
-    # Step B: bind support Torch
-    # ------------------------------------------------------------------
-    def bind_support_torch(self, ids_sorted_np, *, device=None, dtype=None):
-        """
-        Map HEALPix neighbor indices (from Step A) to actual data samples
-        sorted by pixel id. Produces pos_safe and normalized weights.
-
-        Parameters
-        ----------
-        ids_sorted_np : np.ndarray (K,)
-            Sorted pixel ids for available data.
-        device, dtype : Torch device/dtype for results.
-        """
-        if device is None:
-            device = self.device
-        if dtype is None:
-            dtype = self.dtype
-
-        self.ids_sorted_np = np.asarray(ids_sorted_np, dtype=np.int64)
-        ids_sorted = torch.as_tensor(self.ids_sorted_np, device=device, dtype=torch.long)
-
-        idx = self.idx_t.to(device=device, dtype=torch.long)
-        w   = self.w_t.to(device=device, dtype=dtype)
-
-        M = self.Kb * self.P
-        idx = idx.view(4, M)
-        w   = w.view(4, M)
-
-        pos = torch.searchsorted(ids_sorted, idx.reshape(-1)).view(4, M)
-        in_range = pos < ids_sorted.shape[0]
-        cmp_vals = torch.full_like(idx, -1)
-        cmp_vals[in_range] = ids_sorted[pos[in_range]]
-        present = (cmp_vals == idx)
-
-        w = w * present
-        colsum = w.sum(dim=0, keepdim=True).clamp_min(1e-12)
-        w_norm = w / colsum
-
-        self.pos_safe_t = torch.where(present, pos, torch.zeros_like(pos))
-        self.w_norm_t   = w_norm
-        self.present_t  = present
-        self.device = device
-        self.dtype  = dtype
-    '''
     # ------------------------------------------------------------------
     # Step C: apply convolution (already Torch in your code)
     # ------------------------------------------------------------------
@@ -1215,132 +1109,10 @@ class SphericalStencil:
         vals = torch.cat(vals_all, dim=0)
 
         
-        indices = torch.stack([cols, rows], dim=0)             # (2, nnz) invert rows/cols for foscat needs
+        indices = torch.stack([cols, rows], dim=0)             
 
         if return_sparse_tensor:
             M = torch.sparse_coo_tensor(indices, vals, size=shape, device=device, dtype=k_dtype).coalesce()
             return M
         else:
             return vals, indices, shape
-
-
-    def _to_numpy_1d(self, ids):
-        """Return a 1D numpy array of int64 for a single set of cell ids."""
-        import numpy as np, torch
-        if isinstance(ids, np.ndarray):
-            return ids.reshape(-1).astype(np.int64, copy=False)
-        if torch.is_tensor(ids):
-            return ids.detach().cpu().to(torch.long).view(-1).numpy()
-        # python list/tuple of ints
-        return np.asarray(ids, dtype=np.int64).reshape(-1)
-    
-    def _is_varlength_batch(self, ids):
-        """
-        True if ids is a list/tuple of per-sample id arrays (var-length batch).
-        False if ids is a single array/tensor of ids (shared for whole batch).
-        """
-        import numpy as np, torch
-        if isinstance(ids, (list, tuple)):
-            return True
-        if isinstance(ids, np.ndarray) and ids.ndim == 2:
-            # This would be a dense (B, Npix) matrix -> NOT var-length list
-            return False
-        if torch.is_tensor(ids) and ids.dim() == 2:
-            return False
-        return False
-    
-    def Down(self, im, cell_ids=None, nside=None,max_poll=False):
-        """
-        If `cell_ids` is a single set of ids -> return a single (Tensor, Tensor).
-        If `cell_ids` is a list (var-length)           -> return (list[Tensor], list[Tensor]).
-        """
-        if self.f is None:
-            if self.dtype==torch.float64:
-                self.f=sc.funct(KERNELSZ=self.KERNELSZ,all_type='float64')
-            else:
-                self.f=sc.funct(KERNELSZ=self.KERNELSZ,all_type='float32')
-            
-        if cell_ids is None:
-            dim,cdim = self.f.ud_grade_2(im,cell_ids=self.cell_ids,nside=self.nside,max_poll=max_poll)
-            return dim,cdim
-        
-        if nside is None:
-            nside = self.nside
-
-        # var-length mode: list/tuple of ids, one per sample
-        if self._is_varlength_batch(cell_ids):
-            outs, outs_ids = [], []
-            B = len(cell_ids)
-            for b in range(B):
-                cid_b = self._to_numpy_1d(cell_ids[b])
-                # extraire le bon échantillon d'`im`
-                if torch.is_tensor(im):
-                    xb = im[b:b+1]  # (1, C, N_b)
-                    yb, ids_b = self.f.ud_grade_2(xb, cell_ids=cid_b, nside=nside,max_poll=max_poll)
-                    outs.append(yb.squeeze(0))  # (C, N_b')
-                else:
-                    # si im est déjà une liste de (C, N_b)
-                    xb = im[b]
-                    yb, ids_b = self.f.ud_grade_2(xb[None, ...], cell_ids=cid_b, nside=nside,max_poll=max_poll)
-                    outs.append(yb.squeeze(0))
-                outs_ids.append(torch.as_tensor(ids_b, device=outs[-1].device, dtype=torch.long))
-            return outs, outs_ids
-
-        # grille commune (un seul vecteur d'ids)
-        cid = self._to_numpy_1d(cell_ids)
-        return self.f.ud_grade_2(im, cell_ids=cid, nside=nside,max_poll=False)
-
-    def Up(self, im, cell_ids=None, nside=None, o_cell_ids=None):
-        """
-        If `cell_ids` / `o_cell_ids` are single arrays  -> return Tensor.
-        If they are lists (var-length per sample)       -> return list[Tensor].
-        """
-        if self.f is None:
-            if self.dtype==torch.float64:
-                self.f=sc.funct(KERNELSZ=self.KERNELSZ,all_type='float64')
-            else:
-                self.f=sc.funct(KERNELSZ=self.KERNELSZ,all_type='float32')
-                
-        if cell_ids is None:
-            dim = self.f.up_grade(im,self.nside*2,cell_ids=self.cell_ids,nside=self.nside)
-            return dim
-        
-        if nside is None:
-            nside = self.nside
-
-        # var-length: listes parallèles
-        if self._is_varlength_batch(cell_ids):
-            assert isinstance(o_cell_ids, (list, tuple)) and len(o_cell_ids) == len(cell_ids), \
-                "In var-length mode, `o_cell_ids` must be a list with same length as `cell_ids`."
-            outs = []
-            B = len(cell_ids)
-            for b in range(B):
-                cid_b  = self._to_numpy_1d(cell_ids[b])      # coarse ids
-                ocid_b = self._to_numpy_1d(o_cell_ids[b])    # fine   ids
-                if torch.is_tensor(im):
-                    xb = im[b:b+1]  # (1, C, N_b_coarse)
-                    yb = self.f.up_grade(xb, nside*2, cell_ids=cid_b, nside=nside,
-                                         o_cell_ids=ocid_b, force_init_index=True)
-                    outs.append(yb.squeeze(0))  # (C, N_b_fine)
-                else:
-                    xb = im[b]  # (C, N_b_coarse)
-                    yb = self.f.up_grade(xb[None, ...], nside*2, cell_ids=cid_b, nside=nside,
-                                         o_cell_ids=ocid_b, force_init_index=True)
-                    outs.append(yb.squeeze(0))
-            return outs
-
-        # grille commune
-        cid  = self._to_numpy_1d(cell_ids)
-        ocid = self._to_numpy_1d(o_cell_ids) if o_cell_ids is not None else None
-        return self.f.up_grade(im, nside*2, cell_ids=cid, nside=nside,
-                               o_cell_ids=ocid, force_init_index=True)
-
-
-    def to_tensor(self,x):
-        return torch.tensor(x,device=self.device,dtype=self.dtype)
-    
-    def to_numpy(self,x):
-        if isinstance(x,np.ndarray):
-            return x
-        return x.cpu().numpy()
-        
