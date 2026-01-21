@@ -313,7 +313,7 @@ class SphereDownGeo(nn.Module):
                 size=self.M_size,
                 device=x.device,
                 dtype=x.dtype,
-            )
+            ).coalesce().to_sparse_csr().to(x.device)
             x_bc = x.reshape(B * C, N_in)
             y_bc_T = torch.sparse.mm(M, x_bc.T)  # [K_out, B*C]
             y = y_bc_T.T.reshape(B, C, self.K_out)

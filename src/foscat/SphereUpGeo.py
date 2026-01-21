@@ -138,6 +138,14 @@ class SphereUpGeo(nn.Module):
         # Fine ids (full sphere)
         self.register_buffer("cell_ids_in_t", torch.arange(self.N_in, dtype=torch.long, device=self.device))
 
+        self.M_T =  torch.sparse_coo_tensor(
+            self.M_indices.to(device=self.device),
+            self.M_values.to(device=self.device, dtype=self.dtype),
+            size=self.M_size,
+            device=self.device,
+            dtype=self.dtype,
+        ).coalesce() #.to_sparse_csr().to(self.device)
+        
     @staticmethod
     def _transpose_sparse(M: torch.Tensor) -> torch.Tensor:
         M = M.coalesce()
@@ -152,16 +160,8 @@ class SphereUpGeo(nn.Module):
         B, C, K_out = x.shape
         assert K_out == self.K_out, f"Expected K_out={self.K_out}, got {K_out}"
 
-        M_T = torch.sparse_coo_tensor(
-            self.M_indices.to(device=x.device),
-            self.M_values.to(device=x.device, dtype=x.dtype),
-            size=self.M_size,
-            device=x.device,
-            dtype=x.dtype,
-        )
-
         x_bc = x.reshape(B * C, K_out)
-        x_up_bc_T = torch.sparse.mm(M_T, x_bc.T)    # [N_in, B*C]
+        x_up_bc_T = torch.sparse.mm(self.M_T, x_bc.T)    # [N_in, B*C]
         x_up = x_up_bc_T.T.reshape(B, C, self.N_in) # [B, C, N_in]
 
         if self.up_norm == "col_l1":

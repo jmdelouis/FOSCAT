@@ -736,7 +736,7 @@ class FoCUS:
                 nbatch*=shape[k]
             if l_nside not in self.down:
                 print('initialise down', l_nside)
-                self.down[l_nside] = SphereDownGeo(nside_in=l_nside, mode="smooth", in_cell_ids=cell_ids)
+                self.down[l_nside] = SphereDownGeo(nside_in=l_nside, dtype=self.all_bk_type,mode="smooth", in_cell_ids=cell_ids)
             
             res,out_cell=self.down[l_nside](self.backend.bk_reshape(im,[nbatch,1,shape[-1]]))
             
@@ -964,6 +964,7 @@ class FoCUS:
                     else:
                         l_o_cell_ids=o_cell_ids
                     self.up[lout] = SphereUpGeo(nside_out=lout, 
+                                                dtype=self.all_bk_type,
                                                  cell_ids_out=l_o_cell_ids,
                                                  up_norm="col_l1")
                 im, fine_ids = self.up[lout](im)
