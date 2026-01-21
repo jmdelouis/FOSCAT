@@ -67,10 +67,17 @@ class SphereDownGeo(nn.Module):
         assert (self.nside_in & (self.nside_in - 1)) == 0, "nside_in must be a power of 2."
         self.nside_out = self.nside_in // 2
         assert self.nside_out >= 1, "nside_out must be >= 1."
-
-        self.N_in = 12 * self.nside_in * self.nside_in
-        self.N_out = 12 * self.nside_out * self.nside_out
-
+            
+        self.in_cell_ids = in_cell_ids
+        
+        if in_cell_ids is None:
+            self.N_in = 12 * self.nside_in * self.nside_in
+        else:
+            self.N_in = in_cell_ids.shape[0]
+            # NESTED: each coarse pixel has exactly 4 children; parent = child // 4
+            self.cell_ids_out = torch.unique((torch.tensor(in_cell_ids,dtype=torch.int64) // 4))
+            
+        '''
         # Optional: restrict outputs based on valid input pixel ids
         self.in_cell_ids = self._validate_in_cell_ids(in_cell_ids)
 
@@ -81,13 +88,19 @@ class SphereDownGeo(nn.Module):
             self.cell_ids_out = self._validate_cell_ids_out(derived_out)
         else:
             self.cell_ids_out = self._validate_cell_ids_out(cell_ids_out)
-
+        '''
+        
+        if in_cell_ids is None:
+            self.N_out = 12 * self.nside_out * self.nside_out
+        else:
+            self.N_out = self.cell_ids_out.shape[0]
+            
         # Convenience tensor version (returned by forward)
         self.register_buffer(
             "cell_ids_out_t",
             torch.as_tensor(self.cell_ids_out, dtype=torch.long, device=self.device),
         )
-        self.K_out = int(self.cell_ids_out.size)
+        self.K_out = int(self.cell_ids_out.shape[0])
 
         mode = str(mode).lower().strip()
         if mode not in ("smooth", "maxpool"):
