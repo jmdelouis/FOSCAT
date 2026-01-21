@@ -5,8 +5,11 @@ import healpy as hp
 import numpy as np
 import foscat.HealSpline as HS
 from scipy.interpolate import griddata
+from foscat.SphereDownGeo import SphereDownGeo
+from foscat.SphereUpGeo import SphereUpGeo
+import torch
 
-TMPFILE_VERSION = "V10_0"
+TMPFILE_VERSION = "V11_0"
 
 
 class FoCUS:
@@ -57,7 +60,8 @@ class FoCUS:
         self.kernelR_conv = {}
         self.kernelI_conv = {}
         self.padding_conv = {}
-
+        self.down = {}
+        self.up = {}
         if not self.silent:
             print("================================================")
             print("          START FOSCAT CONFIGURATION")
@@ -648,6 +652,7 @@ class FoCUS:
         return rim
 
     # --------------------------------------------------------
+    
     def ud_grade_2(self, im, axis=0, cell_ids=None, nside=None,max_poll=False):
 
         if self.use_2D:
@@ -721,6 +726,22 @@ class FoCUS:
 
         else:
             shape = list(im.shape)
+            if nside is None:
+                l_nside=int(np.sqrt(shape[-1]//12))
+            else:
+                l_nside=nside
+            
+            nbatch=1
+            for k in range(len(shape)-1):
+                nbatch*=shape[k]
+            if l_nside not in self.down:
+                print('initialise down', l_nside)
+                self.down[l_nside] = SphereDownGeo(nside_in=l_nside, mode="smooth", in_cell_ids=cell_ids)
+            
+            res,out_cell=self.down[l_nside](self.backend.bk_reshape(im,[nbatch,1,shape[-1]]))
+            
+            return self.backend.bk_reshape(res,shape[:-1]+[out_cell.shape[0]]),out_cell
+            '''
             if self.use_median:
                 if cell_ids is not None:
                     sim, new_cell_ids = self.backend.binned_mean(im, cell_ids,reduce='median')
@@ -747,6 +768,7 @@ class FoCUS:
                 return self.backend.bk_reduce_mean(
                     self.backend.bk_reshape(im, shape[0:-1]+[shape[-1]//4,4]), axis=-1
                 ),None
+            '''
 
     # --------------------------------------------------------
     def up_grade(self, im, nout,
@@ -836,6 +858,7 @@ class FoCUS:
             else:
                 lout = nside
                 
+            '''
             if (lout,nout) not in self.pix_interp_val or force_init_index:
                 if not self.silent:
                     print("compute lout nout", lout, nout)
@@ -926,12 +949,31 @@ class FoCUS:
                     
                     del w
                     del p
-
-            if lout == nout:
-                imout = im
-            else:
-                # work only on the last column
-
+            '''
+            shape=list(im.shape)
+            nbatch=1
+            for k in range(len(shape)-1):
+                nbatch*=shape[k]
+            
+            im=self.backend.bk_reshape(im,[nbatch,1,shape[-1]])
+            
+            while lout<nout:
+                if lout not in self.up:
+                    if o_cell_ids is None:
+                        l_o_cell_ids=torch.tensor(np.arange(12*(lout**2),dtype='int'),device=im.device)
+                    else:
+                        l_o_cell_ids=o_cell_ids
+                    self.up[lout] = SphereUpGeo(nside_out=lout, 
+                                                 cell_ids_out=l_o_cell_ids,
+                                                 up_norm="col_l1")
+                im, fine_ids = self.up[lout](im)
+                lout*=2
+                if lout<nout and o_cell_ids is not None:
+                    o_cell_ids=torch.repeat(fine_ids,4)*4+ \
+                                torch.tile(torch.tensor([0,1,2,3],device=fine_ids.device,dtype=fine_ids.dtype),fine_ids.shape[0])
+            
+            return self.backend.bk_reshape(im,shape[:-1]+[im.shape[-1]])
+            '''
                 ndata = 1
                 for k in range(len(ishape)-1):
                     ndata = ndata * ishape[k]
@@ -960,6 +1002,7 @@ class FoCUS:
                     return self.backend.bk_reshape(
                         imout, ishape[0:-1]+[imout.shape[-1]]
                     )
+            '''
         return imout
 
     # --------------------------------------------------------
@@ -1500,7 +1543,7 @@ class FoCUS:
                     
                 else:
                     if l_kernel == 5:
-                        pw = 0.5
+                        pw = 0.75
                         pw2 = 0.5
                         threshold = 2e-5
 

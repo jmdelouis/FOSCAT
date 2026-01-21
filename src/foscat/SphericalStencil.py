@@ -1116,3 +1116,12 @@ class SphericalStencil:
             return M
         else:
             return vals, indices, shape
+
+
+    def to_tensor(self,x):
+        return torch.tensor(x,device='cuda')
+
+    def to_numpy(self,x):
+        if isinstance(x,np.ndarray):
+            return x
+        return x.cpu().numpy()

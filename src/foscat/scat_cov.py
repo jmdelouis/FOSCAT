@@ -2419,13 +2419,13 @@ class funct(FOC.FoCUS):
             if smooth_scale > 0:
                 for m in range(smooth_scale):
                     if cc.shape[0] > 12:
-                        cc, _ = self.ud_grade_2(self.smooth(cc))
-                        ss, _ = self.ud_grade_2(self.smooth(ss))
+                        cc, _ = self.ud_grade_2(cc)
+                        ss, _ = self.ud_grade_2(ss)
 
             if cc.shape[-1] != tmp.shape[-1]:
                 ll_nside = int(np.sqrt(tmp.shape[-1] // 12))
-                cc = self.up_grade(cc, ll_nside)
-                ss = self.up_grade(ss, ll_nside)
+                cc = self.up_grade(self.backend.bk_cast(cc), ll_nside)
+                ss = self.up_grade(self.backend.bk_cast(ss), ll_nside)
 
             # compute local phase from weighted cos and sin (same as before)
             if self.BACKEND == "numpy":
@@ -2518,13 +2518,13 @@ class funct(FOC.FoCUS):
                 if smooth_scale > 0:
                     for m in range(smooth_scale):
                         if cc2.shape[1] > 12:
-                            cc2, _ = self.ud_grade_2(self.smooth(cc2))
-                            ss2, _ = self.ud_grade_2(self.smooth(ss2))
+                            cc2, _ = self.ud_grade_2(cc2)
+                            ss2, _ = self.ud_grade_2(ss2)
 
                 if cc2.shape[-1] != sim.shape[-1]:
                     ll_nside = int(np.sqrt(sim.shape[-1] // 12))
-                    cc2 = self.up_grade(cc2, ll_nside)
-                    ss2 = self.up_grade(ss2, ll_nside)
+                    cc2 = self.up_grade(self.backend.bk_cast(cc2), ll_nside)
+                    ss2 = self.up_grade(self.backend.bk_cast(ss2), ll_nside)
 
                 if self.BACKEND == "numpy":
                     phase2 = np.fmod(np.arctan2(ss2, cc2) + 2 * np.pi, 2 * np.pi)
@@ -2742,7 +2742,7 @@ class funct(FOC.FoCUS):
             # if the kernel size is bigger than 3 increase the binning before smoothing
             if self.use_2D:
                 vmask = self.up_grade(
-                    vmask, I1.shape[-2] * 2, nouty=I1.shape[-1] * 2,axis=-2
+                    self.backend.bk_cast(vmask), I1.shape[-2] * 2, nouty=I1.shape[-1] * 2,axis=-2
                 )
                 I1 = self.up_grade(
                     I1, I1.shape[-2] * 2, nouty=I1.shape[-1] * 2,axis=-2
@@ -3550,14 +3550,14 @@ class funct(FOC.FoCUS):
             ### Image I1,
             # downscale the I1 [Nbatch, Npix_j3]
             if j3 != Jmax - 1:
-                I1 = self.smooth(I1, cell_ids=cell_ids_j3, nside=nside_j3)
+                #I1 = self.smooth(I1, cell_ids=cell_ids_j3, nside=nside_j3)
                 I1, new_cell_ids_j3 = self.ud_grade_2(
                     I1, cell_ids=cell_ids_j3, nside=nside_j3
                 )
 
                 ### Image I2
                 if cross:
-                    I2 = self.smooth(I2,  cell_ids=cell_ids_j3, nside=nside_j3)
+                    #I2 = self.smooth(I2,  cell_ids=cell_ids_j3, nside=nside_j3)
                     I2, new_cell_ids_j3 = self.ud_grade_2(
                         I2, cell_ids=cell_ids_j3, nside=nside_j3
                     )
@@ -3565,20 +3565,20 @@ class funct(FOC.FoCUS):
                 ### Modules
                 for j2 in range(0, j3 + 1):  # j2 =< j3
                     ### Dictionary M1_dic[j2]
-                    M1_smooth = self.smooth(
-                        M1_dic[j2], cell_ids=cell_ids_j3, nside=nside_j3
-                    )  # [Nbatch, Npix_j3, Norient3]
+                    #M1_smooth = self.smooth(
+                    #    M1_dic[j2], cell_ids=cell_ids_j3, nside=nside_j3
+                    #)  # [Nbatch, Npix_j3, Norient3]
                     M1_dic[j2], new_cell_ids_j2 = self.ud_grade_2(
-                        M1_smooth,  cell_ids=cell_ids_j3, nside=nside_j3
+                        M1_dic[j2],  cell_ids=cell_ids_j3, nside=nside_j3
                     )  # [Nbatch, Npix_j3, Norient3]
 
                     ### Dictionary M2_dic[j2]
                     if cross:
-                        M2_smooth = self.smooth(
-                            M2_dic[j2],  cell_ids=cell_ids_j3, nside=nside_j3
-                        )  # [Nbatch, Npix_j3, Norient3]
+                        #M2_smooth = self.smooth(
+                        #    M2_dic[j2],  cell_ids=cell_ids_j3, nside=nside_j3
+                        #)  # [Nbatch, Npix_j3, Norient3]
                         M2_dic[j2], new_cell_ids_j2 = self.ud_grade_2(
-                            M2_smooth,  cell_ids=cell_ids_j3, nside=nside_j3
+                            M2_dic[j2],  cell_ids=cell_ids_j3, nside=nside_j3
                         )  # [Nbatch, Npix_j3, Norient3]
                 ### Mask
                 vmask, new_cell_ids_j3 = self.ud_grade_2(
@@ -6571,15 +6571,15 @@ class funct(FOC.FoCUS):
                 # Increase the resolution between each step
                 if self.use_2D:
                     imap = self.up_grade(
-                        omap,
+                        self.backend.bk_cast(omap),
                         imap.shape[1] * 2,
                         axis=-2,
                         nouty=imap.shape[2] * 2
                     )
                 elif self.use_1D:
-                    imap = self.up_grade(omap, imap.shape[1] * 2)
+                    imap = self.up_grade(self.backend.bk_cast(omap), imap.shape[1] * 2)
                 else:
-                    imap = self.up_grade(omap, l_nside)
+                    imap = self.up_grade(self.backend.bk_cast(omap), l_nside)
                     
             if grd_mask is not None:
                 imap = imap * l_grd_mask[k] + tmp[k] * (1 - l_grd_mask[k])
