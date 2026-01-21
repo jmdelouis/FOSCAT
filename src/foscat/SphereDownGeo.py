@@ -72,7 +72,6 @@ class SphereDownGeo(nn.Module):
         
         if in_cell_ids is None:
             self.N_in = 12 * self.nside_in * self.nside_in
-            self.cell_ids_out = self._validate_cell_ids_out(cell_ids_out)
         else:
             self.N_in = in_cell_ids.shape[0]
             # NESTED: each coarse pixel has exactly 4 children; parent = child // 4
@@ -93,6 +92,7 @@ class SphereDownGeo(nn.Module):
         
         if in_cell_ids is None:
             self.N_out = 12 * self.nside_out * self.nside_out
+            self.cell_ids_out = self._validate_cell_ids_out(cell_ids_out)
         else:
             self.N_out = self.cell_ids_out.shape[0]
             
