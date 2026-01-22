@@ -967,7 +967,7 @@ class FoCUS:
                                                 dtype=self.all_bk_type,
                                                  cell_ids_out=l_o_cell_ids,
                                                  up_norm="col_l1")
-                im, fine_ids = self.up[lout](im)
+                im, fine_ids = self.up[lout](self.backend.bk_cast(im))
                 lout*=2
                 if lout<nout and o_cell_ids is not None:
                     o_cell_ids=torch.repeat(fine_ids,4)*4+ \
