@@ -255,7 +255,7 @@ class SphereDownGeo(nn.Module):
             # angular distance via dot product
             dots = np.clip(np.dot(vec, vec0), -1.0, 1.0)
             ang = np.arccos(dots)
-            w = np.exp(- (ang / sigma_rad) ** 2)
+            w = np.exp(- 2*(ang / sigma_rad) ** 2)
 
             w = self._normalize_weights(w)
 
