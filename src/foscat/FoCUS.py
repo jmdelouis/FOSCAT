@@ -1398,7 +1398,9 @@ class FoCUS:
                     else:
                         l_cell_ids=cell_ids
                         
-                    nvalid=self.KERNELSZ**2
+                    nvalid=4*self.KERNELSZ**2
+                    if nvalid>12*nside**2:
+                        nvalid=12*nside**2
                     idxEB=hconvol.idx_nn[:,0:nvalid]
                     tmpEB=np.zeros([self.NORIENT,4,l_cell_ids.shape[0],nvalid],dtype='complex')       
                     tmpS=np.zeros([4,l_cell_ids.shape[0],nvalid],dtype='float')           
