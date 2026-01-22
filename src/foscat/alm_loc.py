@@ -3,7 +3,7 @@ import numpy as np
 import healpy as hp
 
 from foscat.alm import alm as _alm
-
+import torch
 
 class alm_loc(_alm):
     """
@@ -179,6 +179,9 @@ class alm_loc(_alm):
 
         # ft is [..., R, m]
         alm_out = None
+        
+        
+
         for m in range(lmax + 1):
             # IMPORTANT: reuse alm.compute_legendre_m and its normalization exactly
             plm = self.compute_legendre_m(co_th, m, lmax, nside) / (12 * nside**2)  # [L,R]
@@ -189,6 +192,16 @@ class alm_loc(_alm):
                 self.backend.bk_expand_dims(ft_m, axis=-2) * plm_bk,
                 axis=-1
             )  # [..., L]
+            l_vals = np.arange(m, lmax + 1, dtype=np.float64)
+            scale = np.sqrt(2.0 * l_vals + 1.0)
+
+            # convertir scale en backend tensor (torch) sur le bon device
+            scale_t = self.backend.bk_cast(scale)  # ou un helper équivalent
+            # reshape pour broadcast si nécessaire: [1, L] ou [L]
+            shape = (1,) * (tmp.ndim - 1) + (scale_t.shape[0],)
+            scale_t = scale_t.reshape(shape)
+            
+            tmp = tmp * scale_t
             if m == 0:
                 alm_out = tmp
             else:
@@ -204,9 +217,10 @@ class alm_loc(_alm):
         lmax = int(lmax)
 
         alm = self.map2alm_loc(im, nside=nside, cell_ids=cell_ids, nest=nest, lmax=lmax)
-
+        
         # Unpack and compute Cl with correct real-field folding:
-        cl = np.zeros(lmax + 1, dtype=np.float64)
+        cl = torch.zeros((lmax + 1,), dtype=alm.dtype, device=alm.device)
+        
         idx = 0
         for m in range(lmax + 1):
             L = lmax - m + 1
@@ -216,9 +230,9 @@ class alm_loc(_alm):
             # sum over any batch dims
             p = self.backend.bk_reduce_sum(p, axis=tuple(range(p.ndim-1))) if p.ndim > 1 else p
             if m == 0:
-                cl[m:] += np.asarray(p)
+                cl[m:] += p
             else:
-                cl[m:] += 2.0 * np.asarray(p)
-        denom = (2*np.arange(lmax+1)+1).astype(np.float64)
+                cl[m:] += 2.0 * p
+        denom = (2*torch.arange(lmax+1,dtype=p.dtype, device=alm.device)+1)
         cl = cl / denom
-        return self.backend.bk_cast(cl)
+        return cl
