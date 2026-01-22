@@ -212,6 +212,37 @@ class alm_loc(_alm):
 
     # ---------------------------- alm -> Cl ---------------------------------
     def anafast_loc(self, im, nside: int, cell_ids, nest: bool = False, lmax=None):
+        
+        if lmax is None:
+            lmax = min(self.lmax, 3 * nside - 1)
+        lmax = int(lmax)
+
+        alm = self.map2alm_loc(im, nside=nside, cell_ids=cell_ids, nest=nest, lmax=lmax)
+
+        # cl has same batch dims as alm, plus ell dim
+        batch_shape = alm.shape[:-1]
+        cl = torch.zeros(batch_shape + (lmax + 1,), dtype=torch.float64, device=alm.device)
+
+        idx = 0
+        for m in range(lmax + 1):
+            L = lmax - m + 1
+            a = alm[..., idx:idx+L]   # shape: batch + (L,)
+            idx += L
+
+            p = self.backend.bk_real(a * self.backend.bk_conjugate(a))  # batch + (L,)
+
+            if m == 0:
+                cl[..., m:] += p
+            else:
+                cl[..., m:] += 2.0 * p
+
+        # divide by (2l+1), broadcast over batch dims
+        denom = (2 * torch.arange(lmax + 1, dtype=cl.dtype, device=alm.device) + 1)  # (lmax+1,)
+        denom = denom.reshape((1,) * len(batch_shape) + (lmax + 1,))                  # batch-broadcast
+        cl = cl / denom
+        return cl
+    '''
+    def anafast_loc(self, im, nside: int, cell_ids, nest: bool = False, lmax=None):
         if lmax is None:
             lmax = min(self.lmax, 3 * nside - 1)
         lmax = int(lmax)
@@ -236,3 +267,4 @@ class alm_loc(_alm):
         denom = (2*torch.arange(lmax+1,dtype=p.dtype, device=alm.device)+1)
         cl = cl / denom
         return cl
+    '''
