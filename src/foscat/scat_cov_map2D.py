@@ -29,7 +29,7 @@ class funct(scat.funct):
             image1, image2=image2, mask=mask, norm=norm, calc_var=calc_var, Jmax=Jmax
         )
         return scat_cov_map(
-            r.S2, r.S0, r.S3, r.S4, S1=r.S1, S3P=r.S3P, backend=r.backend
+            r.S2, r.S0, r.S3, r.S4, S1=r.S1, S3P=r.S3P, backend=r.backend,
         )
 
     def scat_coeffs_apply(

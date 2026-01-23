@@ -1282,7 +1282,7 @@ class funct(FOC.FoCUS):
         l2_image = None
 
         for j1 in range(jmax):
-            if j1 < jmax - self.OSTEP:  # stop to add scales
+            if j1 < jmax:  # stop to add scales
                 # Convol image along the axis defined by 'axis' using the wavelet defined at
                 # the foscat initialisation
                 # c_image_real is [....,Npix_j1,....,Norient]

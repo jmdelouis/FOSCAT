@@ -558,8 +558,8 @@ class alm:
         Nonetheless, it utilizes TensorFlow and can be integrated into gradient computations.
 
         Input:
-        - `im`: a vector of size ([12 \times \text{Nside}^2]) for scalar data, or of size ([2, 12 \times \text{Nside}^2]) for Q,U polar data,
-        or of size ([3, 12 \times \text{Nside}^2]) for I,Q,U polar data.
+        - `im`: a vector of size ([N_image, 12 \times \text{Nside}^2]) for scalar data, or of size ([N_image, 2, 12 \times \text{Nside}^2]) for Q,U polar data,
+        or of size ([N_image,3, 12 \times \text{Nside}^2]) for I,Q,U polar data.
         - `map2` (optional): a vector of size ([12 \times \text{Nside}^2]) for scalar data, or of size
         ([3, 12 \times \text{Nside}^2]) for polar data. If provided, cross power spectra will be computed.
         - `nest=True`: alters the ordering of the input maps.

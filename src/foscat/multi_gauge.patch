@@ -1,0 +1,198 @@
+BEGIN DIFF
+--- healpix_unet_torch.py
++++ healpix_unet_torch.py
+@@
+ import torch
+ import torch.nn as nn
+ import numpy as np
++import healpy as hp
+@@
+ class HealpixUNet(nn.Module):
+-    def __init__(self,
+-                 in_nside,
+-                 n_chan_in,
+-                 chanlist,
+-                 cell_ids=None,
+-                 KERNELSZ=3,
+-                 task='segmentation',
+-                 out_channels=None,
+-                 final_activation=None,
+-                 device=None,
+-                 prefer_foscat_gpu=False,
+-                 down_type="healpix",
+-                 dtype=torch.float32):
++    def __init__(self,
++                 in_nside,
++                 n_chan_in,
++                 chanlist,
++                 cell_ids=None,
++                 KERNELSZ=3,
++                 G=1,
++                 task='segmentation',
++                 out_channels=None,
++                 final_activation=None,
++                 device=None,
++                 prefer_foscat_gpu=False,
++                 down_type="healpix",
++                 dtype=torch.float32):
+@@
+         self.KERNELSZ = KERNELSZ
++        self.G = int(G)
++        if self.G < 1:
++            raise ValueError("G must be >= 1")
+@@
+         for l, outC in enumerate(self.chanlist):
+-            # operator at encoder level l
+-            hc = ho.SphericalStencil(current_nside,
+-                                    self.KERNELSZ,
+-                                    cell_ids=self.l_cell_ids[l],
+-                                    dtype=self.torch_dtype)
+-            #hc.make_idx_weights()
+-            self.hconv_enc.append(hc)
+-
+-            # conv1 weights
+-            w1 = torch.empty(inC, outC, self.KERNELSZ*self.KERNELSZ)
+-            nn.init.kaiming_uniform_(w1.view(inC*outC, -1), a=np.sqrt(5))
+-            self.enc_w1.append(nn.Parameter(w1))
+-            self.enc_bn1.append(self._norm_1d(outC, kind="group"))
+-
+-            # conv2 weights
+-            w2 = torch.empty(outC, outC, self.KERNELSZ*self.KERNELSZ)
+-            nn.init.kaiming_uniform_(w2.view(outC*outC, -1), a=np.sqrt(5))
+-            self.enc_w2.append(nn.Parameter(w2))
+-            self.enc_bn2.append(self._norm_1d(outC, kind="group"))
+-
+-            inC = outC
++            if outC % self.G != 0:
++                raise ValueError(f"chanlist[{l}]={outC} must be divisible by G={self.G}")
++            outC_g = outC // self.G
++
++            # operator at encoder level l
++            hc = ho.SphericalStencil(current_nside,
++                                    self.KERNELSZ,
++                                    cell_ids=self.l_cell_ids[l],
++                                    dtype=self.torch_dtype)
++            hc.G = self.G
++            if self.G > 1:
++                cid_lvl = self.l_cell_ids[l]
++                th_lvl, ph_lvl = hp.pix2ang(current_nside, cid_lvl, nest=True)
++                hc.prepare_torch(th_lvl, ph_lvl, G=self.G)
++                order_lvl = np.argsort(cid_lvl)
++                hc.ids_sorted_np = cid_lvl[order_lvl]
++                hc.bind_support_torch_multi(hc.ids_sorted_np,
++                                            device=self.device,
++                                            dtype=self.torch_dtype)
++            self.hconv_enc.append(hc)
++
++            # conv1 weights (Ci, Co_g, P)
++            w1 = torch.empty(inC, outC_g, self.KERNELSZ*self.KERNELSZ)
++            nn.init.kaiming_uniform_(w1.view(inC*outC_g, -1), a=np.sqrt(5))
++            self.enc_w1.append(nn.Parameter(w1))
++            self.enc_bn1.append(self._norm_1d(outC, kind="group"))
++
++            # conv2 weights (outC, Co_g, P)
++            w2 = torch.empty(outC, outC_g, self.KERNELSZ*self.KERNELSZ)
++            nn.init.kaiming_uniform_(w2.view(outC*outC_g, -1), a=np.sqrt(5))
++            self.enc_w2.append(nn.Parameter(w2))
++            self.enc_bn2.append(self._norm_1d(outC, kind="group"))
++
++            inC = outC
+@@
+         for d in range(depth):
+             level = depth - 1 - d
+             upC   = self.chanlist[level+1]
+             skipC = self.chanlist[level]
+-            inC   = upC + skipC
+-            outC  = skipC
+-
+-            hc = ho.SphericalStencil(self.enc_nsides[level],
+-                                    self.KERNELSZ,
+-                                    cell_ids=self.l_cell_ids[level],
+-                                    dtype=self.torch_dtype)
+-            #hc.make_idx_weights()
+-            self.hconv_dec.append(hc)
+-
+-            # conv1 weights
+-            w1 = torch.empty(inC, outC, self.KERNELSZ*self.KERNELSZ)
+-            nn.init.kaiming_uniform_(w1.view(inC*outC, -1), a=np.sqrt(5))
+-            self.dec_w1.append(nn.Parameter(w1))
+-            self.dec_bn1.append(self._norm_1d(outC, kind="group"))
+-
+-            # conv2 weights
+-            w2 = torch.empty(outC, outC, self.KERNELSZ*self.KERNELSZ)
+-            nn.init.kaiming_uniform_(w2.view(outC*outC, -1), a=np.sqrt(5))
+-            self.dec_w2.append(nn.Parameter(w2))
+-            self.dec_bn2.append(self._norm_1d(outC, kind="group"))
++            inC_dec  = upC + skipC
++            outC_dec = skipC
++            if outC_dec % self.G != 0:
++                raise ValueError(f"decoder outC at level {level}={outC_dec} must be divisible by G={self.G}")
++            outC_dec_g = outC_dec // self.G
++
++            hc = ho.SphericalStencil(self.enc_nsides[level],
++                                    self.KERNELSZ,
++                                    cell_ids=self.l_cell_ids[level],
++                                    dtype=self.torch_dtype)
++            hc.G = self.G
++            if self.G > 1:
++                cid_lvl = self.l_cell_ids[level]
++                th_lvl, ph_lvl = hp.pix2ang(self.enc_nsides[level], cid_lvl, nest=True)
++                hc.prepare_torch(th_lvl, ph_lvl, G=self.G)
++                order_lvl = np.argsort(cid_lvl)
++                hc.ids_sorted_np = cid_lvl[order_lvl]
++                hc.bind_support_torch_multi(hc.ids_sorted_np,
++                                            device=self.device,
++                                            dtype=self.torch_dtype)
++            self.hconv_dec.append(hc)
++
++            # conv1 weights
++            w1 = torch.empty(inC_dec, outC_dec_g, self.KERNELSZ*self.KERNELSZ)
++            nn.init.kaiming_uniform_(w1.view(inC_dec*outC_dec_g, -1), a=np.sqrt(5))
++            self.dec_w1.append(nn.Parameter(w1))
++            self.dec_bn1.append(self._norm_1d(outC_dec, kind="group"))
++
++            # conv2 weights
++            w2 = torch.empty(outC_dec, outC_dec_g, self.KERNELSZ*self.KERNELSZ)
++            nn.init.kaiming_uniform_(w2.view(outC_dec*outC_dec_g, -1), a=np.sqrt(5))
++            self.dec_w2.append(nn.Parameter(w2))
++            self.dec_bn2.append(self._norm_1d(outC_dec, kind="group"))
+@@
+-        self.head_hconv = ho.SphericalStencil(self.in_nside, self.KERNELSZ,
+-                                              cell_ids=self.l_cell_ids[0],
+-                                              dtype=self.torch_dtype)
+-        #self.head_hconv.make_idx_weights()
+-
+-        self.head_w = nn.Parameter(
+-            torch.empty(self.chanlist[0], self.out_channels, self.KERNELSZ*self.KERNELSZ)
+-        )
+-        nn.init.kaiming_uniform_(self.head_w.view(self.chanlist[0]*self.out_channels, -1), a=np.sqrt(5))
+-        if self.task == 'segmentation':
+-            self.head_bn = self._norm_1d(self.out_channels, kind="group")
+-        else:
+-            self.head_bn = None
++        self.head_hconv = ho.SphericalStencil(self.in_nside, self.KERNELSZ,
++                                              cell_ids=self.l_cell_ids[0],
++                                              dtype=self.torch_dtype)
++        self.head_hconv.G = self.G
++        if self.G > 1:
++            cid0 = self.l_cell_ids[0]
++            th0, ph0 = hp.pix2ang(self.in_nside, cid0, nest=True)
++            self.head_hconv.prepare_torch(th0, ph0, G=self.G)
++            order0 = np.argsort(cid0)
++            self.head_hconv.ids_sorted_np = cid0[order0]
++            self.head_hconv.bind_support_torch_multi(self.head_hconv.ids_sorted_np,
++                                                     device=self.device,
++                                                     dtype=self.torch_dtype)
++
++        if self.out_channels % self.G != 0:
++            raise ValueError(f"out_channels={self.out_channels} must be divisible by G={self.G}")
++        outC_head_g = self.out_channels // self.G
++        self.head_w = nn.Parameter(
++            torch.empty(self.chanlist[0], outC_head_g, self.KERNELSZ*self.KERNELSZ)
++        )
++        nn.init.kaiming_uniform_(self.head_w.view(self.chanlist[0]*outC_head_g, -1), a=np.sqrt(5))
++        if self.task == 'segmentation':
++            self.head_bn = self._norm_1d(self.out_channels, kind="group")
++        else:
++            self.head_bn = None
+END DIFF
