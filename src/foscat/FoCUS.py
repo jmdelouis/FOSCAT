@@ -9,7 +9,7 @@ from foscat.SphereDownGeo import SphereDownGeo
 from foscat.SphereUpGeo import SphereUpGeo
 import torch
 
-TMPFILE_VERSION = "V11_0"
+TMPFILE_VERSION = "V12_0"
 
 
 class FoCUS:
@@ -39,7 +39,7 @@ class FoCUS:
             mpi_rank=0
     ):
 
-        self.__version__ = "2025.11.1"
+        self.__version__ = "2026.01.1"
         # P00 coeff for normalization for scat_cov
         self.TMPFILE_VERSION = TMPFILE_VERSION
         self.P1_dic = None
