@@ -39,6 +39,7 @@ class SphereDownGeo(nn.Module):
         weight_norm: str = "l1",
         cell_ids_out: np.ndarray | list[int] | None = None,
         in_cell_ids: np.ndarray | list[int] | torch.Tensor | None = None,
+        use_csr=True,
         device=None,
         dtype: torch.dtype = torch.float32,
     ):
@@ -102,11 +103,14 @@ class SphereDownGeo(nn.Module):
             self.sigma_deg = float(sigma_deg)
             self.radius_rad = self.radius_deg * np.pi / 180.0
             self.sigma_rad = self.sigma_deg * np.pi / 180.0
-
+                                        
             M = self._build_down_matrix()  # shape (K_out, K_in or N_in)
+              
+            self.M = M.coalesce()
+            
+            if use_csr:
+                self.M = self.M.to_sparse_csr().to(self.device)
 
-            self.register_buffer("M_indices", M.indices())
-            self.register_buffer("M_values", M.values())
             self.M_size = M.size()
 
         else:
@@ -331,9 +335,6 @@ class SphereDownGeo(nn.Module):
                 raise ValueError(f"x last dim must be N_in={self.N_in}, got {N}")
 
         if self.mode == "smooth":
-            M = torch.sparse_coo_tensor(
-                self.M_indices, self.M_values, size=self.M_size, device=x.device, dtype=x.dtype
-            ).coalesce().to_sparse_csr().to(self.device)
 
             # If x is full-sphere but M is subset-based, gather compact inputs
             if self.has_in_subset and N == self.N_in:
@@ -343,7 +344,7 @@ class SphereDownGeo(nn.Module):
 
             # sparse mm expects 2D: (K_out, K_in) @ (K_in, B*C)
             x2 = x_use.reshape(B * C, -1).transpose(0, 1).contiguous()
-            y2 = torch.sparse.mm(M, x2)
+            y2 = torch.sparse.mm(self.M, x2)
             y = y2.transpose(0, 1).reshape(B, C, self.K_out).contiguous()
             return y, self.cell_ids_out_t.to(x.device)
 

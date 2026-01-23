@@ -81,11 +81,12 @@ class SphereUpGeo(nn.Module):
             weight_norm=weight_norm,
             device=self.device,
             dtype=self.dtype,
+            use_csr=False,
         )
 
         M_down_full = torch.sparse_coo_tensor(
-            tmp_down.M_indices,
-            tmp_down.M_values,
+            tmp_down.M.indices(),
+            tmp_down.M.values(),
             size=(tmp_down.N_out, tmp_down.N_in),
             device=self.device,
             dtype=self.dtype,
@@ -144,7 +145,7 @@ class SphereUpGeo(nn.Module):
             size=self.M_size,
             device=self.device,
             dtype=self.dtype,
-        ).coalesce() #.to_sparse_csr().to(self.device)
+        ).coalesce().to_sparse_csr().to(self.device)
         
     @staticmethod
     def _transpose_sparse(M: torch.Tensor) -> torch.Tensor:
