@@ -2702,6 +2702,7 @@ class funct(FOC.FoCUS):
                 nside = int(np.sqrt(npix // 12))
 
             J = int(np.log2(nside)+1)  # Number of j scales
+                
             if cell_ids is not None:
                 J=np.min([J,int(np.log(cell_ids.shape[0]) / (2*np.log(2)))-1])
 
@@ -2764,6 +2765,7 @@ class funct(FOC.FoCUS):
                     I2 = self.up_grade(I2, nside * 2)
 
                 nside = nside * 2
+                Jmax = Jmax +1
 
         # Normalize the masks because they have different pixel numbers
         # vmask /= self.backend.bk_reduce_sum(vmask, axis=1)[:, None]  # [Nmask, Npix]
