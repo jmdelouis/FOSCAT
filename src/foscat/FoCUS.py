@@ -9,7 +9,7 @@ from foscat.SphereDownGeo import SphereDownGeo
 from foscat.SphereUpGeo import SphereUpGeo
 import torch
 
-TMPFILE_VERSION = "V13_0"
+TMPFILE_VERSION = "V14_0"
 
 
 class FoCUS:
@@ -39,7 +39,7 @@ class FoCUS:
             mpi_rank=0
     ):
 
-        self.__version__ = "2026.02.1"
+        self.__version__ = "2026.02.2"
         # P00 coeff for normalization for scat_cov
         self.TMPFILE_VERSION = TMPFILE_VERSION
         self.P1_dic = None
@@ -1579,7 +1579,7 @@ class FoCUS:
                     
                     xx=np.tile(np.arange(self.KERNELSZ)-self.KERNELSZ//2,self.KERNELSZ).reshape(self.KERNELSZ,self.KERNELSZ)
                     
-                    if nside>2:
+                    if nside>1:
                         wwr=(np.exp(-pw2*(xx**2+(xx.T)**2))*np.cos(pw*xx*np.pi)).reshape(1,1,self.KERNELSZ*self.KERNELSZ)
                         wwr-=wwr.mean()
                         wwi=(np.exp(-pw2*(xx**2+(xx.T)**2))*np.sin(pw*xx*np.pi)).reshape(1,1,self.KERNELSZ*self.KERNELSZ)
