@@ -2564,7 +2564,7 @@ class funct(FOC.FoCUS):
                     mat2[0 : k + 1, None, ...].astype("complex64")
                 )
 
-            if k < l_nside - 1:
+            if k < nscale - 1:
                 tmp, _ = self.ud_grade_2(tmp)
                 if image2 is not None:
                     tmpi2, _ = self.ud_grade_2(tmpi)
