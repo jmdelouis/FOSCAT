@@ -9,7 +9,7 @@ from foscat.SphereDownGeo import SphereDownGeo
 from foscat.SphereUpGeo import SphereUpGeo
 import torch
 
-TMPFILE_VERSION = "V12_0"
+TMPFILE_VERSION = "V13_0"
 
 
 class FoCUS:
@@ -39,7 +39,7 @@ class FoCUS:
             mpi_rank=0
     ):
 
-        self.__version__ = "2026.01.1"
+        self.__version__ = "2026.02.1"
         # P00 coeff for normalization for scat_cov
         self.TMPFILE_VERSION = TMPFILE_VERSION
         self.P1_dic = None
@@ -1579,11 +1579,20 @@ class FoCUS:
                     
                     xx=np.tile(np.arange(self.KERNELSZ)-self.KERNELSZ//2,self.KERNELSZ).reshape(self.KERNELSZ,self.KERNELSZ)
                     
-                    wwr=(np.exp(-pw2*(xx**2+(xx.T)**2))*np.cos(pw*xx*np.pi)).reshape(1,1,self.KERNELSZ*self.KERNELSZ)
-                    wwr-=wwr.mean()
-                    wwi=(np.exp(-pw2*(xx**2+(xx.T)**2))*np.sin(pw*xx*np.pi)).reshape(1,1,self.KERNELSZ*self.KERNELSZ)
-                    wwi-=wwi.mean()
-                    amp=np.sum(abs(wwr+1J*wwi))
+                    if nside>2:
+                        wwr=(np.exp(-pw2*(xx**2+(xx.T)**2))*np.cos(pw*xx*np.pi)).reshape(1,1,self.KERNELSZ*self.KERNELSZ)
+                        wwr-=wwr.mean()
+                        wwi=(np.exp(-pw2*(xx**2+(xx.T)**2))*np.sin(pw*xx*np.pi)).reshape(1,1,self.KERNELSZ*self.KERNELSZ)
+                        wwi-=wwi.mean()
+                        amp=np.sum(abs(wwr+1J*wwi))
+                    else:
+                        #asymetric kernels
+                        wwr=(np.exp(-2*pw2*(xx**2+self.NORIENT*(xx.T)**2))).reshape(1,1,self.KERNELSZ*self.KERNELSZ)
+                        #wwr-=wwr.mean()
+                        #wwi=(np.exp(-pw2*(xx**2+(xx.T)**2))*np.sin(pw*xx*np.pi)).reshape(1,1,self.KERNELSZ*self.KERNELSZ)
+                        #wwi-=wwi.mean()
+                        wwi=0.0*wwr
+                        amp=self.NORIENT*np.sum(abs(wwr+1J*wwi))
                     
                     wwr/=amp
                     wwi/=amp

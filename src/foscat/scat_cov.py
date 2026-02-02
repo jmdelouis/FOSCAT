@@ -2701,7 +2701,7 @@ class funct(FOC.FoCUS):
             if nside is None:
                 nside = int(np.sqrt(npix // 12))
 
-            J = int(np.log(nside) / np.log(2))  # Number of j scales
+            J = int(np.log2(nside)+1)  # Number of j scales
             if cell_ids is not None:
                 J=np.min([J,int(np.log(cell_ids.shape[0]) / (2*np.log(2)))-1])
 
@@ -2712,7 +2712,7 @@ class funct(FOC.FoCUS):
         if Jmax > J:
             print("==========\n\n")
             print(
-                "The Jmax you requested is larger than the data size, which may cause problems while computing the scattering transform."
+                "The Jmax you requested is larger than the data size ", J,", which may cause problems while computing the scattering transform."
             )
             print("\n\n==========")
 
