@@ -2372,14 +2372,13 @@ class funct(FOC.FoCUS):
         tmp = im
         if image2 is not None:
             tmpi2 = image2
-        nscale = int(np.log(l_nside) / np.log(2)+1)
         if upscale:
             l_nside = int(np.sqrt(tmp.shape[-1] // 12))
             tmp = self.up_grade(tmp, l_nside * 2)
             if image2 is not None:
                 tmpi2 = self.up_grade(tmpi2, l_nside * 2)
-            nscale+=1
         l_nside = int(np.sqrt(tmp.shape[-1] // 12))
+        nscale = int(np.log(l_nside) / np.log(2)+1)
         cmat = {}
         cmat2 = {}
 
