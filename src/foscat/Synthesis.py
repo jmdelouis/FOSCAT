@@ -196,7 +196,7 @@ class Synthesis:
             self.operation.backend.bk_cast(in_x), self.oshape
         )
         if self.idx_grd is not None:
-            x=x[self.idx_grd]
+            x = x[self.idx_grd]
 
         self.l_log[
             self.mpi_rank * self.MAXNUMLOSS : (self.mpi_rank + 1) * self.MAXNUMLOSS
@@ -249,10 +249,10 @@ class Synthesis:
         g_tot[np.isnan(g_tot)] = 0.0
 
         if self.idx_grd is not None:
-            lg_tot=np.zeros(in_x.shape)
-            lg_tot[self.idx_grd]=g_tot
-            g_tot=lg_tot
-            
+            lg_tot = np.zeros(in_x.shape)
+            lg_tot[self.idx_grd] = g_tot
+            g_tot = lg_tot
+
         self.imin = self.imin + self.batchsz
 
         if self.mpi_size == 1:
@@ -302,25 +302,25 @@ class Synthesis:
 
     # ---------------------------------------------−---------
     def run(
-            self,
-            in_x,
-            NUM_EPOCHS=100,
-            DECAY_RATE=0.95,
-            EVAL_FREQUENCY=100,
-            DEVAL_STAT_FREQUENCY=1000,
-            NUM_STEP_BIAS=1,
-            LEARNING_RATE=0.03,
-            EPSILON=1e-7,
-            KEEP_TRACK=None,
-            grd_mask=None,
-            SHOWGPU=False,
-            MESSAGE="",
-            factr=10.0,
-            batchsz=1,
-            totalsz=1,
-            do_lbfgs=True,
-            idx_grd=None,
-            axis=0,
+        self,
+        in_x,
+        NUM_EPOCHS=100,
+        DECAY_RATE=0.95,
+        EVAL_FREQUENCY=100,
+        DEVAL_STAT_FREQUENCY=1000,
+        NUM_STEP_BIAS=1,
+        LEARNING_RATE=0.03,
+        EPSILON=1e-7,
+        KEEP_TRACK=None,
+        grd_mask=None,
+        SHOWGPU=False,
+        MESSAGE="",
+        factr=10.0,
+        batchsz=1,
+        totalsz=1,
+        do_lbfgs=True,
+        idx_grd=None,
+        axis=0,
     ):
 
         self.KEEP_TRACK = KEEP_TRACK
