@@ -1,6 +1,6 @@
-import numpy as np
 import torch
 import torch.nn as nn
+import numpy as np
 
 from foscat.SphereDownGeo import SphereDownGeo
 
@@ -33,9 +33,7 @@ class SphereUpGeo(nn.Module):
         super().__init__()
 
         if cell_ids_out is None:
-            raise ValueError(
-                "cell_ids_out is mandatory (1D list/np/tensor of coarse HEALPix ids at nside_out)."
-            )
+            raise ValueError("cell_ids_out is mandatory (1D list/np/tensor of coarse HEALPix ids at nside_out).")
 
         if device is None:
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -43,9 +41,7 @@ class SphereUpGeo(nn.Module):
         self.dtype = dtype
 
         self.nside_out = int(nside_out)
-        assert (
-            self.nside_out & (self.nside_out - 1)
-        ) == 0, "nside_out must be a power of 2."
+        assert (self.nside_out & (self.nside_out - 1)) == 0, "nside_out must be a power of 2."
         self.nside_in = self.nside_out * 2
 
         self.N_out = 12 * self.nside_out * self.nside_out
@@ -68,20 +64,13 @@ class SphereUpGeo(nn.Module):
         if cell_ids_out_np.size == 0:
             raise ValueError("cell_ids_out must be non-empty")
         if cell_ids_out_np.min() < 0 or cell_ids_out_np.max() >= self.N_out:
-            raise ValueError(
-                "cell_ids_out contains out-of-bounds ids for this nside_out"
-            )
+            raise ValueError("cell_ids_out contains out-of-bounds ids for this nside_out")
         if np.unique(cell_ids_out_np).size != cell_ids_out_np.size:
-            raise ValueError(
-                "cell_ids_out must not contain duplicates (order matters for alignment)."
-            )
+            raise ValueError("cell_ids_out must not contain duplicates (order matters for alignment).")
 
         self.cell_ids_out_np = cell_ids_out_np
         self.K_out = int(cell_ids_out_np.size)
-        self.register_buffer(
-            "cell_ids_out_t",
-            torch.as_tensor(cell_ids_out_np, dtype=torch.long, device=self.device),
-        )
+        self.register_buffer("cell_ids_out_t", torch.as_tensor(cell_ids_out_np, dtype=torch.long, device=self.device))
 
         # Build the FULL down operator at fine resolution (nside_in -> nside_out)
         tmp_down = SphereDownGeo(
@@ -118,9 +107,7 @@ class SphereUpGeo(nn.Module):
         cols_sel = cols[mask]
         vals_sel = vals[mask]
 
-        new_rows = np.fromiter(
-            (row_map[int(r)] for r in rows_sel), dtype=np.int64, count=rows_sel.size
-        )
+        new_rows = np.fromiter((row_map[int(r)] for r in rows_sel), dtype=np.int64, count=rows_sel.size)
 
         M_down_sub = torch.sparse_coo_tensor(
             torch.as_tensor(np.stack([new_rows, cols_sel], axis=0), dtype=torch.long),
@@ -150,24 +137,16 @@ class SphereUpGeo(nn.Module):
         self.register_buffer("col_l2", col_l2)
 
         # Fine ids (full sphere)
-        self.register_buffer(
-            "cell_ids_in_t",
-            torch.arange(self.N_in, dtype=torch.long, device=self.device),
-        )
+        self.register_buffer("cell_ids_in_t", torch.arange(self.N_in, dtype=torch.long, device=self.device))
 
-        self.M_T = (
-            torch.sparse_coo_tensor(
-                self.M_indices.to(device=self.device),
-                self.M_values.to(device=self.device, dtype=self.dtype),
-                size=self.M_size,
-                device=self.device,
-                dtype=self.dtype,
-            )
-            .coalesce()
-            .to_sparse_csr()
-            .to(self.device)
-        )
-
+        self.M_T =  torch.sparse_coo_tensor(
+            self.M_indices.to(device=self.device),
+            self.M_values.to(device=self.device, dtype=self.dtype),
+            size=self.M_size,
+            device=self.device,
+            dtype=self.dtype,
+        ).coalesce().to_sparse_csr().to(self.device)
+        
     @staticmethod
     def _transpose_sparse(M: torch.Tensor) -> torch.Tensor:
         M = M.coalesce()
@@ -175,9 +154,7 @@ class SphereUpGeo(nn.Module):
         vals = M.values()
         R, C = M.size()
         idx_T = torch.stack([idx[1], idx[0]], dim=0)
-        return torch.sparse_coo_tensor(
-            idx_T, vals, size=(C, R), device=M.device, dtype=M.dtype
-        ).coalesce()
+        return torch.sparse_coo_tensor(idx_T, vals, size=(C, R), device=M.device, dtype=M.dtype).coalesce()
 
     def forward(self, x: torch.Tensor):
         """x: [B, C, K_out] -> x_up: [B, C, N_in]."""
@@ -185,8 +162,8 @@ class SphereUpGeo(nn.Module):
         assert K_out == self.K_out, f"Expected K_out={self.K_out}, got {K_out}"
 
         x_bc = x.reshape(B * C, K_out)
-        x_up_bc_T = torch.sparse.mm(self.M_T, x_bc.T)  # [N_in, B*C]
-        x_up = x_up_bc_T.T.reshape(B, C, self.N_in)  # [B, C, N_in]
+        x_up_bc_T = torch.sparse.mm(self.M_T, x_bc.T)    # [N_in, B*C]
+        x_up = x_up_bc_T.T.reshape(B, C, self.N_in) # [B, C, N_in]
 
         if self.up_norm == "col_l1":
             denom = self.col_sum.to(device=x.device, dtype=x.dtype).clamp_min(self.eps)
