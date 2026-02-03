@@ -245,7 +245,15 @@ class SphereDownGeo(nn.Module):
         if self.has_in_subset:
             in_ids = self.in_cell_ids  # trié/unique :contentReference[oaicite:4]{index=4}
             idx = np.searchsorted(in_ids, children_flat)
-            ok = (idx >= 0) & (idx < in_ids.size) & (in_ids[idx] == children_flat)
+
+            in_range = idx < in_ids.size          # idx est toujours >=0 pour searchsorted
+            idx2 = idx[in_range]
+            child2 = children_flat[in_range]
+
+            ok2 = (in_ids[idx2] == child2)        # comparaison safe
+            ok = np.zeros_like(in_range, dtype=bool)
+            ok[in_range] = ok2
+
             cols_flat = idx[ok]
             rows_flat2 = rows_flat[ok]
             child_ids_kept = children_flat[ok]
