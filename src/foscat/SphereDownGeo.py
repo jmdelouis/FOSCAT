@@ -106,7 +106,7 @@ class SphereDownGeo(nn.Module):
                                         
             M = self._build_down_matrix()  # shape (K_out, K_in or N_in)
               
-            self.M = M.coalesce()
+            self.M = M
             
             if use_csr:
                 self.M = self.M.to_sparse_csr().to(self.device)
@@ -306,7 +306,7 @@ class SphereDownGeo(nn.Module):
 
         indices = torch.stack([rows_t, cols_t], dim=0)
         return torch.sparse_coo_tensor(indices, vals_t, size=(self.K_out, self.K_in),
-                                    device=self.device, dtype=self.dtype).coalesce().to_sparse_csr().to(self.device)
+                                    device=self.device, dtype=self.dtype).coalesce()
     '''
     def _build_down_matrix(self) -> torch.Tensor:
         """Construct sparse matrix M (K_out, K_in or N_in) for the selected coarse pixels."""
