@@ -665,6 +665,9 @@ class BkTorch(BackendBase.BackendBase):
         else:
             raise ValueError("`cell_ids` must be of shape [N] or [B, N].")
 
+        else:
+            raise ValueError("`cell_ids` must be of shape [N] or [B, N].")
+    
     def average_by_cell_group(data, cell_ids):
         """
         data: tensor of shape [..., N, ...] (ex: [B, N, C])
@@ -1022,7 +1025,7 @@ class BkTorch(BackendBase.BackendBase):
         y = y.reshape(*leading_dims, O_c, Nx, Ny)
 
         return y
-
+    
     def conv1d(self, x, w, strides=[1, 1, 1], padding="SAME"):
         """
         Performs 1D convolution along the last axis of a 2D tensor x[n, m] with kernel w[K].
@@ -1155,6 +1158,14 @@ class BkTorch(BackendBase.BackendBase):
             return self.backend.mean(data)
         else:
             return self.backend.mean(data, axis)
+        
+    def bk_reduce_median(self, data, axis=None):
+
+        if axis is None:
+            res,_ = self.backend.median(data)
+        else:
+            res,_ = self.backend.median(data, axis)
+        return res
 
     def bk_reduce_median(self, data, axis=None):
 

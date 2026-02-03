@@ -89,6 +89,11 @@ class GCNN:
     def eval(self, im, indices=None, weights=None):
 
         x = self.x
+        
+        ww = self.backend.bk_reshape(
+            x[0:self.npar * 12 * self.in_nside**2 * self.chanlist[0]],
+            [self.npar,12 * self.in_nside**2 * self.chanlist[0]],
+        )
 
         ww = self.backend.bk_reshape(
             x[0 : self.npar * 12 * self.in_nside**2 * self.chanlist[0]],
@@ -132,6 +137,8 @@ class GCNN:
                     im, ww, indices=indices[k], weights=weights[k]
                 )
             im = self.scat_operator.backend.bk_relu(im)
+            
+            im = self.backend.bk_reshape(self.scat_operator.backend.bk_repeat(im,4),[im.shape[0],im.shape[1],im.shape[2]*4])
 
             im = self.backend.bk_reshape(
                 self.scat_operator.backend.bk_repeat(im, 4),

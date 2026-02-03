@@ -3,41 +3,43 @@ import sys
 
 import healpy as hp
 import numpy as np
-from scipy.interpolate import griddata
-
 import foscat.HealSpline as HS
+from scipy.interpolate import griddata
+from foscat.SphereDownGeo import SphereDownGeo
+from foscat.SphereUpGeo import SphereUpGeo
+import torch
 
-TMPFILE_VERSION = "V10_0"
+TMPFILE_VERSION = "V14_0"
 
 
 class FoCUS:
     def __init__(
-        self,
-        NORIENT=4,
-        LAMBDA=1.2,
-        KERNELSZ=3,
-        slope=1.0,
-        all_type="float32",
-        nstep_max=20,
-        padding="SAME",
-        gpupos=0,
-        mask_thres=None,
-        mask_norm=False,
-        isMPI=False,
-        TEMPLATE_PATH=None,
-        BACKEND="torch",
-        use_2D=False,
-        use_1D=False,
-        return_data=False,
-        DODIV=False,
-        use_median=False,
-        InitWave=None,
-        silent=True,
-        mpi_size=1,
-        mpi_rank=0,
+            self,
+            NORIENT=4,
+            LAMBDA=1.2,
+            KERNELSZ=3,
+            slope=1.0,
+            all_type="float32",
+            nstep_max=20,
+            padding="SAME",
+            gpupos=0,
+            mask_thres=None,
+            mask_norm=False,
+            isMPI=False,
+            TEMPLATE_PATH=None,
+            BACKEND="torch",
+            use_2D=False,
+            use_1D=False,
+            return_data=False,
+            DODIV=False,
+            use_median=False,
+            InitWave=None,
+            silent=True,
+            mpi_size=1,
+            mpi_rank=0
     ):
 
-        self.__version__ = "2025.11.1"
+        self.__version__ = "2026.02.4"
         # P00 coeff for normalization for scat_cov
         self.TMPFILE_VERSION = TMPFILE_VERSION
         self.P1_dic = None
@@ -58,7 +60,8 @@ class FoCUS:
         self.kernelR_conv = {}
         self.kernelI_conv = {}
         self.padding_conv = {}
-
+        self.down = {}
+        self.up = {}
         if not self.silent:
             print("================================================")
             print("          START FOSCAT CONFIGURATION")
@@ -594,7 +597,7 @@ class FoCUS:
                 data = data.reshape((count,))
 
             return data
-
+    
     # ---------------------------------------------−---------
     # ---------------------------------------------−---------
     def healpix_layer(self, im, ww, indices=None, weights=None):
@@ -962,6 +965,86 @@ class FoCUS:
             else:
                 # work only on the last column
 
+                else:
+                    ratio=(nout//lout)**2
+                    if o_cell_ids is None:
+                        o_cell_ids=np.tile(cell_ids,ratio)*ratio+np.repeat(np.arange(ratio),cell_ids.shape[0])
+                    i_npix=cell_ids.shape[0]
+
+                    
+                    th, ph = hp.pix2ang(
+                        nout, self.backend.to_numpy(o_cell_ids), nest=True
+                    )
+
+                    all_idx,www=hp.get_interp_weights(lout,th,ph,nest=True)
+                    #www,all_idx,hidx=sp.ang2weigths(th,ph,nest=True)
+
+                    hidx,inv_idx = np.unique(all_idx,
+                                    return_inverse=True)
+                    all_idx = inv_idx
+                    
+                    sorter = np.argsort(hidx)
+                    
+                    index=sorter[np.searchsorted(hidx,
+                                                 self.backend.to_numpy(cell_ids),
+                                                 sorter=sorter)]
+                    
+                    mask        = -np.ones([hidx.shape[0]])
+                    
+                    mask[index] = np.arange(index.shape[0],dtype='int')
+
+                    all_idx=mask[all_idx]
+
+                    www[all_idx==-1]=0.0
+                    www/=np.sum(www,0)[None,:]
+                    
+                    all_idx[all_idx==-1]=0
+               
+                    w=www.T
+                    p=all_idx.T
+                    
+                    w=w.flatten()
+                    p=p.flatten()
+                    
+                    indice = np.zeros([o_cell_ids.shape[0] * 4, 2], dtype="int")
+                    indice[:, 1] = np.repeat(np.arange(o_cell_ids.shape[0]), 4)
+                    indice[:, 0] = p
+                    
+                    self.pix_interp_val[(lout,nout)] = 1
+                    self.weight_interp_val[(lout,nout)] = self.backend.bk_SparseTensor(
+                        self.backend.bk_constant(indice.T),
+                        self.backend.bk_constant(self.backend.bk_cast(w)),
+                        dense_shape=[i_npix,o_cell_ids.shape[0]],
+                    )
+                    
+                    del w
+                    del p
+            '''
+            shape=list(im.shape)
+            nbatch=1
+            for k in range(len(shape)-1):
+                nbatch*=shape[k]
+            
+            im=self.backend.bk_reshape(im,[nbatch,1,shape[-1]])
+            
+            while lout<nout:
+                if lout not in self.up:
+                    if o_cell_ids is None:
+                        l_o_cell_ids=torch.tensor(np.arange(12*(lout**2),dtype='int'),device=im.device)
+                    else:
+                        l_o_cell_ids=o_cell_ids
+                    self.up[lout] = SphereUpGeo(nside_out=lout, 
+                                                dtype=self.all_bk_type,
+                                                 cell_ids_out=l_o_cell_ids,
+                                                 up_norm="col_l1")
+                im, fine_ids = self.up[lout](self.backend.bk_cast(im))
+                lout*=2
+                if lout<nout and o_cell_ids is not None:
+                    o_cell_ids=torch.repeat(fine_ids,4)*4+ \
+                                torch.tile(torch.tensor([0,1,2,3],device=fine_ids.device,dtype=fine_ids.dtype),fine_ids.shape[0])
+            
+            return self.backend.bk_reshape(im,shape[:-1]+[im.shape[-1]])
+            '''
                 ndata = 1
                 for k in range(len(ishape) - 1):
                     ndata = ndata * ishape[k]
@@ -1914,7 +1997,8 @@ class FoCUS:
             if kernel != -1:
                 return tmp
 
-        return wr, wi, ws, tmp
+        return wr, wi, ws,tmp
+
 
     # ---------------------------------------------−---------
     def init_index_cnn(self, nside, NORIENT=4, kernel=-1, cell_ids=None):
@@ -2299,8 +2383,8 @@ class FoCUS:
             ichannel = 1
             for i in range(1, len(shape) - 1):
                 ichannel *= shape[i]
-
-            l_x = self.backend.bk_reshape(x, [shape[0], 1, ichannel, shape[-1]])
+            
+            l_x = self.backend.bk_reshape(x, [shape[0], 1, ichannel,shape[-1]])
 
             if self.padding == "VALID":
                 oshape = [k for k in shape]
@@ -2308,7 +2392,7 @@ class FoCUS:
                 l_x = self.backend.bk_reshape(
                     l_x[:, :, self.KERNELSZ // 2 : -self.KERNELSZ // 2 + 1, :], oshape
                 )
-        else:
+        else:   
             ichannel = 1
             if len(shape) > 1:
                 ichannel = shape[0]
@@ -2817,7 +2901,7 @@ class FoCUS:
             ishape = list(in_image.shape)
 
             npix = ishape[-1]
-
+            
             ndata = 1
             for k in range(len(ishape) - 1):
                 ndata = ndata * ishape[k]
@@ -2830,7 +2914,7 @@ class FoCUS:
                 res = self.backend.bk_complex(rr, ii)
             else:
                 res = self.backend.conv1d(tim, self.ww_SmoothT[1])
-
+                
             return self.backend.bk_reshape(res, ishape)
 
         else:

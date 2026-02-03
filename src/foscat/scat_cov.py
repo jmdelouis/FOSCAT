@@ -360,7 +360,7 @@ class scat_cov:
                             self.backend.bk_flattenR(self.S3[0]),
                             self.backend.bk_flattenR(self.S4[0]),
                         ],
-                        0,
+                       0,
                     )
                 else:
                     tmp = self.backend.bk_concat(
@@ -2433,8 +2433,8 @@ class funct(FOC.FoCUS):
             if smooth_scale > 0:
                 for m in range(smooth_scale):
                     if cc.shape[0] > 12:
-                        cc, _ = self.ud_grade_2(self.smooth(cc))
-                        ss, _ = self.ud_grade_2(self.smooth(ss))
+                        cc, _ = self.ud_grade_2(cc)
+                        ss, _ = self.ud_grade_2(ss)
 
             if cc.shape[-1] != tmp.shape[-1]:
                 ll_nside = int(np.sqrt(tmp.shape[-1] // 12))
@@ -2727,7 +2727,7 @@ class funct(FOC.FoCUS):
         -------
         S1, S2, S3, S4 normalized
         """
-
+        
         return_data = self.return_data
 
         # Check input consistency
@@ -2816,7 +2816,7 @@ class funct(FOC.FoCUS):
         if Jmax > J:
             print("==========\n\n")
             print(
-                "The Jmax you requested is larger than the data size, which may cause problems while computing the scattering transform."
+                "The Jmax you requested is larger than the data size ", J,", which may cause problems while computing the scattering transform."
             )
             print("\n\n==========")
 
@@ -3681,20 +3681,20 @@ class funct(FOC.FoCUS):
                 ### Modules
                 for j2 in range(0, j3 + 1):  # j2 =< j3
                     ### Dictionary M1_dic[j2]
-                    M1_smooth = self.smooth(
-                        M1_dic[j2], cell_ids=cell_ids_j3, nside=nside_j3
-                    )  # [Nbatch, Npix_j3, Norient3]
+                    #M1_smooth = self.smooth(
+                    #    M1_dic[j2], cell_ids=cell_ids_j3, nside=nside_j3
+                    #)  # [Nbatch, Npix_j3, Norient3]
                     M1_dic[j2], new_cell_ids_j2 = self.ud_grade_2(
-                        M1_smooth, cell_ids=cell_ids_j3, nside=nside_j3
+                        M1_dic[j2],  cell_ids=cell_ids_j3, nside=nside_j3
                     )  # [Nbatch, Npix_j3, Norient3]
 
                     ### Dictionary M2_dic[j2]
                     if cross:
-                        M2_smooth = self.smooth(
-                            M2_dic[j2], cell_ids=cell_ids_j3, nside=nside_j3
-                        )  # [Nbatch, Npix_j3, Norient3]
+                        #M2_smooth = self.smooth(
+                        #    M2_dic[j2],  cell_ids=cell_ids_j3, nside=nside_j3
+                        #)  # [Nbatch, Npix_j3, Norient3]
                         M2_dic[j2], new_cell_ids_j2 = self.ud_grade_2(
-                            M2_smooth, cell_ids=cell_ids_j3, nside=nside_j3
+                            M2_dic[j2],  cell_ids=cell_ids_j3, nside=nside_j3
                         )  # [Nbatch, Npix_j3, Norient3]
                 ### Mask
                 vmask, new_cell_ids_j3 = self.ud_grade_2(
@@ -3713,7 +3713,7 @@ class funct(FOC.FoCUS):
             self.P1_dic = P1_dic
             if cross:
                 self.P2_dic = P2_dic
-
+                
         if not return_data:
             if not self.use_1D:
                 S1 = self.backend.bk_concat(S1, -2)
@@ -3746,14 +3746,9 @@ class funct(FOC.FoCUS):
         if calc_var:
             if not cross:
                 return scat_cov(
-                    s0,
-                    S2,
-                    S3,
-                    S4,
-                    s1=S1,
-                    backend=self.backend,
+                    s0, S2, S3, S4, s1=S1, backend=self.backend,
                     use_1D=self.use_1D,
-                    return_data=self.return_data,
+                    return_data=self.return_data
                 ), scat_cov(
                     vs0,
                     VS2,
@@ -3762,7 +3757,7 @@ class funct(FOC.FoCUS):
                     s1=VS1,
                     backend=self.backend,
                     use_1D=self.use_1D,
-                    return_data=self.return_data,
+                    return_data=self.return_data
                 )
             else:
                 return scat_cov(
@@ -3774,7 +3769,7 @@ class funct(FOC.FoCUS):
                     s3p=S3P,
                     backend=self.backend,
                     use_1D=self.use_1D,
-                    return_data=self.return_data,
+                    return_data=self.return_data
                 ), scat_cov(
                     vs0,
                     VS2,
@@ -3784,19 +3779,16 @@ class funct(FOC.FoCUS):
                     s3p=VS3P,
                     backend=self.backend,
                     use_1D=self.use_1D,
-                    return_data=self.return_data,
+                    return_data=self.return_data
                 )
         else:
             if not cross:
                 return scat_cov(
-                    s0,
-                    S2,
-                    S3,
-                    S4,
+                    s0, S2, S3, S4,
                     s1=S1,
                     backend=self.backend,
                     use_1D=self.use_1D,
-                    return_data=self.return_data,
+                    return_data=self.return_data
                 )
             else:
                 return scat_cov(
@@ -3808,7 +3800,7 @@ class funct(FOC.FoCUS):
                     s3p=S3P,
                     backend=self.backend,
                     use_1D=self.use_1D,
-                    return_data=self.return_data,
+                    return_data=self.return_data
                 )
 
     def clean_norm(self):
@@ -3817,19 +3809,19 @@ class funct(FOC.FoCUS):
         return
 
     def _compute_S3(
-        self,
-        j2,
-        j3,
-        conv,
-        vmask,
-        M_dic,
-        MconvPsi_dic,
-        calc_var=False,
-        return_data=False,
-        cmat2=None,
-        cell_ids=None,
-        nside_j2=None,
-        spin=0,
+            self,
+            j2,
+            j3,
+            conv,
+            vmask,
+            M_dic,
+            MconvPsi_dic,
+            calc_var=False,
+            return_data=False,
+            cmat2=None,
+            cell_ids=None,
+            nside_j2=None,
+            spin=0,
     ):
         """
         Compute the S3 coefficients (auto or cross)
@@ -3848,7 +3840,7 @@ class funct(FOC.FoCUS):
 
         if cmat2 is not None:
             tmp2 = self.backend.bk_repeat(MconvPsi, self.NORIENT, axis=-3)
-            if spin == 0:
+            if spin==0:
                 MconvPsi = self.backend.bk_reduce_sum(
                     self.backend.bk_reshape(
                         cmat2[j3][j2] * tmp2,
@@ -3887,11 +3879,11 @@ class funct(FOC.FoCUS):
         if self.use_1D:
             s3 = conv * self.backend.bk_conjugate(MconvPsi)
         elif self.use_2D:
-            s3 = self.backend.bk_expand_dims(conv, -4) * self.backend.bk_conjugate(
+            s3 = self.backend.bk_expand_dims(conv, -4)* self.backend.bk_conjugate(
                 MconvPsi
             )  # [Nbatch, Norient3, Norient2, Npix_j3]
         else:
-            s3 = self.backend.bk_expand_dims(conv, -3) * self.backend.bk_conjugate(
+            s3 = self.backend.bk_expand_dims(conv, -3)* self.backend.bk_conjugate(
                 MconvPsi
             )  # [Nbatch, Norient3, Norient2, Npix_j3]
         ### Apply the mask [Nmask, Npix_j3] and sum over pixels
@@ -3958,7 +3950,7 @@ class funct(FOC.FoCUS):
         Done by Sihao Cheng and Rudy Morel.
         """
 
-        if N != 0:
+        if N!=0:
             filter = np.zeros([J, L, M, N], dtype="complex64")
 
             slant = 4.0 / L
@@ -3972,17 +3964,11 @@ class funct(FOC.FoCUS):
                     xi = 3.0 / 4.0 * np.pi / 2**j
 
                     R = np.array(
-                        [
-                            [np.cos(theta), -np.sin(theta)],
-                            [np.sin(theta), np.cos(theta)],
-                        ],
+                        [[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]],
                         np.float64,
                     )
                     R_inv = np.array(
-                        [
-                            [np.cos(theta), np.sin(theta)],
-                            [-np.sin(theta), np.cos(theta)],
-                        ],
+                        [[np.cos(theta), np.sin(theta)], [-np.sin(theta), np.cos(theta)]],
                         np.float64,
                     )
                     D = np.array([[1, 0], [0, slant * slant]])
@@ -4003,9 +3989,7 @@ class funct(FOC.FoCUS):
                         + (curv[0, 1] + curv[1, 0]) * xx * yy
                         + curv[1, 1] * yy * yy
                     )
-                    argi = arg + 1.0j * (
-                        xx * xi * np.cos(theta) + yy * xi * np.sin(theta)
-                    )
+                    argi = arg + 1.0j * (xx * xi * np.cos(theta) + yy * xi * np.sin(theta))
 
                     gabi = np.exp(argi).sum((0, 1))
                     gab = np.exp(arg).sum((0, 1))
@@ -4025,8 +4009,8 @@ class funct(FOC.FoCUS):
             return self.backend.bk_cast(filter)
         else:
             filter = np.zeros([J, L, M], dtype="complex64")
-            # TODO
-            print("filter for 1D not yet available")
+            #TODO
+            print('filter for 1D not yet available')
             exit(0)
             slant = 4.0 / L
 
@@ -4039,17 +4023,11 @@ class funct(FOC.FoCUS):
                     xi = 3.0 / 4.0 * np.pi / 2**j
 
                     R = np.array(
-                        [
-                            [np.cos(theta), -np.sin(theta)],
-                            [np.sin(theta), np.cos(theta)],
-                        ],
+                        [[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]],
                         np.float64,
                     )
                     R_inv = np.array(
-                        [
-                            [np.cos(theta), np.sin(theta)],
-                            [-np.sin(theta), np.cos(theta)],
-                        ],
+                        [[np.cos(theta), np.sin(theta)], [-np.sin(theta), np.cos(theta)]],
                         np.float64,
                     )
                     D = np.array([[1, 0], [0, slant * slant]])
@@ -4069,9 +4047,7 @@ class funct(FOC.FoCUS):
                         + (curv[0, 1] + curv[1, 0]) * xx * yy
                         + curv[1, 1] * yy * yy
                     )
-                    argi = arg + 1.0j * (
-                        xx * xi * np.cos(theta) + yy * xi * np.sin(theta)
-                    )
+                    argi = arg + 1.0j * (xx * xi * np.cos(theta) + yy * xi * np.sin(theta))
 
                     gabi = np.exp(argi).sum((0, 1))
                     gab = np.exp(arg).sum((0, 1))
@@ -4223,21 +4199,21 @@ class funct(FOC.FoCUS):
     #
     # ---------------------------------------------------------------------------
     def scattering_cov(
-        self,
-        data,
-        data2=None,
-        Jmax=None,
-        if_large_batch=False,
-        S4_criteria=None,
-        use_ref=False,
-        normalization="S2",
-        edge=False,
-        in_mask=None,
-        pseudo_coef=1,
-        get_variance=False,
-        ref_sigma=None,
-        iso_ang=False,
-        return_table=False,
+            self,
+            data,
+            data2=None,
+            Jmax=None,
+            if_large_batch=False,
+            S4_criteria=None,
+            use_ref=False,
+            normalization="S2",
+            edge=False,
+            in_mask=None,
+            pseudo_coef=1,
+            get_variance=False,
+            ref_sigma=None,
+            iso_ang=False,
+            return_table=False,
     ):
         """
         Calculates the scattering correlations for a batch of images, including:
@@ -4325,24 +4301,24 @@ class funct(FOC.FoCUS):
                 if data2 is not None:
                     N_image2 = data2.shape[0]
             J = int(np.log(nside) / np.log(2)) - 1  # Number of j scales
-            dim = (-2, -1)
+            dim=(-2,-1)
         elif self.use_1D:
             if len(data.shape) == 2:
                 npix = int(im_shape[1])  # Number of pixels
                 M = im_shape[1]
-                N = 0
+                N=0
                 N_image = 1
                 N_image2 = 1
             else:
                 npix = int(im_shape[0])  # Number of pixels
                 N_image = data.shape[0]
                 M = im_shape[0]
-                N = 0
+                N=0
                 if data2 is not None:
                     N_image2 = data2.shape[0]
 
             nside = int(npix)
-            dim = -1
+            dim=(-1)
 
             J = int(np.log(nside) / np.log(2)) - 1  # Number of j scales
         else:
@@ -4356,7 +4332,7 @@ class funct(FOC.FoCUS):
                 if data2 is not None:
                     N_image2 = data2.shape[0]
 
-            if spin == 0:
+            if spin==0:
                 nside = int(np.sqrt(npix // 12))
             else:
                 nside = int(np.sqrt(npix // 24))
@@ -4372,7 +4348,7 @@ class funct(FOC.FoCUS):
                 )
                 print("\n\n==========")
             J = Jmax  # Number of steps for the loop on scales
-
+            
         L = self.NORIENT
         norm_factor_S3 = 1.0
 
@@ -4551,14 +4527,18 @@ class funct(FOC.FoCUS):
 
                 S2 = self.backend.bk_reduce_mean((I1 * edge_mask), axis=dim)
                 if get_variance:
-                    S2_sigma = self.backend.bk_reduce_std((I1 * edge_mask), axis=dim)
+                    S2_sigma = self.backend.bk_reduce_std(
+                        (I1 * edge_mask), axis=dim
+                    )
 
                 I1 = self.backend.bk_L1(I1)
 
                 S1 = self.backend.bk_reduce_mean((I1 * edge_mask), axis=dim)
 
                 if get_variance:
-                    S1_sigma = self.backend.bk_reduce_std((I1 * edge_mask), axis=dim)
+                    S1_sigma = self.backend.bk_reduce_std(
+                        (I1 * edge_mask), axis=dim
+                    )
 
             I1_f = self.backend.bk_fftn(I1, dim=dim)
 
@@ -4581,7 +4561,9 @@ class funct(FOC.FoCUS):
                 if data2 is not None:
                     data2_f_small = self.cut_high_k_off(data2_f, dx3, dy3)
                 if edge:
-                    I1_small = self.backend.bk_ifftn(I1_f_small, dim=dim, norm="ortho")
+                    I1_small = self.backend.bk_ifftn(
+                        I1_f_small, dim=dim, norm="ortho"
+                    )
                     data_small = self.backend.bk_ifftn(
                         data_f_small, dim=dim, norm="ortho"
                     )
@@ -4936,13 +4918,11 @@ class funct(FOC.FoCUS):
                 if iso_ang:
                     if ref_sigma is not None:
                         if return_table:
-                            return (
-                                (S1_iso / ref_sigma["S1_sigma"]),
-                                (S2_iso / ref_sigma["S2_sigma"]),
-                                (S3_iso / ref_sigma["S3_sigma"]),
-                                (S4_iso / ref_sigma["S4_sigma"]),
-                            )
-
+                            return (S1_iso / ref_sigma["S1_sigma"]), \
+                                (S2_iso / ref_sigma["S2_sigma"]) , \
+                                (S3_iso / ref_sigma["S3_sigma"]) , \
+                                (S4_iso / ref_sigma["S4_sigma"]) 
+                        
                         for_synthesis = self.backend.backend.cat(
                             (
                                 mean_data / ref_sigma["std_data"],
@@ -4970,8 +4950,8 @@ class funct(FOC.FoCUS):
                         )
                     else:
                         if return_table:
-                            return S1_iso, S2_iso, S3_iso, S4_iso
-
+                            return S1_iso,S2_iso,S3_iso,S4_iso
+                        
                         for_synthesis = self.backend.backend.cat(
                             (
                                 mean_data / std_data,
@@ -4988,13 +4968,11 @@ class funct(FOC.FoCUS):
                 else:
                     if ref_sigma is not None:
                         if return_table:
-                            return (
-                                (S1 / ref_sigma["S1_sigma"]),
-                                (S2 / ref_sigma["S2_sigma"]),
-                                (S3 / ref_sigma["S3_sigma"]),
-                                (S4 / ref_sigma["S4_sigma"]),
-                            )
-
+                            return (S1 / ref_sigma["S1_sigma"]), \
+                                (S2 / ref_sigma["S2_sigma"]), \
+                                (S3 / ref_sigma["S3_sigma"]), \
+                                (S4 / ref_sigma["S4_sigma"])
+                        
                         for_synthesis = self.backend.backend.cat(
                             (
                                 mean_data / ref_sigma["std_data"],
@@ -5022,8 +5000,8 @@ class funct(FOC.FoCUS):
                         )
                     else:
                         if return_table:
-                            return S1, S2, S3, S4
-
+                            return S1,S2,S3,S4
+                        
                         for_synthesis = self.backend.backend.cat(
                             (
                                 mean_data / std_data,
@@ -5041,13 +5019,11 @@ class funct(FOC.FoCUS):
                 if iso_ang:
                     if ref_sigma is not None:
                         if return_table:
-                            return (
-                                (S1_iso / ref_sigma["S1_sigma"]),
-                                (S2_iso / ref_sigma["S2_sigma"]),
-                                (S3_iso / ref_sigma["S3_sigma"]),
-                                (S4_iso / ref_sigma["S4_sigma"]),
-                            )
-
+                            return (S1_iso / ref_sigma["S1_sigma"]), \
+                                (S2_iso / ref_sigma["S2_sigma"]), \
+                                (S3_iso / ref_sigma["S3_sigma"]), \
+                                (S4_iso / ref_sigma["S4_sigma"])
+                        
                         for_synthesis = self.backend.backend.cat(
                             (
                                 mean_data / ref_sigma["std_data"],
@@ -5077,8 +5053,8 @@ class funct(FOC.FoCUS):
                         )
                     else:
                         if return_table:
-                            return S1_iso, S2_iso, S3_iso, S4_iso
-
+                            return S1_iso,S2_iso,S3_iso,S4_iso
+                        
                         for_synthesis = self.backend.backend.cat(
                             (
                                 mean_data / std_data,
@@ -5097,13 +5073,11 @@ class funct(FOC.FoCUS):
                 else:
                     if ref_sigma is not None:
                         if return_table:
-                            return (
-                                (S1 / ref_sigma["S1_sigma"]),
-                                (S2 / ref_sigma["S2_sigma"]),
-                                (S3 / ref_sigma["S3_sigma"]),
-                                (S4 / ref_sigma["S4_sigma"]),
-                            )
-
+                            return (S1 / ref_sigma["S1_sigma"]), \
+                                (S2 / ref_sigma["S2_sigma"]), \
+                                (S3 / ref_sigma["S3_sigma"]), \
+                                (S4 / ref_sigma["S4_sigma"])
+                        
                         for_synthesis = self.backend.backend.cat(
                             (
                                 mean_data / ref_sigma["std_data"],
@@ -5133,8 +5107,8 @@ class funct(FOC.FoCUS):
                         )
                     else:
                         if return_table:
-                            return S1, S2, S3, S4
-
+                            return S1,S2,S3,S4
+                        
                         for_synthesis = self.backend.backend.cat(
                             (
                                 mean_data / std_data,
@@ -5262,7 +5236,9 @@ class funct(FOC.FoCUS):
             S1 = self.backend.bk_reduce_mean(I1 * edge_mask, axis=dim)
 
             if get_variance:
-                S2_sigma = self.backend.bk_reduce_std((I1**2 * edge_mask), axis=dim)
+                S2_sigma = self.backend.bk_reduce_std(
+                    (I1**2 * edge_mask), axis=dim
+                )
                 S1_sigma = self.backend.bk_reduce_std((I1 * edge_mask), axis=dim)
 
             I1_f = self.backend.bk_fftn(I1, dim=dim)
@@ -5344,7 +5320,9 @@ class funct(FOC.FoCUS):
                 data2_f_small = self.cut_high_k_off(data2_f, dx3, dy3)
             if edge:
                 I1_small = self.backend.bk_ifftn(I1_f_small, dim=dim, norm="ortho")
-                data_small = self.backend.bk_ifftn(data_f_small, dim=dim, norm="ortho")
+                data_small = self.backend.bk_ifftn(
+                    data_f_small, dim=dim, norm="ortho"
+                )
                 if data2 is not None:
                     data2_small = self.backend.bk_ifftn(
                         data2_f_small, dim=dim, norm="ortho"
@@ -6126,11 +6104,9 @@ class funct(FOC.FoCUS):
 
     def from_gaussian(self, x):
 
-        x = self.backend.bk_clip_by_value(
-            x,
-            self.val_min + 1e-7 * (self.val_max - self.val_min),
-            self.val_max - 1e-7 * (self.val_max - self.val_min),
-        )
+        x = self.backend.bk_clip_by_value(x,
+                                          self.val_min+1E-7*(self.val_max-self.val_min),
+                                          self.val_max-1E-7*(self.val_max-self.val_min))
         return self.f_gaussian(self.backend.to_numpy(x))
 
     def square(self, x):
@@ -6301,12 +6277,12 @@ class funct(FOC.FoCUS):
             return result
         else:
             if sigma is None:
-                tmp = self.diff_data(x, y)
+                tmp = self.diff_data(x,y)
             else:
-                tmp = self.diff_data(x, y, sigma=sigma)
-
+                tmp = self.diff_data(x,y,sigma=sigma)
+                
             # do abs in case of complex values
-            return tmp / x.shape[0]
+            return tmp/x.shape[0]
 
     def reduce_sum(self, x):
 
@@ -6427,44 +6403,38 @@ class funct(FOC.FoCUS):
         return scat_cov(
             s0, s2, s3, s4, s1=s1, s3p=s3p, backend=self.backend, use_1D=self.use_1D
         )
-
-    def calc_matrix_orientation(self, noise_map, image2=None):
+    def calc_matrix_orientation(self,noise_map,image2=None):
         # Décalage circulaire par matrice de permutation
-        def circ_shift_matrix(N, k):
+        def circ_shift_matrix(N,k):
             return np.roll(np.eye(N), shift=-k, axis=1)
-
         Norient = self.NORIENT
-        im = self.convol(noise_map)
+        im=self.convol(noise_map)
         if image2 is None:
-            mm = np.mean(abs(self.backend.to_numpy(im)), 0)
+            mm=np.mean(abs(self.backend.to_numpy(im)),0)
         else:
-            im2 = self.convol(self.backend.bk_cast(image2))
-            mm = np.mean(
-                self.backend.to_numpy(
-                    self.backend.bk_L1(im * self.backend.bk_conjugate(im2))
-                ).real,
-                0,
-            )
+            im2=self.convol(self.backend.bk_cast(image2))
+            mm=np.mean(self.backend.to_numpy(
+                self.backend.bk_L1(im*self.backend.bk_conjugate(im2))).real,0)
+        
+        Norient=mm.shape[0]
+        xx=np.cos(np.arange(Norient)/Norient*2*np.pi)
+        yy=np.sin(np.arange(Norient)/Norient*2*np.pi)
 
-        Norient = mm.shape[0]
-        xx = np.cos(np.arange(Norient) / Norient * 2 * np.pi)
-        yy = np.sin(np.arange(Norient) / Norient * 2 * np.pi)
-
-        a = np.sum(mm * xx[:, None], 0)
-        b = np.sum(mm * yy[:, None], 0)
-
-        o = np.fmod(Norient * np.arctan2(-b, a) / (2 * np.pi) + Norient, Norient)
-        xx = np.arange(Norient)
-        alpha = o[None, :] - xx[:, None]
-        beta = np.fmod(1 + o[None, :] - xx[:, None], Norient)
-        alpha = (1 - alpha) * (alpha < 1) * (alpha > 0) + beta * (beta < 1) * (beta > 0)
-
-        m = np.zeros([Norient, Norient, mm.shape[1]])
+        a=np.sum(mm*xx[:,None],0)
+        b=np.sum(mm*yy[:,None],0)
+        
+        o=np.fmod(Norient*np.arctan2(-b,a)/(2*np.pi)+Norient,Norient)
+        xx=np.arange(Norient)
+        alpha = o[None,:]-xx[:,None]
+        beta = np.fmod(1+o[None,:]-xx[:,None],Norient)
+        alpha=(1-alpha)*(alpha<1)*(alpha>0)+beta*(beta<1)*(beta>0)
+        
+        m=np.zeros([Norient,Norient,mm.shape[1]])
         for k in range(Norient):
-            m[k, :, :] = np.roll(alpha, k, 0)
-        # m=np.mean(m,0)
+            m[k,:,:]=np.roll(alpha,k,0)
+        #m=np.mean(m,0)
         return self.backend.bk_cast(m)
-
+        
     def synthesis(
         self,
         image_target,
@@ -6541,19 +6511,23 @@ class funct(FOC.FoCUS):
             use_v = args[2]
             ljmax = args[3]
 
-            learn = scat_operator.eval(u, Jmax=ljmax, norm="auto")
-
-            if synthesised_N > 1:
+            learn = scat_operator.eval(
+                u,
+                Jmax=ljmax,
+                norm='auto'
+                )
+            
+            if synthesised_N>1:
                 learn = scat_operator.reduce_mean_batch(learn)
-
+            
             # compute scattering covariance of the current synthetised map called u
             if use_v:
-                loss = scat_operator.reduce_distance(learn, ref, sigma=sref)
+                loss = scat_operator.reduce_distance(learn,ref,sigma=sref)
             else:
-                loss = scat_operator.reduce_distance(learn, ref)
+                loss = scat_operator.reduce_distance(learn,ref)
 
             return loss
-
+        
         def The_lossX(u, scat_operator, args):
             ref = args[0]
             sref = args[1]
@@ -6713,16 +6687,20 @@ class funct(FOC.FoCUS):
                 # Increase the resolution between each step
                 if self.use_2D:
                     imap = self.up_grade(
-                        omap, imap.shape[1] * 2, axis=-2, nouty=imap.shape[2] * 2
+                        self.backend.bk_cast(omap),
+                        imap.shape[1] * 2,
+                        axis=-2,
+                        nouty=imap.shape[2] * 2
                     )
                 elif self.use_1D:
-                    imap = self.up_grade(omap, imap.shape[1] * 2)
+                    imap = self.up_grade(self.backend.bk_cast(omap), imap.shape[1] * 2)
                 else:
-                    imap = self.up_grade(omap, l_nside)
-
+                    imap = self.up_grade(self.backend.bk_cast(omap), l_nside)
+                    
             if grd_mask is not None:
                 imap = imap * l_grd_mask[k] + tmp[k] * (1 - l_grd_mask[k])
 
+            
             if self.use_2D:
                 # compute the coefficients for the target image
                 if use_variance:
@@ -6747,15 +6725,15 @@ class funct(FOC.FoCUS):
                     sref = ref
             else:
                 self.clean_norm()
-
+                
                 ref = self.eval(
-                    tmp[k],
-                    image2=l_ref[k],
-                    mask=l_in_mask[k],
-                    Jmax=l_jmax[k],
-                    norm="auto",
-                )
-
+                        tmp[k],
+                        image2=l_ref[k],
+                        mask=l_in_mask[k],
+                        Jmax=l_jmax[k],
+                        norm='auto'
+                    )
+                
                 # compute the coefficients for the target image
                 if use_variance:
                     ref, sref = self.eval(
@@ -6764,7 +6742,7 @@ class funct(FOC.FoCUS):
                         mask=l_in_mask[k],
                         Jmax=l_jmax[k],
                         calc_var=True,
-                        norm="auto",
+                        norm='auto'
                     )
                 else:
                     ref = self.eval(
@@ -6772,13 +6750,13 @@ class funct(FOC.FoCUS):
                         image2=l_ref[k],
                         mask=l_in_mask[k],
                         Jmax=l_jmax[k],
-                        norm="auto",
+                        norm='auto'
                     )
                     sref = ref
-
+                    
                 if iso_ang:
-                    ref = ref.iso_mean()
-                    sref = sref.iso_mean()
+                    ref=ref.iso_mean()
+                    sref=sref.iso_mean()
 
             # compute the mean of the population does nothing if only one map is given
             ref = self.reduce_mean_batch(ref)
@@ -6789,13 +6767,9 @@ class funct(FOC.FoCUS):
             if l_ref[k] is None:
                 if self.use_2D:
                     # define a loss to minimize
-                    loss = synthe.Loss(
-                        The_loss, self, ref, sref, use_variance, l_jmax[k]
-                    )
+                    loss = synthe.Loss(The_loss, self, ref, sref, use_variance, l_jmax[k])
                 else:
-                    loss = synthe.Loss(
-                        The_lossH, self, ref, sref, use_variance, l_jmax[k]
-                    )
+                    loss = synthe.Loss(The_lossH, self, ref, sref, use_variance, l_jmax[k])
             else:
                 # define a loss to minimize
                 if self.use_2D:
@@ -6839,7 +6813,7 @@ class funct(FOC.FoCUS):
 
         if not self.use_2D:
             self.clean_norm()
-
+            
         t2 = time.time()
         print("Total computation %.2fs" % (t2 - t1))
 

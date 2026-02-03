@@ -101,8 +101,8 @@ class PlanarViT(nn.Module):
         patch: int = 4,
         out_ch: int = 1,
         dropout: float = 0.1,
-        cls_token: bool = False,  # keep False for dense prediction
-        pos_embed: str = "learned",  # or "none"
+        cls_token: bool = False,    # keep False for dense prediction
+        pos_embed: str = "learned", # or "none"
     ):
         super().__init__()
         assert H % patch == 0 and W % patch == 0, "H and W must be divisible by patch"
@@ -112,7 +112,7 @@ class PlanarViT(nn.Module):
         self.patch = patch
         self.embed_dim = embed_dim
         self.cls_token_enabled = bool(cls_token)
-        self.use_pos_embed = pos_embed == "learned"
+        self.use_pos_embed = (pos_embed == "learned")
 
         # 1) Patch embedding (Conv2d with stride=patch) → tokens
         self.patch_embed = nn.Conv2d(in_ch, embed_dim, kernel_size=patch, stride=patch)
@@ -134,12 +134,10 @@ class PlanarViT(nn.Module):
             self.pos_embed = None
 
         # 3) Transformer encoder
-        self.blocks = nn.ModuleList(
-            [
-                _ViTBlock(embed_dim, num_heads, mlp_ratio=mlp_ratio, drop=dropout)
-                for _ in range(depth)
-            ]
-        )
+        self.blocks = nn.ModuleList([
+            _ViTBlock(embed_dim, num_heads, mlp_ratio=mlp_ratio, drop=dropout)
+            for _ in range(depth)
+        ])
 
         # 4) Patch-wise head (token -> out_ch)
         self.head = nn.Linear(embed_dim, out_ch)
@@ -157,31 +155,31 @@ class PlanarViT(nn.Module):
             raise ValueError(f"Input H,W must be ({self.H},{self.W}), got ({H},{W}).")
 
         # Patch embedding → (B, E, Hp, Wp) → (B, Np, E)
-        z = self.patch_embed(x)  # (B, E, Hp, Wp)
-        z = z.flatten(2).transpose(1, 2)  # (B, Np, E)
+        z = self.patch_embed(x)                 # (B, E, Hp, Wp)
+        z = z.flatten(2).transpose(1, 2)        # (B, Np, E)
 
         # Optional CLS
         if self.cls_token_enabled:
             cls = self.cls_token.expand(B, -1, -1)  # (B,1,E)
-            z = torch.cat([cls, z], dim=1)  # (B,1+Np,E)
+            z = torch.cat([cls, z], dim=1)          # (B,1+Np,E)
 
         # Positional embedding
         if self.pos_embed is not None:
-            z = z + self.pos_embed[:, : z.shape[1], :]
+            z = z + self.pos_embed[:, :z.shape[1], :]
 
         # Transformer
         for blk in self.blocks:
-            z = blk(z)  # (B, N, E)
+            z = blk(z)                             # (B, N, E)
 
         # Drop CLS for dense output
         if self.cls_token_enabled:
-            tokens = z[:, 1:, :]  # (B, Np, E)
+            tokens = z[:, 1:, :]                   # (B, Np, E)
         else:
             tokens = z
 
         # Token head → (B, Np, out_ch) → (B, out_ch, Hp, Wp) → upsample to (H, W)
         y_tok = self.head(tokens).transpose(1, 2)  # (B, out_ch, Np)
-        y = y_tok.reshape(B, -1, self.Hp, self.Wp)  # (B, out_ch, Hp, Wp)
+        y = y_tok.reshape(B, -1, self.Hp, self.Wp) # (B, out_ch, Hp, Wp)
         y = F.interpolate(y, scale_factor=self.patch, mode="nearest")
         return y
 
@@ -189,7 +187,6 @@ class PlanarViT(nn.Module):
 # ---------------------------
 # Utilities
 # ---------------------------
-
 
 def count_parameters(model: nn.Module) -> tuple[int, int]:
     """Return (total_params, trainable_params)."""
@@ -208,18 +205,10 @@ if __name__ == "__main__":
     x = torch.randn(B, C, H, W)
 
     model = PlanarViT(
-        in_ch=C,
-        H=H,
-        W=W,
-        embed_dim=384,
-        depth=8,
-        num_heads=12,
-        mlp_ratio=4.0,
-        patch=4,
-        out_ch=1,
-        dropout=0.1,
-        cls_token=False,
-        pos_embed="learned",
+        in_ch=C, H=H, W=W,
+        embed_dim=384, depth=8, num_heads=12,
+        mlp_ratio=4.0, patch=4, out_ch=1, dropout=0.1,
+        cls_token=False, pos_embed="learned"
     )
     y = model(x)
     tot, trn = count_parameters(model)

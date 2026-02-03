@@ -568,6 +568,18 @@ class HOrientedConvol:
         Npix, M, K = w_idx.shape
         nb_cols = K
 
+        
+        w_idx,w_w = self.bilinear_weights_NxN(xx*self.nside*gamma,
+                                              yy*self.nside*gamma,
+                                              allow_extrapolation=allow_extrapolation)
+        '''
+        # calib : [Npix, K]
+        calib = np.zeros((w_idx.shape[0], w_idx.shape[2]))
+        # Hypothèses : 
+        # w_idx.shape == (Npix, M, K)  et  w_w.shape == (Npix, M, K)
+        Npix, M, K = w_idx.shape
+        nb_cols = K
+        
         # 1) Accumulation par "bincount" avec décalage de ligne
         row_ids = np.arange(Npix, dtype=np.int64)[:, None, None] * nb_cols
         flat_idx = (row_ids + w_idx).ravel()           # indices dans [0, Npix*9)
@@ -576,6 +588,10 @@ class HOrientedConvol:
         calib = np.bincount(flat_idx, weights, minlength=Npix*nb_cols)\
                   .reshape(Npix, nb_cols)
 
+        
+        calib = np.bincount(flat_idx, weights, minlength=Npix*nb_cols)\
+                  .reshape(Npix, nb_cols)
+        
         # 2) Réinjection dans norm_a selon w_idx
         norm_a = calib[np.arange(Npix)[:, None, None], w_idx]
 
