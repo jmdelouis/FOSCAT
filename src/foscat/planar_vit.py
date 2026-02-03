@@ -1,19 +1,21 @@
 # healpix_unet_torch.py
 # (Planar Vision Transformer baseline for lat–lon grids)
 from __future__ import annotations
+
 from typing import Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
 # ---------------------------
 # Building blocks
 # ---------------------------
 
+
 class _MLP(nn.Module):
     """ViT MLP: Linear -> GELU -> Dropout -> Linear -> Dropout."""
+
     def __init__(self, dim: int, mlp_ratio: float = 4.0, drop: float = 0.1):
         super().__init__()
         hidden = int(dim * mlp_ratio)
@@ -34,18 +36,25 @@ class _ViTBlock(nn.Module):
       x = x + Drop(MHA(LN(x)))
       x = x + Drop(MLP(LN(x)))
     """
-    def __init__(self, dim: int, num_heads: int, mlp_ratio: float = 4.0, drop: float = 0.1):
+
+    def __init__(
+        self, dim: int, num_heads: int, mlp_ratio: float = 4.0, drop: float = 0.1
+    ):
         super().__init__()
         assert dim % num_heads == 0, "embed_dim must be divisible by num_heads"
         self.norm1 = nn.LayerNorm(dim)
-        self.attn  = nn.MultiheadAttention(dim, num_heads, dropout=drop, batch_first=True)
+        self.attn = nn.MultiheadAttention(
+            dim, num_heads, dropout=drop, batch_first=True
+        )
         self.norm2 = nn.LayerNorm(dim)
-        self.mlp   = _MLP(dim, mlp_ratio, drop)
+        self.mlp = _MLP(dim, mlp_ratio, drop)
         self.drop_path = nn.Dropout(drop)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Multi-head self-attention
-        x = x + self.drop_path(self.attn(self.norm1(x), self.norm1(x), self.norm1(x))[0])
+        x = x + self.drop_path(
+            self.attn(self.norm1(x), self.norm1(x), self.norm1(x))[0]
+        )
         # Feed-forward
         x = x + self.drop_path(self.mlp(self.norm2(x)))
         return x
@@ -54,6 +63,7 @@ class _ViTBlock(nn.Module):
 # ---------------------------
 # Planar ViT (lat–lon images)
 # ---------------------------
+
 
 class PlanarViT(nn.Module):
     """
@@ -77,9 +87,10 @@ class PlanarViT(nn.Module):
         pred = x[:, -1:, ...] + model(x)
       and train the loss on `pred` vs target.
     """
+
     def __init__(
         self,
-        in_ch: int,          # e.g., T_in months
+        in_ch: int,  # e.g., T_in months
         H: int,
         W: int,
         *,
@@ -203,4 +214,3 @@ if __name__ == "__main__":
     tot, trn = count_parameters(model)
     print("Output:", tuple(y.shape))
     print("Params:", f"total={tot:,}", f"trainable={trn:,}")
-    
