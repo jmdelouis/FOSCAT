@@ -220,24 +220,26 @@ class SphereDownGeo(nn.Module):
 
         # --- (A) Choix du voisinage côté coarse
         # Option 1 (minimal, très rapide) : uniquement le parent -> 4 enfants
-        parents = p_out[:, None]                    # [K,1]
+        #parents = p_out[:, None]                    # [K,1]
 
         # Option 2 (plus “lisse”) : parent + 8 voisins -> 9 parents -> 36 enfants
-        # neigh8 = hp.get_all_neighbours(nside_out, p_out, nest=True)  # [8,K] (healpy renvoie souvent [8,K])
-        # parents = np.concatenate([p_out[None, :], neigh8], axis=0).T # [K,9]
-        # mask_parent = parents >= 0
+        neigh8 = hp.get_all_neighbours(nside_out, p_out, nest=True)  # [8,K] (healpy renvoie souvent [8,K])
+        parents = np.concatenate([p_out[None, :], neigh8], axis=0).T # [K,9]
+        idx=np.where(parents==-1)
+        parents[idx[0],idx[1]]=parents[idx[0],idx[1]-1]
 
         # --- enfants fins (NESTED) : child_id = 4*parent + {0,1,2,3}
         children = (4 * parents[..., None] + offs[None, None, :]).reshape(K, -1)  # [K, 4] ou [K,36]
 
         # Si option voisins activée : invalider enfants des parents=-1
-        # mask_child = np.repeat(mask_parent, 4, axis=1)               # [K,36]
-        # children_flat = children[mask_child]
-        # rows_flat = np.repeat(np.arange(K, dtype=np.int64), children.shape[1])[mask_child]
+        #mask_child = np.repeat(mask_parent, 4, axis=1)               # [K,36]
+        #children_flat = children[mask_child]
+        #print(mask_child.shape,children.shape,K)
+        rows_flat = np.repeat(np.arange(K, dtype=np.int64), children.shape[1])#[mask_child.ravel()]
 
         # Option minimal (sans voisins) :
         children_flat = children.reshape(-1)                           # [K*4]
-        rows_flat = np.repeat(np.arange(K, dtype=np.int64), children.shape[1])
+        #rows_flat = np.repeat(np.arange(K, dtype=np.int64), children.shape[1])
 
         # --- Subset: map vers indices compacts
         if self.has_in_subset:
@@ -304,7 +306,7 @@ class SphereDownGeo(nn.Module):
 
         indices = torch.stack([rows_t, cols_t], dim=0)
         return torch.sparse_coo_tensor(indices, vals_t, size=(self.K_out, self.K_in),
-                                    device=self.device, dtype=self.dtype).coalesce()
+                                    device=self.device, dtype=self.dtype).coalesce().to_sparse_csr().to(self.device)
     '''
     def _build_down_matrix(self) -> torch.Tensor:
         """Construct sparse matrix M (K_out, K_in or N_in) for the selected coarse pixels."""
