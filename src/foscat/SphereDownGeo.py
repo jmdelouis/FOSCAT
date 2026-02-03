@@ -210,6 +210,103 @@ class SphereDownGeo(nn.Module):
         return w / np.sqrt(s2)
 
     def _build_down_matrix(self) -> torch.Tensor:
+        nside_in = self.nside_in
+        nside_out = self.nside_out
+        sigma = float(self.sigma_rad)
+
+        p_out = self.cell_ids_out.astype(np.int64)  # [K]
+        K = p_out.size
+        offs = np.arange(4, dtype=np.int64)         # [4]
+
+        # --- (A) Choix du voisinage côté coarse
+        # Option 1 (minimal, très rapide) : uniquement le parent -> 4 enfants
+        parents = p_out[:, None]                    # [K,1]
+
+        # Option 2 (plus “lisse”) : parent + 8 voisins -> 9 parents -> 36 enfants
+        # neigh8 = hp.get_all_neighbours(nside_out, p_out, nest=True)  # [8,K] (healpy renvoie souvent [8,K])
+        # parents = np.concatenate([p_out[None, :], neigh8], axis=0).T # [K,9]
+        # mask_parent = parents >= 0
+
+        # --- enfants fins (NESTED) : child_id = 4*parent + {0,1,2,3}
+        children = (4 * parents[..., None] + offs[None, None, :]).reshape(K, -1)  # [K, 4] ou [K,36]
+
+        # Si option voisins activée : invalider enfants des parents=-1
+        # mask_child = np.repeat(mask_parent, 4, axis=1)               # [K,36]
+        # children_flat = children[mask_child]
+        # rows_flat = np.repeat(np.arange(K, dtype=np.int64), children.shape[1])[mask_child]
+
+        # Option minimal (sans voisins) :
+        children_flat = children.reshape(-1)                           # [K*4]
+        rows_flat = np.repeat(np.arange(K, dtype=np.int64), children.shape[1])
+
+        # --- Subset: map vers indices compacts
+        if self.has_in_subset:
+            in_ids = self.in_cell_ids  # trié/unique :contentReference[oaicite:4]{index=4}
+            idx = np.searchsorted(in_ids, children_flat)
+            ok = (idx >= 0) & (idx < in_ids.size) & (in_ids[idx] == children_flat)
+            cols_flat = idx[ok]
+            rows_flat2 = rows_flat[ok]
+            child_ids_kept = children_flat[ok]
+        else:
+            cols_flat = children_flat
+            rows_flat2 = rows_flat
+            child_ids_kept = children_flat
+
+        if rows_flat2.size == 0:
+            indices = torch.zeros((2, 0), dtype=torch.long, device=self.device)
+            vals_t = torch.zeros((0,), dtype=self.dtype, device=self.device)
+            return torch.sparse_coo_tensor(indices, vals_t, size=(self.K_out, self.K_in),
+                                           device=self.device, dtype=self.dtype).coalesce()
+
+        # --- poids gaussiens (vectorisé)
+        # centres coarse: vec0 [K,3]
+        vx0, vy0, vz0 = hp.pix2vec(nside_out, p_out, nest=True)
+        vec0 = np.stack([vx0, vy0, vz0], axis=1)                        # [K,3]
+
+        # vec des enfants gardés
+        vx, vy, vz = hp.pix2vec(nside_in, child_ids_kept, nest=True)
+        vec = np.stack([vx, vy, vz], axis=1)                            # [nnz,3]
+
+        # dot(vec, vec0[row])
+        dots = np.einsum("ij,ij->i", vec, vec0[rows_flat2])
+        dots = np.clip(dots, -1.0, 1.0)
+        ang = np.arccos(dots)
+        w = np.exp(-2.0 * (ang / max(sigma, 1e-30)) ** 2)
+
+        # --- normalisation par ligne (row-wise), sans boucle
+        # On recompose un tableau dense “temporaire” [K, m] via indexation
+        m = children.shape[1]
+        # position within row (0..m-1)
+        jpos = np.tile(np.arange(m, dtype=np.int64), K)
+        if self.has_in_subset:
+            jpos = jpos.reshape(-1)[ok]  # aligné sur rows_flat2/child_ids_kept
+        # si option voisins + mask_child : jpos = jpos[mask_child.reshape(-1)][ok] etc.
+
+        W = np.zeros((K, m), dtype=np.float64)
+        W[rows_flat2, jpos] = w
+
+        if self.weight_norm == "l1":
+            s = W.sum(axis=1, keepdims=True)
+            s[s <= 0] = 1.0
+            W /= s
+        else:  # l2
+            s2 = np.sqrt((W * W).sum(axis=1, keepdims=True))
+            s2[s2 <= 0] = 1.0
+            W /= s2
+
+        # extraire w normalisés aux mêmes nnz
+        w_norm = W[rows_flat2, jpos].astype(np.float32)
+
+        # --- sparse
+        rows_t = torch.tensor(rows_flat2, dtype=torch.long, device=self.device)
+        cols_t = torch.tensor(cols_flat, dtype=torch.long, device=self.device)
+        vals_t = torch.tensor(w_norm, dtype=self.dtype, device=self.device)
+
+        indices = torch.stack([rows_t, cols_t], dim=0)
+        return torch.sparse_coo_tensor(indices, vals_t, size=(self.K_out, self.K_in),
+                                    device=self.device, dtype=self.dtype).coalesce()
+    '''
+    def _build_down_matrix(self) -> torch.Tensor:
         """Construct sparse matrix M (K_out, K_in or N_in) for the selected coarse pixels."""
         nside_in = self.nside_in
         nside_out = self.nside_out
@@ -302,7 +399,7 @@ class SphereDownGeo(nn.Module):
             dtype=self.dtype,
         ).coalesce()
         return M
-
+        '''
     # ---------------- forward ----------------
     def forward(self, x: torch.Tensor):
         """
