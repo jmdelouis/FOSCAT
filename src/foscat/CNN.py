@@ -34,12 +34,14 @@ class CNN:
             self.x = self.scat_operator.backend.bk_cast(outlist[6])
             self.out_nside = self.in_nside // (2**self.nscale)
         else:
-            self.nscale = len(chanlist) - 1
+            self.nscale = len(chanlist)-1
             self.npar = nparam
             self.n_chan_in = n_chan_in
             self.scat_operator = scat_operator
             if self.scat_operator is None:
-                self.scat_operator = sc.funct(KERNELSZ=KERNELSZ, NORIENT=NORIENT)
+                self.scat_operator = sc.funct(
+                    KERNELSZ=KERNELSZ,
+                    NORIENT=NORIENT)
 
             self.chanlist = chanlist
             self.KERNELSZ = self.scat_operator.KERNELSZ
@@ -51,7 +53,7 @@ class CNN:
             np.random.seed(SEED)
             self.x = self.scat_operator.backend.bk_cast(
                 np.random.rand(self.get_number_of_weights())
-                / (self.KERNELSZ * (self.KERNELSZ // 2 + 1) * self.NORIENT)
+                / (self.KERNELSZ * (self.KERNELSZ//2+1)*self.NORIENT)
             )
 
     def save(self, filename):
@@ -79,11 +81,8 @@ class CNN:
             totnchan = totnchan + self.chanlist[i] * self.chanlist[i + 1]
         return (
             self.npar * 12 * self.out_nside**2 * self.chanlist[self.nscale]
-            + totnchan * self.KERNELSZ * (self.KERNELSZ // 2 + 1)
-            + self.KERNELSZ
-            * (self.KERNELSZ // 2 + 1)
-            * self.n_chan_in
-            * self.chanlist[0]
+            + totnchan * self.KERNELSZ * (self.KERNELSZ//2+1)
+            + self.KERNELSZ * (self.KERNELSZ//2+1) * self.n_chan_in * self.chanlist[0]
         )
 
     def set_weights(self, x):
@@ -97,51 +96,31 @@ class CNN:
 
         x = self.x
         ww = self.backend.bk_reshape(
-            x[
-                0 : self.KERNELSZ
-                * (self.KERNELSZ // 2 + 1)
-                * self.n_chan_in
-                * self.chanlist[0]
-            ],
-            [
-                self.n_chan_in,
-                self.KERNELSZ * (self.KERNELSZ // 2 + 1),
-                self.chanlist[0],
-            ],
+            x[0 : self.KERNELSZ * (self.KERNELSZ//2+1) * self.n_chan_in * self.chanlist[0]],
+            [self.n_chan_in, self.KERNELSZ * (self.KERNELSZ//2+1),  self.chanlist[0]],
         )
-        nn = (
-            self.KERNELSZ * (self.KERNELSZ // 2 + 1) * self.n_chan_in * self.chanlist[0]
-        )
+        nn = self.KERNELSZ * (self.KERNELSZ//2+1) * self.n_chan_in * self.chanlist[0]
 
         im = self.scat_operator.healpix_layer(im, ww)
         im = self.backend.bk_relu(im)
-
-        im = self.backend.bk_reduce_mean(
-            self.backend.bk_reshape(
-                im, [im.shape[0], im.shape[1], im.shape[2] // 4, 4]
-            ),
-            3,
-        )
+        
+        im = self.backend.bk_reduce_mean(self.backend.bk_reshape(im,[im.shape[0],im.shape[1],im.shape[2]//4,4]),3)
 
         for k in range(self.nscale):
             ww = self.scat_operator.backend.bk_reshape(
                 x[
                     nn : nn
                     + self.KERNELSZ
-                    * (self.KERNELSZ // 2 + 1)
+                    * (self.KERNELSZ//2+1)
                     * self.chanlist[k]
                     * self.chanlist[k + 1]
                 ],
-                [
-                    self.chanlist[k],
-                    self.KERNELSZ * (self.KERNELSZ // 2 + 1),
-                    self.chanlist[k + 1],
-                ],
+                [self.chanlist[k], self.KERNELSZ * (self.KERNELSZ//2+1),  self.chanlist[k + 1]],
             )
             nn = (
                 nn
                 + self.KERNELSZ
-                * (self.KERNELSZ // 2)
+                * (self.KERNELSZ//2)
                 * self.chanlist[k]
                 * self.chanlist[k + 1]
             )
@@ -152,12 +131,7 @@ class CNN:
                     im, ww, indices=indices[k], weights=weights[k]
                 )
             im = self.scat_operator.backend.bk_relu(im)
-            im = self.backend.bk_reduce_mean(
-                self.backend.bk_reshape(
-                    im, [im.shape[0], im.shape[1], im.shape[2] // 4, 4]
-                ),
-                3,
-            )
+            im = self.backend.bk_reduce_mean(self.backend.bk_reshape(im,[im.shape[0],im.shape[1],im.shape[2]//4,4]),3)
 
         ww = self.scat_operator.backend.bk_reshape(
             x[
@@ -173,7 +147,7 @@ class CNN:
             ),
             ww,
         )
-        # im = self.scat_operator.backend.bk_reshape(im, [self.npar])
+        #im = self.scat_operator.backend.bk_reshape(im, [self.npar])
         im = self.scat_operator.backend.bk_relu(im)
 
         return im
