@@ -32,12 +32,14 @@ class GCNN:
             self.x = self.scat_operator.backend.bk_cast(outlist[6])
             self.out_nside = self.in_nside // (2**self.nscale)
         else:
-            self.nscale = len(chanlist) - 1
+            self.nscale = len(chanlist)-1
             self.npar = nparam
             self.n_chan_in = n_chan_in
             self.scat_operator = scat_operator
             if self.scat_operator is None:
-                self.scat_operator = sc.funct(KERNELSZ=KERNELSZ, NORIENT=NORIENT)
+                self.scat_operator = sc.funct(
+                    KERNELSZ=KERNELSZ,
+                    NORIENT=NORIENT)
 
             self.chanlist = chanlist
             self.KERNELSZ = self.scat_operator.KERNELSZ
@@ -49,7 +51,7 @@ class GCNN:
             np.random.seed(SEED)
             self.x = self.scat_operator.backend.bk_cast(
                 np.random.rand(self.get_number_of_weights())
-                / (self.KERNELSZ * (self.KERNELSZ // 2 + 1) * self.NORIENT)
+                / (self.KERNELSZ * (self.KERNELSZ//2+1)*self.NORIENT)
             )
 
     def save(self, filename):
@@ -76,8 +78,8 @@ class GCNN:
             totnchan = totnchan + self.chanlist[i] * self.chanlist[i + 1]
         return (
             self.npar * 12 * self.in_nside**2 * self.chanlist[0]
-            + totnchan * self.KERNELSZ * (self.KERNELSZ // 2 + 1)
-            + self.KERNELSZ * (self.KERNELSZ // 2 + 1) * self.chanlist[nscale]
+            + totnchan * self.KERNELSZ * (self.KERNELSZ//2+1)
+            + self.KERNELSZ * (self.KERNELSZ//2+1) * self.chanlist[nscale]
         )
 
     def set_weights(self, x):
@@ -95,38 +97,27 @@ class GCNN:
             [self.npar,12 * self.in_nside**2 * self.chanlist[0]],
         )
 
-        ww = self.backend.bk_reshape(
-            x[0 : self.npar * 12 * self.in_nside**2 * self.chanlist[0]],
-            [self.npar, 12 * self.in_nside**2 * self.chanlist[0]],
-        )
-
-        im = self.scat_operator.backend.bk_matmul(im, ww)
-
-        im = self.backend.bk_reshape(
-            im, [im.shape[0], self.chanlist[0], 12 * self.in_nside**2]
-        )
-
+        im = self.scat_operator.backend.bk_matmul(im,ww)
+        
+        im = self.backend.bk_reshape(im,[im.shape[0],self.chanlist[0],12 * self.in_nside**2])
+        
         nn = self.npar * 12 * self.in_nside**2 * self.chanlist[0]
-
+        
         for k in range(self.nscale):
             ww = self.scat_operator.backend.bk_reshape(
                 x[
                     nn : nn
                     + self.KERNELSZ
-                    * (self.KERNELSZ // 2 + 1)
+                    * (self.KERNELSZ//2+1)
                     * self.chanlist[k]
                     * self.chanlist[k + 1]
                 ],
-                [
-                    self.chanlist[k],
-                    self.KERNELSZ * (self.KERNELSZ // 2 + 1),
-                    self.chanlist[k + 1],
-                ],
+                [self.chanlist[k], self.KERNELSZ * (self.KERNELSZ//2+1),  self.chanlist[k + 1]],
             )
             nn = (
                 nn
                 + self.KERNELSZ
-                * (self.KERNELSZ // 2)
+                * (self.KERNELSZ//2)
                 * self.chanlist[k]
                 * self.chanlist[k + 1]
             )
@@ -140,12 +131,7 @@ class GCNN:
             
             im = self.backend.bk_reshape(self.scat_operator.backend.bk_repeat(im,4),[im.shape[0],im.shape[1],im.shape[2]*4])
 
-            im = self.backend.bk_reshape(
-                self.scat_operator.backend.bk_repeat(im, 4),
-                [im.shape[0], im.shape[1], im.shape[2] * 4],
-            )
-
-        # im = self.scat_operator.backend.bk_reshape(im, [self.npar])
-        # im = self.scat_operator.backend.bk_relu(im)
+        #im = self.scat_operator.backend.bk_reshape(im, [self.npar])
+        #im = self.scat_operator.backend.bk_relu(im)
 
         return im
