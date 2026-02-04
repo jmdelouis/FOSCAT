@@ -6338,6 +6338,7 @@ class funct(FOC.FoCUS):
         iso_ang=False,
         EVAL_FREQUENCY=100,
         NUM_EPOCHS=300,
+        scat_cov_method='eval',
     ):
 
         import time
@@ -6587,7 +6588,7 @@ class funct(FOC.FoCUS):
                 imap = imap * l_grd_mask[k] + tmp[k] * (1 - l_grd_mask[k])
 
             
-            if self.use_2D:
+            if self.use_2D and scat_cov_method!='eval':
                 # compute the coefficients for the target image
                 if use_variance:
                     ref, sref = self.scattering_cov(
@@ -6651,14 +6652,14 @@ class funct(FOC.FoCUS):
                 self.purge_edge_mask()
 
             if l_ref[k] is None:
-                if self.use_2D:
+                if self.use_2D and scat_cov_method!='eval':
                     # define a loss to minimize
                     loss = synthe.Loss(The_loss, self, ref, sref, use_variance, l_jmax[k])
                 else:
                     loss = synthe.Loss(The_lossH, self, ref, sref, use_variance, l_jmax[k])
             else:
                 # define a loss to minimize
-                if self.use_2D:
+                if self.use_2D and scat_cov_method!='eval':
                     loss = synthe.Loss(
                         The_lossX, self, ref, sref, use_variance, l_ref[k], l_jmax[k]
                     )
