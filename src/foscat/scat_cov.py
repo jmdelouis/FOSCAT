@@ -6401,8 +6401,10 @@ class funct(FOC.FoCUS):
             learn = scat_operator.eval(
                 u,
                 Jmax=ljmax,
-                norm='auto'
+                norm='auto',
                 )
+            if iso_ang:
+                learn=learn.iso_mean()
             
             if synthesised_N>1:
                 learn = scat_operator.reduce_mean_batch(learn)
@@ -6697,7 +6699,7 @@ class funct(FOC.FoCUS):
                 NUM_EPOCHS=NUM_EPOCHS,
                 grd_mask=l_grd_mask[k],
             )
-
+            
         if not self.use_2D:
             self.clean_norm()
             
