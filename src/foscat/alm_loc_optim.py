@@ -45,7 +45,7 @@ sparse_to_dense(alm_per_m, m_valid, lmax_eff_per_m, lmax)
 import numpy as np
 import torch
 
-from alm_loc import alm_loc
+from foscat.alm_loc import alm_loc
 
 
 class alm_loc_optim(alm_loc):
