@@ -85,35 +85,72 @@ class alm_latlon(_alm):
     # ================================================================== #
 
     @staticmethod
-    def build_rings_from_latlon(lat, lon, atol=1e-10):
+    def build_rings_from_latlon(lat, lon, atol=1e-10, convention='colatitude_rad'):
         """
         Groupe une liste plate de pixels en rings de même colatitude.
 
         Paramètres
         ----------
-        lat  : array [N]  colatitude θ de chaque pixel (radians, 0..π).
-               (si la valeur est en degrés ou en latitude géographique,
-               convertir avant : θ = π/2 − lat_geo  ou  θ = lat_rad)
-        lon  : array [N]  longitude φ de chaque pixel (radians, 0..2π).
-        atol : tolérance en radians pour regrouper deux pixels dans le
-               même ring (défaut 1e-10).
+        lat  : array [N]  coordonnée angulaire de chaque pixel (voir convention).
+        lon  : array [N]  coordonnée longitudinale de chaque pixel (voir convention).
+        atol : tolérance en radians pour regrouper deux pixels dans le même ring.
+        convention : str  format des coordonnées en entrée.
+
+            'colatitude_rad'  (défaut)
+                lat = colatitude θ en RADIANS    0 → π
+                lon = longitude  φ en RADIANS    0 → 2π
+
+            'colatitude_deg'
+                lat = colatitude θ en DEGRÉS     0° → 180°
+                lon = longitude  φ en DEGRÉS     0° → 360°
+
+            'geographic_rad'
+                lat = latitude géographique en RADIANS   −π/2 → +π/2
+                lon = longitude en RADIANS               −π → +π  ou  0 → 2π
+
+            'geographic_deg'
+                lat = latitude géographique en DEGRÉS    −90° → +90°
+                lon = longitude en DEGRÉS                −180° → +180°  ou  0° → 360°
+
+        Toutes les conventions convertissent en interne en colatitude + longitude
+        en radians avant le traitement.
 
         Retourne
         --------
-        ring_theta  : ndarray [R]          colatitude de chaque ring (triée)
-        ring_phi_list : list[ndarray [N_r]]  longitudes par ring
-        ring_counts : ndarray int64 [R]    nombre de pixels par ring
-        sort_idx    : ndarray int64 [N]    permutation pour réordonner im :
-                        im_sorted = im[sort_idx]
+        ring_theta    : ndarray [R]            colatitude θ (radians) par ring
+        ring_phi_list : list[ndarray [N_r]]    longitudes  φ (radians) par ring
+        ring_counts   : ndarray int64 [R]      nombre de pixels par ring
+        sort_idx      : ndarray int64 [N]      permutation  im_sorted = im[sort_idx]
         """
         lat = np.asarray(lat, dtype=np.float64).ravel()
         lon = np.asarray(lon, dtype=np.float64).ravel()
-        N = len(lat)
+
+        conv = convention.lower().strip()
+        if conv == 'colatitude_rad':
+            theta = lat
+            phi   = lon
+        elif conv == 'colatitude_deg':
+            theta = np.radians(lat)
+            phi   = np.radians(lon)
+        elif conv == 'geographic_rad':
+            theta = np.pi / 2.0 - lat
+            phi   = lon % (2.0 * np.pi)
+        elif conv == 'geographic_deg':
+            theta = np.radians(90.0 - lat)
+            phi   = np.radians(lon) % (2.0 * np.pi)
+        else:
+            raise ValueError(
+                f"Convention inconnue : '{convention}'. "
+                "Valeurs acceptées : 'colatitude_rad', 'colatitude_deg', "
+                "'geographic_rad', 'geographic_deg'."
+            )
+
+        N = len(theta)
 
         # Trier par colatitude puis par longitude
-        order = np.lexsort((lon, lat))
-        lat_s = lat[order]
-        lon_s = lon[order]
+        order = np.lexsort((phi, theta))
+        lat_s = theta[order]
+        lon_s = phi[order]
 
         # Trouver les frontières de ring (saut de colatitude > atol)
         breaks = np.where(np.diff(lat_s) > atol)[0] + 1
@@ -352,8 +389,14 @@ class alm_latlon(_alm):
         # Projection de Legendre
         alm_out = None
         for m in range(lmax + 1):
-            # plm : [lmax-m+1, R]  (nside inutilisé dans compute_legendre_m)
-            plm    = self.compute_legendre_m(co_th, m, lmax, nside=1)
+            # compute_legendre_m retourne sqrt(4π) · P_lm^norm(cos θ), soit [L, R].
+            # Les harmoniques sphériques normalisées sont Y_lm = sqrt((2l+1)/4π) · P_lm^norm.
+            # Le facteur manquant est sqrt(2l+1)/(4π) ; on l'applique ici pour que
+            # la projection donne a_lm = ∫ f Y_lm* dΩ (convention healpy/standard).
+            plm    = self.compute_legendre_m(co_th, m, lmax, nside=1)   # [L, R]
+            l_vals  = np.arange(m, lmax + 1, dtype=np.float64)           # [L]
+            ylm_factor = np.sqrt(2.0 * l_vals + 1.0) / (4.0 * np.pi)    # [L]
+            plm    = plm * ylm_factor[:, np.newaxis]                      # [L, R]
             plm_bk = self.backend.bk_cast(plm)   # [L, R]
 
             ft_m = ft[..., :, m]   # [..., R]
