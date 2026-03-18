@@ -169,38 +169,101 @@ class alm_latlon(_alm):
     # ================================================================== #
 
     @staticmethod
-    def compute_weights(ring_theta, ring_phi_list, ring_counts):
+    def compute_weights(ring_theta, ring_phi_list, ring_counts,
+                        quadrature='trapeze'):
         """
         Calcule les poids de quadrature par pixel (stéradians).
 
-        Règle :
-        - En θ : règle des trapèzes  →  Δθ_r = |θ_{r+1} − θ_{r-1}| / 2
-          (moitié d'intervalle aux bords)  ×  sin(θ_r)
-        - En φ : uniforme  →  2π / N_r  si ring uniformément espacé,
-                 sinon trapèze enroulé sur les φ triés.
+        Paramètres
+        ----------
+        ring_theta    : [R] colatitudes en radians
+        ring_phi_list : list[ndarray]  longitudes par ring
+        ring_counts   : [R] nombre de pixels par ring
+        quadrature    : str  méthode de quadrature en θ.
+
+            'trapeze'         (défaut)
+                Règle des trapèzes :  w_θ = sin(θ_r) × Δθ_r
+                Bonne pour les grilles régulières en θ.
+
+            'gauss_legendre'
+                Poids de Gauss-Legendre exacts.
+                À utiliser impérativement pour les grilles gaussiennes
+                (ERA5, ECMWF, IFS, ARPEGE…) où les colatitudes sont les
+                zéros de P_R(cos θ).  L'intégrale ∫f dΩ = ∫f dφ dx
+                (x = cos θ) est alors exacte jusqu'à ℓ ≈ 2R-1.
+
+            'equal_area'
+                Poids égaux : 4π / N_total.
+                Pour les grilles à aire égale (HEALPix).
 
         Retourne
         --------
-        weights : ndarray float64 [N_total]  poids dans l'ordre ring-par-ring
+        weights : ndarray float64 [N_total]
         """
-        ring_theta  = np.asarray(ring_theta, dtype=np.float64)
+        ring_theta  = np.asarray(ring_theta,  dtype=np.float64)
         ring_counts = np.asarray(ring_counts, dtype=np.int64)
-        R = len(ring_theta)
-        all_w = []
+        R       = len(ring_theta)
+        N_total = int(ring_counts.sum())
+        all_w   = []
 
+        # ---- poids en θ selon la méthode choisie ----
+        if quadrature == 'trapeze':
+            w_theta = np.empty(R, dtype=np.float64)
+            for r in range(R):
+                if R == 1:
+                    dth = np.pi
+                elif r == 0:
+                    dth = (ring_theta[1] - ring_theta[0]) / 2.0
+                elif r == R - 1:
+                    dth = (ring_theta[-1] - ring_theta[-2]) / 2.0
+                else:
+                    dth = (ring_theta[r + 1] - ring_theta[r - 1]) / 2.0
+                w_theta[r] = abs(np.sin(ring_theta[r]) * dth)
+
+        elif quadrature == 'gauss_legendre':
+            # Les nœuds GL sont x_r = cos(θ_r) ∈ [-1, 1].
+            # np.polynomial.legendre.leggauss(R) renvoie les nœuds et poids
+            # pour ∫₋₁¹ f(x) dx ≈ Σ w_r f(x_r).
+            # Comme dΩ = dφ dx (avec x = cos θ), les poids θ sont directement
+            # les poids GL (sin θ est absorbé dans dx = -sin θ dθ).
+            x_provided = np.cos(ring_theta)          # nœuds fournis
+            gl_nodes, gl_weights = np.polynomial.legendre.leggauss(R)
+            # Les nœuds GL sont triés par ordre croissant ; cos θ est décroissant
+            # (θ croissant), donc on les aligne par tri.
+            sort_gl  = np.argsort(gl_nodes)          # -1 → +1
+            sort_prov = np.argsort(x_provided)       # cos θ croissant
+            gl_w_sorted = gl_weights[sort_gl]        # poids alignés sur x croissant
+            # Réordonner dans l'ordre original des rings (θ croissant ≡ x décroissant)
+            # sort_prov[i] = indice dans rings du i-ème plus petit cos θ
+            w_theta = np.empty(R, dtype=np.float64)
+            w_theta[sort_prov] = gl_w_sorted
+            # Vérification : les nœuds GL doivent correspondre aux cos(θ_r)
+            max_err = np.max(np.abs(np.sort(x_provided) - np.sort(gl_nodes)))
+            if max_err > 1e-6:
+                import warnings
+                warnings.warn(
+                    f"gauss_legendre: les colatitudes fournies ne coïncident pas "
+                    f"avec les nœuds GL (erreur max = {max_err:.2e}). "
+                    "Vérifiez que la grille est bien une grille gaussienne avec "
+                    f"{R} points de latitude.",
+                    UserWarning
+                )
+
+        elif quadrature == 'equal_area':
+            total_area = 4.0 * np.pi
+            w_theta = np.full(R, total_area / N_total)  # sera pondéré par N_r ensuite
+            # Pour equal_area, le poids par pixel est uniforme : 4π/N_total
+            weights = np.full(N_total, total_area / N_total, dtype=np.float64)
+            return weights
+
+        else:
+            raise ValueError(
+                f"Quadrature inconnue : '{quadrature}'. "
+                "Valeurs acceptées : 'trapeze', 'gauss_legendre', 'equal_area'."
+            )
+
+        # ---- poids en φ (commun aux deux méthodes θ non-equal_area) ----
         for r in range(R):
-            # ---- poids en θ ----
-            if R == 1:
-                dth = np.pi
-            elif r == 0:
-                dth = (ring_theta[1] - ring_theta[0]) / 2.0
-            elif r == R - 1:
-                dth = (ring_theta[-1] - ring_theta[-2]) / 2.0
-            else:
-                dth = (ring_theta[r + 1] - ring_theta[r - 1]) / 2.0
-            w_th = abs(np.sin(ring_theta[r]) * dth)
-
-            # ---- poids en φ ----
             N_r   = int(ring_counts[r])
             phi_r = np.asarray(ring_phi_list[r], dtype=np.float64)
 
@@ -208,23 +271,19 @@ class alm_latlon(_alm):
                 w_phi = np.array([2.0 * np.pi])
             else:
                 sorted_phi = np.sort(phi_r)
-                dphi = np.diff(sorted_phi)
-                # Vérifier uniformité (tolérance relative)
+                dphi       = np.diff(sorted_phi)
                 if np.ptp(dphi) < 1e-10 * (2 * np.pi / N_r):
                     w_phi = np.full(N_r, 2.0 * np.pi / N_r)
                 else:
-                    # Trapèze enroulé (wrap-around)
                     gap_wrap = (sorted_phi[0] + 2.0 * np.pi) - sorted_phi[-1]
                     dp_ext   = np.concatenate([[gap_wrap], dphi, [gap_wrap]])
                     w_sorted = (dp_ext[:-1] + dp_ext[1:]) / 2.0
-                    # Réordonner dans l'ordre original des φ
-                    back = np.argsort(np.argsort(phi_r))
-                    w_phi = w_sorted[back]
+                    back     = np.argsort(np.argsort(phi_r))
+                    w_phi    = w_sorted[back]
 
-            all_w.append(w_th * w_phi)
+            all_w.append(w_theta[r] * w_phi)
 
         return np.concatenate(all_w)
-
     # ================================================================== #
     #  Transformée de Fourier par ring                                    #
     # ================================================================== #
@@ -329,7 +388,7 @@ class alm_latlon(_alm):
     # ================================================================== #
 
     def map2alm_latlon(self, im, ring_theta, ring_phi_list, ring_counts,
-                       lmax=None, weights=None):
+                       lmax=None, weights=None, quadrature='trapeze'):
         """
         Calcule les coefficients alm d'une carte définie sur une grille
         arbitraire organisée en rings.
@@ -374,7 +433,8 @@ class alm_latlon(_alm):
 
         # Poids de quadrature
         if weights is None:
-            pixel_weights = self.compute_weights(ring_theta, phi_list, ring_counts)
+            pixel_weights = self.compute_weights(ring_theta, phi_list, ring_counts,
+                                                 quadrature=quadrature)
         elif isinstance(weights, str) and weights == 'uniform':
             pixel_weights = np.ones(N_total, dtype=np.float64) / N_total
         else:
@@ -519,7 +579,7 @@ class alm_latlon(_alm):
     # ================================================================== #
 
     def anafast_latlon(self, im, ring_theta, ring_phi_list, ring_counts,
-                       lmax=None, weights=None):
+                       lmax=None, weights=None, quadrature='trapeze'):
         """
         Estime le spectre de puissance Cl d'une carte sur grille arbitraire.
 
@@ -533,7 +593,7 @@ class alm_latlon(_alm):
 
         alm = self.map2alm_latlon(
             im, ring_theta, ring_phi_list, ring_counts,
-            lmax=lmax, weights=weights
+            lmax=lmax, weights=weights, quadrature=quadrature
         )
 
         batch_shape = alm.shape[:-1] if alm.ndim > 1 else ()
