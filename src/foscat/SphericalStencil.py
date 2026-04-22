@@ -67,9 +67,9 @@ class SphericalStencil:
 
         self.G = n_gauges
         self.gauge_type=gauge_type
-        
+
         self.nest = bool(nest)
-            
+
         # Torch defaults
         if device is None:
             device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -184,7 +184,7 @@ class SphericalStencil:
         # local normal n = third column of R_base, shape (N,3)
         n = R_base[:, :, 2]
         n = n / torch.linalg.norm(n, dim=1, keepdim=True).clamp_min(1e-12)  # safe normalize
-        
+
         # per-target sign: +1 if th <= pi/2 else -1
         sign = torch.where(th <= (np.pi/2), torch.ones_like(th), -torch.ones_like(th))  # (N,)
 
@@ -345,7 +345,7 @@ class SphericalStencil:
         P = self.P
         vec_np = np.zeros((P, 3), dtype=float)
         grid = (np.arange(self.KERNELSZ) - self.KERNELSZ // 2)
-         
+
         # NEW: angular offsets
         xx,yy=np.meshgrid(grid,grid)
         s=1.0 # could be modified
@@ -356,12 +356,12 @@ class SphericalStencil:
         # convert to unit vectors
         x = np.sin(dtheta) * np.cos(dphi)
         y = np.sin(dtheta) * np.sin(dphi)
-        z = np.cos(dtheta)  
+        z = np.cos(dtheta)
         #print(self.nside*x.reshape(self.KERNELSZ,self.KERNELSZ))
         #print(self.nside*y.reshape(self.KERNELSZ,self.KERNELSZ))
         #print(self.nside*z.reshape(self.KERNELSZ,self.KERNELSZ))
         vec_np = np.stack([x, y, z], axis=-1)
-        
+
         #vec_np[:, 0] = np.tile(grid, self.KERNELSZ)
         #vec_np[:, 1] = np.repeat(grid, self.KERNELSZ)
         #vec_np[:, 2] = 1.0 - np.sqrt(vec_np[:, 0]**2 + vec_np[:, 1]**2)
@@ -373,12 +373,12 @@ class SphericalStencil:
                 alpha=2*((th>np.pi/2)-0.5)*ph
             else:
                 alpha=0.0*th
-            
+
         R_t = self._rotation_total_torch(
             th, ph, alpha, G=self.G, gauge_cosmo=(self.gauge_type=='cosmo'),
             device=self.device, dtype=self.dtype
         )  # shape (K,G,3,3)
-        
+
         # --- rotate stencil for each (target, gauge): (K,G,P,3)
         #     einsum over local stencil (P,3) with rotation (K,G,3,3)
         rotated = torch.einsum('kgij,pj->kgpi', R_t, vec_t)  # (K,G,P,3)
@@ -574,7 +574,7 @@ class SphericalStencil:
         self.device = device
         self.dtype  = dtype
 
-    
+
     # ------------------------------------------------------------------
     # Step C: apply convolution (already Torch in your code)
     # ------------------------------------------------------------------
@@ -1038,7 +1038,7 @@ class SphericalStencil:
         # cols: for (ci, k_in)        -> ci*K       + k_in
         row_base = (torch.arange(Co_total, device=device, dtype=torch.long) * K)[:, None]  # (Co_total, 1)
         col_base = (torch.arange(Ci,       device=device, dtype=torch.long) * K)[:, None]  # (Ci, 1)
-        
+
 
         rows_all, cols_all, vals_all = [], [], []
 
@@ -1087,7 +1087,7 @@ class SphericalStencil:
                 rows_all.append(rows.reshape(-1))
                 cols_all.append(cols.reshape(-1))
                 vals_all.append(vals.reshape(-1))
-                
+
 
         # --- accumulate either single- or multi-gauge
         if is_multi:
@@ -1108,8 +1108,8 @@ class SphericalStencil:
         cols = torch.cat(cols_all, dim=0)
         vals = torch.cat(vals_all, dim=0)
 
-        
-        indices = torch.stack([cols, rows], dim=0)             
+
+        indices = torch.stack([cols, rows], dim=0)
 
         if return_sparse_tensor:
             M = torch.sparse_coo_tensor(indices, vals, size=shape, device=device, dtype=k_dtype).coalesce()

@@ -53,7 +53,7 @@ class BkNumpy(BackendBase.BackendBase):
         if S is None:
             return 0
         return S.size
-    
+
     def bk_SparseTensor(self, indice, w, dense_shape=[]):
         return self.scipy.sparse.coo_matrix(
             (w, (indice[:, 0], indice[:, 1])), shape=dense_shape

@@ -247,7 +247,7 @@ def lgnomproject(
         valid = pos < uniq.size
         match = np.zeros_like(valid, dtype=bool)
         match[valid] = (uniq[pos[valid]] == ip_img[valid])
-        
+
         if is_rgb:
             img_flat = np.full((ip_img.size, 3), np.nan, dtype=float)
             img_flat[match, :] = agg_vals[pos[match], :]
@@ -332,7 +332,7 @@ def plot_scat(s1,s2,s3,s4):
         S2=s2
         S3=s3
         S4=s4
-        
+
     N_image=s1.shape[0]
     J=s1.shape[1]
     N_orient=s1.shape[2]
@@ -340,7 +340,7 @@ def plot_scat(s1,s2,s3,s4):
     # compute index j1 and j2 for S3
     j1_s3=np.zeros([s3.shape[1]],dtype='int')
     j2_s3=np.zeros([s3.shape[1]],dtype='int')
-    
+
     # compute index j1 and j2 for S4
     j1_s4=np.zeros([s4.shape[1]],dtype='int')
     j2_s4=np.zeros([s4.shape[1]],dtype='int')
@@ -363,7 +363,7 @@ def plot_scat(s1,s2,s3,s4):
     color=['b','r','orange','pink']
     symbol=['',':','-','.']
     plt.figure(figsize=(16,12))
-    
+
     plt.subplot(2,2,1)
     for k in range(4):
         plt.plot(S1[0,:,k],color=color[k%len(color)],label=r'$\Theta = %d$'%(k))
@@ -371,14 +371,14 @@ def plot_scat(s1,s2,s3,s4):
     plt.xlabel(r'$J_1$')
     plt.ylabel(r'$S_1$')
     plt.yscale('log')
-    
+
     plt.subplot(2,2,2)
     for k in range(4):
         plt.plot(S2[0,:,k],color=color[k%len(color)],label=r'$\Theta = %d$'%(k))
     plt.xlabel(r'$J_1$')
     plt.ylabel(r'$S_2$')
     plt.yscale('log')
-    
+
     plt.subplot(2,2,3)
     nidx=np.concatenate([np.zeros([1]),np.cumsum(np.bincount(j1_s3))],0)
     l_pos=[]
@@ -394,11 +394,11 @@ def plot_scat(s1,s2,s3,s4):
         l_pos=l_pos+list(j2_s3[idx]+nidx[i])
         l_name=l_name+["%d,%d"%(j1_s3[m],j2_s3[m]) for m in idx]
     plt.legend(frameon=0,ncol=2)
-    
+
     plt.xticks(l_pos,l_name, fontsize=6)
     plt.xlabel(r"$j_{1},j_{2}$", fontsize=9)
     plt.ylabel(r"$S_{3}$", fontsize=9)
-    
+
     plt.subplot(2,2,4)
     nidx=0
     l_pos=[]
@@ -417,7 +417,7 @@ def plot_scat(s1,s2,s3,s4):
             l_name=l_name+["%d,%d,%d"%(j1_s4[m],j2_s4[m],j3_s4[m]) for m in idx]
         nidx+=np.max(j2_s4[j1_s4==i]+j3_s4[j1_s4==i])-np.min(j2_s4[j1_s4==i]+j3_s4[j1_s4==i])+1
     plt.legend(frameon=0,ncol=2)
-    
+
     plt.xticks(l_pos,l_name, fontsize=6, rotation=90)
     plt.xlabel(r"$j_{1},j_{2},j_{3}$", fontsize=9)
     plt.ylabel(r"$S_{4}$", fontsize=9)
@@ -526,8 +526,8 @@ def estimate_psd_slope(img, dx=1.0, fmin_frac=0.02, fmax_frac=0.4):
     beta = -m                       # since P ~ f^m -> m = -beta
     return beta
 
-def adjust_psd_slope(img, dx=1.0, delta_beta=0.0, 
-                     f_ref=None, band=None, 
+def adjust_psd_slope(img, dx=1.0, delta_beta=0.0,
+                     f_ref=None, band=None,
                      apodize=True, preserve_mean=True, match_variance=True, eps=None):
     """
     Change the isotropic PSD slope by delta_beta (P -> P * f^{-delta_beta}).
@@ -594,7 +594,7 @@ def adjust_psd_slope(img, dx=1.0, delta_beta=0.0,
         width = 0.1 * (f_hi - f_lo) if f_hi > f_lo else 0.0
         def smooth_step(f, a, b):
             # 0 below a, 1 above b, cosine ramp in between
-            if b <= a: 
+            if b <= a:
                 return (f >= b).astype(float)
             t = np.clip((f - a) / (b - a), 0, 1)
             return 0.5 - 0.5*np.cos(np.pi*t)
@@ -872,7 +872,7 @@ def get_half_interp_weights_ang_general(nside_full, theta, phi, edge_mode="neare
         s = W.sum(axis=0)
         ok = s > 0
         W[:, ok] /= s[ok]
-        
+
     return I, W
 
 
@@ -884,7 +884,7 @@ def conjugate_gradient_normal_equation(data, x0, www, all_idx,
                                        verbose=True):
     """
     Solve the normal equation (Pᵗ P) x = Pᵗ y using the Conjugate Gradient method.
-    
+
     Parameters
     ----------
     data    : array_like
@@ -898,27 +898,27 @@ def conjugate_gradient_normal_equation(data, x0, www, all_idx,
     max_iter: maximum number of CG iterations
     tol     : stopping tolerance on residual norm
     verbose : print convergence info every 50 iterations
-    
+
     Returns
     -------
     x : estimated HEALPix solution u ∈ ℝⁿ
     """
 
-    
+
     def default_P(x, W, indices):
         """
         Forward operator: P(x) = projection of HEALPix map x onto the UTM grid.
-        
+
         Steps:
         - Apply spherical convolution with kernel w(x,y).
         - Interpolate from HEALPix cells to UTM pixels using weights W and indices.
         """
         return np.sum(x[indices] * W, 0)
-    
+
     def default_PT(y, W, indices, hit):
         """
         Adjoint operator: Pᵗ(y) = back-projection from UTM grid to HEALPix cells.
-        
+
         Steps:
         - Distribute UTM values y back onto contributing HEALPix cells using W.
         - Apply hit normalization (inverse of pixel coverage).
@@ -927,11 +927,11 @@ def conjugate_gradient_normal_equation(data, x0, www, all_idx,
         value = np.bincount(indices.flatten(),
                             weights=(W * y[None,:]).flatten()) * hit
         return value
-            
+
     if LPT is None:
         LP=default_P
         LPT=default_PT
-        
+
     x = x0.copy()
 
     # Compute pixel coverage normalization (hit map)
@@ -1156,7 +1156,7 @@ def plot_wave(wave,title="spectrum",unit="Amplitude",cmap="viridis"):
     plt.xlabel(r"$k_x$ [cycles / km]")
     plt.ylabel(r"$k_y$ [cycles / km]")
     plt.title(title)
-    
+
 def lonlat_edges_from_ref(shape, ref_lon, ref_lat, dlon, dlat, anchor="center"):
     """
     Build lon/lat *edges* (H+1, W+1) for a regular, axis-aligned grid.

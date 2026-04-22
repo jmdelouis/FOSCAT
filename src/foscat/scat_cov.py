@@ -120,7 +120,7 @@ class scat_cov:
                     self.backend.bk_reshape(self.S0, [self.S1.shape[0], self.S0.shape[1]])
                 )
             ]
-            
+
             if self.S1 is not None:
                 tmp = tmp + [
                     self.conv2complex(
@@ -2623,7 +2623,7 @@ class funct(FOC.FoCUS):
         -------
         S1, S2, S3, S4 normalized
         """
-        
+
         return_data = self.return_data
 
         # Check input consistency
@@ -2702,7 +2702,7 @@ class funct(FOC.FoCUS):
                 nside = int(np.sqrt(npix // 12))
 
             J = int(np.log2(nside)+1)  # Number of j scales
-                
+
             if cell_ids is not None:
                 J=np.min([J,int(np.log(cell_ids.shape[0]) / (2*np.log(2)))-1])
 
@@ -2793,7 +2793,7 @@ class funct(FOC.FoCUS):
         off_S2 = -2
         off_S3 = -3
         off_S4 = -4
-            
+
         if self.use_1D:
             off_S2 = -1
             off_S3 = -1
@@ -2809,7 +2809,7 @@ class funct(FOC.FoCUS):
             P1_dic = {}
             if cross:
                 P2_dic = {}
-            
+
         elif (norm == "auto") and (self.P1_dic is not None):
             P1_dic = self.P1_dic
             if cross:
@@ -2834,7 +2834,7 @@ class funct(FOC.FoCUS):
                     self.backend.bk_L1(I1 * I2),
                     vmask,
                     calc_var=True)
-                
+
             vs0 = self.backend.bk_concat([l_vs0, l_vs0], -1)
             s0 = self.backend.bk_concat([s0, l_vs0], -1)
             if spin>0:
@@ -2894,7 +2894,7 @@ class funct(FOC.FoCUS):
 
             if cmat is not None:
                 tmp2 = self.backend.bk_repeat(conv1, self.NORIENT, axis=-2)
-                
+
                 if spin==0:
                     conv1 = self.backend.bk_reduce_sum(
                         self.backend.bk_reshape(
@@ -2934,7 +2934,7 @@ class funct(FOC.FoCUS):
                         )
                     else:
                         s2 = self.masked_mean(M1_square, vmask, rank=j3)
-                        
+
                 if cond_init_P1_dic:
                     # We fill P1_dic with S2 for normalisation of S3 and S4
                     P1_dic[j3] = self.backend.bk_real(s2)  # [Nbatch, Nmask, Norient3]
@@ -3599,7 +3599,7 @@ class funct(FOC.FoCUS):
             self.P1_dic = P1_dic
             if cross:
                 self.P2_dic = P2_dic
-                
+
         if not return_data:
             if not self.use_1D:
                 S1 = self.backend.bk_concat(S1, -2)
@@ -4234,7 +4234,7 @@ class funct(FOC.FoCUS):
                 )
                 print("\n\n==========")
             J = Jmax  # Number of steps for the loop on scales
-            
+
         L = self.NORIENT
         norm_factor_S3 = 1.0
 
@@ -4807,8 +4807,8 @@ class funct(FOC.FoCUS):
                             return (S1_iso / ref_sigma["S1_sigma"]), \
                                 (S2_iso / ref_sigma["S2_sigma"]) , \
                                 (S3_iso / ref_sigma["S3_sigma"]) , \
-                                (S4_iso / ref_sigma["S4_sigma"]) 
-                        
+                                (S4_iso / ref_sigma["S4_sigma"])
+
                         for_synthesis = self.backend.backend.cat(
                             (
                                 mean_data / ref_sigma["std_data"],
@@ -4837,7 +4837,7 @@ class funct(FOC.FoCUS):
                     else:
                         if return_table:
                             return S1_iso,S2_iso,S3_iso,S4_iso
-                        
+
                         for_synthesis = self.backend.backend.cat(
                             (
                                 mean_data / std_data,
@@ -4858,7 +4858,7 @@ class funct(FOC.FoCUS):
                                 (S2 / ref_sigma["S2_sigma"]), \
                                 (S3 / ref_sigma["S3_sigma"]), \
                                 (S4 / ref_sigma["S4_sigma"])
-                        
+
                         for_synthesis = self.backend.backend.cat(
                             (
                                 mean_data / ref_sigma["std_data"],
@@ -4887,7 +4887,7 @@ class funct(FOC.FoCUS):
                     else:
                         if return_table:
                             return S1,S2,S3,S4
-                        
+
                         for_synthesis = self.backend.backend.cat(
                             (
                                 mean_data / std_data,
@@ -4909,7 +4909,7 @@ class funct(FOC.FoCUS):
                                 (S2_iso / ref_sigma["S2_sigma"]), \
                                 (S3_iso / ref_sigma["S3_sigma"]), \
                                 (S4_iso / ref_sigma["S4_sigma"])
-                        
+
                         for_synthesis = self.backend.backend.cat(
                             (
                                 mean_data / ref_sigma["std_data"],
@@ -4940,7 +4940,7 @@ class funct(FOC.FoCUS):
                     else:
                         if return_table:
                             return S1_iso,S2_iso,S3_iso,S4_iso
-                        
+
                         for_synthesis = self.backend.backend.cat(
                             (
                                 mean_data / std_data,
@@ -4963,7 +4963,7 @@ class funct(FOC.FoCUS):
                                 (S2 / ref_sigma["S2_sigma"]), \
                                 (S3 / ref_sigma["S3_sigma"]), \
                                 (S4 / ref_sigma["S4_sigma"])
-                        
+
                         for_synthesis = self.backend.backend.cat(
                             (
                                 mean_data / ref_sigma["std_data"],
@@ -4994,7 +4994,7 @@ class funct(FOC.FoCUS):
                     else:
                         if return_table:
                             return S1,S2,S3,S4
-                        
+
                         for_synthesis = self.backend.backend.cat(
                             (
                                 mean_data / std_data,
@@ -6166,7 +6166,7 @@ class funct(FOC.FoCUS):
                 tmp = self.diff_data(x,y)
             else:
                 tmp = self.diff_data(x,y,sigma=sigma)
-                
+
             # do abs in case of complex values
             return tmp/x.shape[0]
 
@@ -6301,26 +6301,26 @@ class funct(FOC.FoCUS):
             im2=self.convol(self.backend.bk_cast(image2))
             mm=np.mean(self.backend.to_numpy(
                 self.backend.bk_L1(im*self.backend.bk_conjugate(im2))).real,0)
-        
+
         Norient=mm.shape[0]
         xx=np.cos(np.arange(Norient)/Norient*2*np.pi)
         yy=np.sin(np.arange(Norient)/Norient*2*np.pi)
 
         a=np.sum(mm*xx[:,None],0)
         b=np.sum(mm*yy[:,None],0)
-        
+
         o=np.fmod(Norient*np.arctan2(-b,a)/(2*np.pi)+Norient,Norient)
         xx=np.arange(Norient)
         alpha = o[None,:]-xx[:,None]
         beta = np.fmod(1+o[None,:]-xx[:,None],Norient)
         alpha=(1-alpha)*(alpha<1)*(alpha>0)+beta*(beta<1)*(beta>0)
-        
+
         m=np.zeros([Norient,Norient,mm.shape[1]])
         for k in range(Norient):
             m[k,:,:]=np.roll(alpha,k,0)
         #m=np.mean(m,0)
         return self.backend.bk_cast(m)
-        
+
     def synthesis(
         self,
         image_target,
@@ -6405,10 +6405,10 @@ class funct(FOC.FoCUS):
                 )
             if iso_ang:
                 learn=learn.iso_mean()
-            
+
             if synthesised_N>1:
                 learn = scat_operator.reduce_mean_batch(learn)
-            
+
             # compute scattering covariance of the current synthetised map called u
             if use_v:
                 loss = scat_operator.reduce_distance(learn,ref,sigma=sref)
@@ -6416,7 +6416,7 @@ class funct(FOC.FoCUS):
                 loss = scat_operator.reduce_distance(learn,ref)
 
             return loss
-        
+
         def The_lossX(u, scat_operator, args):
             ref = args[0]
             sref = args[1]
@@ -6585,11 +6585,11 @@ class funct(FOC.FoCUS):
                     imap = self.up_grade(self.backend.bk_cast(omap), imap.shape[1] * 2)
                 else:
                     imap = self.up_grade(self.backend.bk_cast(omap), l_nside)
-                    
+
             if grd_mask is not None:
                 imap = imap * l_grd_mask[k] + tmp[k] * (1 - l_grd_mask[k])
 
-            
+
             if self.use_2D and scat_cov_method!='eval':
                 # compute the coefficients for the target image
                 if use_variance:
@@ -6614,7 +6614,7 @@ class funct(FOC.FoCUS):
                     sref = ref
             else:
                 self.clean_norm()
-                
+
                 ref = self.eval(
                         tmp[k],
                         image2=l_ref[k],
@@ -6622,7 +6622,7 @@ class funct(FOC.FoCUS):
                         Jmax=l_jmax[k],
                         norm='auto'
                     )
-                
+
                 # compute the coefficients for the target image
                 if use_variance:
                     ref, sref = self.eval(
@@ -6642,7 +6642,7 @@ class funct(FOC.FoCUS):
                         norm='auto'
                     )
                     sref = ref
-                    
+
                 if iso_ang:
                     ref=ref.iso_mean()
                     sref=sref.iso_mean()
@@ -6699,10 +6699,10 @@ class funct(FOC.FoCUS):
                 NUM_EPOCHS=NUM_EPOCHS,
                 grd_mask=l_grd_mask[k],
             )
-            
+
         if not self.use_2D:
             self.clean_norm()
-            
+
         t2 = time.time()
         print("Total computation %.2fs" % (t2 - t1))
 

@@ -124,17 +124,17 @@ class CNN:
             w0[:,12]=0.5
             w0[:,13]=0.2
             w0[:,14]=0.1
-        
+
         a=2*np.sqrt(6/(12 * self.out_nside**2 * self.chanlist[self.nscale]*self.NORIENT*self.npar))
         x=(np.random.rand(self.get_number_of_weights())-0.5)*a
-        
+
         w0=w0.flatten()
         x[0:w0.shape[0]]=w0
         nn = self.KERNELSZ * (self.KERNELSZ//2+1) * self.n_chan_in * self.chanlist[0]*self.NORIENT
-        
+
         for k in range(self.nscale):
             ww = np.zeros([self.chanlist[k], self.NORIENT, self.KERNELSZ * (self.KERNELSZ//2+1),  self.chanlist[k + 1], self.NORIENT])
-            
+
             if self.KERNELSZ==3:
                 ww[:,:,0]=-0.2
                 ww[:,:,1]=-0.5
@@ -159,19 +159,19 @@ class CNN:
                     * self.chanlist[k]
                     * self.chanlist[k + 1]
                 ]=ww.flatten()
-                
+
             nn = nn + (self.KERNELSZ * (self.KERNELSZ//2+1)
                 * self.NORIENT*self.NORIENT
                 * self.chanlist[k]
                 * self.chanlist[k + 1])
-            
+
         self.x = self.scat_operator.backend.bk_cast(x)
-        
+
     def calc_matrix_first_layer(self,noise_map):
         # Décalage circulaire par matrice de permutation
         def circ_shift_matrix(N,k):
             return np.roll(np.eye(N), shift=-k, axis=1)
-        
+
         im=self.scat_operator.convol(noise_map)
         mm=np.mean(abs(im.cpu().numpy()),0)
         Norient=mm.shape[1]
@@ -191,11 +191,11 @@ class CNN:
             m[:,k,:,:]=np.roll(alpha,k,1)
         m=np.mean(m,0)
         return self.scat_operator.backend.bk_cast(m[None,None,...])
-        
-    def eval(self, in_im, 
-            indices=None, 
-            weights=None, 
-            out_map=False, 
+
+    def eval(self, in_im,
+            indices=None,
+            weights=None,
+            out_map=False,
             first_layer_rot=None,
             activation='relu'):
 
@@ -207,17 +207,17 @@ class CNN:
         nn = self.KERNELSZ * (self.KERNELSZ//2+1) * self.n_chan_in * self.chanlist[0]*self.NORIENT
 
         im = self.scat_operator.healpix_layer(in_im[:,:,None,:], ww)
-        
+
         if first_layer_rot is not None:
             im = self.backend.bk_reshape(im,[im.shape[0],im.shape[1],self.NORIENT,1,im.shape[3]])
             im = self.backend.bk_reduce_sum(im*first_layer_rot,2)
-            
-        
+
+
         if activation=='relu':
             im = self.backend.bk_relu(im)
         elif activation=='abs':
             im = self.backend.bk_abs(im)
-        
+
         im = self.backend.bk_reduce_sum(self.backend.bk_reshape(im,[im.shape[0],im.shape[1],self.NORIENT,im.shape[3]//4,4]),4)
 
         if self.add_undersample_data:
@@ -225,11 +225,11 @@ class CNN:
             l_im=self.backend.bk_reduce_sum(
                                            self.backend.bk_reshape(l_im,[in_im.shape[0],in_im.shape[1],self.NORIENT,l_im.shape[3]//4,4]), 4)
             im=self.backend.bk_concat([im,l_im],1)
-                
-            
+
+
         if out_map:
             return im
-        
+
         for k in range(self.nscale):
             ww = self.scat_operator.backend.bk_reshape(
                 x[
@@ -260,7 +260,7 @@ class CNN:
                 im = self.scat_operator.healpix_layer(
                     im, ww, indices=indices[k], weights=weights[k]
                 )
-            
+
             if activation=='relu':
                 im = self.backend.bk_relu(im)
             elif activation=='abs':
@@ -289,7 +289,7 @@ class CNN:
         #im = self.scat_operator.backend.bk_reshape(im, [self.npar])
         #im = self.scat_operator.backend.bk_relu(im)
         return im
-        
+
 class GCNN:
 
     def __init__(
@@ -324,7 +324,7 @@ class GCNN:
         else:
             self.nscale = len(chanlist)-1
             self.npar = nparam
-            
+
             if scat_operator is None:
                 self.scat_operator = sc.funct(
                     KERNELSZ=KERNELSZ,
@@ -390,26 +390,26 @@ class GCNN:
     def eval(self, im, indices=None, weights=None):
 
         x = self.x
-        
+
         ww = self.backend.bk_reshape(
             x[0:self.npar * 12 * self.in_nside**2 * self.chanlist[0]*self.NORIENT],
             [self.npar,12 * self.in_nside**2 * self.chanlist[0]*self.NORIENT],
         )
 
         im = self.scat_operator.backend.bk_matmul(im,ww)
-        
+
         im = self.backend.bk_reshape(im,[im.shape[0],self.chanlist[0],self.NORIENT,12 * self.in_nside**2])
-        
+
         nn = self.npar * 12 * self.in_nside**2 * self.chanlist[0]
-        
+
         for k in range(self.nscale):
-            
+
             im = self.scat_operator.backend.bk_relu(im)
-            
+
             im = self.backend.bk_reshape(
                         self.scat_operator.backend.bk_repeat(im,4,axis=-1),
                         [im.shape[0],im.shape[1],self.NORIENT,im.shape[3]*4])
-            
+
             ww = self.scat_operator.backend.bk_reshape(
                 x[
                     nn : nn
@@ -429,7 +429,7 @@ class GCNN:
                 * self.chanlist[k]
                 * self.chanlist[k + 1]
             )
-            
+
             if indices is None:
                 im = self.scat_operator.healpix_layer(im, ww)
             else:
@@ -447,5 +447,5 @@ class GCNN:
             )
         im = self.backend.bk_reduce_mean(im[:,:,:,None]*ww,[1,2])
         #im = self.scat_operator.backend.bk_relu(im)
-         
+
         return im

@@ -69,10 +69,10 @@ class FoCUS:
             sys.stdout.flush()
 
         home_dir = os.environ["HOME"]
-        
+
         if TEMPLATE_PATH is None:
             TEMPLATE_PATH=home_dir+"/.FOSCAT/data"
-            
+
         self.TEMPLATE_PATH = TEMPLATE_PATH
         if not os.path.exists(self.TEMPLATE_PATH):
             if not self.silent:
@@ -188,7 +188,7 @@ class FoCUS:
 
         self.Idx_CNN = {}
         self.Idx_WCNN = {}
-        
+
         self.filters_set = {}
         self.edge_masks = {}
 
@@ -293,7 +293,7 @@ class FoCUS:
         self.Idx_Neighbours = {}
         self.w_smooth = {}
 
-        
+
         if self.use_1D:
             self.w_smooth = slope * (w_smooth / w_smooth.sum()).astype(self.all_type)
             self.ww_RealT = {}
@@ -388,7 +388,7 @@ class FoCUS:
             if np.dtype(dtype) == np.dtype(key):
                 return code
         raise ValueError(f"Unsupported data type: {dtype}")
-    
+
     def get_type(self):
         return self.all_type
 
@@ -490,7 +490,7 @@ class FoCUS:
     #======================================================================================
     # The next two functions prepare the ability of FOSCAT to work with large indexed file
     #======================================================================================
-    
+
     def save_index(self, filepath, data, offset=0, count=None):
         """
         Save an N-dimensional NumPy array with shape (N, ...) to binary file.
@@ -594,7 +594,7 @@ class FoCUS:
                 data = data.reshape((count,))
 
             return data
-    
+
     # ---------------------------------------------−---------
     # ---------------------------------------------−---------
     def healpix_layer(self, im, ww, indices=None, weights=None):
@@ -606,9 +606,9 @@ class FoCUS:
                 self.init_index_cnn(nside,self.NORIENT)
             indices = self.Idx_CNN[(nside,self.NORIENT,self.KERNELSZ)]
             mat = self.Idx_WCNN[(nside,self.NORIENT,self.KERNELSZ)]
-            
+
         wim = self.backend.bk_gather(im,indices.flatten(),axis=3) #[N_batch,N_i,NORIENT,K*(K+1),N_o,NORIENT,N,N_w]
-        
+
         wim = self.backend.bk_reshape(wim,[im.shape[0],im.shape[1],im.shape[2]]+list(indices.shape))*mat[None,...]
         #win is [N_batch,N_i,  NORIENT,K*(K+1),1,  NORIENT,N,N_w]
         #ww is  [1,      N_i,  NORIENT,K*(K+1),N_o,NORIENT]
@@ -652,7 +652,7 @@ class FoCUS:
         return rim
 
     # --------------------------------------------------------
-    
+
     def ud_grade_2(self, im, axis=0, cell_ids=None, nside=None,max_poll=False):
 
         if self.use_2D:
@@ -677,15 +677,15 @@ class FoCUS:
                 tim[:, 0 : 2 * (npix // 2), 0 : 2 * (npiy // 2), :],
                 [ndata, npix // 2, 2, npiy // 2, 2, 1],
             )
-            
+
             #res = self.backend.bk_reduce_sum(self.backend.bk_reduce_sum(tim, 4), 2) / 4
             '''
-            
+
             if self.use_median:
                 res = self.backend.downsample_median_2x2(tim)
             else:
                 res = self.backend.downsample_mean_2x2(tim)
-    
+
             if len(ishape) == 2:
                 return (
                     self.backend.bk_reshape(
@@ -730,33 +730,33 @@ class FoCUS:
                 l_nside=int(np.sqrt(shape[-1]//12))
             else:
                 l_nside=nside
-            
+
             nbatch=1
             for k in range(len(shape)-1):
                 nbatch*=shape[k]
             if l_nside not in self.down:
                 print('initialise down', l_nside)
                 self.down[l_nside] = SphereDownGeo(nside_in=l_nside, dtype=self.all_bk_type,mode="smooth", in_cell_ids=cell_ids)
-            
+
             res,out_cell=self.down[l_nside](self.backend.bk_reshape(im,[nbatch,1,shape[-1]]))
-            
+
             return self.backend.bk_reshape(res,shape[:-1]+[out_cell.shape[0]]),out_cell
             '''
             if self.use_median:
                 if cell_ids is not None:
                     sim, new_cell_ids = self.backend.binned_mean(im, cell_ids,reduce='median')
                     return sim, new_cell_ids
-            
+
                 return self.backend.bk_reduce_median(
                     self.backend.bk_reshape(im, shape[0:-1]+[shape[-1]//4,4]), axis=-1
                 ),None
-            
+
             elif max_poll:
-            
+
                 if cell_ids is not None:
                     sim, new_cell_ids = self.backend.binned_mean(im, cell_ids,reduce='max')
                     return sim, new_cell_ids
-            
+
                 return self.backend.bk_reduce_max(
                     self.backend.bk_reshape(im, shape[0:-1]+[shape[-1]//4,4]), axis=-1
                 ),None
@@ -764,7 +764,7 @@ class FoCUS:
                 if cell_ids is not None:
                     sim, new_cell_ids = self.backend.binned_mean(im, cell_ids,reduce='mean')
                     return sim, new_cell_ids
-            
+
                 return self.backend.bk_reduce_mean(
                     self.backend.bk_reshape(im, shape[0:-1]+[shape[-1]//4,4]), axis=-1
                 ),None
@@ -809,7 +809,7 @@ class FoCUS:
                 return self.backend.bk_reshape(res, [nout, nouty])
             else:
                 return self.backend.bk_reshape(
-                        res, ishape[0:-2] + [nout, nouty] 
+                        res, ishape[0:-2] + [nout, nouty]
                 )
 
         elif self.use_1D:
@@ -823,7 +823,7 @@ class FoCUS:
 
             npix = im.shape[axis]
             odata = 1
-            
+
             ndata = 1
             if len(ishape)>1:
                 for k in range(len(ishape)-1):
@@ -857,7 +857,7 @@ class FoCUS:
                 lout = int(np.sqrt(im.shape[-1] // 12))
             else:
                 lout = nside
-                
+
             '''
             if (lout,nout) not in self.pix_interp_val or force_init_index:
                 if not self.silent:
@@ -865,7 +865,7 @@ class FoCUS:
                 if cell_ids is None:
                     o_cell_ids=np.arange(12 * nout**2, dtype="int")
                     i_npix=12*lout**2
-                
+
                     #level=int(np.log2(lout)) # nside=128
 
                     #sp = HS.heal_spline(level,gamma=2.0)
@@ -873,21 +873,21 @@ class FoCUS:
                     th, ph = hp.pix2ang(
                         nout, o_cell_ids, nest=True
                     )
-                    
+
                     all_idx,www=hp.get_interp_weights(lout,th,ph,nest=True)
-                                          
+
                     #www,all_idx,hidx=sp.ang2weigths(th,ph,nest=True)
 
                     w=www.T
                     p=all_idx.T
-                    
+
                     w=w.flatten()
                     p=p.flatten()
-                    
+
                     indice = np.zeros([o_cell_ids.shape[0] * 4, 2], dtype="int")
                     indice[:, 1] = np.repeat(np.arange(o_cell_ids.shape[0]), 4)
                     indice[:, 0] = p
-                    
+
                     self.pix_interp_val[(lout,nout)] = 1
                     self.weight_interp_val[(lout,nout)] = self.backend.bk_SparseTensor(
                         self.backend.bk_constant(indice.T),
@@ -901,7 +901,7 @@ class FoCUS:
                         o_cell_ids=np.tile(cell_ids,ratio)*ratio+np.repeat(np.arange(ratio),cell_ids.shape[0])
                     i_npix=cell_ids.shape[0]
 
-                    
+
                     th, ph = hp.pix2ang(
                         nout, self.backend.to_numpy(o_cell_ids), nest=True
                     )
@@ -912,41 +912,41 @@ class FoCUS:
                     hidx,inv_idx = np.unique(all_idx,
                                     return_inverse=True)
                     all_idx = inv_idx
-                    
+
                     sorter = np.argsort(hidx)
-                    
+
                     index=sorter[np.searchsorted(hidx,
                                                  self.backend.to_numpy(cell_ids),
                                                  sorter=sorter)]
-                    
+
                     mask        = -np.ones([hidx.shape[0]])
-                    
+
                     mask[index] = np.arange(index.shape[0],dtype='int')
 
                     all_idx=mask[all_idx]
 
                     www[all_idx==-1]=0.0
                     www/=np.sum(www,0)[None,:]
-                    
+
                     all_idx[all_idx==-1]=0
-               
+
                     w=www.T
                     p=all_idx.T
-                    
+
                     w=w.flatten()
                     p=p.flatten()
-                    
+
                     indice = np.zeros([o_cell_ids.shape[0] * 4, 2], dtype="int")
                     indice[:, 1] = np.repeat(np.arange(o_cell_ids.shape[0]), 4)
                     indice[:, 0] = p
-                    
+
                     self.pix_interp_val[(lout,nout)] = 1
                     self.weight_interp_val[(lout,nout)] = self.backend.bk_SparseTensor(
                         self.backend.bk_constant(indice.T),
                         self.backend.bk_constant(self.backend.bk_cast(w)),
                         dense_shape=[i_npix,o_cell_ids.shape[0]],
                     )
-                    
+
                     del w
                     del p
             '''
@@ -954,16 +954,16 @@ class FoCUS:
             nbatch=1
             for k in range(len(shape)-1):
                 nbatch*=shape[k]
-            
+
             im=self.backend.bk_reshape(im,[nbatch,1,shape[-1]])
-            
+
             while lout<nout:
                 if lout not in self.up:
                     if o_cell_ids is None:
                         l_o_cell_ids=torch.tensor(np.arange(12*(lout**2),dtype='int'),device=im.device)
                     else:
                         l_o_cell_ids=o_cell_ids
-                    self.up[lout] = SphereUpGeo(nside_out=lout, 
+                    self.up[lout] = SphereUpGeo(nside_out=lout,
                                                 dtype=self.all_bk_type,
                                                  cell_ids_out=l_o_cell_ids,
                                                  up_norm="col_l1")
@@ -972,7 +972,7 @@ class FoCUS:
                 if lout<nout and o_cell_ids is not None:
                     o_cell_ids=torch.repeat(fine_ids,4)*4+ \
                                 torch.tile(torch.tensor([0,1,2,3],device=fine_ids.device,dtype=fine_ids.dtype),fine_ids.shape[0])
-            
+
             return self.backend.bk_reshape(im,shape[:-1]+[im.shape[-1]])
             '''
                 ndata = 1
@@ -1327,11 +1327,11 @@ class FoCUS:
                             nside,spin  # if cell_ids computes the index
                         )
                     )
-                        
+
         except:
             if cell_ids is not None and spin!=0:
                 self.init_index(nside, kernel=kernel, spin=spin)
-                
+
             if not self.use_2D:
                 if spin!=0:
                     # keep the print here as spin!=0 can be long
@@ -1368,7 +1368,7 @@ class FoCUS:
                               )
                         '''
                         self.init_index(nside, kernel=kernel, spin=0)
-                        
+
                         tmp = self.read_index(
                             "%s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN0.fst"
                             % (
@@ -1379,7 +1379,7 @@ class FoCUS:
                                 nside
                             )
                         )
-                        
+
                     tmpw = self.read_index("%s/FOSCAT_%s_W%d_%d_%d_WAVE-SPIN0.fst"% (
                                             self.TEMPLATE_PATH,
                                             self.TMPFILE_VERSION,
@@ -1388,23 +1388,23 @@ class FoCUS:
                                             nside,
                                         )
                                     )
-                    
+
                     import foscat.HOrientedConvol as hs
 
                     hconvol=hs.HOrientedConvol(nside,4*self.KERNELSZ+1,cell_ids=cell_ids)
-                    
+
                     if cell_ids is None:
                         l_cell_ids=np.arange(12*nside**2)
                     else:
                         l_cell_ids=cell_ids
-                        
+
                     nvalid=4*self.KERNELSZ**2
                     if nvalid>12*nside**2:
                         nvalid=12*nside**2
                     idxEB=hconvol.idx_nn[:,0:nvalid]
-                    tmpEB=np.zeros([self.NORIENT,4,l_cell_ids.shape[0],nvalid],dtype='complex')       
-                    tmpS=np.zeros([4,l_cell_ids.shape[0],nvalid],dtype='float')           
-                    
+                    tmpEB=np.zeros([self.NORIENT,4,l_cell_ids.shape[0],nvalid],dtype='complex')
+                    tmpS=np.zeros([4,l_cell_ids.shape[0],nvalid],dtype='float')
+
                     idx={}
                     nn=0
                     nn2=1
@@ -1430,48 +1430,48 @@ class FoCUS:
                         for k in range(self.NORIENT):
                             ralm=hp.map2alm(hp.reorder(r[k].cpu().numpy().real,n2r=True))[None,:]
                             ialm=hp.map2alm(hp.reorder(r[k].cpu().numpy().imag,n2r=True))[None,:]
-                            
+
                             alm=np.concatenate([ralm,0*ralm,0*ralm],0)
                             rqe,rue,rie=hp.alm2map_spin(alm,nside,spin,3*nside-1)
                             alm=np.concatenate([ialm,0*ialm,0*ialm],0)
                             iqe,iue,iie=hp.alm2map_spin(alm,nside,spin,3*nside-1)
-                            
+
                             alm=np.concatenate([0*ralm,ralm,0*ralm],0)
                             rqb,rub,rib=hp.alm2map_spin(alm,nside,spin,3*nside-1)
                             alm=np.concatenate([0*ialm,ialm,0*ialm],0)
                             iqb,iub,iib=hp.alm2map_spin(alm,nside,spin,3*nside-1)
-                            
+
                             rqe=hp.reorder(rqe,r2n=True)
                             rue=hp.reorder(rue,r2n=True)
                             rqb=hp.reorder(rqb,r2n=True)
                             rub=hp.reorder(rub,r2n=True)
-                            
+
                             iqe=hp.reorder(iqe,r2n=True)
                             iue=hp.reorder(iue,r2n=True)
                             iqb=hp.reorder(iqb,r2n=True)
                             iub=hp.reorder(iub,r2n=True)
-                            
+
                             for l in idx2:
                                 tmpEB[k,0,l]=rqe[idxEB[l,:]]+1J*iqe[idxEB[l,:]]
                                 tmpEB[k,1,l]=rue[idxEB[l,:]]+1J*iue[idxEB[l,:]]
                                 tmpEB[k,2,l]=rqb[idxEB[l,:]]+1J*iqb[idxEB[l,:]]
                                 tmpEB[k,3,l]=rub[idxEB[l,:]]+1J*iub[idxEB[l,:]]
-                                
+
                         r=self.smooth(im)
-                        
+
                         ralm=hp.map2alm(hp.reorder(r.cpu().numpy(),n2r=True))[None,:]
-                            
+
                         alm=np.concatenate([ralm,0*ralm,0*ralm],0)
                         rqe,rue,rie=hp.alm2map_spin(alm,nside,spin,3*nside-1)
-                            
+
                         alm=np.concatenate([0*ralm,ralm,0*ralm],0)
                         rqb,rub,rib=hp.alm2map_spin(alm,nside,spin,3*nside-1)
-                        
+
                         rqe=hp.reorder(rqe,r2n=True)
                         rue=hp.reorder(rue,r2n=True)
                         rqb=hp.reorder(rqb,r2n=True)
                         rub=hp.reorder(rub,r2n=True)
-                            
+
                         for l in idx2:
                             tmpS[0,l,:]=rqe[idxEB[l,:]]
                             tmpS[1,l,:]=rue[idxEB[l,:]]
@@ -1483,7 +1483,7 @@ class FoCUS:
                             else:
                                 pp+=1
                             print('%.2f%% Done'%(100*nn/(l_cell_ids.shape[0])))
-                        
+
                     wav=tmpEB.flatten()
                     wwav=tmpS.flatten()
                     ndata=l_cell_ids.shape[0]*nvalid
@@ -1491,22 +1491,22 @@ class FoCUS:
                     for k in range(self.NORIENT):
                         indice_1_1[(4*k+1)*ndata:(4*k+2)*ndata]+=l_cell_ids.shape[0]
                         indice_1_1[(4*k+3)*ndata:(4*k+4)*ndata]+=l_cell_ids.shape[0]
-                    
+
                     indice_1_0=np.tile(np.tile(np.repeat(np.arange(l_cell_ids.shape[0]),nvalid),4),self.NORIENT)
                     for k in range(self.NORIENT):
                         indice_1_0[(4*k+2)*ndata:(4*k+4)*ndata]+=self.NORIENT*l_cell_ids.shape[0]
                         indice_1_0[(4*k)*ndata:(4*k+4)*ndata]+=k*l_cell_ids.shape[0]
-                    
+
                     indice=np.concatenate([indice_1_1[:,None],indice_1_0[:,None]],1)
-                    
+
                     indice_2_1=np.tile(idxEB.flatten(),4)
                     indice_2_1[ndata:2*ndata]+=l_cell_ids.shape[0]
                     indice_2_1[3*ndata:4*ndata]+=l_cell_ids.shape[0]
                     indice_2_0=np.tile(np.repeat(np.arange(l_cell_ids.shape[0]),nvalid),4)
                     indice_2_0[2*ndata:]+=l_cell_ids.shape[0]
-                    
+
                     indice2=np.concatenate([indice_2_1[:,None],indice_2_0[:,None]],1)
-                    
+
                     self.save_index("%s/FOSCAT_%s_W%d_%d_%d_PIDX-SPIN%d.fst"% (self.TEMPLATE_PATH,
                                                                        self.TMPFILE_VERSION,
                                                                        self.KERNELSZ**2,
@@ -1543,7 +1543,7 @@ class FoCUS:
                                                                        ),
                                     wwav
                                     )
-                    
+
                 else:
                     if l_kernel == 5:
                         pw = 0.75
@@ -1559,10 +1559,10 @@ class FoCUS:
                         pw = 0.5
                         pw2 = 0.25
                         threshold = 2e-5
-                        
+
                     import foscat.SphericalStencil as hs
                     import torch
-                    
+
                     if cell_ids is None:
                         l_cell_ids=np.arange(12*nside**2)
                     else:
@@ -1570,15 +1570,15 @@ class FoCUS:
 
                     if isinstance(l_cell_ids,torch.Tensor):
                         l_cell_ids=self.backend.to_numpy(l_cell_ids)
-                        
+
                     hconvol=hs.SphericalStencil(nside,
                                                 l_kernel,
                                                 cell_ids=l_cell_ids,
                                                 n_gauges=self.NORIENT,
                                                 gauge_type='cosmo')
-                    
+
                     xx=np.tile(np.arange(self.KERNELSZ)-self.KERNELSZ//2,self.KERNELSZ).reshape(self.KERNELSZ,self.KERNELSZ)
-                    
+
                     if nside>0:
                         wwr=(np.exp(-pw2*(xx**2+(xx.T)**2))*np.cos(pw*xx*np.pi)).reshape(1,1,self.KERNELSZ*self.KERNELSZ)
                         wwr-=wwr.mean()
@@ -1593,35 +1593,35 @@ class FoCUS:
                         #wwi-=wwi.mean()
                         wwi=0.0*wwr
                         amp=self.NORIENT*np.sum(abs(wwr+1J*wwi))
-                    
+
                     wwr/=amp
                     wwi/=amp
-                    
+
                     wwr=hconvol.to_tensor(wwr)
                     wwi=hconvol.to_tensor(wwi)
-                    
+
                     wavr,indice,mshape=hconvol.make_matrix(wwr)
                     wavi,indice,mshape=hconvol.make_matrix(wwi)
 
                     wav=hconvol.to_numpy(wavr)+1J*hconvol.to_numpy(wavi)
                     indice=hconvol.to_numpy(indice)
 
-                    
+
                     hconvol=hs.SphericalStencil(nside,
                                                 l_kernel,
                                                 cell_ids=l_cell_ids,
                                                 n_gauges=1,
                                                 gauge_type='cosmo')
-                    
-                    
+
+
                     ww=hconvol.to_tensor((np.exp(-pw2*(xx**2+(xx.T)**2))).reshape(1,1,self.KERNELSZ*self.KERNELSZ))
                     ww/=ww.sum()
-                    
+
                     wwav,indice2,mshape=hconvol.make_matrix(ww)
 
                     wwav=hconvol.to_numpy(wwav)
                     indice2=hconvol.to_numpy(indice2)
-                    
+
                     if cell_ids is None:
                         if not self.silent:
                             print(
@@ -1679,7 +1679,7 @@ class FoCUS:
                             ),
                             wwav,
                         )
-                    
+
             if self.use_2D:
                 if l_kernel**2 == 9:
                     if self.rank == 0:
@@ -1764,11 +1764,11 @@ class FoCUS:
                     spin,
                 )
             )
-            '''                           
+            '''
             if cell_ids is not None:
                 idx_map=-np.ones([12*nside**2],dtype='int32')
                 lcell_ids=cell_ids
-                
+
                 try:
                     idx_map[lcell_ids]=np.arange(lcell_ids.shape[0],dtype='int32')
                 except:
@@ -1788,7 +1788,7 @@ class FoCUS:
                 tmp[lidx,0]=0
                 tmp[:,1]+=orientation*lcell_ids.shape[0]
                 tmp[:,0]+=orientation2*lcell_ids.shape[0]
-                
+
                 idx_map=-np.ones([12*nside**2],dtype='int32')
                 idx_map[lcell_ids]=np.arange(cell_ids.shape[0],dtype='int32')
                 lidx=np.where(idx_map[tmp2[:,1]%(12*nside**2)]!=-1)[0]
@@ -1812,12 +1812,12 @@ class FoCUS:
                 wr-=(ww/wh)[tmp[:,1]]
                 ww=np.bincount(tmp[:,1],weights=wi)
                 wi-=(ww/wh)[tmp[:,1]]
-                
+
                 ww=np.bincount(tmp[:,1],weights=np.sqrt(wr*wr+wi*wi))
                 wr/=ww[tmp[:,1]]
                 wi/=ww[tmp[:,1]]
             '''
-                
+
         else:
             tmp = indice
             tmp2 = indice2
@@ -1825,9 +1825,9 @@ class FoCUS:
             wi = wav.imag
             ws = self.slope * wwav
 
-            
+
         if spin==0:
-            
+
             wr = self.backend.bk_SparseTensor(
                 self.backend.bk_constant(tmp),
                 self.backend.bk_constant(self.backend.bk_cast(wr)),
@@ -1884,7 +1884,7 @@ class FoCUS:
             ncell = 12 * nside * nside
 
         try:
-            
+
             if cell_ids is not None:
                 tmp = self.read_index(
                       "%s/XXXX_%s_W%d_%d_%d_PIDX.fst"  # can not work
@@ -1910,17 +1910,17 @@ class FoCUS:
                     )
         except:
 
-            pw = 8.0 
+            pw = 8.0
             pw2 = 1.0
             threshold = 1e-3
-            
+
             if l_kernel == 5:
                     pw = 8.0
                     pw2 = 0.5
                     threshold = 2e-4
 
             elif l_kernel == 3:
-                    pw = 8.0 
+                    pw = 8.0
                     pw2 = 1.0
                     threshold = 1e-3
 
@@ -1928,9 +1928,9 @@ class FoCUS:
                     pw = 8.0
                     pw2 = 0.25
                     threshold = 4e-5
-            
+
             n_weights = self.KERNELSZ*(self.KERNELSZ//2+1)
-            
+
             if cell_ids is not None:
                     if not isinstance(cell_ids, np.ndarray):
                         cell_ids = self.backend.to_numpy(cell_ids)
@@ -1942,7 +1942,7 @@ class FoCUS:
                     thi = [t[k] / np.pi * 180 for k in range(ncell)]
 
                     indice = np.zeros([n_weights, NORIENT, ncell,4], dtype="int")
-                    
+
                     wav = np.zeros([n_weights, NORIENT, ncell,4], dtype="float")
 
             else:
@@ -2006,30 +2006,30 @@ class FoCUS:
 
                         axes  = y2 * np.cos(angle)  - x2 * np.sin(angle)
                         axes2 = -y2 * np.sin(angle) - x2 * np.cos(angle)
-                        
+
                         for k_weights in range(self.KERNELSZ//2+1):
                             for l_weights in range(self.KERNELSZ):
-                                
+
                                 val=np.exp(-(pw*(axes2*(nside)-(k_weights-self.KERNELSZ//2))**2+pw*(axes*(nside)-(l_weights-self.KERNELSZ//2))**2))+ \
                                     np.exp(-(pw*(axes2*(nside)+(k_weights-self.KERNELSZ//2))**2+pw*(axes*(nside)-(l_weights-self.KERNELSZ//2))**2))
 
                                 idx = np.argsort(-val)
                                 idx = idx[0:4]
-                                
+
                                 nval = len(idx)
                                 val=val[idx]
-                                
+
                                 r = abs(val).sum()
 
                                 if r > 0:
                                     val = val / r
-                                    
+
                                 indice[k_weights*self.KERNELSZ+l_weights,l_rotation,iii,:] = hidx[idx]
                                 wav[k_weights*self.KERNELSZ+l_weights,l_rotation,iii,:] = val
-                
+
             if not self.silent:
                     print("Kernel Size ", iv / (NORIENT * 12 * nside * nside))
-                
+
             if cell_ids is None:
                     if not self.silent:
                         print(
@@ -2089,12 +2089,12 @@ class FoCUS:
             )
         else:
             tmp = indice
-        
+
         self.Idx_CNN[(nside,NORIENT,self.KERNELSZ)] = tmp
         self.Idx_WCNN[(nside,NORIENT,self.KERNELSZ)] = self.backend.bk_cast(wav)
 
         return wav, tmp
-        
+
     # ---------------------------------------------−---------
     # convert swap axes tensor x [....,a,....,b,....] to [....,b,....,a,....]
     def swapaxes(self, x, axis1, axis2):
@@ -2215,7 +2215,7 @@ class FoCUS:
             ichannel = 1
             for i in range(1, len(shape) - 1):
                 ichannel *= shape[i]
-            
+
             l_x = self.backend.bk_reshape(x, [shape[0], 1, ichannel,shape[-1]])
 
             if self.padding == "VALID":
@@ -2224,11 +2224,11 @@ class FoCUS:
                 l_x = self.backend.bk_reshape(
                     l_x[:, :, self.KERNELSZ // 2 : -self.KERNELSZ // 2 + 1, :], oshape
                 )
-        else:   
+        else:
             ichannel = 1
             if len(shape)>1:
                 ichannel = shape[0]
-                
+
             ochannel = 1
             for i in range(1,len(shape)-1):
                 ochannel *= shape[i]
@@ -2237,7 +2237,7 @@ class FoCUS:
 
         # data=[Nbatch,...,NORIENT[,NORIENT],X[,Y]] => data=[Nbatch,...,1,NORIENT[,NORIENT],X[,Y]]
         # mask=[Nmask,X[,Y]] => mask=[1,Nmask,....,X[,Y]]
-        
+
         if self.use_2D:
             l_mask = self.backend.bk_expand_dims(self.backend.bk_expand_dims(l_mask,0),-3)
         else:
@@ -2275,7 +2275,7 @@ class FoCUS:
                 oshape = oshape + list(x.shape[1:-2])
             else:
                 oshape = oshape + [1]
-                
+
             if calc_var:
                 if self.use_median:
                     vh = self.backend.bk_reduce_sum(
@@ -2308,7 +2308,7 @@ class FoCUS:
         elif self.use_1D:
             mtmp = l_mask
             vtmp = l_x
-            
+
             if self.use_median:
                 res,res2  = self.backend.bk_masked_median(l_x, l_mask)
             else:
@@ -2328,7 +2328,7 @@ class FoCUS:
             if calc_var:
                 if self.use_median:
                     vh = self.backend.bk_reduce_sum(l_mask, axis=-1)
-                    
+
                 if self.backend.bk_is_complex(vtmp):
                     res2 = self.backend.bk_sqrt(
                         (
@@ -2345,7 +2345,7 @@ class FoCUS:
                     )
                 else:
                     res2 = self.backend.bk_sqrt((res2 - res * res) / (vh))
-                    
+
                 res = self.backend.bk_reshape(res, oshape)
                 res2 = self.backend.bk_reshape(res2, oshape)
                 return res, res2
@@ -2368,7 +2368,7 @@ class FoCUS:
                 oshape = [x.shape[0]]
             else:
                 oshape = [1]
-                
+
             oshape = oshape + [mask.shape[0]]
 
             if len(shape) > 2:
@@ -2664,7 +2664,7 @@ class FoCUS:
                     [ndata, self.NORIENT, ishape[-1]],
                 )
                 res = self.backend.bk_complex(rr, ii)
-                
+
             if spin==0:
                 if len(ishape) > 1:
                     return self.backend.bk_reshape(
@@ -2679,7 +2679,7 @@ class FoCUS:
                     )
                 else:
                     return self.backend.bk_reshape(res, [2,self.NORIENT, ishape[-1]])
-                
+
         return res
 
     # ---------------------------------------------−---------
@@ -2697,7 +2697,7 @@ class FoCUS:
 
             npix = ishape[-2]
             npiy = ishape[-1]
-            
+
             odata = 1
             if len(ishape) > 1:
                 for k in range(len(ishape)-2):
@@ -2725,7 +2725,7 @@ class FoCUS:
             ishape = list(in_image.shape)
 
             npix = ishape[-1]
-            
+
             ndata = 1
             for k in range(len(ishape) - 1):
                 ndata = ndata * ishape[k]
@@ -2738,13 +2738,13 @@ class FoCUS:
                 res = self.backend.bk_complex(rr, ii)
             else:
                 res = self.backend.conv1d(tim, self.ww_SmoothT[1])
-                
+
             return self.backend.bk_reshape(res, ishape)
 
         else:
 
             ishape = list(image.shape)
-            
+
             if nside is None:
                 nside = int(np.sqrt(image.shape[-1] // 12))
 
@@ -2758,7 +2758,7 @@ class FoCUS:
                 self.ww_Real[(spin,nside)] = wr
                 self.ww_Imag[(spin,nside)] = wi
                 self.w_smooth[(spin,nside)] = ws
-                
+
             l_w_smooth = self.w_smooth[(spin,nside)]
 
             odata = 1
@@ -2789,7 +2789,7 @@ class FoCUS:
                     res = self.backend.bk_complex(rr, ri)
                 else:
                     res = self.backend.bk_sparse_dense_matmul(tim, l_w_smooth)
-                
+
             if len(ishape) == 1:
                 return self.backend.bk_reshape(res, [ishape[-1]])
             else:

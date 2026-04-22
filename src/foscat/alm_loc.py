@@ -179,8 +179,8 @@ class alm_loc(_alm):
 
         # ft is [..., R, m]
         alm_out = None
-        
-        
+
+
 
         for m in range(lmax + 1):
             # IMPORTANT: reuse alm.compute_legendre_m and its normalization exactly
@@ -200,7 +200,7 @@ class alm_loc(_alm):
             # reshape pour broadcast si nécessaire: [1, L] ou [L]
             shape = (1,) * (tmp.ndim - 1) + (scale_t.shape[0],)
             scale_t = scale_t.reshape(shape)
-            
+
             tmp = tmp * scale_t
             if m == 0:
                 alm_out = tmp
@@ -212,7 +212,7 @@ class alm_loc(_alm):
 
     # ---------------------------- alm -> Cl ---------------------------------
     def anafast_loc(self, im, nside: int, cell_ids, nest: bool = False, lmax=None):
-        
+
         if lmax is None:
             lmax = min(self.lmax, 3 * nside - 1)
         lmax = int(lmax)
@@ -248,10 +248,10 @@ class alm_loc(_alm):
         lmax = int(lmax)
 
         alm = self.map2alm_loc(im, nside=nside, cell_ids=cell_ids, nest=nest, lmax=lmax)
-        
+
         # Unpack and compute Cl with correct real-field folding:
         cl = torch.zeros((lmax + 1,), dtype=alm.dtype, device=alm.device)
-        
+
         idx = 0
         for m in range(lmax + 1):
             L = lmax - m + 1

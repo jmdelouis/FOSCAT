@@ -103,11 +103,11 @@ class SphereDownGeo(nn.Module):
             self.sigma_deg = float(sigma_deg)
             self.radius_rad = self.radius_deg * np.pi / 180.0
             self.sigma_rad = self.sigma_deg * np.pi / 180.0
-                                        
+
             M = self._build_down_matrix()  # shape (K_out, K_in or N_in)
-              
+
             self.M = M
-            
+
             if use_csr:
                 self.M = self.M.to_sparse_csr().to(self.device)
 

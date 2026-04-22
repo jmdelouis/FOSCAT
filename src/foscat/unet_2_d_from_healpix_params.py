@@ -59,7 +59,7 @@ class PlanarUNet(nn.Module):
         self.down_type = down_type
         self.dtype = torch.float32 if dtype == 'float32' else torch.float64
         self.head_reduce = head_reduce
-        
+
         # default final activation consistent with HealpixUNet
         if final_activation is None:
             if task == 'regression':
@@ -146,12 +146,12 @@ class PlanarUNet(nn.Module):
 
     def to_tensor(self,x):
         return torch.tensor(x,device=self.device)
-    
+
     def to_numpy(self,x):
         if isinstance(x,np.ndarray):
             return x
         return x.cpu().numpy()
-    
+
     # -------------------------- forward --------------------------
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """x: (B, C_in, H, W) with H=3*in_nside, W=4*in_nside"""
