@@ -34,17 +34,14 @@ Usage
 
 All angles must be in **radians**. theta is colatitude (0 at north pole), phi is longitude in [0, 2*pi).
 """
-
 from __future__ import annotations
 
 from typing import Tuple
-
 import healpy as hp
 import numpy as np
 
 try:
     from scipy.spatial import cKDTree  # optional
-
     _HAVE_SCIPY = True
 except Exception:  # pragma: no cover
     cKDTree = None
@@ -65,18 +62,14 @@ class HealBili:
         Falls back to blocked brute-force dot-product search otherwise.
     """
 
-    def __init__(
-        self, src_theta: np.ndarray, src_phi: np.ndarray, *, prefer_kdtree: bool = False
-    ) -> None:
+    def __init__(self, src_theta: np.ndarray, src_phi: np.ndarray, *, prefer_kdtree: bool = False) -> None:
         if src_theta.shape != src_phi.shape or src_theta.ndim != 2:
             raise ValueError("src_theta and src_phi must have the same 2D shape (H, W)")
         self.src_theta = np.asarray(src_theta, dtype=float)
         self.src_phi = np.asarray(src_phi, dtype=float)
         self.H, self.W = self.src_theta.shape
         # Precompute unit vectors of source grid nodes
-        self._Vsrc = self._sph_to_vec(
-            self.src_theta.ravel(), self.src_phi.ravel()
-        )  # (H*W, 3)
+        self._Vsrc = self._sph_to_vec(self.src_theta.ravel(), self.src_phi.ravel())  # (H*W, 3)
         self.prefer_kdtree = bool(prefer_kdtree) and _HAVE_SCIPY
         if self.prefer_kdtree:  # optional acceleration
             self._kdtree = cKDTree(self._Vsrc)
@@ -87,9 +80,9 @@ class HealBili:
     # Public API
     # -----------------------------
     def compute_weights(
-        self,
-        level,
-        cell_ids: np.ndarray,
+            self,
+            level,
+            cell_ids: np.ndarray,
     ) -> Tuple[np.ndarray, np.ndarray]:
         """Compute bilinear weights/indices for target HEALPix angles.
 
@@ -106,8 +99,8 @@ class HealBili:
             Bilinear weights aligned with `I`. Weights are set to 0.0 for invalid corners and normalized to sum to 1
             when at least one corner is valid.
         """
-        # compute the coordinate of the selected cell_ids
-        heal_theta, heal_phi = hp.pix2ang(2**level, cell_ids, nest=True)
+        #compute the coordinate of the selected cell_ids
+        heal_theta, heal_phi = hp.pix2ang(2**level,cell_ids,nest=True)
 
         ht = np.asarray(heal_theta, dtype=float).ravel()
         hpt = np.asarray(heal_phi, dtype=float).ravel()
@@ -157,7 +150,7 @@ class HealBili:
                 P10 = np.array(self._project_to_plane(v10, ex, ey))
                 P01 = np.array(self._project_to_plane(v01, ex, ey))
                 P11 = np.array(self._project_to_plane(v11, ex, ey))
-                P = np.array(self._project_to_plane(v, ex, ey))
+                P   = np.array(self._project_to_plane(v,   ex, ey))
 
                 # Invert bilinear mapping f(s,t) = P
                 s, t, ok, resid = self._invert_bilinear(P00, P10, P01, P11, P)
@@ -188,9 +181,7 @@ class HealBili:
 
         return I, W
 
-    def apply_weights(
-        self, img: np.ndarray, I: np.ndarray, W: np.ndarray
-    ) -> np.ndarray:
+    def apply_weights(self, img: np.ndarray, I: np.ndarray, W: np.ndarray) -> np.ndarray:
         """Apply precomputed (I, W) to a source image to obtain values at the HEALPix targets.
 
         Parameters
@@ -233,9 +224,7 @@ class HealBili:
         return np.stack([x, y, z], axis=-1)
 
     @staticmethod
-    def _tangent_axes_from_vec(
-        v: np.ndarray,
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def _tangent_axes_from_vec(v: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Return an orthonormal basis (ex, ey, ez=v_hat) for the tangent plane at v."""
         ez = v / np.linalg.norm(v)
         a = np.array([1.0, 0.0, 0.0], dtype=float)
@@ -247,54 +236,25 @@ class HealBili:
         return ex, ey, ez
 
     @staticmethod
-    def _project_to_plane(
-        vec: np.ndarray, ex: np.ndarray, ey: np.ndarray
-    ) -> Tuple[float, float]:
+    def _project_to_plane(vec: np.ndarray, ex: np.ndarray, ey: np.ndarray) -> Tuple[float, float]:
         """Project 3D unit vector `vec` onto plane spanned by (ex, ey): returns (x, y)."""
         return float(np.dot(vec, ex)), float(np.dot(vec, ey))
 
     @staticmethod
-    def _bilinear_f(
-        s: float,
-        t: float,
-        P00: np.ndarray,
-        P10: np.ndarray,
-        P01: np.ndarray,
-        P11: np.ndarray,
-    ) -> np.ndarray:
+    def _bilinear_f(s: float, t: float, P00: np.ndarray, P10: np.ndarray, P01: np.ndarray, P11: np.ndarray) -> np.ndarray:
         """Bilinear blend of 4 points in R^2."""
-        return (
-            ((1 - s) * (1 - t)) * P00
-            + (s * (1 - t)) * P10
-            + ((1 - s) * t) * P01
-            + (s * t) * P11
-        )
+        return ((1 - s) * (1 - t)) * P00 + (s * (1 - t)) * P10 + ((1 - s) * t) * P01 + (s * t) * P11
 
     @staticmethod
-    def _bilinear_jacobian(
-        s: float,
-        t: float,
-        P00: np.ndarray,
-        P10: np.ndarray,
-        P01: np.ndarray,
-        P11: np.ndarray,
-    ) -> np.ndarray:
+    def _bilinear_jacobian(s: float, t: float, P00: np.ndarray, P10: np.ndarray, P01: np.ndarray, P11: np.ndarray) -> np.ndarray:
         """2x2 Jacobian of the bilinear map at (s,t)."""
         dFds = (-(1 - t)) * P00 + (1 - t) * P10 + (-t) * P01 + t * P11
         dFdt = (-(1 - s)) * P00 + (-s) * P10 + (1 - s) * P01 + s * P11
         return np.stack([dFds, dFdt], axis=-1)
 
     @classmethod
-    def _invert_bilinear(
-        cls,
-        P00: np.ndarray,
-        P10: np.ndarray,
-        P01: np.ndarray,
-        P11: np.ndarray,
-        P: np.ndarray,
-        max_iter: int = 10,
-        tol: float = 1e-9,
-    ) -> Tuple[float, float, bool, float]:
+    def _invert_bilinear(cls, P00: np.ndarray, P10: np.ndarray, P01: np.ndarray, P11: np.ndarray, P: np.ndarray,
+                         max_iter: int = 10, tol: float = 1e-9) -> Tuple[float, float, bool, float]:
         """Invert the bilinear map f(s,t)=P with a Newton loop; return (s,t, ok, residual)."""
         # Initial guess from parallelogram (ignore cross term)
         A = np.column_stack([P10 - P00, P01 - P00])  # 2x2

@@ -360,9 +360,9 @@ class BackendBase:
     # ---------------------------------------------−---------
     # --             BACKEND DEFINITION                    --
     # ---------------------------------------------−---------
-    def bk_len(self, S):
+    def bk_len(self,S):
         raise NotImplementedError("This is an abstract class.")
-
+        
     def bk_SparseTensor(self, indice, w, dense_shape=[]):
         raise NotImplementedError("This is an abstract class.")
 

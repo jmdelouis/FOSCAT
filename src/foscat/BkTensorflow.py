@@ -89,11 +89,11 @@ class BkTensorflow(BackendBase.BackendBase):
     # ---------------------------------------------−---------
     # --             BACKEND DEFINITION                    --
     # ---------------------------------------------−---------
-    def bk_len(self, S):
+    def bk_len(self,S):
         if S is None:
             return 0
         return tf.size(S)
-
+    
     def bk_SparseTensor(self, indice, w, dense_shape=[]):
         return self.backend.SparseTensor(indice, w, dense_shape=dense_shape)
 

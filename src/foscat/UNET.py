@@ -49,7 +49,6 @@ Notes
 """
 
 from typing import Dict, Optional
-
 import numpy as np
 
 import foscat.scat_cov as sc
@@ -141,7 +140,7 @@ class UNET:
         # log2(in_nside) levels with channels growing as 4 * 2**k
         if chanlist is None:
             nlayer = int(np.log2(in_nside))
-            chanlist = [4 * 2**k for k in range(nlayer)]
+            chanlist = [4 * 2 ** k for k in range(nlayer)]
         else:
             nlayer = len(chanlist)
         print("N_layer ", nlayer)
@@ -400,20 +399,21 @@ class UNET:
 
         return l_data
 
-    def to_tensor(self, x):
-        if self.f is None:
-            if self.dtype == torch.float64:
-                self.f = sc.funct(KERNELSZ=self.KERNELSZ, all_type="float64")
-            else:
-                self.f = sc.funct(KERNELSZ=self.KERNELSZ, all_type="float32")
-        return self.f.backend.bk_cast(x)
 
-    def to_numpy(self, x):
-        if isinstance(x, np.ndarray):
+    def to_tensor(self,x):
+        if self.f is None:
+            if self.dtype==torch.float64:
+                self.f=sc.funct(KERNELSZ=self.KERNELSZ,all_type='float64')
+            else:
+                self.f=sc.funct(KERNELSZ=self.KERNELSZ,all_type='float32')
+        return self.f.backend.bk_cast(x)
+    
+    def to_numpy(self,x):
+        if isinstance(x,np.ndarray):
             return x
         return x.cpu().numpy()
 
-
+    
 # -----------------------------
 # Unit tests (smoke tests)
 # -----------------------------
@@ -488,3 +488,4 @@ if __name__ == "__main__":
                     np.testing.assert_allclose(y1_np, y3_np, rtol=0, atol=0)
 
     unittest.main()
+ 

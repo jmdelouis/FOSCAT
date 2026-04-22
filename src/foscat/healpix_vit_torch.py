@@ -1,10 +1,9 @@
 # healpix_vit_varlevels.py
 # HEALPix ViT with level-wise (variable) channel widths and U-Net-style spherical decoder
 from __future__ import annotations
-
-from typing import List, Literal, Optional, Tuple, Union
-
+from typing import List, Optional, Literal, Tuple, Union
 import numpy as np
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -69,7 +68,7 @@ class HealpixViT(nn.Module):
         *,
         in_nside: int,
         n_chan_in: int,
-        level_dims: List[int],  # e.g., [128, 192, 256]  (fine -> token)
+        level_dims: List[int],       # e.g., [128, 192, 256]  (fine -> token)
         depth: int,
         num_heads: int,
         cell_ids: np.ndarray,
@@ -114,9 +113,7 @@ class HealpixViT(nn.Module):
 
         for d in self.level_dims:
             if d % self.G != 0:
-                raise ValueError(
-                    f"Each level dim must be divisible by G={self.G}; got {d}."
-                )
+                raise ValueError(f"Each level dim must be divisible by G={self.G}; got {d}.")
         if self.embed_dim % self.num_heads != 0:
             raise ValueError("embed_dim must be divisible by num_heads.")
 
@@ -161,10 +158,7 @@ class HealpixViT(nn.Module):
             self.hconv_levels.append(hc)
 
             dummy, next_ids = hc.Down(
-                dummy,
-                cell_ids=self.level_cell_ids[-1],
-                nside=current_nside,
-                max_poll=True,
+                dummy, cell_ids=self.level_cell_ids[-1], nside=current_nside, max_poll=True
             )
             self.level_cell_ids.append(self.f.backend.to_numpy(next_ids))
             current_nside //= 2
@@ -196,28 +190,22 @@ class HealpixViT(nn.Module):
         self.patch_w = nn.Parameter(
             torch.empty(self.n_chan_in, fine_g, self.KERNELSZ * self.KERNELSZ)
         )
-        nn.init.kaiming_uniform_(
-            self.patch_w.view(self.n_chan_in * fine_g, -1), a=np.sqrt(5)
-        )
-        self.patch_bn = nn.GroupNorm(
-            num_groups=min(8, fine_dim if fine_dim > 1 else 1), num_channels=fine_dim
-        )
+        nn.init.kaiming_uniform_(self.patch_w.view(self.n_chan_in * fine_g, -1), a=np.sqrt(5))
+        self.patch_bn = nn.GroupNorm(num_groups=min(8, fine_dim if fine_dim > 1 else 1),
+                                     num_channels=fine_dim)
 
         # ---------------- Encoder convs per level (C_i -> C_{i+1}) ----------------
         self.enc_w: nn.ParameterList = nn.ParameterList()
         self.enc_bn: nn.ModuleList = nn.ModuleList()
         for i in range(self.token_down):
             Cin = self.level_dims[i]
-            Cout = self.level_dims[i + 1]
+            Cout = self.level_dims[i+1]
             Cout_g = Cout // self.G
             w = nn.Parameter(torch.empty(Cin, Cout_g, self.KERNELSZ * self.KERNELSZ))
             nn.init.kaiming_uniform_(w.view(Cin * Cout_g, -1), a=np.sqrt(5))
             self.enc_w.append(w)
-            self.enc_bn.append(
-                nn.GroupNorm(
-                    num_groups=min(8, Cout if Cout > 1 else 1), num_channels=Cout
-                )
-            )
+            self.enc_bn.append(nn.GroupNorm(num_groups=min(8, Cout if Cout > 1 else 1),
+                                            num_channels=Cout))
 
         # ---------------- Transformer at token grid ----------------
         self.n_tokens = int(self.token_cell_ids.shape[0])
@@ -254,19 +242,14 @@ class HealpixViT(nn.Module):
         self.dec_bn: nn.ModuleList = nn.ModuleList()
         for i in range(self.token_down - 1, -1, -1):
             # decoder proceeds from token level back to fine; we create weights in the same order
-            Cin_fuse = self.level_dims[i + 1] + self.level_dims[i]  # up + skip
+            Cin_fuse = self.level_dims[i+1] + self.level_dims[i]  # up + skip
             Cout = self.level_dims[i]
             Cout_g = Cout // self.G
-            w = nn.Parameter(
-                torch.empty(Cin_fuse, Cout_g, self.KERNELSZ * self.KERNELSZ)
-            )
+            w = nn.Parameter(torch.empty(Cin_fuse, Cout_g, self.KERNELSZ * self.KERNELSZ))
             nn.init.kaiming_uniform_(w.view(Cin_fuse * Cout_g, -1), a=np.sqrt(5))
             self.dec_w.append(w)  # index 0 corresponds to up from token to level L-1
-            self.dec_bn.append(
-                nn.GroupNorm(
-                    num_groups=min(8, Cout if Cout > 1 else 1), num_channels=Cout
-                )
-            )
+            self.dec_bn.append(nn.GroupNorm(num_groups=min(8, Cout if Cout > 1 else 1),
+                                            num_channels=Cout))
 
         # ---------------- Final head (C_fine -> out_channels) ----------------
         if self.task == "global":
@@ -275,26 +258,13 @@ class HealpixViT(nn.Module):
             self.C_fine = self.level_dims[0]
 
             if self.out_channels % self.G != 0:
-                raise ValueError(
-                    f"out_channels={self.out_channels} must be divisible by G={self.G}"
-                )
-            out_g = self.C_fine // self.G
-            self.head_w = nn.Parameter(
-                torch.empty(out_g, self.out_channels, self.KERNELSZ * self.KERNELSZ)
-            )
-            nn.init.kaiming_uniform_(
-                self.head_w.view(self.out_channels * out_g, -1), a=np.sqrt(5)
-            )
-            self.head_bn = (
-                nn.GroupNorm(
-                    num_groups=min(
-                        8, self.out_channels if self.out_channels > 1 else 1
-                    ),
-                    num_channels=self.out_channels,
-                )
-                if self.task == "segmentation"
-                else None
-            )
+                raise ValueError(f"out_channels={self.out_channels} must be divisible by G={self.G}")
+            out_g = self.C_fine//self.G
+            self.head_w = nn.Parameter(torch.empty(out_g, self.out_channels, self.KERNELSZ * self.KERNELSZ))
+            nn.init.kaiming_uniform_(self.head_w.view(self.out_channels * out_g, -1), a=np.sqrt(5))
+            self.head_bn = (nn.GroupNorm(num_groups=min(8, self.out_channels if self.out_channels > 1 else 1),
+                                         num_channels=self.out_channels)
+                            if self.task == "segmentation" else None)
 
         # ---------------- Device probe ----------------
         pref = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -321,14 +291,8 @@ class HealpixViT(nn.Module):
                 # dry run
                 npix0 = int(self.cell_ids_fine.shape[0])
                 x_try = torch.zeros(1, self.n_chan_in, npix0, device=preferred)
-                hc0 = (
-                    self.hconv_levels[0]
-                    if len(self.hconv_levels) > 0
-                    else self.hconv_head
-                )
-                y_try = hc0.Convol_torch(
-                    x_try, self.patch_w, cell_ids=self.cell_ids_fine
-                )
+                hc0 = self.hconv_levels[0] if len(self.hconv_levels) > 0 else self.hconv_head
+                y_try = hc0.Convol_torch(x_try, self.patch_w, cell_ids=self.cell_ids_fine)
                 _ = y_try.sum().item()
                 self._foscat_device = preferred
                 return preferred
@@ -374,16 +338,12 @@ class HealpixViT(nn.Module):
             raise ValueError(f"Expected {self.n_chan_in} channels, got {x.shape[1]}")
         if runtime_ids is not None:
             runtime_ids = self._to_numpy_ids(runtime_ids)
-
+            
         x = x.to(self.runtime_device)
 
         # -------- Patch embedding Cin -> C_fine --------
-        hc_fine0 = (
-            self.hconv_levels[0] if len(self.hconv_levels) > 0 else self.hconv_head
-        )
-        z = hc_fine0.Convol_torch(
-            x, self.patch_w, cell_ids=self.cell_ids_fine
-        )  # (B, C_fine, Nfine)
+        hc_fine0 = self.hconv_levels[0] if len(self.hconv_levels) > 0 else self.hconv_head
+        z = hc_fine0.Convol_torch(x, self.patch_w, cell_ids=self.cell_ids_fine)  # (B, C_fine, Nfine)
         if not torch.is_tensor(z):
             z = torch.as_tensor(z, device=self.runtime_device)
         z = self._as_tensor_batch(z)
@@ -395,9 +355,7 @@ class HealpixViT(nn.Module):
         ids_list: List[np.ndarray] = []
 
         l_data = z
-        l_cell_ids = (
-            self.cell_ids_fine if runtime_ids is None else np.asarray(runtime_ids)
-        )
+        l_cell_ids = self.cell_ids_fine if runtime_ids is None else np.asarray(runtime_ids)
         current_nside = self.in_nside
 
         for i, hc in enumerate(self.hconv_levels):
@@ -407,9 +365,7 @@ class HealpixViT(nn.Module):
 
             # conv to next channels C_{i+1} at same grid
             w_enc = self.enc_w[i]
-            l_data = hc.Convol_torch(
-                l_data, w_enc, cell_ids=l_cell_ids
-            )  # (B, C_{i+1}, N_current)
+            l_data = hc.Convol_torch(l_data, w_enc, cell_ids=l_cell_ids)  # (B, C_{i+1}, N_current)
             if not torch.is_tensor(l_data):
                 l_data = torch.as_tensor(l_data, device=self.runtime_device)
             l_data = self._as_tensor_batch(l_data)
@@ -417,18 +373,14 @@ class HealpixViT(nn.Module):
             l_data = F.gelu(l_data)
 
             # Down one level
-            l_data, l_cell_ids = hc.Down(
-                l_data, cell_ids=l_cell_ids, nside=current_nside, max_poll=True
-            )
+            l_data, l_cell_ids = hc.Down(l_data, cell_ids=l_cell_ids, nside=current_nside, max_poll=True)
             l_data = self._as_tensor_batch(l_data)
             current_nside //= 2
 
         # We are now at token grid with channels = C_token
-        x_tok = l_data  # (B, C_token, Ntok)
-        token_ids = l_cell_ids  # ids at token level
-        assert (
-            x_tok.shape[1] == self.embed_dim
-        ), "Token channels mismatch with embed_dim."
+        x_tok = l_data              # (B, C_token, Ntok)
+        token_ids = l_cell_ids      # ids at token level
+        assert x_tok.shape[1] == self.embed_dim, "Token channels mismatch with embed_dim."
 
         # -------- Transformer on tokens --------
         seq = x_tok.permute(0, 2, 1)  # (B, Ntok, E)
@@ -436,11 +388,11 @@ class HealpixViT(nn.Module):
             cls = self.cls_token.expand(seq.size(0), -1, -1)
             seq = torch.cat([cls, seq], dim=1)
         if self.pos_embed is not None:
-            seq = seq + self.pos_embed[:, : seq.shape[1], :]
+            seq = seq + self.pos_embed[:, :seq.shape[1], :]
 
-        seq = self.encoder(seq)  # (B, Ntok(+1), E)
+        seq = self.encoder(seq)       # (B, Ntok(+1), E)
         if self.cls_token_enabled:
-            tokens = seq[:, 1:, :]  # drop cls for dense
+            tokens = seq[:, 1:, :]    # drop cls for dense
         else:
             tokens = seq
 
@@ -449,48 +401,36 @@ class HealpixViT(nn.Module):
         if self.task == "global":
             if self.head_type == "cls" and self.cls_token_enabled:
                 cls_vec = seq[:, 0, :]
-                return nn.Linear(self.embed_dim, self.out_channels).to(seq.device)(
-                    cls_vec
-                )
+                return nn.Linear(self.embed_dim, self.out_channels).to(seq.device)(cls_vec)
             else:
-                return nn.Linear(self.embed_dim, self.out_channels).to(seq.device)(
-                    tokens.mean(dim=1)
-                )
+                return nn.Linear(self.embed_dim, self.out_channels).to(seq.device)(tokens.mean(dim=1))
 
         # -------- Build runtime id chain (fine -> ... -> token) --------
-        fine_ids_runtime = (
-            self.cell_ids_fine if runtime_ids is None else np.asarray(runtime_ids)
-        )
+        fine_ids_runtime = self.cell_ids_fine if runtime_ids is None else np.asarray(runtime_ids)
         ids_chain = [np.asarray(fine_ids_runtime)]
         nside_tmp = self.in_nside
-        _dummy = self.f.backend.bk_cast(
-            np.zeros((1, 1, ids_chain[0].shape[0]), dtype=self.np_dtype)
-        )
+        _dummy = self.f.backend.bk_cast(np.zeros((1, 1, ids_chain[0].shape[0]), dtype=self.np_dtype))
         for hc in self.hconv_levels:
-            _dummy, _next = hc.Down(
-                _dummy, cell_ids=ids_chain[-1], nside=nside_tmp, max_poll=True
-            )
+            _dummy, _next = hc.Down(_dummy, cell_ids=ids_chain[-1], nside=nside_tmp, max_poll=True)
             ids_chain.append(self.f.backend.to_numpy(_next))
             nside_tmp //= 2
 
         tok_ids_np = self._to_numpy_ids(token_ids)
-
+        
         assert tok_feat.shape[-1] == tok_ids_np.shape[0], "Token count mismatch."
-        assert np.array_equal(
-            tok_ids_np, ids_chain[-1]
-        ), "Token ids mismatch with runtime chain."
+        assert np.array_equal(tok_ids_np, ids_chain[-1]), "Token ids mismatch with runtime chain."
 
         # list of nsides at each encoder level (fine -> ... -> pre-token)
-        nsides_levels = [self.in_nside // (2**k) for k in range(self.token_down)]
+        nsides_levels = [self.in_nside // (2 ** k) for k in range(self.token_down)]
 
         # -------- Decoder: Up step-by-step with fusion conv --------
         y = tok_feat  # (B, C_token, Ntok)
-        dec_idx = 0  # index in self.dec_w / self.dec_bn (built from token->fine order)
-        for i in range(len(ids_chain) - 1, 0, -1):
-            coarse_ids = ids_chain[i]  # current y grid
-            fine_ids = ids_chain[i - 1]  # target grid
-            source_ns = self.in_nside // (2**i)
-            fine_ns = self.in_nside // (2 ** (i - 1))
+        dec_idx = 0   # index in self.dec_w / self.dec_bn (built from token->fine order)
+        for i in range(len(ids_chain)-1, 0, -1):
+            coarse_ids = ids_chain[i]      # current y grid
+            fine_ids   = ids_chain[i-1]    # target grid
+            source_ns  = self.in_nside // (2 ** i)
+            fine_ns    = self.in_nside // (2 ** (i-1))
 
             # choose operator for the target fine level
             if fine_ns == self.in_nside:
@@ -500,18 +440,14 @@ class HealpixViT(nn.Module):
                 op_fine = self.hconv_levels[idx]
 
             # Up one level
-            y_up = op_fine.Up(
-                y, cell_ids=coarse_ids, o_cell_ids=fine_ids, nside=source_ns
-            )
+            y_up = op_fine.Up(y, cell_ids=coarse_ids, o_cell_ids=fine_ids, nside=source_ns)
             if not torch.is_tensor(y_up):
                 y_up = torch.as_tensor(y_up, device=self.runtime_device)
             y_up = self._as_tensor_batch(y_up)  # (B, C_{i}, N_fine)
 
             # Skip at this level (channels = C_{i-1})
-            skip_i = self._as_tensor_batch(skips[i - 1]).to(y_up.device)
-            assert np.array_equal(
-                np.asarray(ids_list[i - 1]), np.asarray(fine_ids)
-            ), "Skip ids misaligned."
+            skip_i = self._as_tensor_batch(skips[i-1]).to(y_up.device)
+            assert np.array_equal(np.asarray(ids_list[i-1]), np.asarray(fine_ids)), "Skip ids misaligned."
 
             # Concat and fuse: (C_{i} + C_{i-1}) -> C_{i-1}
             y_cat = torch.cat([y_up, skip_i], dim=1)
@@ -541,9 +477,7 @@ class HealpixViT(nn.Module):
         return y
 
     @torch.no_grad()
-    def predict(
-        self, x: Union[torch.Tensor, np.ndarray], batch_size: int = 8
-    ) -> torch.Tensor:
+    def predict(self, x: Union[torch.Tensor, np.ndarray], batch_size: int = 8) -> torch.Tensor:
         self.eval()
         if isinstance(x, np.ndarray):
             x = torch.from_numpy(x).float()

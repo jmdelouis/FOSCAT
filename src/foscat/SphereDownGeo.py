@@ -1,7 +1,8 @@
-import healpy as hp
-import numpy as np
+
 import torch
 import torch.nn as nn
+import numpy as np
+import healpy as hp
 
 
 class SphereDownGeo(nn.Module):
@@ -50,9 +51,7 @@ class SphereDownGeo(nn.Module):
         self.dtype = dtype
 
         self.nside_in = int(nside_in)
-        assert (
-            self.nside_in & (self.nside_in - 1)
-        ) == 0, "nside_in must be a power of 2."
+        assert (self.nside_in & (self.nside_in - 1)) == 0, "nside_in must be a power of 2."
         self.nside_out = self.nside_in // 2
         assert self.nside_out >= 1, "nside_out must be >= 1."
 
@@ -76,9 +75,7 @@ class SphereDownGeo(nn.Module):
             else:
                 req_out = self._validate_cell_ids_out(cell_ids_out)
                 # keep only those compatible with derived_out (otherwise they'd be all-zero)
-                self.cell_ids_out = np.intersect1d(
-                    req_out, derived_out, assume_unique=False
-                )
+                self.cell_ids_out = np.intersect1d(req_out, derived_out, assume_unique=False)
                 if self.cell_ids_out.size == 0:
                     raise ValueError(
                         "After intersecting cell_ids_out with unique(in_cell_ids//4), "
@@ -106,11 +103,11 @@ class SphereDownGeo(nn.Module):
             self.sigma_deg = float(sigma_deg)
             self.radius_rad = self.radius_deg * np.pi / 180.0
             self.sigma_rad = self.sigma_deg * np.pi / 180.0
-
+                                        
             M = self._build_down_matrix()  # shape (K_out, K_in or N_in)
-
+              
             self.M = M
-
+            
             if use_csr:
                 self.M = self.M.to_sparse_csr().to(self.device)
 
@@ -123,21 +120,15 @@ class SphereDownGeo(nn.Module):
             children = np.stack(
                 [4 * self.cell_ids_out + i for i in range(4)],
                 axis=1,
-            ).astype(
-                np.int64
-            )  # [K_out, 4] in fine pixel ids (full indexing)
+            ).astype(np.int64)  # [K_out, 4] in fine pixel ids (full indexing)
 
             if self.has_in_subset:
                 # map each child pixel id to position in in_cell_ids (compact index)
                 pos = self._positions_in_sorted(self.in_cell_ids, children.reshape(-1))
-                children_compact = pos.reshape(self.K_out, 4).astype(
-                    np.int64
-                )  # -1 if missing
+                children_compact = pos.reshape(self.K_out, 4).astype(np.int64)  # -1 if missing
                 self.register_buffer(
                     "children_compact",
-                    torch.tensor(
-                        children_compact, dtype=torch.long, device=self.device
-                    ),
+                    torch.tensor(children_compact, dtype=torch.long, device=self.device),
                 )
             else:
                 self.register_buffer(
@@ -148,18 +139,12 @@ class SphereDownGeo(nn.Module):
         # expose ids as torch buffers for convenience
         self.register_buffer(
             "cell_ids_out_t",
-            torch.tensor(
-                self.cell_ids_out.astype(np.int64), dtype=torch.long, device=self.device
-            ),
+            torch.tensor(self.cell_ids_out.astype(np.int64), dtype=torch.long, device=self.device),
         )
         if self.has_in_subset:
             self.register_buffer(
                 "in_cell_ids_t",
-                torch.tensor(
-                    self.in_cell_ids.astype(np.int64),
-                    dtype=torch.long,
-                    device=self.device,
-                ),
+                torch.tensor(self.in_cell_ids.astype(np.int64), dtype=torch.long, device=self.device),
             )
 
     # ---------------- validation helpers ----------------
@@ -170,14 +155,10 @@ class SphereDownGeo(nn.Module):
 
         arr = np.asarray(cell_ids_out, dtype=np.int64).reshape(-1)
         if arr.size == 0:
-            raise ValueError(
-                "cell_ids_out is empty: provide at least one coarse pixel id."
-            )
+            raise ValueError("cell_ids_out is empty: provide at least one coarse pixel id.")
         arr = np.unique(arr)
         if arr.min() < 0 or arr.max() >= self.N_out:
-            raise ValueError(
-                f"cell_ids_out must be in [0, {self.N_out-1}] for nside_out={self.nside_out}."
-            )
+            raise ValueError(f"cell_ids_out must be in [0, {self.N_out-1}] for nside_out={self.nside_out}.")
         return arr
 
     def _validate_in_cell_ids(self, in_cell_ids):
@@ -190,20 +171,14 @@ class SphereDownGeo(nn.Module):
             arr = np.asarray(in_cell_ids)
         arr = np.asarray(arr, dtype=np.int64).reshape(-1)
         if arr.size == 0:
-            raise ValueError(
-                "in_cell_ids is empty: provide at least one fine pixel id or None."
-            )
+            raise ValueError("in_cell_ids is empty: provide at least one fine pixel id or None.")
         arr = np.unique(arr)
         if arr.min() < 0 or arr.max() >= self.N_in:
-            raise ValueError(
-                f"in_cell_ids must be in [0, {self.N_in-1}] for nside_in={self.nside_in}."
-            )
+            raise ValueError(f"in_cell_ids must be in [0, {self.N_in-1}] for nside_in={self.nside_in}.")
         return arr
 
     @staticmethod
-    def _positions_in_sorted(
-        sorted_ids: np.ndarray, query_ids: np.ndarray
-    ) -> np.ndarray:
+    def _positions_in_sorted(sorted_ids: np.ndarray, query_ids: np.ndarray) -> np.ndarray:
         """
         For each query_id, return its index in sorted_ids if present, else -1.
         sorted_ids must be sorted ascending unique.
@@ -241,49 +216,41 @@ class SphereDownGeo(nn.Module):
 
         p_out = self.cell_ids_out.astype(np.int64)  # [K]
         K = p_out.size
-        offs = np.arange(4, dtype=np.int64)  # [4]
+        offs = np.arange(4, dtype=np.int64)         # [4]
 
         # --- (A) Choix du voisinage côté coarse
         # Option 1 (minimal, très rapide) : uniquement le parent -> 4 enfants
-        # parents = p_out[:, None]                    # [K,1]
+        #parents = p_out[:, None]                    # [K,1]
 
         # Option 2 (plus “lisse”) : parent + 8 voisins -> 9 parents -> 36 enfants
-        neigh8 = hp.get_all_neighbours(
-            nside_out, p_out, nest=True
-        )  # [8,K] (healpy renvoie souvent [8,K])
-        parents = np.concatenate([p_out[None, :], neigh8], axis=0).T  # [K,9]
-        idx = np.where(parents == -1)
-        parents[idx[0], idx[1]] = parents[idx[0], idx[1] - 1]
+        neigh8 = hp.get_all_neighbours(nside_out, p_out, nest=True)  # [8,K] (healpy renvoie souvent [8,K])
+        parents = np.concatenate([p_out[None, :], neigh8], axis=0).T # [K,9]
+        idx=np.where(parents==-1)
+        parents[idx[0],idx[1]]=parents[idx[0],idx[1]-1]
 
         # --- enfants fins (NESTED) : child_id = 4*parent + {0,1,2,3}
-        children = (4 * parents[..., None] + offs[None, None, :]).reshape(
-            K, -1
-        )  # [K, 4] ou [K,36]
+        children = (4 * parents[..., None] + offs[None, None, :]).reshape(K, -1)  # [K, 4] ou [K,36]
 
         # Si option voisins activée : invalider enfants des parents=-1
-        # mask_child = np.repeat(mask_parent, 4, axis=1)               # [K,36]
-        # children_flat = children[mask_child]
-        # print(mask_child.shape,children.shape,K)
-        rows_flat = np.repeat(
-            np.arange(K, dtype=np.int64), children.shape[1]
-        )  # [mask_child.ravel()]
+        #mask_child = np.repeat(mask_parent, 4, axis=1)               # [K,36]
+        #children_flat = children[mask_child]
+        #print(mask_child.shape,children.shape,K)
+        rows_flat = np.repeat(np.arange(K, dtype=np.int64), children.shape[1])#[mask_child.ravel()]
 
         # Option minimal (sans voisins) :
-        children_flat = children.reshape(-1)  # [K*4]
-        # rows_flat = np.repeat(np.arange(K, dtype=np.int64), children.shape[1])
+        children_flat = children.reshape(-1)                           # [K*4]
+        #rows_flat = np.repeat(np.arange(K, dtype=np.int64), children.shape[1])
 
         # --- Subset: map vers indices compacts
         if self.has_in_subset:
-            in_ids = (
-                self.in_cell_ids
-            )  # trié/unique :contentReference[oaicite:4]{index=4}
+            in_ids = self.in_cell_ids  # trié/unique :contentReference[oaicite:4]{index=4}
             idx = np.searchsorted(in_ids, children_flat)
 
-            in_range = idx < in_ids.size  # idx est toujours >=0 pour searchsorted
+            in_range = idx < in_ids.size          # idx est toujours >=0 pour searchsorted
             idx2 = idx[in_range]
             child2 = children_flat[in_range]
 
-            ok2 = in_ids[idx2] == child2  # comparaison safe
+            ok2 = (in_ids[idx2] == child2)        # comparaison safe
             ok = np.zeros_like(in_range, dtype=bool)
             ok[in_range] = ok2
 
@@ -298,22 +265,17 @@ class SphereDownGeo(nn.Module):
         if rows_flat2.size == 0:
             indices = torch.zeros((2, 0), dtype=torch.long, device=self.device)
             vals_t = torch.zeros((0,), dtype=self.dtype, device=self.device)
-            return torch.sparse_coo_tensor(
-                indices,
-                vals_t,
-                size=(self.K_out, self.K_in),
-                device=self.device,
-                dtype=self.dtype,
-            ).coalesce()
+            return torch.sparse_coo_tensor(indices, vals_t, size=(self.K_out, self.K_in),
+                                           device=self.device, dtype=self.dtype).coalesce()
 
         # --- poids gaussiens (vectorisé)
         # centres coarse: vec0 [K,3]
         vx0, vy0, vz0 = hp.pix2vec(nside_out, p_out, nest=True)
-        vec0 = np.stack([vx0, vy0, vz0], axis=1)  # [K,3]
+        vec0 = np.stack([vx0, vy0, vz0], axis=1)                        # [K,3]
 
         # vec des enfants gardés
         vx, vy, vz = hp.pix2vec(nside_in, child_ids_kept, nest=True)
-        vec = np.stack([vx, vy, vz], axis=1)  # [nnz,3]
+        vec = np.stack([vx, vy, vz], axis=1)                            # [nnz,3]
 
         # dot(vec, vec0[row])
         dots = np.einsum("ij,ij->i", vec, vec0[rows_flat2])
@@ -351,14 +313,8 @@ class SphereDownGeo(nn.Module):
         vals_t = torch.tensor(w_norm, dtype=self.dtype, device=self.device)
 
         indices = torch.stack([rows_t, cols_t], dim=0)
-        return torch.sparse_coo_tensor(
-            indices,
-            vals_t,
-            size=(self.K_out, self.K_in),
-            device=self.device,
-            dtype=self.dtype,
-        ).coalesce()
-
+        return torch.sparse_coo_tensor(indices, vals_t, size=(self.K_out, self.K_in),
+                                    device=self.device, dtype=self.dtype).coalesce()
     '''
     def _build_down_matrix(self) -> torch.Tensor:
         """Construct sparse matrix M (K_out, K_in or N_in) for the selected coarse pixels."""
@@ -454,7 +410,6 @@ class SphereDownGeo(nn.Module):
         ).coalesce()
         return M
         '''
-
     # ---------------- forward ----------------
     def forward(self, x: torch.Tensor):
         """
@@ -516,13 +471,9 @@ class SphereDownGeo(nn.Module):
                 idx = ch[:, j]  # [K_out]
                 mask = idx >= 0
                 # start with very negative so missing children don't win
-                tmp = torch.full(
-                    (B, C, self.K_out), -torch.inf, device=x.device, dtype=x.dtype
-                )
+                tmp = torch.full((B, C, self.K_out), -torch.inf, device=x.device, dtype=x.dtype)
                 if mask.any():
-                    tmp[:, :, mask] = x_use.index_select(
-                        dim=2, index=idx[mask]
-                    ).reshape(B, C, -1)
+                    tmp[:, :, mask] = x_use.index_select(dim=2, index=idx[mask]).reshape(B, C, -1)
                 y = tmp if y is None else torch.maximum(y, tmp)
             # If a parent had no valid children at all, it is -inf -> set to 0
             y = torch.where(torch.isfinite(y), y, torch.zeros_like(y))
@@ -531,8 +482,6 @@ class SphereDownGeo(nn.Module):
         else:
             ch = self.children_full.to(x.device)  # [K_out,4] full indices
             # gather children and max
-            xch = x_use.index_select(dim=2, index=ch.reshape(-1)).reshape(
-                B, C, self.K_out, 4
-            )
+            xch = x_use.index_select(dim=2, index=ch.reshape(-1)).reshape(B, C, self.K_out, 4)
             y = xch.max(dim=3).values
             return y, self.cell_ids_out_t.to(x.device)
