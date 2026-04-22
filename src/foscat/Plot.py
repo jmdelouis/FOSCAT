@@ -1,33 +1,38 @@
-import numpy as np
-import matplotlib.pyplot as plt
-import healpy as hp
-import math
 import io
+import math
+
+import healpy as hp
+import matplotlib.pyplot as plt
+import numpy as np
 import requests
 from PIL import Image
 
+
 def lgnomproject(
-        cell_ids,               # (N,) HEALPix pixel indices
-        data,                   # (N,) scalar values OR (N,3) RGB values in [0,1]
-        nside: int,
-        rot=None,
-        xsize: int = 400,
-        ysize: int = 400,
-        reso: float = None,
-        fov_deg=None,
-        nest: bool = True,
-        reduce: str = "mean",   # 'mean'|'median'|'sum'|'first'
-        mask_outside: bool = True,
-        unseen_value=None,      # defaults to hp.UNSEEN (scalar) or np.nan (RGB)
-        return_image_only: bool = False,
-        title: str = None, cmap: str = "viridis", vmin=None, vmax=None,
-        notext: bool = False,
-        hold: bool = True,
-        interp: bool = False,
-        sub=(1,1,1),
-        cbar: bool = False,
-        unit: str = "Value",
-        rgb_clip=(0.0, 1.0),    # clip range for RGB
+    cell_ids,  # (N,) HEALPix pixel indices
+    data,  # (N,) scalar values OR (N,3) RGB values in [0,1]
+    nside: int,
+    rot=None,
+    xsize: int = 400,
+    ysize: int = 400,
+    reso: float = None,
+    fov_deg=None,
+    nest: bool = True,
+    reduce: str = "mean",  # 'mean'|'median'|'sum'|'first'
+    mask_outside: bool = True,
+    unseen_value=None,  # defaults to hp.UNSEEN (scalar) or np.nan (RGB)
+    return_image_only: bool = False,
+    title: str = None,
+    cmap: str = "viridis",
+    vmin=None,
+    vmax=None,
+    notext: bool = False,
+    hold: bool = True,
+    interp: bool = False,
+    sub=(1, 1, 1),
+    cbar: bool = False,
+    unit: str = "Value",
+    rgb_clip=(0.0, 1.0),  # clip range for RGB
 ):
     """
     Gnomonic projection from *sparse* HEALPix samples (cell_ids, data) to an image.
@@ -36,10 +41,14 @@ def lgnomproject(
 
     # -------- 0) Input normalization --------
     if unseen_value is None:
-        unseen_value = hp.UNSEEN if (np.ndim(data) == 1 or (np.ndim(data)==2 and data.shape[1] != 3)) else np.nan
+        unseen_value = (
+            hp.UNSEEN
+            if (np.ndim(data) == 1 or (np.ndim(data) == 2 and data.shape[1] != 3))
+            else np.nan
+        )
 
     cell_ids = np.asarray(cell_ids, dtype=np.int64)
-    vals_in  = np.asarray(data)
+    vals_in = np.asarray(data)
 
     if vals_in.ndim == 1:
         is_rgb = False
@@ -49,7 +58,9 @@ def lgnomproject(
     elif vals_in.ndim == 2 and vals_in.shape[1] == 3:
         is_rgb = True
         if cell_ids.shape[0] != vals_in.shape[0]:
-            raise ValueError("For RGB mode, `data` must have shape (N,3) matching `cell_ids` length.")
+            raise ValueError(
+                "For RGB mode, `data` must have shape (N,3) matching `cell_ids` length."
+            )
         vals_in = vals_in.astype(float)
     else:
         raise ValueError("`data` must be (N,) for scalar or (N,3) for RGB.")
@@ -71,7 +82,7 @@ def lgnomproject(
         elif reduce == "median":
             agg_vals = np.empty((uniq.size, 3), dtype=float)
             for k, pix in enumerate(uniq):
-                sel = (cell_ids == pix)
+                sel = cell_ids == pix
                 agg_vals[k, :] = np.median(vals_in[sel, :], axis=0)
         elif reduce == "mean":
             sums = np.zeros((uniq.size, 3), dtype=float)
@@ -111,13 +122,13 @@ def lgnomproject(
         theta_c, phi_c = hp.pix2ang(nside, uniq, nest=nest)  # colat, lon (rad)
         lon0_deg = np.degrees(np.angle(np.mean(np.exp(1j * phi_c))))
         lat0_deg = 90.0 - np.degrees(np.median(theta_c))
-        psi_deg  = 0.0
+        psi_deg = 0.0
         rot = (lon0_deg % 360.0, float(lat0_deg), float(psi_deg))
 
     lon0_deg, lat0_deg, psi_deg = rot
     lon0 = np.deg2rad(lon0_deg)
     lat0 = np.deg2rad(lat0_deg)
-    psi  = np.deg2rad(psi_deg)
+    psi = np.deg2rad(psi_deg)
 
     # -------- 3) Tangent-plane grid --------
     if reso is not None:
@@ -143,20 +154,22 @@ def lgnomproject(
 
     # rotate plane
     c, s = np.cos(psi), np.sin(psi)
-    Xr =  c * X + s * Y
+    Xr = c * X + s * Y
     Yr = -s * X + c * Y
 
     # -------- 4) Inverse gnomonic → sphere --------
-    rho  = np.hypot(Xr, Yr)
+    rho = np.hypot(Xr, Yr)
     cang = np.arctan(rho)
     sinc, cosc = np.sin(cang), np.cos(cang)
     sinlat0, coslat0 = np.sin(lat0), np.cos(lat0)
 
     with np.errstate(invalid="ignore", divide="ignore"):
-        lat = np.arcsin(cosc * sinlat0 + (Yr * sinc * coslat0) / np.where(rho == 0, 1.0, rho))
+        lat = np.arcsin(
+            cosc * sinlat0 + (Yr * sinc * coslat0) / np.where(rho == 0, 1.0, rho)
+        )
         lon = lon0 + np.arctan2(Xr * sinc, rho * coslat0 * cosc - Yr * sinlat0 * sinc)
 
-    lon = (lon + 2*np.pi) % (2*np.pi)
+    lon = (lon + 2 * np.pi) % (2 * np.pi)
     theta_img = (np.pi / 2.0) - lat
     outside = (cosc <= 0.0) if mask_outside else np.zeros_like(cosc, dtype=bool)
 
@@ -177,7 +190,7 @@ def lgnomproject(
         # -------- 5) (NOUVEAU) Interpolation bilinéaire via poids HEALPix --------
         # Aplatis les angles de l'image
         theta_flat = theta_img.ravel()
-        phi_flat   = lon.ravel()
+        phi_flat = lon.ravel()
 
         # Récupère pour chaque direction les indices de 4 voisins et leurs poids
         # inds: shape (npix_img, 4) ; w: shape (npix_img, 4)
@@ -187,7 +200,7 @@ def lgnomproject(
         pos = np.searchsorted(uniq, inds, side="left")
         in_range = pos < uniq.size
         match = np.zeros_like(in_range, dtype=bool)
-        match[in_range] = (uniq[pos[in_range]] == inds[in_range])
+        match[in_range] = uniq[pos[in_range]] == inds[in_range]
 
         # Construit un masque 'valid' des voisins présents dans tes données
         # valid shape (npix_img, 4)
@@ -211,7 +224,7 @@ def lgnomproject(
 
             # combinaison pondérée (en ignorant les NaN via w_eff)
             num = np.nansum(vals * w_eff[..., None], axis=0)  # (npix_img, 3)
-            img_flat[nonzero, :] = (num[nonzero, :] / ws[nonzero,None]).astype(float)
+            img_flat[nonzero, :] = (num[nonzero, :] / ws[nonzero, None]).astype(float)
 
             img = img_flat.reshape(ysize, xsize, 3)
 
@@ -240,14 +253,16 @@ def lgnomproject(
 
     else:
         # -------- 5) Map image pixels to HEALPix ids --------
-        ip_img = hp.ang2pix(nside, theta_img.ravel(), lon.ravel(), nest=nest).astype(np.int64)
+        ip_img = hp.ang2pix(nside, theta_img.ravel(), lon.ravel(), nest=nest).astype(
+            np.int64
+        )
 
         # -------- 6) Assign values by matching ip_img ∈ uniq --------
         pos = np.searchsorted(uniq, ip_img, side="left")
         valid = pos < uniq.size
         match = np.zeros_like(valid, dtype=bool)
-        match[valid] = (uniq[pos[valid]] == ip_img[valid])
-        
+        match[valid] = uniq[pos[valid]] == ip_img[valid]
+
         if is_rgb:
             img_flat = np.full((ip_img.size, 3), np.nan, dtype=float)
             img_flat[match, :] = agg_vals[pos[match], :]
@@ -269,15 +284,15 @@ def lgnomproject(
     # axes extents (approx)
     x_deg = np.degrees(np.arctan(xs))
     y_deg = np.degrees(np.arctan(ys))
-    longitude_min = x_deg[0]/np.cos(np.deg2rad(lat0_deg)) + lon0_deg
-    longitude_max = x_deg[-1]/np.cos(np.deg2rad(lat0_deg)) + lon0_deg
+    longitude_min = x_deg[0] / np.cos(np.deg2rad(lat0_deg)) + lon0_deg
+    longitude_max = x_deg[-1] / np.cos(np.deg2rad(lat0_deg)) + lon0_deg
     if longitude_min > 180:
         longitude_min -= 360
         longitude_max -= 360
-    extent = (longitude_min, longitude_max, y_deg[0]+lat0_deg, y_deg[-1]+lat0_deg)
+    extent = (longitude_min, longitude_max, y_deg[0] + lat0_deg, y_deg[-1] + lat0_deg)
 
     if hold:
-        fig, ax = plt.subplots(figsize=(xsize/100, ysize/100), dpi=100)
+        fig, ax = plt.subplots(figsize=(xsize / 100, ysize / 100), dpi=100)
     else:
         ax = plt.subplot(sub[0], sub[1], sub[2])
 
@@ -287,7 +302,7 @@ def lgnomproject(
             origin="lower",
             extent=extent,
             interpolation="nearest",
-            aspect="auto"
+            aspect="auto",
         )
         # pas de cmap/cbar en RGB
     else:
@@ -296,9 +311,10 @@ def lgnomproject(
             origin="lower",
             extent=extent,
             cmap=cmap,
-            vmin=vmin, vmax=vmax,
+            vmin=vmin,
+            vmax=vmax,
             interpolation="nearest",
-            aspect="auto"
+            aspect="auto",
         )
         if cbar:
             if hold:
@@ -320,110 +336,137 @@ def lgnomproject(
     plt.tight_layout()
     return (fig, ax) if hold else ax
 
-def plot_scat(s1,s2,s3,s4):
 
-    if not isinstance(s1,np.ndarray): # manage if Torch tensor
-        S1=s1.cpu().numpy()
-        S2=s2.cpu().numpy()
-        S3=s3.cpu().numpy()
-        S4=s4.cpu().numpy()
+def plot_scat(s1, s2, s3, s4):
+
+    if not isinstance(s1, np.ndarray):  # manage if Torch tensor
+        S1 = s1.cpu().numpy()
+        S2 = s2.cpu().numpy()
+        S3 = s3.cpu().numpy()
+        S4 = s4.cpu().numpy()
     else:
-        S1=s1
-        S2=s2
-        S3=s3
-        S4=s4
-        
-    N_image=s1.shape[0]
-    J=s1.shape[1]
-    N_orient=s1.shape[2]
+        S1 = s1
+        S2 = s2
+        S3 = s3
+        S4 = s4
+
+    N_image = s1.shape[0]
+    J = s1.shape[1]
+    N_orient = s1.shape[2]
 
     # compute index j1 and j2 for S3
-    j1_s3=np.zeros([s3.shape[1]],dtype='int')
-    j2_s3=np.zeros([s3.shape[1]],dtype='int')
-    
+    j1_s3 = np.zeros([s3.shape[1]], dtype="int")
+    j2_s3 = np.zeros([s3.shape[1]], dtype="int")
+
     # compute index j1 and j2 for S4
-    j1_s4=np.zeros([s4.shape[1]],dtype='int')
-    j2_s4=np.zeros([s4.shape[1]],dtype='int')
-    j3_s4=np.zeros([s4.shape[1]],dtype='int')
+    j1_s4 = np.zeros([s4.shape[1]], dtype="int")
+    j2_s4 = np.zeros([s4.shape[1]], dtype="int")
+    j3_s4 = np.zeros([s4.shape[1]], dtype="int")
 
-    n_s3=0
-    n_s4=0
-    for j3 in range(0,J):
+    n_s3 = 0
+    n_s4 = 0
+    for j3 in range(0, J):
         for j2 in range(0, j3 + 1):
-            j1_s3[n_s3]=j2
-            j2_s3[n_s3]=j3
-            n_s3+=1
+            j1_s3[n_s3] = j2
+            j2_s3[n_s3] = j3
+            n_s3 += 1
             for j1 in range(0, j2 + 1):
-                j1_s4[n_s4]=j1
-                j2_s4[n_s4]=j2
-                j3_s4[n_s4]=j3
-                n_s4+=1
+                j1_s4[n_s4] = j1
+                j2_s4[n_s4] = j2
+                j3_s4[n_s4] = j3
+                n_s4 += 1
 
+    color = ["b", "r", "orange", "pink"]
+    symbol = ["", ":", "-", "."]
+    plt.figure(figsize=(16, 12))
 
-    color=['b','r','orange','pink']
-    symbol=['',':','-','.']
-    plt.figure(figsize=(16,12))
-    
-    plt.subplot(2,2,1)
+    plt.subplot(2, 2, 1)
     for k in range(4):
-        plt.plot(S1[0,:,k],color=color[k%len(color)],label=r'$\Theta = %d$'%(k))
-    plt.legend(frameon=0,ncol=2)
-    plt.xlabel(r'$J_1$')
-    plt.ylabel(r'$S_1$')
-    plt.yscale('log')
-    
-    plt.subplot(2,2,2)
+        plt.plot(S1[0, :, k], color=color[k % len(color)], label=r"$\Theta = %d$" % (k))
+    plt.legend(frameon=0, ncol=2)
+    plt.xlabel(r"$J_1$")
+    plt.ylabel(r"$S_1$")
+    plt.yscale("log")
+
+    plt.subplot(2, 2, 2)
     for k in range(4):
-        plt.plot(S2[0,:,k],color=color[k%len(color)],label=r'$\Theta = %d$'%(k))
-    plt.xlabel(r'$J_1$')
-    plt.ylabel(r'$S_2$')
-    plt.yscale('log')
-    
-    plt.subplot(2,2,3)
-    nidx=np.concatenate([np.zeros([1]),np.cumsum(np.bincount(j1_s3))],0)
-    l_pos=[]
-    l_name=[]
+        plt.plot(S2[0, :, k], color=color[k % len(color)], label=r"$\Theta = %d$" % (k))
+    plt.xlabel(r"$J_1$")
+    plt.ylabel(r"$S_2$")
+    plt.yscale("log")
+
+    plt.subplot(2, 2, 3)
+    nidx = np.concatenate([np.zeros([1]), np.cumsum(np.bincount(j1_s3))], 0)
+    l_pos = []
+    l_name = []
     for i in np.unique(j1_s3):
-        idx=np.where(j1_s3==i)[0]
+        idx = np.where(j1_s3 == i)[0]
         for k in range(4):
             for l in range(4):
-                if i==0:
-                    plt.plot(j2_s3[idx]+nidx[i],S3[0,idx,k,l],symbol[l%len(symbol)],color=color[k%len(color)],label=r'$\Theta = %d,%d$'%(k,l))
+                if i == 0:
+                    plt.plot(
+                        j2_s3[idx] + nidx[i],
+                        S3[0, idx, k, l],
+                        symbol[l % len(symbol)],
+                        color=color[k % len(color)],
+                        label=r"$\Theta = %d,%d$" % (k, l),
+                    )
                 else:
-                    plt.plot(j2_s3[idx]+nidx[i],S3[0,idx,k,l],symbol[l%len(symbol)],color=color[k%len(color)])
-        l_pos=l_pos+list(j2_s3[idx]+nidx[i])
-        l_name=l_name+["%d,%d"%(j1_s3[m],j2_s3[m]) for m in idx]
-    plt.legend(frameon=0,ncol=2)
-    
-    plt.xticks(l_pos,l_name, fontsize=6)
+                    plt.plot(
+                        j2_s3[idx] + nidx[i],
+                        S3[0, idx, k, l],
+                        symbol[l % len(symbol)],
+                        color=color[k % len(color)],
+                    )
+        l_pos = l_pos + list(j2_s3[idx] + nidx[i])
+        l_name = l_name + ["%d,%d" % (j1_s3[m], j2_s3[m]) for m in idx]
+    plt.legend(frameon=0, ncol=2)
+
+    plt.xticks(l_pos, l_name, fontsize=6)
     plt.xlabel(r"$j_{1},j_{2}$", fontsize=9)
     plt.ylabel(r"$S_{3}$", fontsize=9)
-    
-    plt.subplot(2,2,4)
-    nidx=0
-    l_pos=[]
-    l_name=[]
+
+    plt.subplot(2, 2, 4)
+    nidx = 0
+    l_pos = []
+    l_name = []
     for i in np.unique(j1_s4):
         for j in np.unique(j2_s4):
-            idx=np.where((j1_s4==i)*(j2_s4==j))[0]
+            idx = np.where((j1_s4 == i) * (j2_s4 == j))[0]
             for k in range(4):
                 for l in range(4):
                     for m in range(4):
-                        if i==0 and j==0 and m==0:
-                            plt.plot(j2_s4[idx]+j3_s4[idx]+nidx,S4[0,idx,k,l,m],symbol[l%len(symbol)],color=color[k%len(color)],label=r'$\Theta = %d,%d,%d$'%(k,l,m))
+                        if i == 0 and j == 0 and m == 0:
+                            plt.plot(
+                                j2_s4[idx] + j3_s4[idx] + nidx,
+                                S4[0, idx, k, l, m],
+                                symbol[l % len(symbol)],
+                                color=color[k % len(color)],
+                                label=r"$\Theta = %d,%d,%d$" % (k, l, m),
+                            )
                         else:
-                            plt.plot(j2_s4[idx]+j3_s4[idx]+nidx,S4[0,idx,k,l,m],symbol[l%len(symbol)],color=color[k%len(color)])
-            l_pos=l_pos+list(j2_s4[idx]+j3_s4[idx]+nidx)
-            l_name=l_name+["%d,%d,%d"%(j1_s4[m],j2_s4[m],j3_s4[m]) for m in idx]
-        nidx+=np.max(j2_s4[j1_s4==i]+j3_s4[j1_s4==i])-np.min(j2_s4[j1_s4==i]+j3_s4[j1_s4==i])+1
-    plt.legend(frameon=0,ncol=2)
-    
-    plt.xticks(l_pos,l_name, fontsize=6, rotation=90)
+                            plt.plot(
+                                j2_s4[idx] + j3_s4[idx] + nidx,
+                                S4[0, idx, k, l, m],
+                                symbol[l % len(symbol)],
+                                color=color[k % len(color)],
+                            )
+            l_pos = l_pos + list(j2_s4[idx] + j3_s4[idx] + nidx)
+            l_name = l_name + ["%d,%d,%d" % (j1_s4[m], j2_s4[m], j3_s4[m]) for m in idx]
+        nidx += (
+            np.max(j2_s4[j1_s4 == i] + j3_s4[j1_s4 == i])
+            - np.min(j2_s4[j1_s4 == i] + j3_s4[j1_s4 == i])
+            + 1
+        )
+    plt.legend(frameon=0, ncol=2)
+
+    plt.xticks(l_pos, l_name, fontsize=6, rotation=90)
     plt.xlabel(r"$j_{1},j_{2},j_{3}$", fontsize=9)
     plt.ylabel(r"$S_{4}$", fontsize=9)
 
 
 import numpy as np
+
 
 def power_spectrum_1d(data, dx=1.0):
     """
@@ -450,8 +493,12 @@ def power_spectrum_1d(data, dx=1.0):
 
     # Spatial frequency grids (cycles per unit length; NOT radians)
     ny, nx = data.shape
-    fx = np.fft.fftshift(np.fft.fftfreq(nx, d=dx))  # cycles per unit length (e.g., m^-1)
-    fy = np.fft.fftshift(np.fft.fftfreq(ny, d=dx))  # cycles per unit length (e.g., m^-1)
+    fx = np.fft.fftshift(
+        np.fft.fftfreq(nx, d=dx)
+    )  # cycles per unit length (e.g., m^-1)
+    fy = np.fft.fftshift(
+        np.fft.fftfreq(ny, d=dx)
+    )  # cycles per unit length (e.g., m^-1)
     fx2d, fy2d = np.meshgrid(fx, fy, indexing="xy")
     fr = np.sqrt(fx2d**2 + fy2d**2)  # radial spatial frequency (cycles per unit length)
 
@@ -477,7 +524,9 @@ def power_spectrum_1d(data, dx=1.0):
 
     return f_centers, Pk
 
+
 import numpy as np
+
 
 def _freq_grids(ny, nx, dx=1.0):
     """Return 2D radial spatial frequency grid fr (cycles per unit), with fftshift."""
@@ -487,11 +536,13 @@ def _freq_grids(ny, nx, dx=1.0):
     fr = np.sqrt(fx2d**2 + fy2d**2)
     return fr
 
+
 def _hann2d(ny, nx):
     """2D separable Hann apodization."""
     wy = np.hanning(ny)
     wx = np.hanning(nx)
     return np.outer(wy, wx)
+
 
 def estimate_psd_slope(img, dx=1.0, fmin_frac=0.02, fmax_frac=0.4):
     """
@@ -500,13 +551,14 @@ def estimate_psd_slope(img, dx=1.0, fmin_frac=0.02, fmax_frac=0.4):
     """
     # 2D periodogram
     F = np.fft.fftshift(np.fft.fft2(img))
-    P2D = np.abs(F)**2
+    P2D = np.abs(F) ** 2
     ny, nx = img.shape
     fr = _freq_grids(ny, nx, dx=dx)
     # radial bins
-    nbins = min(nx, ny)//2
-    f_bins = np.linspace(0.0, fr.max(), nbins+1)
-    fr_flat = fr.ravel(); P_flat = P2D.ravel()
+    nbins = min(nx, ny) // 2
+    f_bins = np.linspace(0.0, fr.max(), nbins + 1)
+    fr_flat = fr.ravel()
+    P_flat = P2D.ravel()
     bin_idx = np.digitize(fr_flat, f_bins) - 1
     valid = (bin_idx >= 0) & (bin_idx < nbins)
     sum_bin = np.bincount(bin_idx[valid], weights=P_flat[valid], minlength=nbins)
@@ -514,21 +566,36 @@ def estimate_psd_slope(img, dx=1.0, fmin_frac=0.02, fmax_frac=0.4):
     with np.errstate(invalid="ignore", divide="ignore"):
         Pk = sum_bin / cnt_bin
     Pk[cnt_bin == 0] = np.nan
-    f_centers = 0.5*(f_bins[1:] + f_bins[:-1])
+    f_centers = 0.5 * (f_bins[1:] + f_bins[:-1])
 
     # fit on a safe band
     fmax = np.nanmax(f_centers)
-    mask = (f_centers > fmin_frac*fmax) & (f_centers < fmax_frac*fmax) & np.isfinite(Pk) & (Pk > 0)
-    x = np.log10(f_centers[mask]); y = np.log10(Pk[mask])
+    mask = (
+        (f_centers > fmin_frac * fmax)
+        & (f_centers < fmax_frac * fmax)
+        & np.isfinite(Pk)
+        & (Pk > 0)
+    )
+    x = np.log10(f_centers[mask])
+    y = np.log10(Pk[mask])
     if x.size < 5:
         return np.nan
-    m, b = np.polyfit(x, y, 1)      # log10 P = m log10 f + b
-    beta = -m                       # since P ~ f^m -> m = -beta
+    m, b = np.polyfit(x, y, 1)  # log10 P = m log10 f + b
+    beta = -m  # since P ~ f^m -> m = -beta
     return beta
 
-def adjust_psd_slope(img, dx=1.0, delta_beta=0.0, 
-                     f_ref=None, band=None, 
-                     apodize=True, preserve_mean=True, match_variance=True, eps=None):
+
+def adjust_psd_slope(
+    img,
+    dx=1.0,
+    delta_beta=0.0,
+    f_ref=None,
+    band=None,
+    apodize=True,
+    preserve_mean=True,
+    match_variance=True,
+    eps=None,
+):
     """
     Change the isotropic PSD slope by delta_beta (P -> P * f^{-delta_beta}).
     - delta_beta > 0 : steeper spectrum (more large-scale, smoother image)
@@ -588,16 +655,20 @@ def adjust_psd_slope(img, dx=1.0, delta_beta=0.0,
     # Optional band-limiting with smooth cosine tapers
     if band is not None:
         f_lo, f_hi = band
-        if f_lo is None: f_lo = 0.0
-        if f_hi is None: f_hi = fr.max()
+        if f_lo is None:
+            f_lo = 0.0
+        if f_hi is None:
+            f_hi = fr.max()
         # smooth 0..1 mask between f_lo and f_hi (raised-cosine of width 10% band)
         width = 0.1 * (f_hi - f_lo) if f_hi > f_lo else 0.0
+
         def smooth_step(f, a, b):
             # 0 below a, 1 above b, cosine ramp in between
-            if b <= a: 
+            if b <= a:
                 return (f >= b).astype(float)
             t = np.clip((f - a) / (b - a), 0, 1)
-            return 0.5 - 0.5*np.cos(np.pi*t)
+            return 0.5 - 0.5 * np.cos(np.pi * t)
+
         mask_lo = smooth_step(fr, f_lo - width, f_lo + width)
         mask_hi = 1.0 - smooth_step(fr, f_hi - width, f_hi + width)
         band_mask = mask_lo * mask_hi
@@ -618,18 +689,22 @@ def adjust_psd_slope(img, dx=1.0, delta_beta=0.0,
         s_in = np.std(img)
         s_out = np.std(out)
         if s_out > 0:
-            out = (out - out.mean()) * (s_in / s_out) + (img.mean() if preserve_mean else 0.0)
+            out = (out - out.mean()) * (s_in / s_out) + (
+                img.mean() if preserve_mean else 0.0
+            )
 
     return out
+
 
 # --- 1) Lat/Lon -> fractional XYZ tile coords at zoom z ---
 def latlon_to_xyz_frac(lat, lon, z):
     """Return fractional tile coordinates (xf, yf) at zoom z (Web Mercator)."""
-    n = 2 ** z
+    n = 2**z
     xf = (lon + 180.0) / 360.0 * n
     lat_rad = np.radians(lat)
-    yf = (1.0 - np.log(np.tan(lat_rad) + 1/np.cos(lat_rad)) / math.pi) / 2.0 * n
+    yf = (1.0 - np.log(np.tan(lat_rad) + 1 / np.cos(lat_rad)) / math.pi) / 2.0 * n
     return xf, yf
+
 
 # --- 2) Fractional tile coords -> (xtile, ytile, px, py) inside 256×256 tile ---
 def xyz_frac_to_tile_pixel(xf, yf, tile_size=256):
@@ -642,17 +717,20 @@ def xyz_frac_to_tile_pixel(xf, yf, tile_size=256):
     py = np.clip(py, 0, tile_size - 1)
     return xtile, ytile, px, py
 
+
 # --- 3) Simple tile cache + fetcher for Esri World Imagery ---
 ESRI_WORLD_IMAGERY = (
     "https://server.arcgisonline.com/ArcGIS/rest/services/"
     "World_Imagery/MapServer/tile/{z}/{y}/{x}"
 )
 
+
 class TileCache:
     def __init__(self):
         self.cache = {}  # (z,x,y) -> PIL.Image
         self.session = requests.Session()
         self.session.headers.update({"User-Agent": "research-sampler/1.0"})
+
     def get_tile(self, z, x, y, timeout=10):
         key = (z, x, y)
         if key in self.cache:
@@ -663,6 +741,7 @@ class TileCache:
         img = Image.open(io.BytesIO(r.content)).convert("RGB")
         self.cache[key] = img
         return img
+
 
 # --- 4) Main sampler ---
 def sample_esri_world_imagery(lat, lon, zoom=17, tile_size=256):
@@ -701,6 +780,7 @@ def sample_esri_world_imagery(lat, lon, zoom=17, tile_size=256):
             rgb[i] = pix[int(px[i]), int(py[i])]
     return rgb
 
+
 # ---------- EXAMPLE ----------
 # latN, lonN are your arrays of length N
 # latN = np.array([...], dtype=float)
@@ -709,8 +789,9 @@ def sample_esri_world_imagery(lat, lon, zoom=17, tile_size=256):
 # vals_rgb = sample_esri_world_imagery(latN, lonN, zoom=zoom)
 # vals_rgb.shape -> (N, 3)
 
-import numpy as np
 import healpy as hp
+import numpy as np
+
 
 # --- NESTED helpers ---
 def _compact_bits_u64(z):
@@ -722,6 +803,7 @@ def _compact_bits_u64(z):
     z = (z | (z >> 16)) & np.uint64(0x00000000FFFFFFFF)
     return z
 
+
 def _spread_bits_u64(v):
     v = v & np.uint64(0x00000000FFFFFFFF)
     v = (v | (v << 16)) & np.uint64(0x0000FFFF0000FFFF)
@@ -730,6 +812,7 @@ def _spread_bits_u64(v):
     v = (v | (v << 2)) & np.uint64(0x3333333333333333)
     v = (v | (v << 1)) & np.uint64(0x5555555555555555)
     return v
+
 
 def _nest_to_fxy(ipix, nside):
     ipix = ipix.astype(np.uint64)
@@ -740,10 +823,14 @@ def _nest_to_fxy(ipix, nside):
     y = _compact_bits_u64(inface >> np.uint64(1))
     return face.astype(np.int64), x.astype(np.int64), y.astype(np.int64)
 
+
 def _fxy_to_nest(face, x, y, nside):
-    inter = _spread_bits_u64(x.astype(np.uint64)) | (_spread_bits_u64(y.astype(np.uint64)) << np.uint64(1))
-    base  = face.astype(np.uint64) * (np.uint64(nside) * np.uint64(nside))
+    inter = _spread_bits_u64(x.astype(np.uint64)) | (
+        _spread_bits_u64(y.astype(np.uint64)) << np.uint64(1)
+    )
+    base = face.astype(np.uint64) * (np.uint64(nside) * np.uint64(nside))
     return (base + inter).astype(np.int64)
+
 
 # --- Main ---
 def get_half_interp_weights_ang_general(nside_full, theta, phi, edge_mode="nearest"):
@@ -752,8 +839,8 @@ def get_half_interp_weights_ang_general(nside_full, theta, phi, edge_mode="neare
     Returns I (4 even NESTED ids) and W (4 weights summing to 1).
     """
     theta = np.asarray(theta, dtype=np.float64).ravel()
-    phi   = np.asarray(phi,   dtype=np.float64).ravel()
-    N     = theta.size
+    phi = np.asarray(phi, dtype=np.float64).ravel()
+    N = theta.size
 
     # 1) Use the full-grid containing pixel to locate face/x/y neighborhood
     ids_full = hp.ang2pix(nside_full, theta, phi, nest=True)
@@ -790,11 +877,11 @@ def get_half_interp_weights_ang_general(nside_full, theta, phi, edge_mode="neare
         I[k] = _fxy_to_nest(face, Xs[k], Ys[k], nside_full)
 
     # 4) Build 3D vectors (STACK tuples -> (N,3))
-    v_tgt = np.vstack(hp.ang2vec(theta, phi,nest=True)).T              # (N,3)
-    v00   = np.vstack(hp.pix2vec(nside_full, I[0], nest=True)).T
-    v10   = np.vstack(hp.pix2vec(nside_full, I[1], nest=True)).T
-    v01   = np.vstack(hp.pix2vec(nside_full, I[2], nest=True)).T
-    v11   = np.vstack(hp.pix2vec(nside_full, I[3], nest=True)).T
+    v_tgt = np.vstack(hp.ang2vec(theta, phi, nest=True)).T  # (N,3)
+    v00 = np.vstack(hp.pix2vec(nside_full, I[0], nest=True)).T
+    v10 = np.vstack(hp.pix2vec(nside_full, I[1], nest=True)).T
+    v01 = np.vstack(hp.pix2vec(nside_full, I[2], nest=True)).T
+    v11 = np.vstack(hp.pix2vec(nside_full, I[3], nest=True)).T
 
     # 5) Tangent-plane basis at average corner direction (robust)
     v_c = v00 + v10 + v01 + v11
@@ -803,12 +890,12 @@ def get_half_interp_weights_ang_general(nside_full, theta, phi, edge_mode="neare
     tmp = v10 - v00
     tmp -= (tmp * v_c).sum(1, keepdims=True) * v_c
     # if degenerate, pick an arbitrary perpendicular
-    bad = (np.linalg.norm(tmp, axis=1) < 1e-12)
+    bad = np.linalg.norm(tmp, axis=1) < 1e-12
     if np.any(bad):
         ref = np.zeros_like(v_c)
         ref[:, 0] = 1.0
         # if nearly collinear, use y-axis
-        mask = (np.abs((ref * v_c).sum(1)) > 0.99)
+        mask = np.abs((ref * v_c).sum(1)) > 0.99
         ref[mask] = np.array([0.0, 1.0, 0.0])
         tmp[bad] = ref[bad] - (ref[bad] * v_c[bad]).sum(1, keepdims=True) * v_c[bad]
 
@@ -819,10 +906,10 @@ def get_half_interp_weights_ang_general(nside_full, theta, phi, edge_mode="neare
         return np.stack([(v * e1).sum(1), (v * e2).sum(1)], axis=1)
 
     p_tgt = proj(v_tgt)
-    p00   = proj(v00)
-    p10   = proj(v10)
-    p01   = proj(v01)
-    p11   = proj(v11)
+    p00 = proj(v00)
+    p10 = proj(v10)
+    p01 = proj(v01)
+    p11 = proj(v11)
 
     # 6) Solve for (tx, ty) in bilinear map via GN refinement
     a = p10 - p00
@@ -833,25 +920,25 @@ def get_half_interp_weights_ang_general(nside_full, theta, phi, edge_mode="neare
     AtA_00 = (a * a).sum(1)
     AtA_11 = (b * b).sum(1)
     AtA_01 = (a * b).sum(1)
-    det    = AtA_00 * AtA_11 - AtA_01 * AtA_01
+    det = AtA_00 * AtA_11 - AtA_01 * AtA_01
     det[det == 0] = 1e-15
     At_rhs0 = (a * rhs).sum(1)
     At_rhs1 = (b * rhs).sum(1)
-    tx = ( AtA_11 * At_rhs0 - AtA_01 * At_rhs1) / det
+    tx = (AtA_11 * At_rhs0 - AtA_01 * At_rhs1) / det
     ty = (-AtA_01 * At_rhs0 + AtA_00 * At_rhs1) / det
 
     P_est = p00 + a * tx[:, None] + b * ty[:, None] + c * (tx * ty)[:, None]
-    res   = rhs - (P_est - p00)
+    res = rhs - (P_est - p00)
     J0 = a + c * ty[:, None]
     J1 = b + c * tx[:, None]
     JTJ_00 = (J0 * J0).sum(1)
     JTJ_11 = (J1 * J1).sum(1)
     JTJ_01 = (J0 * J1).sum(1)
-    det2   = JTJ_00 * JTJ_11 - JTJ_01 * JTJ_01
+    det2 = JTJ_00 * JTJ_11 - JTJ_01 * JTJ_01
     det2[det2 == 0] = 1e-15
     JTres0 = (J0 * res).sum(1)
     JTres1 = (J1 * res).sum(1)
-    dtx = ( JTJ_11 * JTres0 - JTJ_01 * JTres1) / det2
+    dtx = (JTJ_11 * JTres0 - JTJ_01 * JTres1) / det2
     dty = (-JTJ_01 * JTres0 + JTJ_00 * JTres1) / det2
     tx += dtx
     ty += dty
@@ -872,19 +959,16 @@ def get_half_interp_weights_ang_general(nside_full, theta, phi, edge_mode="neare
         s = W.sum(axis=0)
         ok = s > 0
         W[:, ok] /= s[ok]
-        
+
     return I, W
 
 
-def conjugate_gradient_normal_equation(data, x0, www, all_idx,
-                                       LPT=None,
-                                       LP=None,
-                                       max_iter=100,
-                                       tol=1e-8,
-                                       verbose=True):
+def conjugate_gradient_normal_equation(
+    data, x0, www, all_idx, LPT=None, LP=None, max_iter=100, tol=1e-8, verbose=True
+):
     """
     Solve the normal equation (Pᵗ P) x = Pᵗ y using the Conjugate Gradient method.
-    
+
     Parameters
     ----------
     data    : array_like
@@ -898,40 +982,38 @@ def conjugate_gradient_normal_equation(data, x0, www, all_idx,
     max_iter: maximum number of CG iterations
     tol     : stopping tolerance on residual norm
     verbose : print convergence info every 50 iterations
-    
+
     Returns
     -------
     x : estimated HEALPix solution u ∈ ℝⁿ
     """
 
-    
     def default_P(x, W, indices):
         """
         Forward operator: P(x) = projection of HEALPix map x onto the UTM grid.
-        
+
         Steps:
         - Apply spherical convolution with kernel w(x,y).
         - Interpolate from HEALPix cells to UTM pixels using weights W and indices.
         """
         return np.sum(x[indices] * W, 0)
-    
+
     def default_PT(y, W, indices, hit):
         """
         Adjoint operator: Pᵗ(y) = back-projection from UTM grid to HEALPix cells.
-        
+
         Steps:
         - Distribute UTM values y back onto contributing HEALPix cells using W.
         - Apply hit normalization (inverse of pixel coverage).
         - Apply spherical convolution with kernel w(x,y).
         """
-        value = np.bincount(indices.flatten(),
-                            weights=(W * y[None,:]).flatten()) * hit
+        value = np.bincount(indices.flatten(), weights=(W * y[None, :]).flatten()) * hit
         return value
-            
+
     if LPT is None:
-        LP=default_P
-        LPT=default_PT
-        
+        LP = default_P
+        LPT = default_PT
+
     x = x0.copy()
 
     # Compute pixel coverage normalization (hit map)
@@ -960,7 +1042,7 @@ def conjugate_gradient_normal_equation(data, x0, www, all_idx,
         rs_new = np.dot(r, r)
 
         if verbose and i % 10 == 0:
-            v=np.mean((LP(p, www, all_idx)-data)**2)
+            v = np.mean((LP(p, www, all_idx) - data) ** 2)
             print(f"Iter {i:03d}: residual = {np.sqrt(rs_new):.3e},{np.sqrt(v):.3e}")
 
         if np.sqrt(rs_new) < tol:
@@ -976,15 +1058,15 @@ def conjugate_gradient_normal_equation(data, x0, www, all_idx,
 
 def spectrum_polar_to_cartesian(
     w,
-    scales=None,                    # radial *values* (see scale_kind)
-    orientations=None,              # angles in radians (uniform)
+    scales=None,  # radial *values* (see scale_kind)
+    orientations=None,  # angles in radians (uniform)
     n_pixels=512,
     r_max=None,
     method="bilinear",
     fill_value=0.0,
     *,
-    scale_kind="frequency",         # "frequency" or "size"
-    size_to_freq_factor=1.0,        # if scale_kind="size": freq = size_to_freq_factor / size
+    scale_kind="frequency",  # "frequency" or "size"
+    size_to_freq_factor=1.0,  # if scale_kind="size": freq = size_to_freq_factor / size
 ):
     """
     If scale_kind == "frequency":
@@ -995,6 +1077,7 @@ def spectrum_polar_to_cartesian(
         Choose size_to_freq_factor to get the units you want (e.g., 1.0 for cycles/size).
     """
     from math import pi
+
     w = np.asarray(w)
     if w.ndim != 2:
         raise ValueError("w must be (Nscale, Norientation)")
@@ -1005,7 +1088,7 @@ def spectrum_polar_to_cartesian(
         # default dyadic: sizes OR frequencies depending on scale_kind
         base = 2.0 ** np.arange(ns, dtype=float)
         if scale_kind == "frequency":
-            scales = base                     # 1,2,4,... as frequencies
+            scales = base  # 1,2,4,... as frequencies
         elif scale_kind == "size":
             # sizes: 1,2,4,...  -> convert to frequency
             scales = size_to_freq_factor / base
@@ -1033,7 +1116,7 @@ def spectrum_polar_to_cartesian(
 
     # ---- orientations (uniform over [0, 2π) ) ----
     if orientations is None:
-        orientations = np.linspace(0.0, 2*np.pi, no, endpoint=False)
+        orientations = np.linspace(0.0, 2 * np.pi, no, endpoint=False)
     else:
         orientations = np.asarray(orientations, dtype=float)
         if len(orientations) != no:
@@ -1043,6 +1126,7 @@ def spectrum_polar_to_cartesian(
     return _spectrum_polar_to_cartesian_core(
         w, scales, orientations, n_pixels, r_max, method, fill_value
     )
+
 
 def _spectrum_polar_to_cartesian_core(
     w, scales, orientations, n_pixels, r_max, method, fill_value
@@ -1056,11 +1140,12 @@ def _spectrum_polar_to_cartesian_core(
     ky = np.linspace(-r_max, r_max, n_pixels, dtype=float)
     KX, KY = np.meshgrid(kx, ky, indexing="xy")
     R = np.hypot(KX, KY)
-    Theta = -np.mod(np.arctan2(KY, KX), 2.0*np.pi)
+    Theta = -np.mod(np.arctan2(KY, KX), 2.0 * np.pi)
 
-    radial_index = np.interp(R, scales, np.arange(ns, dtype=float),
-                             left=np.nan, right=np.nan)
-    dtheta = (2.0*np.pi) / no
+    radial_index = np.interp(
+        R, scales, np.arange(ns, dtype=float), left=np.nan, right=np.nan
+    )
+    dtheta = (2.0 * np.pi) / no
     angular_index = Theta / dtheta
 
     valid = np.isfinite(radial_index)
@@ -1095,7 +1180,12 @@ def _spectrum_polar_to_cartesian_core(
 
             # Now sample the padded array; 'nearest' mode is fine thanks to explicit padding
             sampled = map_coordinates(
-                w_pad, coords, order=order, mode="nearest", cval=fill_value, prefilter=True
+                w_pad,
+                coords,
+                order=order,
+                mode="nearest",
+                cval=fill_value,
+                prefilter=True,
             ).reshape(n_pixels, n_pixels)
 
             img = np.where(valid, sampled, fill_value)
@@ -1125,8 +1215,8 @@ def _spectrum_polar_to_cartesian_core(
         t1 = np.mod(t_idx + 1, no)
         tr = np.clip(radial_index - r_idx, 0.0, 1.0)
         ta = np.clip(angular_index - t_idx, 0.0, 1.0)
-        f00 = w[r_idx,     t0]
-        f01 = w[r_idx,     t1]
+        f00 = w[r_idx, t0]
+        f01 = w[r_idx, t1]
         f10 = w[r_idx + 1, t0]
         f11 = w[r_idx + 1, t1]
         g0 = (1.0 - ta) * f00 + ta * f01
@@ -1136,27 +1226,29 @@ def _spectrum_polar_to_cartesian_core(
 
     return img, kx, ky
 
-def plot_wave(wave,title="spectrum",unit="Amplitude",cmap="viridis"):
+
+def plot_wave(wave, title="spectrum", unit="Amplitude", cmap="viridis"):
     img, kx, ky = spectrum_polar_to_cartesian(
         wave,
-        scales=2**np.arange(wave.shape[0]),                 # tailles croissantes
-        scale_kind="size",            # conversion automatique vers fréquence
-        size_to_freq_factor=50.0,      # cycles / (unit of size) (Sentinel-2 10m résolution ~to 20m resoltuion for smaller scale; equiv. 50 cycles/km
+        scales=2 ** np.arange(wave.shape[0]),  # tailles croissantes
+        scale_kind="size",  # conversion automatique vers fréquence
+        size_to_freq_factor=50.0,  # cycles / (unit of size) (Sentinel-2 10m résolution ~to 20m resoltuion for smaller scale; equiv. 50 cycles/km
         method="bicubic",
         n_pixels=512,
     )
     plt.imshow(
-            img,
-            extent=[kx[0], kx[-1], ky[0], ky[-1]],
-            origin="lower",
-            aspect="equal",
-            cmap=cmap,
+        img,
+        extent=[kx[0], kx[-1], ky[0], ky[-1]],
+        origin="lower",
+        aspect="equal",
+        cmap=cmap,
     )
-    plt.colorbar(label=unit,shrink=0.5)
+    plt.colorbar(label=unit, shrink=0.5)
     plt.xlabel(r"$k_x$ [cycles / km]")
     plt.ylabel(r"$k_y$ [cycles / km]")
     plt.title(title)
-    
+
+
 def lonlat_edges_from_ref(shape, ref_lon, ref_lat, dlon, dlat, anchor="center"):
     """
     Build lon/lat *edges* (H+1, W+1) for a regular, axis-aligned grid.
@@ -1186,23 +1278,25 @@ def lonlat_edges_from_ref(shape, ref_lon, ref_lat, dlon, dlat, anchor="center"):
         lon0 = ref_lon
         lat0 = ref_lat
     elif anchor == "topleft":
-        lon0 = ref_lon + (W/2.0 - 0.5) * dlon
-        lat0 = ref_lat - (H/2.0 - 0.5) * dlat
+        lon0 = ref_lon + (W / 2.0 - 0.5) * dlon
+        lat0 = ref_lat - (H / 2.0 - 0.5) * dlat
     elif anchor == "topright":
-        lon0 = ref_lon - (W/2.0 - 0.5) * dlon
-        lat0 = ref_lat - (H/2.0 - 0.5) * dlat
+        lon0 = ref_lon - (W / 2.0 - 0.5) * dlon
+        lat0 = ref_lat - (H / 2.0 - 0.5) * dlat
     elif anchor == "bottomleft":
-        lon0 = ref_lon + (W/2.0 - 0.5) * dlon
-        lat0 = ref_lat + (H/2.0 - 0.5) * dlat
+        lon0 = ref_lon + (W / 2.0 - 0.5) * dlon
+        lat0 = ref_lat + (H / 2.0 - 0.5) * dlat
     elif anchor == "bottomright":
-        lon0 = ref_lon - (W/2.0 - 0.5) * dlon
-        lat0 = ref_lat + (H/2.0 - 0.5) * dlat
+        lon0 = ref_lon - (W / 2.0 - 0.5) * dlon
+        lat0 = ref_lat + (H / 2.0 - 0.5) * dlat
     else:
-        raise ValueError("anchor must be one of: center/topleft/topright/bottomleft/bottomright")
+        raise ValueError(
+            "anchor must be one of: center/topleft/topright/bottomleft/bottomright"
+        )
 
     # 1D edges (corners) along lon/lat, centered on (lon0, lat0)
-    lon_edges_1d = lon0 + (np.arange(W + 1) - W/2.0) * dlon
-    lat_edges_1d = lat0 + (np.arange(H + 1) - H/2.0) * dlat
+    lon_edges_1d = lon0 + (np.arange(W + 1) - W / 2.0) * dlon
+    lat_edges_1d = lat0 + (np.arange(H + 1) - H / 2.0) * dlat
 
     # 2D corner grids (H+1, W+1)
     lon_edges, lat_edges = np.meshgrid(lon_edges_1d, lat_edges_1d, indexing="xy")
@@ -1213,18 +1307,22 @@ def plot_image_lonlat(img, lon_edges, lat_edges, cmap="viridis", vmin=None, vmax
     """
     Plot a 2D image on a lon/lat grid using pcolormesh (no reprojection).
     """
-    #fig, ax = plt.subplots(figsize=(7, 5))
-    m = plt.pcolormesh(lon_edges, lat_edges, img, cmap=cmap, vmin=vmin, vmax=vmax, shading="flat")
-    #plt.colorbar(m, ax=ax, label="Intensity")
-    #ax.set_xlabel("Longitude (deg)")
-    #ax.set_ylabel("Latitude (deg)")
-    #ax.set_aspect("equal")  # keeps degrees square; remove if you prefer auto
+    # fig, ax = plt.subplots(figsize=(7, 5))
+    m = plt.pcolormesh(
+        lon_edges, lat_edges, img, cmap=cmap, vmin=vmin, vmax=vmax, shading="flat"
+    )
+    # plt.colorbar(m, ax=ax, label="Intensity")
+    # ax.set_xlabel("Longitude (deg)")
+    # ax.set_ylabel("Latitude (deg)")
+    # ax.set_aspect("equal")  # keeps degrees square; remove if you prefer auto
     # add a small margin
-    #ax.set_xlim(lon_edges.min(), lon_edges.max())
-    #ax.set_ylim(lat_edges.min(), lat_edges.max())
+    # ax.set_xlim(lon_edges.min(), lon_edges.max())
+    # ax.set_ylim(lat_edges.min(), lat_edges.max())
     return fig, ax
 
+
 import matplotlib.tri as mtri
+
 
 def _edges_from_centers_2d(C):
     """
@@ -1254,24 +1352,35 @@ def _edges_from_centers_2d(C):
     Cp[1:-1, 1:-1] = C
 
     # Edges (extrapolate outward along each axis)
-    Cp[0, 1:-1]  = 2*C[0, :]  - C[1, :]     # top row
-    Cp[-1, 1:-1] = 2*C[-1, :] - C[-2, :]    # bottom row
-    Cp[1:-1, 0]  = 2*C[:, 0]  - C[:, 1]     # left col
-    Cp[1:-1, -1] = 2*C[:, -1] - C[:, -2]    # right col
+    Cp[0, 1:-1] = 2 * C[0, :] - C[1, :]  # top row
+    Cp[-1, 1:-1] = 2 * C[-1, :] - C[-2, :]  # bottom row
+    Cp[1:-1, 0] = 2 * C[:, 0] - C[:, 1]  # left col
+    Cp[1:-1, -1] = 2 * C[:, -1] - C[:, -2]  # right col
 
     # Corners of the padded array: extrapolate diagonally
-    Cp[0, 0]     = 2*C[0, 0]   - C[1, 1]
-    Cp[0, -1]    = 2*C[0, -1]  - C[1, -2]
-    Cp[-1, 0]    = 2*C[-1, 0]  - C[-2, 1]
-    Cp[-1, -1]   = 2*C[-1, -1] - C[-2, -2]
+    Cp[0, 0] = 2 * C[0, 0] - C[1, 1]
+    Cp[0, -1] = 2 * C[0, -1] - C[1, -2]
+    Cp[-1, 0] = 2 * C[-1, 0] - C[-2, 1]
+    Cp[-1, -1] = 2 * C[-1, -1] - C[-2, -2]
 
     # 2) Average 2x2 blocks to get corners (H+1, W+1)
     E = 0.25 * (Cp[:-1, :-1] + Cp[1:, :-1] + Cp[:-1, 1:] + Cp[1:, 1:])
     return E
 
 
-def plot_image_latlon(fig,ax,img, lat, lon, mode="structured", cmap="viridis", vmin=None, vmax=None,
-                      shading="flat", aspect="equal"):
+def plot_image_latlon(
+    fig,
+    ax,
+    img,
+    lat,
+    lon,
+    mode="structured",
+    cmap="viridis",
+    vmin=None,
+    vmax=None,
+    shading="flat",
+    aspect="equal",
+):
     """
     Plot an image given per-pixel lat/lon coordinates.
 
@@ -1300,14 +1409,18 @@ def plot_image_latlon(fig,ax,img, lat, lon, mode="structured", cmap="viridis", v
 
     if mode == "structured":
         if img.shape != lat.shape or img.shape != lon.shape:
-            raise ValueError("For 'structured' mode, img, lat, lon must have the same (H, W) shape.")
+            raise ValueError(
+                "For 'structured' mode, img, lat, lon must have the same (H, W) shape."
+            )
 
         # Compute *corner* grids (H+1, W+1) from center grids (H, W)
         lat_edges = _edges_from_centers_2d(lat)
         lon_edges = _edges_from_centers_2d(lon)
 
-        m = ax.pcolormesh(lon_edges, lat_edges, img, cmap=cmap, vmin=vmin, vmax=vmax, shading=shading)
-        plt.colorbar(m, ax=ax, label="reflectance",shrink=0.5)
+        m = ax.pcolormesh(
+            lon_edges, lat_edges, img, cmap=cmap, vmin=vmin, vmax=vmax, shading=shading
+        )
+        plt.colorbar(m, ax=ax, label="reflectance", shrink=0.5)
         ax.set_xlabel("Longitude (deg)")
         ax.set_ylabel("Latitude (deg)")
         ax.set_aspect(aspect)
@@ -1328,7 +1441,7 @@ def plot_image_latlon(fig,ax,img, lat, lon, mode="structured", cmap="viridis", v
 
         fig, ax = plt.subplots(figsize=(7, 5))
         m = ax.tripcolor(tri, z, cmap=cmap, vmin=vmin, vmax=vmax, shading=shading)
-        plt.colorbar(m, ax=ax, label="reflectance",shrink=0.5)
+        plt.colorbar(m, ax=ax, label="reflectance", shrink=0.5)
         ax.set_xlabel("Longitude (deg)")
         ax.set_ylabel("Latitude (deg)")
         ax.set_aspect(aspect)
