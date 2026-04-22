@@ -12,7 +12,7 @@ class HOrientedConvol:
                  KERNELSZ,
                  cell_ids=None,
                  nest=True,
-                 device='cuda',
+                 device=None,
                  dtype='float64',
                  polar=False,
                  gamma=1.0,
@@ -20,6 +20,9 @@ class HOrientedConvol:
                  no_cell_ids=False,
                  ):
 
+
+        if device is None:
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
         if dtype=='float64':
             self.dtype=torch.float64
@@ -362,12 +365,14 @@ class HOrientedConvol:
                                        i_cell_ids,
                                        polar=False,
                                        gamma=1.0,
-                                       device='cuda',
+                                       device=None,
                                        allow_extrapolation=True):
         """
         Accept 1D (Npix,) or 2D (B, Npix) cell_ids and return
         tensors batched sur la 1ère dim (B, ...).
         """
+        if device is None:
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
         # → cast numpy
         if torch.is_tensor(i_cell_ids):
             cid = i_cell_ids.detach().cpu().numpy()
@@ -402,8 +407,10 @@ class HOrientedConvol:
     def make_idx_weights_from_cell_ids(self,i_cell_ids,
                                        polar=False,
                                        gamma=1.0,
-                                       device='cuda',
+                                       device=None,
                                        allow_extrapolation=True):
+        if device is None:
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
         if len(i_cell_ids.shape)<2:
             cell_ids=i_cell_ids
             n_cids=1
@@ -435,8 +442,10 @@ class HOrientedConvol:
                                            cell_ids,
                                            polar=False,
                                            gamma=1.0,
-                                           device='cuda',
+                                           device=None,
                                            allow_extrapolation=True):
+        if device is None:
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
         idx_nn = self.knn_healpix_ckdtree(cell_ids, 
                                           self.KERNELSZ*self.KERNELSZ, 
@@ -500,8 +509,10 @@ class HOrientedConvol:
         
         return idx_nn,w_idx,w_w,xx,yy
         
-    def make_idx_weights(self,polar=False,gamma=1.0,device='cuda',allow_extrapolation=True,return_index=False):
-        
+    def make_idx_weights(self,polar=False,gamma=1.0,device=None,allow_extrapolation=True,return_index=False):
+        if device is None:
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
         idx_nn,w_idx,w_w = self.make_idx_weights_from_one_cell_ids(self.cell_ids,
                                                                   polar=polar,
                                                                   gamma=gamma,
