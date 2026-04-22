@@ -407,13 +407,13 @@ class UNET:
             else:
                 self.f=sc.funct(KERNELSZ=self.KERNELSZ,all_type='float32')
         return self.f.backend.bk_cast(x)
-
+    
     def to_numpy(self,x):
         if isinstance(x,np.ndarray):
             return x
         return x.cpu().numpy()
 
-
+    
 # -----------------------------
 # Unit tests (smoke tests)
 # -----------------------------
@@ -488,3 +488,4 @@ if __name__ == "__main__":
                     np.testing.assert_allclose(y1_np, y3_np, rtol=0, atol=0)
 
     unittest.main()
+ 

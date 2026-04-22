@@ -203,3 +203,4 @@ if __name__ == "__main__":
     tot, trn = count_parameters(model)
     print("Output:", tuple(y.shape))
     print("Params:", f"total={tot:,}", f"trainable={trn:,}")
+    

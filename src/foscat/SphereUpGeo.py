@@ -146,7 +146,7 @@ class SphereUpGeo(nn.Module):
             device=self.device,
             dtype=self.dtype,
         ).coalesce().to_sparse_csr().to(self.device)
-
+        
     @staticmethod
     def _transpose_sparse(M: torch.Tensor) -> torch.Tensor:
         M = M.coalesce()

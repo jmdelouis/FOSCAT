@@ -338,7 +338,7 @@ class HealpixViT(nn.Module):
             raise ValueError(f"Expected {self.n_chan_in} channels, got {x.shape[1]}")
         if runtime_ids is not None:
             runtime_ids = self._to_numpy_ids(runtime_ids)
-
+            
         x = x.to(self.runtime_device)
 
         # -------- Patch embedding Cin -> C_fine --------
@@ -416,7 +416,7 @@ class HealpixViT(nn.Module):
             nside_tmp //= 2
 
         tok_ids_np = self._to_numpy_ids(token_ids)
-
+        
         assert tok_feat.shape[-1] == tok_ids_np.shape[0], "Token count mismatch."
         assert np.array_equal(tok_ids_np, ids_chain[-1]), "Token ids mismatch with runtime chain."
 

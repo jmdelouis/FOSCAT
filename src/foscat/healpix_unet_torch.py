@@ -60,7 +60,7 @@ class HealpixUNet(nn.Module):
         Preferred device. The module will probe whether Foscat ops can run on CUDA; if not,
         it will fallback to CPU and keep all parameters/buffers on CPU for consistency.
     down_type:
-        {"mean","max"}, default "max". Equivalent of max poll during down
+        {"mean","max"}, default "max". Equivalent of max poll during down  
     prefer_foscat_gpu : bool, default True
         When device is CUDA, try to move Foscat operators (internal tensors) to CUDA and do a dry-run.
         If the dry-run fails, everything falls back to CPU.
@@ -88,12 +88,12 @@ class HealpixUNet(nn.Module):
             prefer_foscat_gpu: bool = True,
             gauge_type: Optional[Literal['cosmo','phi']] = 'cosmo',
             G: int =1,
-            down_type: Optional[Literal['mean','max']] = 'max',
+            down_type: Optional[Literal['mean','max']] = 'max',  
             dtype: Literal['float32','float64'] = 'float32',
             head_reduce: Literal['mean','learned']='mean'
     ) -> None:
         super().__init__()
-
+        
         self.dtype=dtype
         if dtype=='float32':
             self.np_dtype=np.float32
@@ -107,7 +107,7 @@ class HealpixUNet(nn.Module):
 
         if self.G < 1:
             raise ValueError("G must be >= 1")
-
+    
         if cell_ids is None:
             raise ValueError("cell_ids must be provided for the finest resolution.")
         if len(chanlist) == 0:
@@ -125,7 +125,7 @@ class HealpixUNet(nn.Module):
             self.max_poll = True
         else:
             self.max_poll = False
-
+        
         # Choose default final activation if not given
         if final_activation is None:
             if task == 'regression':
@@ -154,7 +154,7 @@ class HealpixUNet(nn.Module):
         # ---------- Oriented convolutions per level (encoder & decoder) ----------
         self.hconv_enc: List[ho.SphericalStencil] = []
         self.hconv_dec: List[ho.SphericalStencil] = []
-
+        
         # dummy data to propagate shapes/ids through ud_grade_2
         l_data = self.f.backend.bk_cast(np.zeros((1, 1, cell_ids.shape[0]), dtype=self.np_dtype))
 
@@ -166,9 +166,9 @@ class HealpixUNet(nn.Module):
                                      gauge_type=self.gauge_type,
                                      cell_ids=self.l_cell_ids[l],
                                      dtype=self.torch_dtype)
-
+            
             self.hconv_enc.append(hc)
-
+            
             # downsample once to get next level ids and new data shape
             l_data, next_ids = hc.Down(
                 l_data, cell_ids=self.l_cell_ids[l], nside=current_nside,max_poll=self.max_poll
@@ -184,7 +184,7 @@ class HealpixUNet(nn.Module):
         self.enc_bn2 = nn.ModuleList()
 
         self.enc_nsides = enc_nsides  # [in, in/2, ..., in/2**depth]
-
+        
         inC = self.n_chan_in
         for l, outC in enumerate(self.chanlist):
             if outC % self.G != 0:
@@ -259,7 +259,7 @@ class HealpixUNet(nn.Module):
         )
         nn.init.kaiming_uniform_(self.head_w.view(head_inC * outC_head_g, -1), a=np.sqrt(5))
         self.head_bn = self._norm_1d(self.out_channels, kind="group") if self.task == 'segmentation' else None
-
+        
         # Choose how to reduce across gauges at head:
         # 'sum' (default), 'mean', or 'learned' (via 1x1 conv).
         self.head_reduce = getattr(self, 'head_reduce', 'mean')  # you can turn this into a ctor arg if you like
@@ -268,7 +268,7 @@ class HealpixUNet(nn.Module):
             self.head_mixer = nn.Conv1d(self.G * outC_head_g, self.out_channels, kernel_size=1, bias=True)
         else:
             self.head_mixer = None
-
+    
         # ---- Decide runtime device (probe Foscat on CUDA, else CPU) ----
         self.runtime_device = self._probe_and_set_runtime_device(self.device)
 
@@ -291,7 +291,7 @@ class HealpixUNet(nn.Module):
             return nn.BatchNorm1d(C)
         else:
             raise ValueError(f"Unknown norm kind: {kind}")
-
+            
     # -------------------------- device plumbing --------------------------
     def _move_hconv_tensors(self, hc: ho.SphericalStencil, device: torch.device) -> None:
         """Best-effort: move any torch.Tensor attribute of SphericalStencil to device."""
@@ -340,7 +340,7 @@ class HealpixUNet(nn.Module):
         self.device = device
         self.runtime_device = self._probe_and_set_runtime_device(device)
         return self.runtime_device
-
+    
     # --- inside HealpixUNet class, add a single-sample forward helper ---
     def _forward_one(self, x1: torch.Tensor, cell_ids1=None) -> torch.Tensor:
         """
@@ -363,7 +363,7 @@ class HealpixUNet(nn.Module):
             else:
                 ci = cell_ids1
             return super().forward(x1, cell_ids=ci)
-
+        
     def _as_tensor_batch(self, x):
         """
         Ensure a (B, C, N) tensor.
@@ -383,7 +383,7 @@ class HealpixUNet(nn.Module):
             # variable-length with B>1 not supported in a single tensor
             raise ValueError("Variable-length batch detected; use batch_size=1 or loop per-sample.")
         return x
-
+    
     # --- replace your current `forward` signature/body with a dispatcher ---
     def forward_any(self, x, cell_ids: Optional[np.ndarray] = None):
         """
@@ -441,13 +441,13 @@ class HealpixUNet(nn.Module):
         l_data = x
         current_nside = self.in_nside
         l_cell_ids=cell_ids
-
+        
         if cell_ids is not None:
             t_cell_ids={}
             t_cell_ids[0]=l_cell_ids
         else:
             t_cell_ids=self.l_cell_ids
-
+            
         for l, outC in enumerate(self.chanlist):
             # conv1 + BN + ReLU
             l_data = self.hconv_enc[l].Convol_torch(l_data,
@@ -478,11 +478,11 @@ class HealpixUNet(nn.Module):
                     t_cell_ids[l+1]=l_cell_ids
                 else:
                     l_cell_ids=None
-
+                    
                 if isinstance(l_data, torch.Tensor) and l_data.device != self.runtime_device:
                     l_data = l_data.to(self.runtime_device)
                 current_nside //= 2
-
+                
         # Decoder
         for d in range(len(self.chanlist)):
             level = len(self.chanlist) - 1 - d  # encoder level we are going back to
@@ -541,17 +541,17 @@ class HealpixUNet(nn.Module):
             y = y_g.mean(dim=1)   # (B, outC_head_g, K)
 
         y = self._as_tensor_batch(y)
-
+        
         # Optional BN + activation as before
         if self.task == 'segmentation' and self.head_bn is not None:
             y = self.head_bn(y)
-
+            
         if self.final_activation == 'sigmoid':
             y = torch.sigmoid(y)
-
+            
         elif self.final_activation == 'softmax':
             y = torch.softmax(y, dim=1)
-
+            
         return y
 
     # -------------------------- utilities --------------------------
@@ -561,7 +561,7 @@ class HealpixUNet(nn.Module):
         outs = []
         if isinstance(x,np.ndarray):
             x=self.to_Tensor(x)
-
+            
         if not isinstance(x, torch.Tensor):
             for i in range(len(x)):
                 if cell_ids is not None:
@@ -575,17 +575,17 @@ class HealpixUNet(nn.Module):
                                              cell_ids=cell_ids[i : i + batch_size]))
                 else:
                     outs.append(self.forward(x[i : i + batch_size]))
-
+                
         return torch.cat(outs, dim=0)
 
     def to_tensor(self,x):
         return self.hconv_enc[0].f.backend.bk_cast(x)
-
+    
     def to_numpy(self,x):
         if isinstance(x,np.ndarray):
             return x
         return x.cpu().numpy()
-
+    
     # -----------------------------
     # Kernel extraction & plotting
     # -----------------------------
@@ -782,7 +782,7 @@ if __name__ == "__main__":
                     np.testing.assert_allclose(y1_np, y3_np, rtol=0, atol=0)
 
     unittest.main()
-
+    
 from torch.utils.data import Dataset
 # 1) Dataset that omits cell_ids when None
 from torch.utils.data import Dataset, DataLoader, TensorDataset

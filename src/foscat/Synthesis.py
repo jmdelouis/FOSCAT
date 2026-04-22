@@ -252,7 +252,7 @@ class Synthesis:
             lg_tot=np.zeros(in_x.shape)
             lg_tot[self.idx_grd]=g_tot
             g_tot=lg_tot
-
+            
         self.imin = self.imin + self.batchsz
 
         if self.mpi_size == 1:

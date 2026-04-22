@@ -91,7 +91,7 @@ class CNN:
     def get_weights(self):
         return self.x
 
-
+    
     def eval(self, im, indices=None, weights=None):
 
         x = self.x
@@ -103,7 +103,7 @@ class CNN:
 
         im = self.scat_operator.healpix_layer(im, ww)
         im = self.backend.bk_relu(im)
-
+        
         im = self.backend.bk_reduce_mean(self.backend.bk_reshape(im,[im.shape[0],im.shape[1],im.shape[2]//4,4]),3)
 
         for k in range(self.nscale):

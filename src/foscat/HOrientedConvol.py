@@ -28,7 +28,7 @@ class HOrientedConvol:
             self.dtype=torch.float64
         else:
             self.dtype=torch.float32
-
+        
         if KERNELSZ % 2 == 0:
             raise ValueError(f"N must be odd so that coordinates are integers from -K..K; got N={KERNELSZ}.")
 
@@ -36,12 +36,12 @@ class HOrientedConvol:
 
         if no_cell_ids==True:
             cell_ids=np.arange(10)
-
+            
         if cell_ids is None:
             self.cell_ids=np.arange(12*nside**2)
-
-            idx_nn = self.knn_healpix_ckdtree(self.cell_ids,
-                KERNELSZ*KERNELSZ,
+            
+            idx_nn = self.knn_healpix_ckdtree(self.cell_ids, 
+                KERNELSZ*KERNELSZ, 
                 nside,
                 nest=nest,
             )
@@ -50,28 +50,28 @@ class HOrientedConvol:
                 self.cell_ids=cell_ids.cpu().numpy()
             except:
                 self.cell_ids=cell_ids
-
+                
             self.local_test=True
 
             if self.cell_ids.ndim==1:
-                idx_nn = self.knn_healpix_ckdtree(self.cell_ids,
-                                                  KERNELSZ*KERNELSZ,
+                idx_nn = self.knn_healpix_ckdtree(self.cell_ids, 
+                                                  KERNELSZ*KERNELSZ, 
                                                   nside,
                                                   nest=nest,
                                                   )
             else:
                 idx_nn = []
                 for k in range(self.cell_ids.shape[0]):
-                    idx_nn.append(self.knn_healpix_ckdtree(self.cell_ids[k],
-                                                           KERNELSZ*KERNELSZ,
+                    idx_nn.append(self.knn_healpix_ckdtree(self.cell_ids[k], 
+                                                           KERNELSZ*KERNELSZ, 
                                                            nside,
                                                            nest=nest,
                                                            ))
                 idx_nn=np.stack(idx_nn,0)
-
+        
         if self.cell_ids.ndim==1:
             mat_pt=self.rotation_matrices_from_healpix(nside,self.cell_ids,nest=nest)
-
+            
             if self.local_test:
                 t,p = hp.pix2ang(nside,self.cell_ids[idx_nn],nest=True)
             else:
@@ -87,30 +87,30 @@ class HOrientedConvol:
             if self.local_test:
             idx_nn=self.remap_by_first_column(idx_nn)
             '''
-
+            
             del mat_pt
             del vec_orig
         else:
-
+            
             t,p,vec_rot = [],[],[]
-
+            
             for k in range(self.cell_ids.shape[0]):
                 mat_pt=self.rotation_matrices_from_healpix(nside,self.cell_ids[k],nest=nest)
-
+                
                 lt,lp = hp.pix2ang(nside,self.cell_ids[k,idx_nn[k]],nest=True)
-
+                
                 vec_orig=hp.ang2vec(lt,lp)
-
+                
                 l_vec_rot=np.einsum('mki,ijk->kmj', vec_orig,mat_pt)
                 vec_rot.append(l_vec_rot)
-
+                
                 del vec_orig
                 del mat_pt
-
+                
                 t.append(lt[:,0])
                 p.append(lp[:,0])
 
-
+                    
             self.t=np.stack(t,0)
             self.p=np.stack(p,0)
             self.vec_rot=np.stack(vec_rot,0)
@@ -118,13 +118,13 @@ class HOrientedConvol:
             del t
             del p
             del vec_rot
-
+                
         self.polar=polar
         self.gamma=gamma
         self.device=device
         self.allow_extrapolation=allow_extrapolation
         self.w_idx=None
-
+        
         self.idx_nn=idx_nn
         self.nside=nside
         self.KERNELSZ=KERNELSZ
@@ -136,13 +136,13 @@ class HOrientedConvol:
         Remap the values in `idx` so that:
           - The first column becomes [0, 1, ..., N-1]
           - All other columns are updated accordingly using the same mapping.
-
+        
         Parameters
         ----------
         idx : np.ndarray
             Integer array of shape (N, m).
             Assumes all values in idx are present in the first column (otherwise they get -1).
-
+    
         Returns
         -------
         np.ndarray
@@ -150,33 +150,33 @@ class HOrientedConvol:
         """
         if idx.ndim != 2:
             raise ValueError("idx must be a 2D array of shape (N, m)")
-
+        
         N, m = idx.shape
-
+    
         # Create a mapping: original_value_in_first_column -> row_index
         # Example: if idx[:,0] = [101, 505, 303], then mapping = {101:0, 505:1, 303:2}
         keys = idx[:, 0]
         mapping = {v: i for i, v in enumerate(keys)}
-
+    
         # Optional check: ensure all values are in the mapping keys
         # If not, you can raise an error or handle it differently
         # if not np.isin(idx, keys).all():
         #     missing = np.unique(idx[~np.isin(idx, keys)])
         #     raise ValueError(f"Some values are not in idx[:,0]: {missing}")
-
+    
         # Function to get mapped value, or -1 if value is not found
         get = mapping.get
-
+    
         # Apply mapping to all elements (vectorized via np.vectorize)
         out = np.vectorize(lambda v: get(int(v), -1), otypes=[int])(idx)
-
+    
         return out
-
+    
     def rotation_matrices_from_healpix(self,nside, hpix_idx, nest=True):
         """
         Compute rotation matrices that move each Healpix pixel center to the North pole.
         equivalent to rotation matrices R_z(phi) * R_y(-thi) for N points.
-
+    
         Parameters
         ----------
         nside : int
@@ -185,29 +185,29 @@ class HOrientedConvol:
             Healpix pixel indices.
         nest : bool, optional
             True if indices are in NESTED ordering, False for RING ordering.
-
+    
         Returns
         -------
         R : ndarray, shape (3, 3, N)
             Rotation matrices for each pixel index.
         """
-
+        
         try:
             hpix_idx = np.asarray(hpix_idx)
         except:
             hpix_idx = hpix_idx.cpu().numpy()
-
+            
         N = hpix_idx.shape[0]
-
+    
         # Get angular coordinates of each pixel center
         theta, phi = hp.pix2ang(nside, hpix_idx, nest=nest)  # theta: colatitude (0=north pole)
-
+        
         # Precompute sines/cosines
         cphi = np.cos(phi)
         sphi = np.sin(phi)
         cthi = np.cos(-theta)
         sthi = np.sin(-theta)
-
+    
         # Rotation around Z (by phi)
         Rz = np.zeros((3, 3, N))
         Rz[0, 0, :] = cphi
@@ -215,7 +215,7 @@ class HOrientedConvol:
         Rz[1, 0, :] = sphi
         Rz[1, 1, :] = cphi
         Rz[2, 2, :] = 1.0
-
+    
         # Rotation around Y (by -theta)
         Ry = np.zeros((3, 3, N))
         Ry[0, 0, :] = cthi
@@ -223,10 +223,10 @@ class HOrientedConvol:
         Ry[1, 1, :] = 1.0
         Ry[2, 0, :] = sthi
         Ry[2, 2, :] = cthi
-
+    
         # Multiply Rz * Ry for each pixel
         R = np.einsum('ijk,jlk->ilk', Rz, Ry)
-
+        
         return R
 
     def _choose_depth_for_candidates(self, N, overshoot=2, max_depth=12):
@@ -253,7 +253,7 @@ class HOrientedConvol:
             hidx = np.asarray(hidx, dtype=np.int64)
         except:
             hidx = hidx.cpu().numpy()
-
+            
         if hidx.ndim != 1:
             raise ValueError("hidx must be 1D")
         M = hidx.size
@@ -307,7 +307,7 @@ class HOrientedConvol:
                             return_index=False,
                             return_smooth=False,
                            ):
-
+        
         sigma_gauss = 0.5
         sigma_cosine = 0.5
         if self.KERNELSZ == 3:
@@ -316,15 +316,15 @@ class HOrientedConvol:
 
         orientations=np.asarray(orientations)
         NORIENT = orientations.shape[0]
-
+        
         rotate=2*((self.t<np.pi/2)-0.5)[None,:,None]
         if polar:
             xx=np.cos(self.p[None,:]+np.pi/2-orientations[:,None])[:,:,None]*self.vec_rot[None,:,:,0]-rotate*np.sin(self.p[None,:]+np.pi/2-orientations[:,None])[:,:,None]*self.vec_rot[None,:,:,1]
         else:
             xx=np.cos(np.pi/2-orientations[:,None,None])*self.vec_rot[None,:,:,0]-np.sin(np.pi/2-orientations[:,None,None])*self.vec_rot[None,:,:,1]
-
+            
         r=(self.vec_rot[None,:,:,0]**2+self.vec_rot[None,:,:,1]**2+(self.vec_rot[None,:,:,2]-1.0)**2)
-
+        
         if return_smooth:
             wsmooth=np.exp(-sigma_gauss*r*self.nside**2)
             if norm_std:
@@ -333,15 +333,15 @@ class HOrientedConvol:
 
         #for consistency with previous definition
         w=np.exp(-sigma_gauss*r*self.nside**2)*(np.cos(xx*self.nside*sigma_cosine*np.pi)-1J*np.sin(xx*self.nside*sigma_cosine*np.pi))
-
+              
         if norm_std:
-            ww=1/np.sum(abs(w),2)[:,:,None]
+            ww=1/np.sum(abs(w),2)[:,:,None] 
         else:
             ww=1.0
-
+            
         if norm_mean:
             w = (w.real-np.mean(w.real,2)[:,:,None]+1J*(w.imag-np.mean(w.imag,2)[:,:,None]))*ww
-
+            
         NK=self.idx_nn.shape[1]
         indice_1_0 = np.tile(self.idx_nn.flatten(),NORIENT)
         indice_1_1 = np.tile(np.repeat(self.idx_nn[:,0],NK),NORIENT)+ \
@@ -352,13 +352,13 @@ class HOrientedConvol:
             indice_2_0 = self.idx_nn.flatten()
             indice_2_1 = np.repeat(self.idx_nn[:,0],NK)
             wsmooth = wsmooth.flatten()
-
+            
         if return_index:
             if return_smooth:
                 return w,np.concatenate([indice_1_0[:,None],indice_1_1[:,None]],1),wsmooth,np.concatenate([indice_2_0[:,None],indice_2_1[:,None]],1)
-
+            
             return w,np.concatenate([indice_1_0[:,None],indice_1_1[:,None]],1)
-
+        
         return csr_array((w, (indice_1_0, indice_1_1)), shape=(12*self.nside**2, 12*self.nside**2*NORIENT))
 
     def make_idx_weights_from_cell_ids(self,
@@ -417,9 +417,9 @@ class HOrientedConvol:
         else:
             cell_ids=i_cell_ids[0]
             n_cids=i_cell_ids.shape[0]
-
+            
         idx_nn,w_idx,w_w    = [],[],[]
-
+        
         for k in range(n_cids):
             cell_ids=i_cell_ids[k]
             l_idx_nn,l_w_idx,l_w_w = self.make_idx_weights_from_one_cell_ids(cell_ids,
@@ -430,11 +430,11 @@ class HOrientedConvol:
             idx_nn.append(l_idx_nn)
             w_idx.append(l_w_idx)
             w_w.append(l_w_w)
-
+            
         idx_nn = torch.Tensor(np.stack(idx_nn,0)).to(device=device, dtype=torch.long)
         w_idx  = torch.Tensor(np.stack(w_idx,0)).to(device=device, dtype=torch.long)
         w_w    = torch.Tensor(np.stack(w_w,0)).to(device=device, dtype=self.dtype)
-
+        
         return idx_nn,w_idx,w_w
     '''
 
@@ -447,23 +447,23 @@ class HOrientedConvol:
         if device is None:
             device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-        idx_nn = self.knn_healpix_ckdtree(cell_ids,
-                                          self.KERNELSZ*self.KERNELSZ,
+        idx_nn = self.knn_healpix_ckdtree(cell_ids, 
+                                          self.KERNELSZ*self.KERNELSZ, 
                                           self.nside,
                                           nest=self.nest,
                                           )
-
+        
         mat_pt=self.rotation_matrices_from_healpix(self.nside,cell_ids,nest=self.nest)
 
         t,p = hp.pix2ang(self.nside,cell_ids[idx_nn],nest=self.nest)
-
+            
         vec_orig=hp.ang2vec(t,p)
 
         vec_rot = np.einsum('mki,ijk->kmj', vec_orig,mat_pt)
-
+        
         del vec_orig
         del mat_pt
-
+        
         rotate=2*((t<np.pi/2)-0.5)[:,None]
         if polar:
             xx=np.cos(p)[:,None]*vec_rot[:,:,0]-rotate*np.sin(p)[:,None]*vec_rot[:,:,1]
@@ -476,26 +476,26 @@ class HOrientedConvol:
         del rotate
         del t
         del p
-
+        
         w_idx,w_w = self.bilinear_weights_NxN(xx*self.nside*gamma,
                                               yy*self.nside*gamma,
                                               allow_extrapolation=allow_extrapolation)
         '''
         # calib : [Npix, K]
         calib = np.zeros((w_idx.shape[0], w_idx.shape[2]))
-        # Hypothèses :
+        # Hypothèses : 
         # w_idx.shape == (Npix, M, K)  et  w_w.shape == (Npix, M, K)
         Npix, M, K = w_idx.shape
         nb_cols = K
-
+        
         # 1) Accumulation par "bincount" avec décalage de ligne
         row_ids = np.arange(Npix, dtype=np.int64)[:, None, None] * nb_cols
         flat_idx = (row_ids + w_idx).ravel()           # indices dans [0, Npix*9)
         weights  = w_w.ravel().astype(np.float64)      # ou dtype de ton choix
-
+        
         calib = np.bincount(flat_idx, weights, minlength=Npix*nb_cols)\
                   .reshape(Npix, nb_cols)
-
+        
         # 2) Réinjection dans norm_a selon w_idx
         norm_a = calib[np.arange(Npix)[:, None, None], w_idx]
 
@@ -506,9 +506,9 @@ class HOrientedConvol:
         '''
         #del xx
         #del yy
-
+        
         return idx_nn,w_idx,w_w,xx,yy
-
+        
     def make_idx_weights(self,polar=False,gamma=1.0,device=None,allow_extrapolation=True,return_index=False):
         if device is None:
             device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -518,31 +518,31 @@ class HOrientedConvol:
                                                                   gamma=gamma,
                                                                   device=device,
                                                                   allow_extrapolation=allow_extrapolation)
-
+        
         # Ensure types/devices
         self.idx_nn = torch.Tensor(idx_nn).to(device=device, dtype=torch.long)
         self.w_idx  = torch.Tensor(w_idx).to(device=device, dtype=torch.long)
         self.w_w    = torch.Tensor(w_w).to(device=device, dtype=self.dtype)
-
+    
     def _grid_index(self, xi, yi):
         """
         Map integer grid coords (xi, yi) in {-1,0,1} to flat index in [0..8]
         following the given order (row-major from y=-1 to y=1).
         """
         return (yi + self.KERNELSZ//2) * self.KERNELSZ + (xi + self.KERNELSZ//2)
-
+    
     def bilinear_weights_NxN(self,x, y, allow_extrapolation=True):
         """
         Compute bilinear weights on an N×N integer grid with node coordinates
         (xi, yi) in {-K, ..., +K} × {-K, ..., +K}, where K = N//2 (N must be odd).
 
         N is attached to the class `N = self.KERNELSZ`
-
+        
         The query point (x, y) is continuous in the same coordinate system.
         For each query, we pick the unit cell [x0, x0+1] × [y0, y0+1] with
         integer corners (x0,y0), (x0+1,y0), (x0,y0+1), (x0+1,y0+1), and compute
         standard bilinear weights relative to (x0, y0).
-
+    
         Parameters
         ----------
         x, y : float or array-like of shape (M,)
@@ -556,7 +556,7 @@ class HOrientedConvol:
             - If True : do not clamp (x, y); we still select the nearest boundary
               cell inside the grid for the indices, but tx, ty may fall outside
               [0, 1], yielding extrapolation (weights can be negative).
-
+    
         Returns
         -------
         idx : ndarray of shape (M, 4), dtype=int64
@@ -567,7 +567,7 @@ class HOrientedConvol:
             Corresponding bilinear weights for each query point. If
             allow_extrapolation=False and the point is inside the grid, each row
             sums to 1 and all weights are in [0,1].
-
+    
         Notes
         -----
         - This matches your previous 3×3 case when N=3, with the same row-major
@@ -577,20 +577,20 @@ class HOrientedConvol:
         """
         # --- checks & shapes ---
         N=self.KERNELSZ
-
+        
         K = N // 2
-
+    
         x = np.atleast_1d(np.asarray(x, dtype=float))
         y = np.atleast_1d(np.asarray(y, dtype=float))
         if x.shape != y.shape:
             raise ValueError("x and y must have the same shape")
         M = x.shape[0]
-
+    
         # --- optionally clamp queries (for pure interpolation) ---
         if not allow_extrapolation:
             x = np.clip(x, -K, K)
             y = np.clip(y, -K, K)
-
+    
         # --- choose the cell: x0=floor(x), y0=floor(y), but keep indices in-bounds
         #     cell must be inside [-K..K-1] × [-K..K-1] so that +1 is valid
         x0 = np.floor(x)
@@ -599,11 +599,11 @@ class HOrientedConvol:
         y0 = np.clip(y0, -K, K - 1).astype(int)
         x1 = x0 + 1
         y1 = y0 + 1
-
+    
         # --- local coords within the cell (unit spacing) ---
         tx = x - x0
         ty = y - y0
-
+    
         # --- bilinear weights ---
         # (x0,y0) w00, (x1,y0) w10, (x0,y1) w01, (x1,y1) w11
         w00 = (1.0 - tx) * (1.0 - ty)
@@ -611,20 +611,20 @@ class HOrientedConvol:
         w01 = (1.0 - tx) * ty
         w11 = tx * ty
         w = np.stack([w00, w10, w01, w11], axis=1)
-
+    
         # --- flat indices in row-major order (y changes slowest) ---
         # index = (yi + K) * N + (xi + K)
         def flat_idx(xi, yi):
             return (yi + K) * N + (xi + K)
-
+    
         i00 = flat_idx(x0, y0)
         i10 = flat_idx(x1, y0)
         i01 = flat_idx(x0, y1)
         i11 = flat_idx(x1, y1)
         idx = np.stack([i00, i10, i01, i11], axis=1).astype(np.int64)
-
+    
         return idx, w
-
+    
     # --- Add inside class HOrientedConvol, just above Convol_torch ---
     def _convol_single(self, im1: torch.Tensor, ww: torch.Tensor, cell_ids=None, nside=None):
         """
@@ -728,7 +728,7 @@ class HOrientedConvol:
                     l_cell=self.cell_ids[None,:]
                 else:
                     l_cell=self.cell_ids
-
+                    
                 idx_nn,w_idx,w_w = self.make_idx_weights_from_cell_ids(
                     l_cell,
                     polar=self.polar,
@@ -795,9 +795,9 @@ class HOrientedConvol:
             ww_eff = ww
         else:
             raise ValueError(f"Unsupported ww shape {tuple(ww.shape)}")
-
+        
         # --- Sanitize shapes: ensure w_idx_eff / w_w_eff == (B, Npix, S, P)
-
+        
         # ---- 3) Gather along M using w_idx_eff -> (B, C_i, C_o, Npix, S, P)
         idx_exp = w_idx_eff[:, None, None, :, :, :]            # (B,1,1,Npix,S,P)
         rw = torch.take_along_dim(
@@ -814,7 +814,7 @@ class HOrientedConvol:
         out     = out_ci.sum(dim=1)                            # sum over C_i -> (B, C_o, Npix)
 
         return out
-
+    
     def _to_numpy_1d(self, ids):
         """Return a 1D numpy array of int64 for a single set of cell ids."""
         import numpy as np, torch
@@ -850,11 +850,11 @@ class HOrientedConvol:
                 self.f=sc.funct(KERNELSZ=self.KERNELSZ,all_type='float64')
             else:
                 self.f=sc.funct(KERNELSZ=self.KERNELSZ,all_type='float32')
-
+                
         if cell_ids is None:
             dim,cdim = self.f.ud_grade_2(im,cell_ids=self.cell_ids,nside=self.nside,max_poll=False)
             return dim,cdim
-
+        
         if nside is None:
             nside = self.nside
 
@@ -891,11 +891,11 @@ class HOrientedConvol:
                 self.f=sc.funct(KERNELSZ=self.KERNELSZ,all_type='float64')
             else:
                 self.f=sc.funct(KERNELSZ=self.KERNELSZ,all_type='float32')
-
+                
         if cell_ids is None:
             dim = self.f.up_grade(im,self.nside*2,cell_ids=self.cell_ids,nside=self.nside)
             return dim
-
+        
         if nside is None:
             nside = self.nside
 
@@ -933,8 +933,12 @@ class HOrientedConvol:
             else:
                 self.f=sc.funct(KERNELSZ=self.KERNELSZ,all_type='float32')
         return self.f.backend.bk_cast(x)
-
+    
     def to_numpy(self,x):
         if isinstance(x,np.ndarray):
             return x
         return x.cpu().numpy()
+        
+
+   
+        

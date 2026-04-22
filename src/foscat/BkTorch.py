@@ -62,7 +62,7 @@ class BkTorch(BackendBase.BackendBase):
         self.torch_device = (
             torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
         )
-
+        
     def downsample_mean_2x2(self,tim: torch.Tensor) -> torch.Tensor:
         """
         Average-pool tensor tim over non-overlapping 2x2 spatial blocks.
@@ -204,7 +204,7 @@ class BkTorch(BackendBase.BackendBase):
             # idem à ta doc existante, mais la valeur est une moyenne (reduce="mean")
             # ou un maximum (reduce="max").
         """
-
+        
         # ---- Tensorize & device/dtype plumbing ----
         if isinstance(data, np.ndarray):
             data = torch.from_numpy(data).to(
@@ -606,7 +606,7 @@ class BkTorch(BackendBase.BackendBase):
 
         else:
             raise ValueError("`cell_ids` must be of shape [N] or [B, N].")
-
+    
     def average_by_cell_group(data, cell_ids):
         """
         data: tensor of shape [..., N, ...] (ex: [B, N, C])
@@ -826,7 +826,7 @@ class BkTorch(BackendBase.BackendBase):
             if torch.isnan(t).all():
                 return torch.tensor(float('nan'), device=t.device, dtype=torch.float32)
             return torch.max(t[~torch.isnan(t)]) if torch.isnan(t).any() else torch.max(t)
-
+    
         # Iterate Weiszfeld
         for _ in range(max_iter):
             # Skip voxels with no valid samples
@@ -889,7 +889,7 @@ class BkTorch(BackendBase.BackendBase):
         med2 = z  # [a,b,c], real
 
         return med, med2
-
+    
     # ---------------------------------------------−---------
     # --             BACKEND DEFINITION                    --
     # ---------------------------------------------−---------
@@ -897,7 +897,7 @@ class BkTorch(BackendBase.BackendBase):
         if S is None:
             return 0
         return S.numel()
-
+    
     def bk_SparseTensor(self, indice, w, dense_shape=[]):
         return self.backend.sparse_coo_tensor(indice, w, dense_shape).coalesce().to_sparse_csr().to(self.torch_device)
 
@@ -941,7 +941,7 @@ class BkTorch(BackendBase.BackendBase):
         y = y.reshape(*leading_dims, O_c, Nx, Ny)
 
         return y
-
+    
     def conv1d(self, x, w, strides=[1, 1, 1], padding="SAME"):
         """
         Performs 1D convolution along the last axis of a 2D tensor x[n, m] with kernel w[K].
@@ -1064,7 +1064,7 @@ class BkTorch(BackendBase.BackendBase):
             return self.backend.mean(data)
         else:
             return self.backend.mean(data, axis)
-
+        
     def bk_reduce_median(self, data, axis=None):
 
         if axis is None:
@@ -1214,7 +1214,7 @@ class BkTorch(BackendBase.BackendBase):
                 xr = self.backend.concat(
                     [self.bk_real(data[k]) for k in range(ndata)], axis=axis
                 )
-
+                    
                 xi = self.backend.concat(
                     [self.bk_imag(data[k]) for k in range(ndata)], axis=axis
                 )
