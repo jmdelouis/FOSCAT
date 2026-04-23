@@ -1119,7 +1119,7 @@ class SphericalStencil:
 
 
     def to_tensor(self,x):
-        return torch.tensor(x,device='cuda')
+        return torch.tensor(x,device=self.device)
 
     def to_numpy(self,x):
         if isinstance(x,np.ndarray):
