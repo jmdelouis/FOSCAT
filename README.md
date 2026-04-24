@@ -9,7 +9,6 @@ This README replaces the former dependency on `FOSCAT_DEMO`. The recommended exa
 - `Denoising-2D.ipynb` - denoising by statistical constraints.
 - `Remove_CMB.ipynb` - component separation / CMB-like background removal.
 - `local_foscat.ipynb` and `CNN_local.ipynb` - local HEALPix domains and local spherical convolutions.
-- `CNN_ecmwf.ipynb` - HEALPix neural network example on ECMWF-like fields.
 
 ## Install
 
