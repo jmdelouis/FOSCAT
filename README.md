@@ -1,87 +1,73 @@
-# foscat
+# FOSCAT
 
-[![Read the Docs](https://readthedocs.org/projects/foscat-documentation/badge/?version=latest)](https://foscat-documentation.readthedocs.io/en/latest)
+FOSCAT is a Python package for wavelet/scattering-based analysis and synthesis of data on regular 2D grids and on the sphere with HEALPix pixelization.
 
-A python package dedicated to image component separation based on scattering transform analysis designed for high performance computing.
+This README replaces the former dependency on `FOSCAT_DEMO`. The recommended examples are now the notebooks from `demo-foscat-pangeo-eosc`, especially:
 
-## the concept
+- `Demo_Synthesis.ipynb` - global HEALPix synthesis from scattering-covariance statistics.
+- `Synthesis2D.ipynb` - 2D image/field synthesis.
+- `Denoising-2D.ipynb` - denoising by statistical constraints.
+- `Remove_CMB.ipynb` - component separation / CMB-like background removal.
+- `local_foscat.ipynb` and `CNN_local.ipynb` - local HEALPix domains and local spherical convolutions.
+- `CNN_ecmwf.ipynb` - HEALPix neural network example on ECMWF-like fields.
 
-The foscat genesis has been built to synthesise data (2D or Healpix) using Cross Scattering Transform. For a detailed method description please refer to https://arxiv.org/abs/2207.12527. This algorithm could be effectively usable for component separation (e.g. denoising).
+## Install
 
-A demo package for this process can be found at https://github.com/jmdelouis/FOSCAT_DEMO.
-
-## usage
-
-# Short tutorial
-
-https://github.com/IAOCEA/demo-foscat-pangeo-eosc/blob/main/Demo_Synthesis.ipynb
-
-# FOSCAT_DEMO
-
-The python scripts _demo.py_ included in this package demonstrate how to use the foscat library to generate synthetic fields that have patterns with the same statistical properties as a specified image.
-
-# Install foscat library
-
-Before installing, make sure you have python installed in your enviroment.
-The last version of the foscat library can be installed using PyPi:
-
-```
+```bash
 pip install foscat
 ```
 
-Load the FOSCAT_DEMO package from github.
+For the examples, a fuller environment is usually useful:
 
-```
-git clone https://github.com/jmdelouis/FOSCAT_DEMO.git
-```
-
-## Recommended installing procedures for mac users
-
-It is recomended to use python=3.9\*.
-
-```
-micromamba create -n FOSCAT
-micromamba install -n FOSCAT ‘python==3.9*’
-micromamba activate FOSCAT
+```bash
+micromamba create -n foscat python=3.10
+micromamba activate foscat
 pip install foscat
-git clone https://github.com/jmdelouis/FOSCAT_DEMO.git
-
+pip install tensorflow torch healpy xarray gcsfs zarr jupyterlab
 ```
 
-## Recommended installing procedures HPC users
+## Minimal HEALPix synthesis sketch
 
-It is recomended to install tensorflow in advance. For [DATARMOR](https://pcdm.ifremer.fr/Equipement) for using GPU ;
+```python
+import numpy as np
+import foscat.scat_cov as sc
+from foscat.Synthesis import Synthesis
 
+nside = 64
+target_map = np.random.randn(12 * nside**2)
+
+scat_op = sc.funct(KERNELSZ=5, NORIENT=4, OSTEP=1, all_type='float64')
+target_stat = scat_op.eval(target_map)
+
+class MyLoss:
+    def __init__(self, scat_op, target_stat):
+        self.scat_op = scat_op
+        self.target_stat = target_stat
+
+    def eval(self, x, batch, return_all=False):
+        stat = self.scat_op.eval(x)
+        loss = stat.reduce_mean_batch((stat - self.target_stat) ** 2)
+        return loss
+
+x0 = np.random.randn(target_map.size)
+solver = Synthesis(MyLoss(scat_op, target_stat))
+result = solver.run(x0, EVAL_FREQUENCY=10, NUM_EPOCHS=50)
 ```
-micromamba create -n FOSCAT
-micromamba install -n FOSCAT ‘python==3.9*’
-micromamba install -n FOSCAT ‘tensorflow==2.11.0’
-micromamba activate FOSCAT
-pip install foscat
-git clone https://github.com/jmdelouis/FOSCAT_DEMO.git
 
+## Documentation
+
+This repository contains a MkDocs documentation skeleton:
+
+```bash
+pip install mkdocs mkdocs-material
+mkdocs serve
 ```
 
-## Authors and acknowledgment
+A minimal Sphinx bridge is also provided in `docs_sphinx/` for teams preferring Sphinx.
 
-Authors: J.-M. Delouis, P. Campeti, T. Foulquier, J. Mangin, L. Mousset, T. Odaka, F. Paul, E. Allys
+## Main sections
 
-This work is part of the R & T Deepsee project supported by CNES. The authors acknowledge the heritage of the Planck-HFI consortium regarding data, software, knowledge. This work has been supported by the Programme National de Télédétection Spatiale (PNTS, http://programmes.insu.cnrs.fr/pnts/), grant n◦ PNTS-2020-08
-
-## License
-
-BSD 3-Clause License
-
-Copyright (c) 2022, the Foscat developers All rights reserved.
-
-Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
-
-Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
-
-Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
-
-Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
-
-## Project status
-
-It is a scientific driven development. We are open to any contributing development.
+- Getting started: installation and concepts.
+- User guide: scattering covariance, HEALPix synthesis, 2D synthesis, component separation, and local wavelet convolutions.
+- Examples: mapping from maintained notebooks to documentation pages.
+- Reference: practical API entry points and best practices.

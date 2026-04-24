@@ -1,0 +1,38 @@
+site_name: FOSCAT
+site_description: Wavelet/scattering analysis and synthesis on 2D grids and HEALPix spheres
+repo_name: FOSCAT
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.expand
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.arithmatex:
+      generic: true
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Installation: getting-started/installation.md
+      - Core concepts: getting-started/concepts.md
+  - User guide:
+      - Scattering covariance: user-guide/scattering-covariance.md
+      - HEALPix synthesis: user-guide/healpix-synthesis.md
+      - 2D synthesis: user-guide/2d-synthesis.md
+      - Component separation: user-guide/component-separation.md
+      - Local HEALPix wavelets: user-guide/local-healpix-wavelets.md
+      - HEALPix neural networks: user-guide/healpix-neural-networks.md
+  - Examples:
+      - Notebook map: examples/notebook-map.md
+      - Minimal examples: examples/minimal-examples.md
+  - Reference:
+      - API entry points: reference/api-entry-points.md
+      - Best practices: reference/best-practices.md
