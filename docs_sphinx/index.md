@@ -78,8 +78,16 @@ evaluates S0–S4 coefficient sets, supports batching and masking.
 :link: user-guide/synthesis
 :link-type: doc
 
-Adam-based differentiable optimisation loop. Plug in any differentiable loss
+L-BFGS-B differentiable optimisation loop. Plug in any differentiable loss
 to synthesise or reconstruct fields matching target statistics.
+:::
+
+:::{grid-item-card} synthesis — all options
+:link: user-guide/synthesis-options
+:link-type: doc
+
+Complete reference for every parameter of `scat_op.synthesis()`: multi-resolution
+schedule, masking, upsampling, iso_ang, cross-covariance, and more.
 :::
 
 ::::
@@ -159,6 +167,7 @@ hidden: true
 ---
 user-guide/scattering-covariance
 user-guide/synthesis
+user-guide/synthesis-options
 user-guide/healpix-synthesis
 user-guide/2d-synthesis
 user-guide/component-separation
