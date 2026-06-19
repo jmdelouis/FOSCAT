@@ -6404,6 +6404,7 @@ class funct(FOC.FoCUS):
         EVAL_FREQUENCY=100,
         NUM_EPOCHS=300,
         scat_cov_method='eval',
+        n_up=0,
     ):
 
         import time
@@ -6765,9 +6766,43 @@ class funct(FOC.FoCUS):
                 grd_mask=l_grd_mask[k],
             )
             
+        if n_up > 0 and self.use_2D:
+            # Extra upsampling steps: synthesise at 2^n_up times the target size
+            # while keeping the same jmax (same wavelet scales as the final main step).
+            # The result is a larger field whose local statistics match those of
+            # the original target — the field is "inscribed" in a 2^n_up x larger domain.
+            #
+            # Important: do NOT call clean_norm() here. The normalisation was set when
+            # ref was computed on the original target; reusing it keeps the loss
+            # comparison consistent across the upscaled iterations.
+            for up in range(n_up):
+                # Upsample current result by factor 2 in each spatial dimension
+                imap = self.up_grade(
+                    self.backend.bk_cast(omap),
+                    omap.shape[1] * 2,
+                    axis=-2,
+                    nouty=omap.shape[2] * 2,
+                )
+
+                loss_up = synthe.Loss(
+                    The_lossH, self, ref, sref, use_variance, l_jmax[nstep - 1]
+                )
+                sy_up = synthe.Synthesis([loss_up])
+
+                print(
+                    "Synthesis scale [ %d x %d ] (n_up step %d/%d)"
+                    % (imap.shape[1], imap.shape[2], up + 1, n_up)
+                )
+
+                omap = sy_up.run(
+                    imap,
+                    EVAL_FREQUENCY=EVAL_FREQUENCY,
+                    NUM_EPOCHS=NUM_EPOCHS,
+                )
+
         if not self.use_2D:
             self.clean_norm()
-            
+
         t2 = time.time()
         print("Total computation %.2fs" % (t2 - t1))
 
