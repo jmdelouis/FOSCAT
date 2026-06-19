@@ -64,7 +64,22 @@ suppress_warnings = [
     "autoapi",
     "myst.header",
     "ref.python",
+    "ref.class",    # autoapi parses non-standard type annotations as class refs
     "intersphinx.external",
+    "config.html_static_path",  # tolerate missing _static until content is added
+]
+
+# Ignore unresolvable cross-references produced by existing source docstrings.
+# These come from numpy-style type fields like "torch tensor with size [N, L]"
+# that autoapi converts to :py:class: references.
+nitpick_ignore_regex = [
+    ("py:class", r"torch tensor.*"),
+    ("py:class", r"[Ii]nteger"),
+    ("py:class", r"[Tt]ensor"),
+    ("py:class", r"S[0-9].*"),
+    ("py:class", r".*pre-normalized.*"),
+    ("py:class", r"[Pp]arameters"),
+    ("py:class", r"xarray\.DataArray"),
 ]
 
 # ---------------------------------------------------------------------------
@@ -89,6 +104,7 @@ intersphinx_mapping = {
     "numpy": ("https://numpy.org/doc/stable", None),
     "torch": ("https://pytorch.org/docs/stable", None),
     "healpy": ("https://healpy.readthedocs.io/en/latest/", None),
+    "xarray": ("https://docs.xarray.dev/en/stable/", None),
 }
 
 # ---------------------------------------------------------------------------
