@@ -206,6 +206,74 @@ stat_iso = stat.iso_mean()   # S1,S2 → (...), S3,S3P → (...,L), S4 → (...,
 result = scat_op.synthesis(xnorm, iso_ang=True, NUM_EPOCHS=300)
 ```
 
+---
+
+### Soft angular compression — `fft_ang`
+
+`iso_mean` is a hard reduction: it collapses each orientation axis to a single
+number (the mean), discarding all information about angular variation.
+`fft_ang` is a softer alternative that keeps the first few Fourier harmonics
+along each orientation axis, preserving the *amplitude* of the angular variation.
+
+```python
+stat_fft = stat.fft_ang(nharm=1, imaginary=True)
+```
+
+**What is kept (nharm=1):**
+
+| Output index | Content |
+|---|---|
+| `[…, 0]` | DC — mean over orientations (identical to `iso_mean`) |
+| `[…, 1]` | Cosine projection: $\sum_l \cos(2\pi l/L) \cdot S[l]$ |
+| `[…, 2]` | Sine projection: $\sum_l \sin(2\pi l/L) \cdot S[l]$ |
+
+**Shapes after `fft_ang(nharm=1, imaginary=True)`** (`nout = 3`):
+
+| Statistic | Before | After |
+|-----------|--------|-------|
+| S1, S2 | `(..., L)` | `(..., 3)` |
+| S3, S3P | `(..., L, L)` | `(..., 3, 3)` |
+| S4 | `(..., L, L, L)` | `(..., 3, 3, 3)` |
+
+For S3/S4 the projection is the **tensor product** of independent 1D Fourier
+projections on each orientation axis.
+
+**Why `imaginary=True` is essential for rotation invariance:**
+
+With `imaginary=False` only the cosine component is kept. A field whose dominant
+orientation sits at the zero-crossing of cosine (e.g. 90° for L=4) would give
+a near-zero first-harmonic coefficient despite being strongly anisotropic.
+
+With `imaginary=True` both cosine and sine are kept, so the **amplitude**
+
+$$A_1 = \sqrt{c_1^2 + s_1^2}$$
+
+is **rotation-invariant** regardless of the image orientation. This is the
+recommended mode whenever results must not depend on the absolute rotation of
+the input field.
+
+```python
+import numpy as np
+
+stat_fft = stat.fft_ang(nharm=1, imaginary=True)
+
+# Rotation-invariant angular amplitude for S2:
+A1_S2 = np.sqrt(stat_fft.S2[..., 1]**2 + stat_fft.S2[..., 2]**2)
+
+# Use fft_ang in synthesis via a custom loss:
+from foscat.Synthesis import Loss, Synthesis
+
+def fft_loss(u, scat_op, args):
+    ref_fft = args[0]
+    learn = scat_op.eval(u, norm='auto').fft_ang(nharm=1, imaginary=True)
+    return scat_op.reduce_distance(learn, ref_fft)
+
+target_fft = scat_op.eval(xnorm, norm='auto').fft_ang(nharm=1, imaginary=True)
+loss = Loss(fft_loss, scat_op, target_fft)
+solver = Synthesis([loss])
+result = solver.run(x0, NUM_EPOCHS=300)
+```
+
 ### Serialisation
 
 ```python

@@ -1839,6 +1839,87 @@ class scat_cov:
         )
 
     def fft_ang(self, nharm=1, imaginary=False):
+        """Project orientation axes onto the first Fourier harmonics.
+
+        This is a softer alternative to :meth:`iso_mean`.  Instead of
+        collapsing each orientation axis to a single mean value, it keeps
+        the first ``nharm`` harmonics of the discrete Fourier transform along
+        each orientation axis L.  This preserves the *amplitude* of the angular
+        variation while reducing the number of descriptors from L to
+        ``nout = 1 + 2*nharm`` (with ``imaginary=True``) per orientation axis.
+
+        .. rubric:: Why ``imaginary=True`` is the recommended mode
+
+        With ``imaginary=False`` the projection basis is
+        ``{1, cos(2π·l/L), cos(4π·l/L), …}``.  A field whose dominant
+        orientation sits at exactly 90° (i.e. at the zero-crossing of the
+        cosine) would give a near-zero first-harmonic coefficient even though
+        the field is strongly anisotropic.
+
+        With ``imaginary=True`` the basis is
+        ``{1, cos(2π·l/L), sin(2π·l/L), cos(4π·l/L), sin(4π·l/L), …}``.
+        The amplitude of the first harmonic,
+
+        .. math::
+
+            A_1 = \\sqrt{c_1^2 + s_1^2}
+
+        is **rotation-invariant**: it is the same regardless of the absolute
+        orientation of the field.  Use ``imaginary=True`` whenever you want a
+        description that does not depend on the image orientation.
+
+        .. rubric:: Reduction per statistic
+
+        ============  ====================  =======================
+        Statistic     Input shape           Output shape
+        ============  ====================  =======================
+        S1, S2        ``[…, L]``            ``[…, nout]``
+        S3, S3P       ``[…, L, L]``         ``[…, nout, nout]``
+        S4            ``[…, L, L, L]``      ``[…, nout, nout, nout]``
+        ============  ====================  =======================
+
+        For multi-axis statistics (S3, S4) the projection is the **tensor
+        product** of independent 1-D Fourier projections on each axis:
+
+        .. math::
+
+            \\text{output}[k_1, k_2] =
+              \\sum_{l_1, l_2} \\phi_{k_1}(l_1)\\, \\phi_{k_2}(l_2)\\,
+              S3[l_1, l_2]
+
+        where :math:`\\phi_0(l) = 1`,  :math:`\\phi_1(l) = \\cos(2\\pi l/L)`,
+        :math:`\\phi_2(l) = \\sin(2\\pi l/L)`.
+
+        Parameters
+        ----------
+        nharm : int, optional
+            Number of harmonics to keep beyond the DC term.  ``nharm=1``
+            (default) keeps the mean and the first angular harmonic.
+        imaginary : bool, optional
+            If ``False`` (default), keep only the cosine components
+            ``{1, cos, cos(2·), …}`` — ``nout = 1 + nharm``.
+            If ``True``, keep both cosine and sine components
+            ``{1, cos, sin, cos(2·), sin(2·), …}`` — ``nout = 1 + 2·nharm``.
+            **Recommended: ``True``** to obtain rotation-invariant amplitudes.
+
+        Returns
+        -------
+        scat_cov
+            A new statistics object with orientation axes compressed from L to
+            ``nout``.
+
+        Examples
+        --------
+        >>> stat = scat_op.eval(image)
+        >>> stat_fft = stat.fft_ang(nharm=1, imaginary=True)
+        >>> # S2 shape: (..., L) -> (..., 3)   [DC, cos, sin]
+        >>> # S3 shape: (..., L, L) -> (..., 3, 3)
+        >>> # S4 shape: (..., L, L, L) -> (..., 3, 3, 3)
+        >>>
+        >>> # Rotation-invariant first-harmonic amplitude for S2:
+        >>> import numpy as np
+        >>> A1_S2 = np.sqrt(stat_fft.S2[..., 1]**2 + stat_fft.S2[..., 2]**2)
+        """
         shape = list(self.S2.shape)
         norient = shape[3]
 
@@ -1917,7 +1998,7 @@ class scat_cov:
 
         S4 = self.S4
         if self.S4 is not None:
-            if self.backend.bk_is_complex(self.S3):
+            if self.backend.bk_is_complex(self.S4):
                 lmat = self.backend._fft_3_orient_C[(norient, nharm, imaginary)]
             else:
                 lmat = self.backend._fft_3_orient[(norient, nharm, imaginary)]
@@ -6413,7 +6494,303 @@ class funct(FOC.FoCUS):
         scat_cov_method='eval',
         n_up=0,
     ):
+        """Synthesise a new field whose scattering-covariance statistics match
+        those of ``image_target``.
 
+        This is the main high-level entry point for texture synthesis, denoising,
+        inpainting, and component separation with FOSCAT.  Internally it runs
+        L-BFGS-B (``scipy.optimize.fmin_l_bfgs_b``) on the scattering-covariance
+        loss, with an optional coarse-to-fine multi-resolution schedule controlled
+        by ``nstep``.
+
+        The optimisation minimises:
+
+        .. math::
+
+            u^* = \\arg\\min_u \\mathcal{L}(u), \\qquad
+            \\mathcal{L}(u) = \\sum_k
+            \\frac{(\\Phi(u)_k - \\Phi(d)_k)^2}{\\sigma_k^2}
+
+        where :math:`\\Phi` is the scattering-covariance operator, :math:`d` is
+        ``image_target``, and :math:`\\sigma_k^2` is the per-coefficient variance
+        of :math:`\\Phi(d)` (used only when ``use_variance=True``).
+
+        Parameters
+        ----------
+        image_target : array-like
+            Reference field whose statistics are to be reproduced.
+
+            - **HEALPix:** shape ``(npix,)`` or ``(B, npix)`` with
+              ``npix = 12 * nside**2``.
+            - **2D:** shape ``(H, W)`` or ``(B, H, W)``.
+            - **1D:** shape ``(N,)`` or ``(B, N)``.
+
+            Normalise the input before calling (zero mean, unit variance is
+            standard)::
+
+                xnorm = (image - image.mean()) / image.std()
+
+        reference : array-like, optional
+            Second reference field for **cross-covariance** synthesis.  When
+            provided the loss matches the cross-statistics
+            :math:`\\Phi_\\times(u, d_2)` against the target
+            :math:`\\Phi_\\times(d_1, d_2)`, where ``d1 = image_target`` and
+            ``d2 = reference``.  Both fields must have the same shape.
+            Useful for component separation (e.g. CMB × dust template).
+
+        nstep : int, optional
+            Number of resolution levels in the coarse-to-fine schedule.
+            Default is ``4``.
+
+            The algorithm downsamples ``image_target`` by successive factors of 2
+            to build a resolution pyramid, then optimises from coarsest to finest,
+            using each result as the warm start for the next level.  This
+            dramatically improves convergence for large maps.
+
+            +---------+----------------------------------------------+
+            | nstep   | Resolutions visited (2D, 256 × 256 target)  |
+            +=========+==============================================+
+            | 1       | 256 × 256 only                               |
+            +---------+----------------------------------------------+
+            | 2       | 128 × 128 → 256 × 256                        |
+            +---------+----------------------------------------------+
+            | 3       | 64 × 64 → 128 × 128 → 256 × 256             |
+            +---------+----------------------------------------------+
+            | 4       | 32 → 64 → 128 → 256                          |
+            +---------+----------------------------------------------+
+
+            Capped automatically when ``nstep > jmax - 1`` (map too small for
+            that many downsampling steps).
+
+        seed : int, optional
+            Random seed for the Gaussian white-noise initial condition used at
+            the coarsest resolution level.  Default is ``1234``.  Has no effect
+            when ``input_image`` is provided.  Change to generate independent
+            realisations::
+
+                results = [scat_op.synthesis(xnorm, seed=s) for s in range(8)]
+
+        Jmax : int or None, optional
+            Maximum wavelet scale index included in the loss.  ``None`` (default)
+            uses all scales available for the map size.  Decremented by 1 at each
+            coarser resolution level during the multi-resolution schedule.
+            Reduce to constrain only small-scale statistics::
+
+                result = scat_op.synthesis(xnorm, Jmax=4)  # ignore large scales
+
+        edge : bool, optional
+            Enable edge-aware boundary handling for non-periodic maps.
+            Default is ``False`` (periodic/full-sphere boundaries).  Set to
+            ``True`` for rectangular images or partial-sky patches.
+            Activated automatically when ``in_mask`` is provided.
+
+        to_gaussian : bool, optional
+            Gaussianise ``image_target`` before computing target statistics, then
+            invert at the end.  Default is ``False``.  Useful for highly
+            non-Gaussian fields (log-normal distributions, etc.) to decouple
+            the histogram constraint from the scattering statistics.
+
+        use_variance : bool, optional
+            Weight each loss term by the inverse variance of the corresponding
+            coefficient in ``image_target``.  Default is ``True``.
+
+            - ``True``: loss is scale-invariant — large-scale and small-scale
+              coefficients contribute equally regardless of amplitude.
+            - ``False``: uniform weighting, dominated by the largest-amplitude
+              statistics (usually coarse scales).
+
+        synthesised_N : int, optional
+            Number of independent synthetic maps to produce simultaneously.
+            Default is ``1``.  All ``synthesised_N`` maps share the same loss,
+            which amortises the per-iteration GPU cost.  The output gains a
+            leading batch dimension::
+
+                result = scat_op.synthesis(xnorm, synthesised_N=4)
+                # result.shape == (4, H, W)  for 2D
+
+        input_image : array-like or None, optional
+            Warm-start initial condition.  When ``None`` (default), starts from
+            Gaussian white noise.  When provided, ``input_image`` is downsampled
+            to each resolution level and used as the initial guess at the
+            coarsest level.  Useful for iterative refinement or for injecting
+            a prior::
+
+                result_v1 = scat_op.synthesis(xnorm, NUM_EPOCHS=100)
+                result_v2 = scat_op.synthesis(xnorm, NUM_EPOCHS=500,
+                                               input_image=result_v1)
+
+        grd_mask : array-like or None, optional
+            Binary mask selecting which pixels the optimiser is allowed to
+            update.  Pixels where ``grd_mask = 0`` are frozen to their values
+            in ``image_target``; only pixels where ``grd_mask = 1`` move.
+            Same shape as ``image_target``.  Downsampled at each resolution
+            level.  Useful for **inpainting** (reconstruct missing regions
+            while keeping observed pixels fixed)::
+
+                grd_mask = np.zeros_like(xnorm)
+                grd_mask[missing_pixels] = 1.0
+                result = scat_op.synthesis(xnorm, grd_mask=grd_mask)
+
+        in_mask : array-like or None, optional
+            Binary mask marking **invalid pixels in the input data** that should
+            not contribute to the reference statistics.  Same shape as
+            ``image_target``.  Pixels with ``in_mask = 0`` are excluded from
+            the scattering-covariance computation at every scale level (the mask
+            is downsampled along with the map).  Setting ``in_mask`` also
+            enables ``edge=True`` internally.  Useful for partial-sky CMB maps
+            or images with missing regions::
+
+                mask = np.ones_like(xnorm)
+                mask[bad_pixels] = 0.0
+                result = scat_op.synthesis(xnorm, in_mask=mask)
+
+        iso_ang : bool, optional
+            Use isotropically averaged statistics in the loss.  Default is
+            ``False``.
+
+            - ``False``: the full oriented S1–S4 statistics are used.  The
+              synthesised field can reproduce anisotropic structures (filaments,
+              oriented textures).
+            - ``True``: statistics are collapsed to their rotationally invariant
+              content via :meth:`iso_mean` before computing the loss.  Reduces
+              the number of constraints and accelerates convergence for
+              statistically isotropic fields (e.g. CMB).
+
+            Angular-reduction summary with ``iso_ang=True``:
+
+            ============  ====================  =======================
+            Statistic     Input shape           Output shape
+            ============  ====================  =======================
+            S1, S2        ``[…, L]``            ``[…]``  (mean over L)
+            S3, S3P       ``[…, L, L]``         ``[…, L]``  (by Δl = l₂−l₁)
+            S4            ``[…, L, L, L]``      ``[…, L, L]``
+            ============  ====================  =======================
+
+        EVAL_FREQUENCY : int, optional
+            Print the current loss every N L-BFGS-B iterations.  Default is
+            ``100``.
+
+        NUM_EPOCHS : int, optional
+            Maximum number of L-BFGS-B iterations **per resolution level**.
+            Default is ``300``.  The optimiser may stop earlier when its
+            convergence criterion is met.  Total wall-clock time scales as
+            ``nstep × NUM_EPOCHS``.
+
+        scat_cov_method : str, optional
+            Internal method for computing scattering covariances.  Default is
+            ``'eval'`` (recommended), which uses :meth:`eval` with
+            ``norm='auto'`` and caches the normalisation after the first call.
+            Any other value falls back to the legacy ``scattering_cov()`` path
+            (2D only, kept for backward compatibility).
+
+        n_up : int, optional
+            Number of **extra upsampling steps** beyond the target size, keeping
+            the same ``Jmax``.  Default is ``0`` (no extra steps).
+
+            With ``n_up=1``, after completing synthesis at N × N, the algorithm
+            continues at 2N × 2N using the same scattering statistics as the
+            N × N target.  The result is a field that locally matches the
+            statistics of the original target, embedded in a larger canvas.
+            Only available for 2D maps.
+
+            +--------+-----------------------------+
+            | n_up   | Output size (N × N target)  |
+            +========+=============================+
+            | 0      | N × N  (standard)            |
+            +--------+-----------------------------+
+            | 1      | 2N × 2N                      |
+            +--------+-----------------------------+
+            | 2      | 4N × 4N                      |
+            +--------+-----------------------------+
+
+            The ``Jmax`` used during n_up steps is pinned to the value
+            effective for the N × N target so that wavelet filters and the norm
+            cache remain consistent::
+
+                result = scat_op.synthesis(xnorm_256, nstep=3, n_up=1)
+                # result.shape == (512, 512)
+
+        Returns
+        -------
+        numpy.ndarray
+            Synthesised field.
+
+            - Shape equals ``image_target.shape`` when ``synthesised_N=1`` and
+              ``n_up=0``.
+            - When ``synthesised_N > 1``, a leading dimension of size
+              ``synthesised_N`` is added.
+            - When ``n_up > 0`` (2D only), spatial dimensions are multiplied by
+              ``2**n_up``.
+
+        Examples
+        --------
+        **Minimal 2D synthesis**::
+
+            import foscat.scat_cov2D as sc
+            import numpy as np
+
+            scat_op = sc.funct(NORIENT=4)
+            xnorm = (image - image.mean()) / image.std()
+            result = scat_op.synthesis(xnorm, seed=10, nstep=3, NUM_EPOCHS=300)
+
+        **Batch synthesis with mask**::
+
+            mask = np.ones_like(xnorm)
+            mask[invalid] = 0.0
+            results = scat_op.synthesis(
+                xnorm,
+                in_mask=mask,
+                synthesised_N=4,
+                nstep=3,
+                iso_ang=True,
+                NUM_EPOCHS=500,
+            )
+            # results.shape == (4, H, W)
+
+        **Inpainting — reconstruct missing pixels, freeze observed ones**::
+
+            grd_mask = np.zeros_like(xnorm)
+            grd_mask[hole_pixels] = 1.0
+            result = scat_op.synthesis(
+                xnorm, grd_mask=grd_mask, nstep=3, edge=True, NUM_EPOCHS=500
+            )
+
+        **Upsampled synthesis (n_up)**::
+
+            result = scat_op.synthesis(xnorm_256, nstep=3, n_up=1, NUM_EPOCHS=300)
+            # result.shape == (512, 512)
+
+        **Cross-covariance — component separation**::
+
+            result = scat_op.synthesis(
+                cmb_estimate,
+                reference=dust_template,
+                nstep=3,
+                iso_ang=True,
+                NUM_EPOCHS=300,
+            )
+
+        **Isotropic Gaussianised synthesis**::
+
+            result = scat_op.synthesis(
+                image_target,
+                to_gaussian=True,
+                iso_ang=True,
+                nstep=4,
+                NUM_EPOCHS=500,
+            )
+
+        Notes
+        -----
+        The optimiser is ``scipy.optimize.fmin_l_bfgs_b``, a quasi-Newton
+        method that uses a low-memory approximation of the inverse Hessian.
+        It converges in tens to a few hundred iterations for typical
+        scattering-covariance losses, far fewer than first-order methods.
+
+        For large maps (nside ≥ 256 for HEALPix, H/W ≥ 256 for 2D) always
+        use ``nstep ≥ 3``.  Starting directly at full resolution wastes
+        compute and converges poorly.
+        """
         import time
 
         import foscat.Synthesis as synthe
