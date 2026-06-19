@@ -6775,13 +6775,20 @@ class funct(FOC.FoCUS):
             
         if n_up > 0 and self.use_2D:
             # Extra upsampling steps: synthesise at 2^n_up times the target size
-            # while keeping the same jmax (same wavelet scales as the final main step).
-            # The result is a larger field whose local statistics match those of
-            # the original target — the field is "inscribed" in a 2^n_up x larger domain.
-            #
-            # Important: do NOT call clean_norm() here. The normalisation was set when
-            # ref was computed on the original target; reusing it keeps the loss
-            # comparison consistent across the upscaled iterations.
+            # while keeping the SAME Jmax as the original target (same wavelet scales,
+            # same P1_dic keys).  When Jmax=None, eval derives it from the map size,
+            # so on a 2N×2N map it would add one extra scale not present in P1_dic
+            # → KeyError.  We therefore pin Jmax to the value that was effective for
+            # the NxN target and pass it explicitly to The_lossH.
+            target_shape = tmp[nstep - 1]
+            target_side = np.min([target_shape.shape[1], target_shape.shape[2]])
+            n_up_jmax = int(np.log(target_side - self.KERNELSZ) / np.log(2))
+            if self.KERNELSZ > 3:
+                n_up_jmax -= 1
+            # Respect an explicit user-supplied Jmax if it is more restrictive
+            if l_jmax[nstep - 1] is not None:
+                n_up_jmax = min(n_up_jmax, l_jmax[nstep - 1])
+
             for up in range(n_up):
                 # Upsample current result by factor 2 in each spatial dimension
                 imap = self.up_grade(
@@ -6792,7 +6799,7 @@ class funct(FOC.FoCUS):
                 )
 
                 loss_up = synthe.Loss(
-                    The_lossH, self, ref, sref, use_variance, l_jmax[nstep - 1]
+                    The_lossH, self, ref, sref, use_variance, n_up_jmax
                 )
                 sy_up = synthe.Synthesis([loss_up])
 
