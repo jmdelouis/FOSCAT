@@ -1785,38 +1785,45 @@ class scat_cov:
 
         S4 = self.S4
         if self.S4 is not None:
+            # S4 has shape [a, b, c, L1, L2, L3].
+            # The correct isotropic reduction averages over the global orientation l1
+            # while keeping the two relative angles (Δl12, Δl13) fixed:
+            #   output[Δl12, Δl13] = (1/L) Σ_{l1} S4[l1, (l1+Δl12)%L, (l1+Δl13)%L]
+            # Result shape: [a, b, c, L, L]  (two relative-angle indices).
+            if norient not in self.backend._iso_orient3:
+                self.backend.calc_iso_orient3(norient)
+
             if self.backend.bk_is_complex(self.S4):
-                lmat = self.backend._iso_orient_C[norient]
-                lmat_T = self.backend._iso_orient_C_T[norient]
+                lmat3 = self.backend._iso_orient3_C[norient]
+                lmat3_T = self.backend._iso_orient3_C_T[norient]
             else:
-                lmat = self.backend._iso_orient[norient]
-                lmat_T = self.backend._iso_orient_T[norient]
+                lmat3 = self.backend._iso_orient3[norient]
+                lmat3_T = self.backend._iso_orient3_T[norient]
 
             shape = list(self.S4.shape)
+            # [a, b, c, L, L, L] → [a*b*c, L^3]  matmul [L^3, L^2]  → [a*b*c, L^2]
+            # → [a, b, c, L, L]
             S4 = self.backend.bk_reshape(
                 self.backend.backend.matmul(
                     self.backend.bk_reshape(
                         self.S4,
-                        [shape[0] * shape[1] * shape[2] * norient, norient * norient],
+                        [shape[0] * shape[1] * shape[2], norient * norient * norient],
                     ),
-                    lmat,
+                    lmat3,
                 ),
                 [shape[0], shape[1], shape[2], norient, norient],
             )
-            S4 = self.backend.bk_reduce_mean(S4, 3)
             if repeat:
+                # [a, b, c, L, L] → [a*b*c, L^2]  matmul [L^2, L^3]  → [a*b*c, L^3]
+                # → [a, b, c, L, L, L]
                 S4 = self.backend.bk_reshape(
-                    self.backend.bk_repeat(
+                    self.backend.backend.matmul(
                         self.backend.bk_reshape(
-                            S4, [shape[0] * shape[1] * shape[2], norient]
+                            S4,
+                            [shape[0] * shape[1] * shape[2], norient * norient],
                         ),
-                        norient,
-                        axis=0,
+                        lmat3_T,
                     ),
-                    [shape[0] * shape[1] * shape[2] * norient, norient],
-                )
-                S4 = self.backend.bk_reshape(
-                    self.backend.backend.matmul(S4, lmat_T),
                     [shape[0], shape[1], shape[2], norient, norient, norient],
                 )
 

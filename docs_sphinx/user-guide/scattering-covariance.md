@@ -130,15 +130,17 @@ stat = scat_op.eval(batch)   # scat_cov object with batch dimension
 
 `eval()` returns a `scat_cov` instance containing the coefficient arrays:
 
-| Attribute | Shape (HEALPix, batch=B) | Description |
-|-----------|--------------------------|-------------|
-| `S0` | `(B, nscale)` | Mean wavelet power per scale |
-| `S1` | `(B, nscale, NORIENT)` | First-order modulus mean per scale and orientation |
-| `S2` | `(B, nscale, NORIENT, nscale2, NORIENT)` | Second-order scattering mean (`nscale2 < nscale`) |
-| `S3` | `(B, nscale, NORIENT, nscale2, NORIENT)` | Cross-scale covariance (complex) |
-| `S3P` | `(B, nscale, NORIENT, NORIENT)` | Cross-orientation covariance (complex) |
-| `S4` | `(B, nscale, NORIENT, nscale2, NORIENT, nscale2, NORIENT)` | Second-order covariance (complex) |
+| Attribute | Shape | Description |
+|-----------|-------|-------------|
+| `S0` | `(B, Nj)` | Mean wavelet power per scale |
+| `S1` | `(B, Nj, L)` | First-order modulus mean — per scale `j` and orientation `l` |
+| `S2` | `(B, Nj1, Nj2, L)` | Second-order scattering mean — pairs `(j1, j2)` with `j2 ≤ j1`, one orientation `l` |
+| `S3` | `(B, Nj1, Nj2, L, L)` | Cross-scale covariance — pairs `(j1, j2)`, two orientations `(l1, l2)` |
+| `S3P` | `(B, Nj1, Nj2, L, L)` | Cross-orientation covariance — same shape as S3 |
+| `S4` | `(B, Nj1, Nj2, L, L, L)` | Second-order cross-scale covariance — scale triplets, three orientations `(l1, l2, l3)` |
 | `numel` | int | Total number of real-valued coefficients after flattening |
+
+`B` = batch size, `Nj*` = number of active scale (pairs/triplets), `L` = `NORIENT`.
 
 ### Arithmetic
 
@@ -148,6 +150,60 @@ stat = scat_op.eval(batch)   # scat_cov object with batch dimension
 diff = stat_a - stat_b      # difference
 sq   = diff ** 2            # element-wise square
 loss = sq.reduce_mean_batch(sq)  # scalar per batch element → mean over coefficients
+```
+
+### Isotropic angular averaging — `iso_mean` / `iso_ang`
+
+For statistically isotropic fields, only the **relative** orientation between wavelet
+pairs matters, not the absolute angle.  `iso_mean()` reduces the orientation axes
+by averaging over all global rotations, keeping only rotationally-invariant
+combinations.
+
+```python
+stat_iso = stat.iso_mean()          # reduce to isotropic descriptors
+stat_full = stat.iso_mean(repeat=True)  # reduce then broadcast back to original shape
+```
+
+The reduction is different for each statistic:
+
+**S1, S2** — shape `(..., L)` → `(...)`:
+
+Simple mean over the single orientation axis:
+
+$$S_1^\text{iso}[j] = \frac{1}{L}\sum_{l=0}^{L-1} S_1[j,\, l]$$
+
+**S3, S3P** — shape `(..., L, L)` → `(..., L)`:
+
+Only the angular difference $\Delta l = l_2 - l_1 \bmod L$ is invariant.
+The output index is $\Delta l$:
+
+$$S_3^\text{iso}[j_1,j_2,\,\Delta l] = \frac{1}{L}\sum_{l_1=0}^{L-1} S_3\!\left[j_1,j_2,\;l_1,\;(l_1+\Delta l)\bmod L\right]$$
+
+The $L$ output values correspond to angular separations $\Delta l \cdot \pi/L \in \{0, \pi/L, \ldots, (L-1)\pi/L\}$.
+
+**S4** — shape `(..., L, L, L)` → `(..., L, L)`:
+
+S4 has three orientation indices $(l_1, l_2, l_3)$, one per scale in the triplet.
+The two invariant quantities are both pairwise differences relative to $l_1$:
+
+$$\Delta l_{12} = (l_2 - l_1)\bmod L, \qquad \Delta l_{13} = (l_3 - l_1)\bmod L$$
+
+$$S_4^\text{iso}[j_1,j_2,j_3,\,\Delta l_{12},\,\Delta l_{13}]
+= \frac{1}{L}\sum_{l_1=0}^{L-1}
+  S_4\!\left[l_1,\;(l_1+\Delta l_{12})\bmod L,\;(l_1+\Delta l_{13})\bmod L\right]$$
+
+Result shape: `(..., L, L)` — a $L\times L$ matrix of relative-angle pairs.
+This is implemented via the `_iso_orient3` matrix in `BkBase.calc_iso_orient3`.
+
+**Usage with `iso_ang=True` in synthesis:**
+
+```python
+# Compute statistics and immediately reduce to isotropic descriptors
+stat = scat_op.eval(x, norm='auto')
+stat_iso = stat.iso_mean()   # S1,S2 → (...), S3,S3P → (...,L), S4 → (...,L,L)
+
+# Use iso_ang directly in synthesis:
+result = scat_op.synthesis(xnorm, iso_ang=True, NUM_EPOCHS=300)
 ```
 
 ### Serialisation

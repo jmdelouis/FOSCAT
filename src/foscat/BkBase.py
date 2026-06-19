@@ -16,6 +16,11 @@ class BackendBase:
         self._iso_orient_T = {}
         self._iso_orient_C = {}
         self._iso_orient_C_T = {}
+        # 3-orientation averaging matrix for S4
+        self._iso_orient3 = {}
+        self._iso_orient3_T = {}
+        self._iso_orient3_C = {}
+        self._iso_orient3_C_T = {}
         self._fft_1_orient = {}
         self._fft_1_orient_C = {}
         self._fft_2_orient = {}
@@ -125,6 +130,43 @@ class BackendBase:
         )
         self._iso_orient_C_T[norient] = self.bk_complex(
             self._iso_orient_T[norient], 0 * self._iso_orient_T[norient]
+        )
+
+    def calc_iso_orient3(self, norient):
+        """Build the averaging matrix for 3-orientation isotropic reduction (S4).
+
+        S4 has shape [..., L1, L2, L3].  Under a global rotation by δ the three
+        orientation indices shift together: l_k → (l_k + δ) mod L.  The only
+        rotationally-invariant quantities are the two *relative* angles
+
+            Δl12 = (l2 - l1) mod L
+            Δl13 = (l3 - l1) mod L
+
+        The forward matrix (shape [L^3, L^2]) maps the flat (l1, l2, l3) index
+        to the flat (Δl12, Δl13) index with weight 1/L:
+
+            output[Δl12, Δl13] = (1/L) Σ_{l1} input[l1, (l1+Δl12)%L, (l1+Δl13)%L]
+
+        The transpose matrix (shape [L^2, L^3], weight L·tmpᵀ) is the pseudo-
+        inverse used by the ``repeat=True`` path to reconstruct a full
+        [..., L, L, L] tensor from the [..., L, L] isotropic representation.
+        """
+        L = norient
+        tmp = np.zeros([L * L * L, L * L])
+        for l1 in range(L):
+            for dl12 in range(L):
+                for dl13 in range(L):
+                    l2 = (l1 + dl12) % L
+                    l3 = (l1 + dl13) % L
+                    tmp[l1 * L * L + l2 * L + l3, dl12 * L + dl13] = 1.0 / L
+
+        self._iso_orient3[norient] = self.bk_constant(self.bk_cast(tmp))
+        self._iso_orient3_T[norient] = self.bk_constant(self.bk_cast(L * tmp.T))
+        self._iso_orient3_C[norient] = self.bk_complex(
+            self._iso_orient3[norient], 0 * self._iso_orient3[norient]
+        )
+        self._iso_orient3_C_T[norient] = self.bk_complex(
+            self._iso_orient3_T[norient], 0 * self._iso_orient3_T[norient]
         )
 
     def calc_fft_orient(self, norient, nharm, imaginary):
