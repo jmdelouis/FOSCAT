@@ -1009,42 +1009,42 @@ class FoCUS:
     # --------------------------------------------------------
     def fill_1d(self, i_arr, nullval=0):
         arr = i_arr.copy()
-        # Indices des éléments non nuls
+        # Indices of non-zero elements
         non_zero_indices = np.where(arr != nullval)[0]
 
-        # Indices de tous les éléments
+        # Indices of all elements
         all_indices = np.arange(len(arr))
 
-        # Interpoler linéairement en utilisant np.interp
+        # Linearly interpolate using np.interp
         # np.interp(x, xp, fp) : x sont les indices pour lesquels on veut obtenir des valeurs
-        # xp sont les indices des données existantes, fp sont les valeurs des données existantes
+        # xp are the indices of existing data, fp are the values of existing data
         interpolated_values = np.interp(
             all_indices, non_zero_indices, arr[non_zero_indices]
         )
 
-        # Mise à jour du tableau original
+        # Update the original array
         arr[arr == nullval] = interpolated_values[arr == nullval]
 
         return arr
 
     def fill_2d(self, i_arr, nullval=0):
         arr = i_arr.copy()
-        # Créer une grille de coordonnées correspondant aux indices du tableau
+        # Create a coordinate grid matching the array indices
         x, y = np.indices(arr.shape)
 
-        # Extraire les coordonnées des points non nuls ainsi que leurs valeurs
+        # Extract coordinates of non-zero points and their values
         non_zero_points = np.array((x[arr != nullval], y[arr != nullval])).T
         non_zero_values = arr[arr != nullval]
 
-        # Extraire les coordonnées des points nuls
+        # Extract coordinates of zero points
         zero_points = np.array((x[arr == nullval], y[arr == nullval])).T
 
-        # Interpolation linéaire
+        # Linear interpolation
         interpolated_values = griddata(
             non_zero_points, non_zero_values, zero_points, method="linear"
         )
 
-        # Remplacer les valeurs nulles par les valeurs interpolées
+        # Replace zero values with interpolated values
         arr[arr == nullval] = interpolated_values
 
         return arr
@@ -1057,19 +1057,19 @@ class FoCUS:
 
         itt = 0
         while null_indices.shape[0] > 0 and itt < nmax:
-            # Trouver les coordonnées theta, phi pour les pixels nuls
+            # Find theta, phi coordinates for zero pixels
             theta, phi = hp.pix2ang(nside, null_indices)
 
             # Interpoler les valeurs en utilisant les pixels voisins
-            # La fonction get_interp_val peut être utilisée pour obtenir les valeurs interpolées
-            # pour des positions données en theta et phi.
+            # get_interp_val can be used to obtain interpolated values
+            # at positions given in theta and phi.
             i_idx = hp.get_all_neighbours(nside, theta, phi)
 
             i_w = (map[i_idx] != nullval) * (i_idx != -1)
             vv = np.sum(i_w, 0)
             interpolated_values = np.sum(i_w * map[i_idx], 0)
 
-            # Remplacer les valeurs nulles par les valeurs interpolées
+            # Replace zero values with interpolated values
             map[null_indices[vv > 0]] = interpolated_values[vv > 0] / vv[vv > 0]
 
             null_indices = np.where(map == nullval)[0]

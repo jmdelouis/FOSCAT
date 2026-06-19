@@ -1,4 +1,4 @@
-# `synthesis` — Guide complet des options
+# `synthesis` — Complete parameter reference
 
 **Module:** `foscat.scat_cov`, `foscat.scat_cov2D`, `foscat.scat_cov1D`
 
@@ -21,6 +21,9 @@ result = scat_op.synthesis(
     grd_mask      = None,
     in_mask       = None,
     iso_ang       = False,
+    fft_ang       = False,
+    fft_nharm     = 1,
+    fft_imaginary = True,
     EVAL_FREQUENCY= 100,
     NUM_EPOCHS    = 300,
     scat_cov_method = 'eval',
@@ -317,6 +320,75 @@ Whether to use **isotropically averaged** statistics in the loss.
 ```python
 # Isotropic synthesis — suitable for CMB-like fields
 result = scat_op.synthesis(xnorm, iso_ang=True, nstep=3)
+```
+
+```{note}
+`iso_ang` and `fft_ang` should not be used together. `iso_ang` is the harder
+reduction (mean only); `fft_ang` keeps angular variation and is the recommended
+soft alternative.
+```
+
+---
+
+### `fft_ang` *(default: False)* / `fft_nharm` *(default: 1)* / `fft_imaginary` *(default: True)*
+
+A **softer alternative to `iso_ang`** that compresses the orientation axes to
+their first Fourier harmonics instead of collapsing them to a single mean.
+The three parameters work together:
+
+| Parameter | Type | Default | Role |
+|-----------|------|---------|------|
+| `fft_ang` | bool | `False` | Enable Fourier angular compression |
+| `fft_nharm` | int | `1` | Number of harmonics to keep beyond DC |
+| `fft_imaginary` | bool | `True` | Keep both cos and sin components |
+
+#### What `fft_ang=True` keeps (with `fft_nharm=1, fft_imaginary=True`)
+
+For each orientation axis L, three coefficients are computed:
+
+| Output index | Content | Physical meaning |
+|---|---|---|
+| `[…, 0]` | DC = $\frac{1}{L}\sum_l S[l]$ | Same as `iso_ang` — global mean |
+| `[…, 1]` | $\sum_l \cos\!\bigl(\tfrac{2\pi l}{L}\bigr)\cdot S[l]$ | In-phase first harmonic |
+| `[…, 2]` | $\sum_l \sin\!\bigl(\tfrac{2\pi l}{L}\bigr)\cdot S[l]$ | Quadrature first harmonic |
+
+The **amplitude** $A_1 = \sqrt{c_1^2 + s_1^2}$ measures the strength of the
+dominant angular variation and is **rotation-invariant** (independent of the
+absolute orientation of the image). This is why `fft_imaginary=True` is
+strongly recommended: with only the cosine (`fft_imaginary=False`) a field
+oriented at 90° gives $c_1 \approx 0$ even when strongly anisotropic.
+
+#### Shapes after `fft_ang(nharm=1, imaginary=True)` → `nout = 3`
+
+| Statistic | Before | After | Factor |
+|-----------|--------|-------|--------|
+| S1, S2 | `(…, L)` | `(…, 3)` | ×3/L |
+| S3, S3P | `(…, L, L)` | `(…, 3, 3)` | ×9/L² |
+| S4 | `(…, L, L, L)` | `(…, 3, 3, 3)` | ×27/L³ |
+
+For S3/S4 the projection is the **tensor product** of independent 1D Fourier
+projections on each orientation axis. For S3 with L=4 this reduces from 16 to 9
+orientation coefficients per scale pair, keeping the full angular power.
+
+#### `fft_ang` vs `iso_ang` — choosing the right reduction
+
+| | `iso_ang=True` | `fft_ang=True` |
+|---|---|---|
+| S1/S2 output | scalar (1 value) | 3 values (DC + cos + sin) |
+| Angular information kept | mean only | mean + amplitude + phase of dominant mode |
+| Number of constraints | minimum | moderate (×3 per axis vs ×1) |
+| Suited for | strictly isotropic fields | fields with preferred but variable orientation |
+| Cost per iteration | lowest | slightly higher |
+
+```python
+# fft_ang synthesis — preserves angular variation amplitude
+result = scat_op.synthesis(xnorm, fft_ang=True, nstep=3, NUM_EPOCHS=300)
+
+# Keep two harmonics (DC + first two angular modes):
+result = scat_op.synthesis(xnorm, fft_ang=True, fft_nharm=2, nstep=3)
+
+# With fft_imaginary=False only if the image orientation is known and fixed:
+result = scat_op.synthesis(xnorm, fft_ang=True, fft_imaginary=False, nstep=3)
 ```
 
 ---

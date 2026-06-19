@@ -213,12 +213,12 @@ class PlanarUNet(nn.Module):
     ) -> torch.Tensor:
         """Memory-safe prediction.
         - Streams mini-batches avec torch.inference_mode() + AMP optionnel.
-        - Déplace chaque batch de sorties sur `out_device` (CPU par défaut) pour libérer la VRAM.
-        - Vérifie et explicite les erreurs de shape.
+        - Moves each output batch to `out_device` (CPU by default) to free VRAM.
+        - Checks and clarifies shape errors.
         """
         self.eval()
 
-        # --- checks & normalisation d'entrée ---
+        # --- input checks & normalisation ---
         x = x if torch.is_tensor(x) else torch.as_tensor(x)
         if x.ndim != 4:
             raise ValueError(f"predict expects (N,C,H,W), got {tuple(getattr(x,'shape',()))}")
@@ -229,7 +229,7 @@ class PlanarUNet(nn.Module):
             H, W = int(x.shape[-2]), int(x.shape[-1])
             return torch.empty((0, self.out_channels, H, W), device=out_device or self.device)
 
-        # --- préparation ---
+        # --- preparation ---
         dtype_map = {'float32': torch.float32, 'float16': torch.float16}
         out_dtype_t = dtype_map[out_dtype]
         use_cuda = (self.device.type == 'cuda')
@@ -246,7 +246,7 @@ class PlanarUNet(nn.Module):
             except Exception:
                 pass
 
-        # --- inférence batch par batch ---
+        # --- batch-by-batch inference ---
         out_list: List[torch.Tensor] = []
         with torch.inference_mode():
             ctx = (torch.cuda.amp.autocast() if (amp and use_cuda) else nullcontext())
@@ -254,7 +254,7 @@ class PlanarUNet(nn.Module):
                 xb = x[i:i+batch_size].to(self.device, dtype=self.dtype, non_blocking=True)
                 with ctx:
                     yb = self.forward(xb)
-                # Déplacer la sortie vers l'appareil voulu (CPU par défaut)
+                # Move output to the target device (CPU by default)
                 yb = yb.to(out_device, dtype=out_dtype_t) if out_device is not None else yb.to(dtype=out_dtype_t)
                 out_list.append(yb)
                 del xb, yb
@@ -314,9 +314,9 @@ def fit(
         verbose: bool = True,
         optimizer: Literal['ADAM', 'LBFGS'] = 'ADAM',
     ) -> dict:
-    """Training loop *miroir* de `healpix_unet_torch.fit`, adapté aux images 2D.
+    """Training loop mirroring `healpix_unet_torch.fit`, adapted for 2D images.
 
-    - Entrées fixes: tensors/ndarrays de même taille (B, C, H, W) avec H=3*nside, W=4*nside
+    - Fixed inputs: tensors/ndarrays of the same size (B, C, H, W) with H=3*nside, W=4*nside
     - Perte: MSE (regression) / BCE(BCEWithLogits si final_activation='none') / CrossEntropy (multiclasses)
     - Optimiseur: ADAM ou LBFGS avec closure
     - Logs: renvoie {"loss": history}

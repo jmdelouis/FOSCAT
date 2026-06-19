@@ -10,7 +10,7 @@ import foscat.BkBase as BackendBase
 class BkTorch(BackendBase.BackendBase):
 
     def __init__(self, *args, **kwargs):
-        # Impose que use_2D=True pour la classe scat
+        # Force use_2D=True for the scat class
         super().__init__(name="torch", *args, **kwargs)
         self.backend = torch
         self.device = (
@@ -104,25 +104,25 @@ class BkTorch(BackendBase.BackendBase):
         a, N1, N2, b = tim.shape
         N1_2 = N1 // 2
         N2_2 = N2 // 2
-        # On ignore la dernière ligne/colonne si N1/N2 sont impairs
+        # Ignore last row/column if N1/N2 are odd
         x = tim[:, :2*N1_2, :2*N2_2, :]  # [a, 2*N1_2, 2*N2_2, b]
 
-        # Regrouper les blocs 2x2 -> construire une dernière dimension de taille 4
-        # Réarrange: [a, N1_2, 2, N2_2, 2, b] -> [a, N1_2, N2_2, b, 4]
+        # Group 2x2 blocks -> build a last dimension of size 4
+        # Rearrange: [a, N1_2, 2, N2_2, 2, b] -> [a, N1_2, N2_2, b, 4]
         x = x.reshape(a, N1_2, 2, N2_2, 2, b).permute(0, 1, 3, 5, 2, 4).reshape(a, N1_2, N2_2, b, 4)
 
         if not torch.is_complex(x):
-            # Réel : médiane le long de la dernière dim (taille 4)
+            # Real: median along the last dim (size 4)
             med, _ = torch.median(x, dim=-1)      # [a, N1_2, N2_2, b]
             return med
         else:
-            # Complexe : trier par module puis prendre l'élément de rang 1 (médiane inférieure)
+            # Complex: sort by magnitude then take rank-1 element (lower median)
             mags = x.abs()                        # [a, N1_2, N2_2, b, 4]
-            sorted_mag, idx = torch.sort(mags, dim=-1)   # idx: indices triés par |.| croissant
-            # Récupérer l'indice de médiane inférieure (pour 4 éléments -> position 1)
+            sorted_mag, idx = torch.sort(mags, dim=-1)   # idx: indices sorted by |.| ascending
+            # Retrieve lower-median index (for 4 elements -> position 1)
             med_rank = 1
             gather_idx = idx[..., med_rank:med_rank+1]   # [a, N1_2, N2_2, b, 1]
-            # Sélectionner la valeur complexe correspondante
+            # Select the corresponding complex value
             med = torch.gather(x, dim=-1, index=gather_idx).squeeze(-1)   # [a, N1_2, N2_2, b]
             return med
 
@@ -178,7 +178,7 @@ class BkTorch(BackendBase.BackendBase):
                 data,
                 cell_ids,
                 *,
-                reduce: str = "mean",          # <-- NEW: "mean" (par défaut) ou "max"
+                reduce: str = "mean",          # <-- NEW: "mean" (default) or "max"
                 padded: bool = False,
                 fill_value: float = float("nan"),
     ):
@@ -201,7 +201,7 @@ class BkTorch(BackendBase.BackendBase):
 
         Returns
             -------
-            # idem à ta doc existante, mais la valeur est une moyenne (reduce="mean")
+            # same as existing doc, but the value is a mean (reduce="mean")
             # ou un maximum (reduce="max").
         """
         
@@ -223,7 +223,7 @@ class BkTorch(BackendBase.BackendBase):
 
         # Utilitaires pour 'max' (fallback si scatter_reduce_ indisponible)
         def _segment_max(vals_flat, idx_flat, out_size):
-            """Retourne out[out_idx] = max(vals[ idx==out_idx ]), vectorisé si possible."""
+            """Return out[out_idx] = max(vals[ idx==out_idx ]), vectorised when possible."""
             # PyTorch >= 1.12 / 2.0: scatter_reduce_ disponible
             if hasattr(torch.Tensor, "scatter_reduce_"):
                 out = torch.full((out_size,), -float("inf"),
@@ -236,7 +236,7 @@ class BkTorch(BackendBase.BackendBase):
             uniq = torch.unique(idx_flat)
             for u in uniq.tolist():
                 m = (idx_flat == u)
-                # éviter max() sur tensor vide
+                # avoid max() on empty tensor
                 if m.any():
                     out[u] = torch.max(vals_flat[m])
             return out

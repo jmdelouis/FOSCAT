@@ -197,7 +197,7 @@ class HealpixUNet(nn.Module):
             self.enc_w1.append(nn.Parameter(w1))
             self.enc_bn1.append(self._norm_1d(outC, kind="group"))
 
-            # conv2: outC -> outC  (entrée = total outC ; noyau (outC, outC_g, P))
+            # conv2: outC -> outC  (input = total outC; kernel (outC, outC_g, P))
             w2 = torch.empty(outC, outC_g, self.KERNELSZ * self.KERNELSZ)
             nn.init.kaiming_uniform_(w2.view(outC * outC_g, -1), a=np.sqrt(5))
             self.enc_w2.append(nn.Parameter(w2))
@@ -224,8 +224,8 @@ class HealpixUNet(nn.Module):
 
             upC = self.chanlist[level + 1] if level + 1 < depth else self.chanlist[level]
             skipC = self.chanlist[level]
-            inC_dec  = upC + skipC           # total en entrée
-            outC_dec = skipC                 # total en sortie (ce que tu avais déjà)
+            inC_dec  = upC + skipC           # total input channels
+            outC_dec = skipC                 # total output channels
 
             if outC_dec % self.G != 0:
                 raise ValueError(f"decoder outC at level {level} = {outC_dec} must be divisible by G={self.G}")
@@ -1131,9 +1131,9 @@ def fit(
                                 yb = yb.squeeze(0)           # -> (N_i,)
                             elif yb.dim() != 1:
                                 raise ValueError("For multiclass CE, y[i] must be (N,) or (1,N)")
-                            # le critère CE recevra (1,C_out,N_i) et (N_i,)
+                            # CE criterion receives (1,C_out,N_i) and (N_i,)
                         else:
-                            # régression / binaire: cible de forme (1, C_out, N_i)
+                            # regression / binary: target of shape (1, C_out, N_i)
                             if yb.dim() == 2:
                                 yb = yb.unsqueeze(0)
                             elif yb.dim() != 3 or yb.shape[0] != 1:
@@ -1156,7 +1156,7 @@ def fit(
                             for i in range(len(xs)):
                                 xb, yb, cb_np = _prep_xyc(i)
                                 preds = model(xb, cell_ids=cb_np) if cb_np is not None else model(xb)
-                                # adapter la cible à la sortie
+                                # adapt target to match output
                                 if seg_multiclass:
                                     loss_i = criterion(preds, yb)       # preds: (1,C_out,N_i), yb: (N_i,)
                                 else:

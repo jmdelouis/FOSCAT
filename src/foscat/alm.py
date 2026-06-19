@@ -193,14 +193,14 @@ class alm:
 
     def recurrence_fn(self, states, inputs):
         """
-        Fonction de récurrence pour tf.scan.
+        Recurrence function for tf.scan.
         states: un tuple (U_{n-1}, U_{n-2}) de forme [m]
-        inputs: un tuple (a_n(x), b_n) où a_n(x) est de forme [m]
+        inputs: a tuple (a_n(x), b_n) where a_n(x) has shape [m]
         """
         U_prev, U_prev2 = states
         a_n, b_n = inputs  # a_n est de forme [m], b_n est un scalaire
         U_n = a_n * U_prev - b_n * U_prev2
-        return (U_n, U_prev)  # Avancer les états
+        return (U_n, U_prev)  # Advance the states
 
     # Calcul des P_{lm}(x) pour tout l inclus dans [m,lmax]
     def compute_legendre_m(self, x, m, lmax, nside):
@@ -211,7 +211,7 @@ class alm:
             self.log(1 + np.arange(2 * m))
         )
 
-        # Étape 1 : Calcul de P_{mm}(x)
+        # Step 1: Compute P_{mm}(x)
         if m == 0:
             Pmm = 1.0
         else:
@@ -224,12 +224,12 @@ class alm:
         if m == lmax:
             return result * np.exp(ratio) * np.sqrt(4 * np.pi) + 0j
 
-        # Étape 2 : Calcul de P_{l+1, m}(x)
+        # Step 2: Compute P_{l+1, m}(x)
         result[1] = x * (2 * m + 1) * result[0]
 
         ratio[1, 0] = ratio[0, 0] - 0.5 * self.log(2 * m + 1)
 
-        # Étape 3 : Récurence pour l > m + 1
+        # Step 3: Recurrence for l > m + 1
         for ell in range(m + 2, lmax + 1):
             result[ell - m] = (
                 (2 * ell - 1) * x * result[ell - m - 1]
@@ -262,10 +262,10 @@ class alm:
             )
             return self.backend.bk_complex(v, 0 * v)
 
-        # Étape 2 : Calcul de P_{l+1, m}(x)
+        # Step 2: Compute P_{l+1, m}(x)
         result[1] = x * self.A[nside, m][1] * result[0]
 
-        # Étape 3 : Récurence pour l > m + 1
+        # Step 3: Recurrence for l > m + 1
         for ell in range(m + 2, lmax + 1):
             result[ell - m] = (
                 self.A[nside, m][ell - m] * x * result[ell - m - 1]
@@ -293,7 +293,7 @@ class alm:
             )
             return self.backend.bk_complex(v, 0 * v)
 
-        # Étape 2 : Calcul de P_{l+1, m}(x)
+        # Step 2: Compute P_{l+1, m}(x)
         U_1 = x * self.A[nside, m][1] * U_0
         if m == lmax - 1:
             result = tf.concat(
@@ -308,12 +308,12 @@ class alm:
         a_values = self.backend.bk_expand_dims(
             self.A[nside, m], 1
         ) * self.backend.bk_expand_dims(x, 0)
-        # Initialiser les états avec (U_1, U_0) pour chaque m
+        # Initialise states with (U_1, U_0) for each m
         initial_states = (U_1, U_0)
         inputs = (a_values[2:], self.B[nside, m][2:])
         # Appliquer tf.scan
         result = tf.scan(self.recurrence_fn, inputs, initializer=initial_states)
-        # Le premier élément de result contient les U[n]
+        # The first element of result contains U[n]
         result = tf.concat(
             [
                 self.backend.bk_expand_dims(U_0, 0),
@@ -323,7 +323,7 @@ class alm:
             axis=0,
         )
         """
-        # Étape 3 : Récurence pour l > m + 1
+        # Step 3: Recurrence for l > m + 1
         for l in range(m + 2, lmax+1):
             result[l-m]  = self.A[nside,m][l-m] * x * result[l-m-1] - self.B[nside,m][l-m] *  result[l-m-2]
 
@@ -345,7 +345,7 @@ class alm:
         ratio[1, 0] = self.double_factorial_log(2 * m - 1) - 0.5 * np.sum(
             self.log(1 + np.arange(2 * m))
         )
-        # Étape 1 : Calcul de P_{mm}(x)
+        # Step 1: Compute P_{mm}(x)
         if m == 0:
             Pmm = 1.0
         else:
@@ -362,12 +362,12 @@ class alm:
             ).reshape(lmax + 1 - m, 1)
 
         else:
-            # Étape 2 : Calcul de P_{l+1, m}(x)
+            # Step 2: Compute P_{l+1, m}(x)
             result[2] = co_th * (2 * m + 1) * result[0]
 
             ratio[2, 0] = ratio[1, 0] - self.log(2 * m + 1) / 2
 
-            # Étape 3 : Récurence pour l > m + 1
+            # Step 3: Recurrence for l > m + 1
             for ell in range(m + 2, lmax + 1):
                 result[ell - m + 1] = (
                     (2 * ell - 1) * co_th * result[ell - m]

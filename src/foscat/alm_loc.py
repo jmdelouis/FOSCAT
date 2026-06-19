@@ -196,8 +196,8 @@ class alm_loc(_alm):
             scale = np.sqrt(2.0 * l_vals + 1.0)
 
             # convertir scale en backend tensor (torch) sur le bon device
-            scale_t = self.backend.bk_cast(scale)  # ou un helper équivalent
-            # reshape pour broadcast si nécessaire: [1, L] ou [L]
+            scale_t = self.backend.bk_cast(scale)  # or an equivalent helper
+            # reshape for broadcast if needed: [1, L] or [L]
             shape = (1,) * (tmp.ndim - 1) + (scale_t.shape[0],)
             scale_t = scale_t.reshape(shape)
             

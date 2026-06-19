@@ -168,7 +168,7 @@ class CNN:
         self.x = self.scat_operator.backend.bk_cast(x)
         
     def calc_matrix_first_layer(self,noise_map):
-        # Décalage circulaire par matrice de permutation
+        # Circular shift via permutation matrix
         def circ_shift_matrix(N,k):
             return np.roll(np.eye(N), shift=-k, axis=1)
         

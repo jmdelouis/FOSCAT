@@ -457,9 +457,9 @@ class foscat_backend:
             lx = x.permute(0, 3, 1, 2)
             wx = (
                 self.backend.from_numpy(w).to(self.torch_device).permute(3, 2, 0, 1)
-            )  # de (5, 5, 1, 4) à (4, 1, 5, 5)
+            )  # from (5, 5, 1, 4) to (4, 1, 5, 5)
 
-            # Calculer le padding symétrique
+            # Compute symmetric padding
             kx, ky = w.shape[0], w.shape[1]
 
             # Appliquer le padding

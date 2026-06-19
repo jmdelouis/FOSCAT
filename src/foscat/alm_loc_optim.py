@@ -1,44 +1,44 @@
 """
 alm_loc_optim.py
 ================
-Variante optimisée de alm_loc pour le calcul des harmoniques sphériques
-sur un domaine HEALPix restreint.
+Optimised variant of alm_loc for spherical-harmonic computation
+on a restricted HEALPix domain.
 
-Deux optimisations clés par rapport à alm_loc
+Two key optimisations relative to alm_loc
 ----------------------------------------------
-1.  Restriction en m  (axe longitude)
-    Pour chaque ring r avec cnt pixels sur N_ring totaux :
-      - ring plein   : mode m valide si  (m % N_ring) <= N_ring // 2
-      - ring partiel : mode m valide si  (m % N_ring) <= cnt // 2   (Nyquist partiel)
-    Pour chaque m, seuls les rings satisfaisant ce critère alimentent
-    la projection de Legendre.
+1.  Restriction in m  (longitude axis)
+    For each ring r with cnt pixels out of N_ring total:
+      - full ring    : mode m valid if  (m % N_ring) <= N_ring // 2
+      - partial ring : mode m valid if  (m % N_ring) <= cnt // 2   (partial Nyquist)
+    For each m, only rings satisfying this criterion feed
+    the Legendre projection.
 
-2.  Restriction en l  (axe latitude)
-    Avec R_m rings valides pour le mode m, le système de Legendre dispose
-    de R_m équations.  On ne peut contraindre au plus que R_m degrés ell.
-    On pose donc :
+2.  Restriction in l  (latitude axis)
+    With R_m valid rings for mode m, the Legendre system has R_m
+    equations.  At most R_m ell degrees can be constrained.
+    Hence:
         lmax_eff(m) = min(lmax,  m + R_m - 1)
-    et on ne calcule les polynômes de Legendre que jusqu'à ce plafond.
+    and Legendre polynomials are computed only up to this ceiling.
 
-Économie résultante
+Resulting savings
 -------------------
 La projection de Legendre passe de O(R × (lmax - m + 1))
-à O(R_m × (lmax_eff(m) - m + 1)), ce qui est quadratiquement plus
+to O(R_m × (lmax_eff(m) - m + 1)), which is quadratically more
 favorable pour les petits domaines.
 
-API publique (miroir de alm_loc)
+Public API (mirroring alm_loc)
 ---------------------------------
 analyze_domain(nside, cell_ids, nest, lmax)
     → rings_used, counts, sizes, valid_idx_per_m, lmax_eff_per_m, m_valid
 
 map2alm_loc_optim(im, nside, cell_ids, nest, lmax)
-    → alm_per_m, m_valid, lmax_eff_per_m   (alm creux)
+    → alm_per_m, m_valid, lmax_eff_per_m   (sparse alm)
 
 anafast_loc_optim(im, nside, cell_ids, nest, lmax)
     → cl [lmax+1], m_count [lmax+1]
 
 sparse_to_dense(alm_per_m, m_valid, lmax_eff_per_m, lmax)
-    → vecteur alm dense (zéros pour les modes non calculés),
+    → dense alm vector (zeros for uncalculated modes),
       compatible avec la mise en page de alm_loc.map2alm_loc
 """
 
@@ -60,19 +60,19 @@ class alm_loc_optim(alm_loc):
     def analyze_domain(self, nside: int, cell_ids, nest: bool = False,
                        lmax: int = None):
         """
-        Pré-calcule l'ensemble des modes (l, m) qui sont effectivement
-        contraints par le patch partiel décrit par cell_ids.
+        Pre-compute the set of (l, m) modes that are effectively
+        constrained by the partial patch described by cell_ids.
 
-        Paramètres
+        Parameters
         ----------
-        nside    : résolution HEALPix
+        nside    : HEALPix resolution
         cell_ids : indices de pixels (ring ou nested)
         nest     : True si cell_ids utilise l'ordre NESTED
-        lmax     : multipôle maximal (défaut : min(self.lmax, 3*nside-1))
+        lmax     : maximum multipole (default: min(self.lmax, 3*nside-1))
 
-        Retourne
-        --------
-        rings_used       : ndarray int32 [R]    indices des rings présents
+        Returns
+        -------
+        rings_used       : ndarray int32 [R]    indices of present rings
         counts           : ndarray int32 [R]    nb de pixels par ring
         sizes            : ndarray int32         N_ring pour chaque ring du nside
         valid_idx_per_m  : dict  m -> ndarray int32  indices dans rings_used
@@ -96,7 +96,7 @@ class alm_loc_optim(alm_loc):
             ring_idx_sorted, return_index=True, return_counts=True
         )
 
-        # N_ring pour chaque ring utilisé
+        # N_ring for each used ring
         Nrings = sizes[rings_used].astype(np.int64)   # [R]
         nyquist = (counts // 2).astype(np.int64)       # [R]  Nyquist partiel
         is_full = counts == Nrings                     # [R]  bool
@@ -106,10 +106,10 @@ class alm_loc_optim(alm_loc):
         m_valid: list = []
 
         for m in range(lmax + 1):
-            m_mod = (m % Nrings).astype(np.int64)     # fréquence aliasée [R]
+            m_mod = (m % Nrings).astype(np.int64)     # aliased frequency [R]
 
-            # Ring plein  : critère Nyquist FFT standard (m_mod <= N_ring/2)
-            # Ring partiel: critère Nyquist réduit      (m_mod <= cnt/2)
+            # Full ring   : standard FFT Nyquist criterion (m_mod <= N_ring/2)
+            # Partial ring: reduced Nyquist criterion          (m_mod <= cnt/2)
             valid_mask = (is_full & (m_mod <= Nrings // 2)) | \
                          (~is_full & (m_mod <= nyquist))
 
@@ -117,37 +117,37 @@ class alm_loc_optim(alm_loc):
 
             if valid.size > 0:
                 valid_idx_per_m[m] = valid
-                # Avec R_m rings on contraint au plus R_m degrés ell
+                # With R_m rings we constrain at most R_m ell degrees
                 lmax_eff_per_m[m] = int(min(lmax, m + valid.size - 1))
                 m_valid.append(m)
 
         return rings_used, counts, sizes, valid_idx_per_m, lmax_eff_per_m, m_valid
 
     # ================================================================== #
-    #  map -> alm creux (optimisé)                                        #
+    #  map -> sparse alm (optimised)                                      #
     # ================================================================== #
 
     def map2alm_loc_optim(self, im, nside: int, cell_ids,
                           nest: bool = False, lmax: int = None):
         """
-        Calcule les coefficients harmoniques sphériques sur un patch partiel,
-        en se limitant aux modes (l, m) effectivement contraints par la
-        couverture partielle du ciel.
+        Compute spherical-harmonic coefficients on a partial patch,
+        restricted to the (l, m) modes effectively constrained by the
+        partial sky coverage.
 
-        Paramètres
+        Parameters
         ----------
-        im       : [..., n_pixels]  valeurs de la carte sur le patch
-        nside    : résolution HEALPix
-        cell_ids : indices de pixels dans le patch
-        nest     : True si ordre NESTED
-        lmax     : multipôle maximal
+        im       : [..., n_pixels]  map values on the patch
+        nside    : HEALPix resolution
+        cell_ids : pixel indices in the patch
+        nest     : True if NESTED ordering
+        lmax     : maximum multipole
 
-        Retourne
-        --------
-        alm_per_m      : liste de tenseurs, un par m valide.
+        Returns
+        -------
+        alm_per_m      : list of tensors, one per valid m.
                          alm_per_m[i] a la forme [..., lmax_eff(m)-m+1]
                          pour m = m_valid[i]
-        m_valid        : list[int]   valeurs de m dans le même ordre
+        m_valid        : list[int]   m values in the same order
         lmax_eff_per_m : dict  m -> int
         """
         nside = int(nside)
@@ -168,12 +168,12 @@ class alm_loc_optim(alm_loc):
         rings_used, counts, sizes, valid_idx_per_m, lmax_eff_per_m, m_valid = \
             self.analyze_domain(nside, cell_ids, nest=nest, lmax=lmax)
 
-        # Transformée de Fourier par ring — identique à comp_tf_loc
+        # Fourier transform per ring — identical to comp_tf_loc
         # ft : [..., R, lmax+1]
         _, ft = self.comp_tf_loc(im, nside=nside, cell_ids=cell_ids,
                                  nest=nest, realfft=True, mmax=lmax)
 
-        # cos(theta) pour tous les rings utilisés
+        # cos(theta) for all used rings
         co_th_all = np.cos(self.ring_th(nside)[rings_used])   # [R]
 
         alm_per_m = []
@@ -181,13 +181,13 @@ class alm_loc_optim(alm_loc):
         for m in m_valid:
             vidx    = valid_idx_per_m[m]     # indices dans rings_used, [R_m]
             lmax_m  = lmax_eff_per_m[m]      # lmax effectif pour ce m
-            n_l     = lmax_m - m + 1         # nb de degrés ell calculés
+            n_l     = lmax_m - m + 1         # number of ell degrees computed
 
             co_th_m = co_th_all[vidx]        # [R_m]
 
-            # Polynômes de Legendre P_{lm}(cos θ) pour l = m..lmax_m
+            # Legendre polynomials P_{lm}(cos θ) for l = m..lmax_m
             # Forme : [n_l, R_m]
-            # On passe lmax_m au lieu de lmax → économie sur la récurrence
+            # Pass lmax_m instead of lmax → savings on the recurrence
             plm = self.compute_legendre_m(co_th_m, m, lmax_m, nside) \
                   / (12 * nside**2)
             plm_bk = self.backend.bk_cast(plm)   # [n_l, R_m]
@@ -197,13 +197,13 @@ class alm_loc_optim(alm_loc):
             ft_m = ft[..., vidx, m]
 
             # Projection : [..., n_l] = sum_{R_m} ft_m * P_{lm}
-            # ft_m étendu : [..., 1, R_m]  ×  plm [n_l, R_m]  → somme sur R_m
+            # extended ft_m: [..., 1, R_m]  ×  plm [n_l, R_m]  → sum over R_m
             tmp = self.backend.bk_reduce_sum(
                 self.backend.bk_expand_dims(ft_m, axis=-2) * plm_bk,
                 axis=-1
             )   # [..., n_l]
 
-            # Pondération sqrt(2l+1) (cohérente avec map2alm_loc)
+            # sqrt(2l+1) weighting (consistent with map2alm_loc)
             l_vals = np.arange(m, lmax_m + 1, dtype=np.float64)
             scale  = self.backend.bk_cast(np.sqrt(2.0 * l_vals + 1.0))
             scale  = scale.reshape((1,) * (tmp.ndim - 1) + (n_l,))
@@ -217,27 +217,27 @@ class alm_loc_optim(alm_loc):
         return alm_per_m, m_valid, lmax_eff_per_m
 
     # ================================================================== #
-    #  Conversion creux -> dense (compatibilité avec alm_loc)             #
+    #  Sparse -> dense conversion (compatibility with alm_loc)            #
     # ================================================================== #
 
     def sparse_to_dense(self, alm_per_m, m_valid, lmax_eff_per_m, lmax: int):
         """
         Convertit l'alm creux (sortie de map2alm_loc_optim) vers le vecteur
-        dense plat utilisé par alm_loc.map2alm_loc.
+        flat dense array used by alm_loc.map2alm_loc.
 
         Format dense : [m=0: l=0..lmax | m=1: l=1..lmax | …]
-        Les modes non calculés sont remplis de zéros.
+        Uncalculated modes are filled with zeros.
 
-        Paramètres
+        Parameters
         ----------
         alm_per_m      : liste de tenseurs (sortie de map2alm_loc_optim)
         m_valid        : list[int]
         lmax_eff_per_m : dict m -> int
-        lmax           : multipôle maximal utilisé lors du calcul
+        lmax           : maximum multipole used during computation
 
         Retourne
         --------
-        out : tenseur [..., total_alm]  dtype et device identiques à l'entrée
+        out : tensor [..., total_alm]  same dtype and device as input
         """
         if not alm_per_m:
             raise ValueError("alm_per_m est vide.")
@@ -250,7 +250,7 @@ class alm_loc_optim(alm_loc):
 
         out = torch.zeros(batch_shape + (total,), dtype=dtype, device=device)
 
-        # Décalage de chaque m dans le vecteur dense
+        # Offset of each m in the dense vector
         offset = 0
         m_to_offset = {}
         for m in range(lmax + 1):
@@ -266,34 +266,34 @@ class alm_loc_optim(alm_loc):
         return out
 
     # ================================================================== #
-    #  alm -> Cl  (optimisé)                                              #
+    #  alm -> Cl  (optimised)                                             #
     # ================================================================== #
 
     def anafast_loc_optim(self, im, nside: int, cell_ids,
                           nest: bool = False, lmax: int = None):
         """
-        Estime le spectre de puissance angulaire Cl sur un patch partiel.
+        Estimate the angular power spectrum Cl on a partial patch.
 
-        Seuls les modes (l, m) effectivement contraints par le patch
-        contribuent à l'estimation.  Pour chaque l, Cl est normalisé par
-        le nombre de modes m disponibles (dégradation gracieuse plutôt que
-        dilution par des modes nuls).
+        Only the (l, m) modes effectively constrained by the patch
+        contribute to the estimate.  For each l, Cl is normalised by
+        the number of available m modes (graceful degradation rather than
+        dilution by zero modes).
 
-        Paramètres
+        Parameters
         ----------
         im       : [..., n_pixels]
-        nside    : résolution HEALPix
-        cell_ids : indices de pixels dans le patch
-        nest     : True si ordre NESTED
-        lmax     : multipôle maximal
+        nside    : HEALPix resolution
+        cell_ids : pixel indices in the patch
+        nest     : True if NESTED ordering
+        lmax     : maximum multipole
 
         Retourne
         --------
         cl      : tenseur [..., lmax+1]
         m_count : ndarray int32 [lmax+1]
-                  nombre de modes m contribuant à chaque l
-                  (permet de signaler les multipôles mal contraints :
-                   m_count[l] == 0  →  Cl[l] non défini)
+                  number of m modes contributing to each l
+                  (flags poorly constrained multipoles:
+                   m_count[l] == 0  →  Cl[l] undefined)
         """
         nside = int(nside)
         if lmax is None:
@@ -330,11 +330,11 @@ class alm_loc_optim(alm_loc):
             cl[..., m:lmax_m + 1] += weight * power
             m_count[m:lmax_m + 1] += 1 if m == 0 else 2
 
-        # Normalisation : on divise par le nombre de modes contribuant à chaque l
+        # Normalisation: divide by the number of modes contributing to each l
         # (et non par (2l+1) global, qui supposerait le ciel complet)
         norm = np.where(m_count > 0,
                         m_count.astype(np.float64),
-                        1.0)   # évite la division par zéro
+                        1.0)   # avoid division by zero
         norm_t = torch.tensor(norm, dtype=torch.float64, device=device)
         norm_t = norm_t.reshape((1,) * len(batch_shape) + (lmax + 1,))
         cl = cl / norm_t
@@ -342,15 +342,15 @@ class alm_loc_optim(alm_loc):
         return cl, m_count
 
     # ================================================================== #
-    #  Utilitaire : résumé du domaine (diagnostic)                        #
+    #  Utility: domain summary (diagnostic)                               #
     # ================================================================== #
 
     def domain_summary(self, nside: int, cell_ids, nest: bool = False,
                        lmax: int = None):
         """
-        Affiche un résumé lisible du domaine partiel :
-        fraction de ciel couverte, nb de rings, nb de modes (m, l) effectifs
-        vs brut, et gain de calcul estimé.
+        Print a human-readable summary of the partial domain:
+        sky fraction covered, number of rings, effective (m, l) mode count
+        vs brute-force, and estimated computation gain.
         """
         nside = int(nside)
         if lmax is None:
@@ -367,10 +367,10 @@ class alm_loc_optim(alm_loc):
         n_rings_full  = 4 * nside - 1
         n_rings_patch = len(rings_used)
 
-        # Coût brut (alm_loc original) : sum_m  R × (lmax - m + 1)
+        # Brute-force cost (original alm_loc): sum_m  R × (lmax - m + 1)
         cost_full = sum(n_rings_patch * (lmax - m + 1) for m in range(lmax + 1))
 
-        # Coût optimisé : sum_m  R_m × (lmax_eff(m) - m + 1)
+        # Optimised cost: sum_m  R_m × (lmax_eff(m) - m + 1)
         cost_opt = sum(
             len(valid_idx_per_m[m]) * (lmax_eff_per_m[m] - m + 1)
             for m in m_valid

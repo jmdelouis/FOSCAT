@@ -2,8 +2,8 @@ import time
 
 import tensorflow as tf
 
-# Vérifier si un GPU est disponible
-print("GPU détecté :", tf.config.list_physical_devices("GPU"))
+# Check whether a GPU is available
+print("GPU detected:", tf.config.list_physical_devices("GPU"))
 
 device = "/GPU:0" if tf.config.list_physical_devices("GPU") else "/CPU:0"
 
@@ -18,7 +18,7 @@ def matmul_benchmark():
 dt = 0
 a = 0
 for k in range(10):
-    # Exécuter le benchmark
+    # Run the benchmark
     with tf.device(device):
         start = time.time()
         result = matmul_benchmark()
@@ -27,10 +27,10 @@ for k in range(10):
         if k > 2:
             dt += end - start
 
-print(f"Temps de calcul :{dt:.4f} sec", a)
+print(f"Compute time: {dt:.4f} sec", a)
 dt = 0
 for k in range(10):
-    # Exécuter le benchmark
+    # Run the benchmark
     with tf.device("/CPU:0"):
         start = time.time()
         result = matmul_benchmark()
@@ -39,4 +39,4 @@ for k in range(10):
         if k > 2:
             dt += end - start
 
-print(f"Temps de calcul :{dt:.4f} sec")
+print(f"Compute time: {dt:.4f} sec")

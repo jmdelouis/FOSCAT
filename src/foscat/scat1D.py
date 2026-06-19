@@ -6,7 +6,7 @@ import numpy as np
 import foscat.backend as bk
 import foscat.FoCUS as FOC
 
-# Vérifier si TensorFlow est importé et défini
+# Check whether TensorFlow is imported and available
 tf_defined = "tensorflow" in sys.modules
 
 if tf_defined:

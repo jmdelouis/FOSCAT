@@ -1,53 +1,53 @@
 """
 alm_latlon.py
 =============
-Transformée en harmoniques sphériques pour des cartes définies sur une
-grille arbitraire en colatitude / longitude, organisée en rings.
+Spherical-harmonic transform for maps defined on an arbitrary
+colatitude / longitude grid organised into rings.
 
-Différences par rapport à foscat.alm.alm
+Differences with respect to foscat.alm.alm
 -----------------------------------------
-- Aucune dépendance à HEALPix pour le positionnement des pixels.
-- Les rings peuvent avoir des colatitudes quelconques (pas les colatitudes
-  HEALPix) et des longitudes quelconques (pas nécessairement uniformes).
-- Étape longitude : DFT directe si les φ d'un ring sont irréguliers ;
-  FFT + déphasage (comme alm.comp_tf) si les φ sont uniformément espacés.
-- Étape colatitude : même récurrence de Legendre que alm.compute_legendre_m,
-  évaluée aux cosinus des colatitudes fournies.
-- Poids de quadrature : trapèze en θ (sin θ · Δθ) × uniforme en φ (2π/N_r)
-  par défaut, ou tableau de poids fourni par l'utilisateur.
+- No dependency on HEALPix for pixel positioning.
+- Rings may have arbitrary colatitudes (not HEALPix colatitudes)
+  and arbitrary longitudes (not necessarily uniform).
+- Longitude step: direct DFT when ring φ values are irregular;
+  FFT + phase shift (like alm.comp_tf) when φ are uniformly spaced.
+- Colatitude step: same Legendre recurrence as alm.compute_legendre_m,
+  evaluated at the cosines of the provided colatitudes.
+- Quadrature weights: trapezoidal in θ (sin θ · Δθ) × uniform in φ (2π/N_r)
+  by default, or user-supplied weight array.
 
-API principale
+Main API
 --------------
 build_rings_from_latlon(lat, lon, atol)
-    Classe une liste plate de (lat, lon) en rings de même colatitude.
+    Groups a flat list of (lat, lon) into rings of equal colatitude.
 
 compute_weights(ring_theta, ring_phi_list, ring_counts)
-    Calcule les poids de quadrature par pixel (stéradians).
+    Computes the quadrature weights per pixel (steradians).
 
 comp_tf_latlon(im, ring_phi_list, ring_counts, pixel_weights, mmax)
-    DFT pondérée par ring → ft[..., R, mmax+1].
+    Ring-weighted DFT → ft[..., R, mmax+1].
 
 map2alm_latlon(im, ring_theta, ring_phi_list, ring_counts, lmax, weights)
-    Carte → alm.
+    Map → alm.
 
 anafast_latlon(im, ring_theta, ring_phi_list, ring_counts, lmax, weights)
-    Carte → Cl.
+    Map → Cl.
 
 alm2map_latlon(alm, ring_theta, ring_phi_list, ring_counts, lmax)
-    alm → carte (synthèse).
+    alm → map (synthesis).
 
-Exemple minimal
+Minimal example
 ---------------
     import numpy as np
     from foscat.alm_latlon import alm_latlon
 
-    # Grille régulière (ntheta=64 rings × nphi=128 pixels par ring)
+    # Regular grid (ntheta=64 rings × nphi=128 pixels per ring)
     ntheta, nphi = 64, 128
     theta_1d = np.linspace(np.pi / (2*ntheta), np.pi - np.pi/(2*ntheta), ntheta)
     phi_1d   = np.linspace(0, 2*np.pi*(1 - 1/nphi), nphi)
 
-    lat  = np.repeat(theta_1d, nphi)        # colatitude de chaque pixel
-    lon  = np.tile(phi_1d,     ntheta)      # longitude de chaque pixel
+    lat  = np.repeat(theta_1d, nphi)        # colatitude of each pixel
+    lon  = np.tile(phi_1d,     ntheta)      # longitude of each pixel
 
     ring_theta, ring_phi_list, ring_counts, sort_idx = \\
         alm_latlon.build_rings_from_latlon(lat, lon)
@@ -71,55 +71,54 @@ from foscat.alm import alm as _alm
 
 class alm_latlon(_alm):
     """
-    Transformée en harmoniques sphériques sur une grille lat/lon arbitraire
-    organisée en rings.
+    Spherical-harmonic transform on an arbitrary lat/lon grid organised into rings.
     """
 
     def __init__(self, backend=None, lmax=24, limit_range=1e10):
-        # nside=None : pas de grille HEALPix, maxlog calculé depuis lmax
+        # nside=None: no HEALPix grid, maxlog computed from lmax
         super().__init__(backend=backend, lmax=lmax, nside=None,
                          limit_range=limit_range)
 
     # ================================================================== #
-    #  Construction des rings depuis un tableau plat (lat, lon)           #
+    #  Build rings from a flat (lat, lon) array                           #
     # ================================================================== #
 
     @staticmethod
     def build_rings_from_latlon(lat, lon, atol=1e-10, convention='colatitude_rad'):
         """
-        Groupe une liste plate de pixels en rings de même colatitude.
+        Group a flat list of pixels into rings of equal colatitude.
 
-        Paramètres
+        Parameters
         ----------
-        lat  : array [N]  coordonnée angulaire de chaque pixel (voir convention).
-        lon  : array [N]  coordonnée longitudinale de chaque pixel (voir convention).
-        atol : tolérance en radians pour regrouper deux pixels dans le même ring.
-        convention : str  format des coordonnées en entrée.
+        lat  : array [N]  angular coordinate of each pixel (see convention).
+        lon  : array [N]  longitudinal coordinate of each pixel (see convention).
+        atol : tolerance in radians for grouping two pixels into the same ring.
+        convention : str  format of the input coordinates.
 
-            'colatitude_rad'  (défaut)
-                lat = colatitude θ en RADIANS    0 → π
-                lon = longitude  φ en RADIANS    0 → 2π
+            'colatitude_rad'  (default)
+                lat = colatitude θ in RADIANS    0 → π
+                lon = longitude  φ in RADIANS    0 → 2π
 
             'colatitude_deg'
-                lat = colatitude θ en DEGRÉS     0° → 180°
-                lon = longitude  φ en DEGRÉS     0° → 360°
+                lat = colatitude θ in DEGREES    0° → 180°
+                lon = longitude  φ in DEGREES    0° → 360°
 
             'geographic_rad'
-                lat = latitude géographique en RADIANS   −π/2 → +π/2
-                lon = longitude en RADIANS               −π → +π  ou  0 → 2π
+                lat = geographic latitude in RADIANS   −π/2 → +π/2
+                lon = longitude in RADIANS             −π → +π  or  0 → 2π
 
             'geographic_deg'
-                lat = latitude géographique en DEGRÉS    −90° → +90°
-                lon = longitude en DEGRÉS                −180° → +180°  ou  0° → 360°
+                lat = geographic latitude in DEGREES   −90° → +90°
+                lon = longitude in DEGREES             −180° → +180°  or  0° → 360°
 
-        Toutes les conventions convertissent en interne en colatitude + longitude
-        en radians avant le traitement.
+        All conventions are converted internally to colatitude + longitude
+        in radians before processing.
 
-        Retourne
-        --------
-        ring_theta    : ndarray [R]            colatitude θ (radians) par ring
-        ring_phi_list : list[ndarray [N_r]]    longitudes  φ (radians) par ring
-        ring_counts   : ndarray int64 [R]      nombre de pixels par ring
+        Returns
+        -------
+        ring_theta    : ndarray [R]            colatitude θ (radians) per ring
+        ring_phi_list : list[ndarray [N_r]]    longitudes  φ (radians) per ring
+        ring_counts   : ndarray int64 [R]      number of pixels per ring
         sort_idx      : ndarray int64 [N]      permutation  im_sorted = im[sort_idx]
         """
         lat = np.asarray(lat, dtype=np.float64).ravel()
@@ -140,19 +139,19 @@ class alm_latlon(_alm):
             phi   = np.radians(lon) % (2.0 * np.pi)
         else:
             raise ValueError(
-                f"Convention inconnue : '{convention}'. "
-                "Valeurs acceptées : 'colatitude_rad', 'colatitude_deg', "
+                f"Unknown convention: '{convention}'. "
+                "Accepted values: 'colatitude_rad', 'colatitude_deg', "
                 "'geographic_rad', 'geographic_deg'."
             )
 
         N = len(theta)
 
-        # Trier par colatitude puis par longitude
+        # Sort by colatitude then by longitude
         order = np.lexsort((phi, theta))
         lat_s = theta[order]
         lon_s = phi[order]
 
-        # Trouver les frontières de ring (saut de colatitude > atol)
+        # Find ring boundaries (colatitude jump > atol)
         breaks = np.where(np.diff(lat_s) > atol)[0] + 1
         ring_starts = np.concatenate([[0], breaks])
         ring_ends   = np.concatenate([breaks, [N]])
@@ -165,39 +164,39 @@ class alm_latlon(_alm):
         return ring_theta, ring_phi_list, ring_counts, order
 
     # ================================================================== #
-    #  Poids de quadrature                                                #
+    #  Quadrature weights                                                 #
     # ================================================================== #
 
     @staticmethod
     def compute_weights(ring_theta, ring_phi_list, ring_counts,
                         quadrature='trapeze'):
         """
-        Calcule les poids de quadrature par pixel (stéradians).
+        Computes the quadrature weights per pixel (steradians).
 
-        Paramètres
+        Parameters
         ----------
-        ring_theta    : [R] colatitudes en radians
-        ring_phi_list : list[ndarray]  longitudes par ring
-        ring_counts   : [R] nombre de pixels par ring
-        quadrature    : str  méthode de quadrature en θ.
+        ring_theta    : [R] colatitudes in radians
+        ring_phi_list : list[ndarray]  longitudes per ring
+        ring_counts   : [R] number of pixels per ring
+        quadrature    : str  quadrature method in θ.
 
-            'trapeze'         (défaut)
-                Règle des trapèzes :  w_θ = sin(θ_r) × Δθ_r
-                Bonne pour les grilles régulières en θ.
+            'trapeze'         (default)
+                Trapezoidal rule:  w_θ = sin(θ_r) × Δθ_r
+                Suitable for regular θ grids.
 
             'gauss_legendre'
-                Poids de Gauss-Legendre exacts.
-                À utiliser impérativement pour les grilles gaussiennes
-                (ERA5, ECMWF, IFS, ARPEGE…) où les colatitudes sont les
-                zéros de P_R(cos θ).  L'intégrale ∫f dΩ = ∫f dφ dx
-                (x = cos θ) est alors exacte jusqu'à ℓ ≈ 2R-1.
+                Exact Gauss-Legendre weights.
+                Required for Gaussian grids
+                (ERA5, ECMWF, IFS, ARPEGE…) where the colatitudes are the
+                zeros of P_R(cos θ).  The integral ∫f dΩ = ∫f dφ dx
+                (x = cos θ) is then exact up to ℓ ≈ 2R-1.
 
             'equal_area'
-                Poids égaux : 4π / N_total.
-                Pour les grilles à aire égale (HEALPix).
+                Equal weights: 4π / N_total.
+                For equal-area grids (HEALPix).
 
-        Retourne
-        --------
+        Returns
+        -------
         weights : ndarray float64 [N_total]
         """
         ring_theta  = np.asarray(ring_theta,  dtype=np.float64)
@@ -206,7 +205,7 @@ class alm_latlon(_alm):
         N_total = int(ring_counts.sum())
         all_w   = []
 
-        # ---- poids en θ selon la méthode choisie ----
+        # ---- θ weights according to chosen method ----
         if quadrature == 'trapeze':
             w_theta = np.empty(R, dtype=np.float64)
             for r in range(R):
@@ -221,48 +220,48 @@ class alm_latlon(_alm):
                 w_theta[r] = abs(np.sin(ring_theta[r]) * dth)
 
         elif quadrature == 'gauss_legendre':
-            # Les nœuds GL sont x_r = cos(θ_r) ∈ [-1, 1].
-            # np.polynomial.legendre.leggauss(R) renvoie les nœuds et poids
-            # pour ∫₋₁¹ f(x) dx ≈ Σ w_r f(x_r).
-            # Comme dΩ = dφ dx (avec x = cos θ), les poids θ sont directement
-            # les poids GL (sin θ est absorbé dans dx = -sin θ dθ).
-            x_provided = np.cos(ring_theta)          # nœuds fournis
+            # GL nodes are x_r = cos(θ_r) ∈ [-1, 1].
+            # np.polynomial.legendre.leggauss(R) returns nodes and weights
+            # for ∫₋₁¹ f(x) dx ≈ Σ w_r f(x_r).
+            # Since dΩ = dφ dx (with x = cos θ), the θ weights are directly
+            # the GL weights (sin θ is absorbed into dx = -sin θ dθ).
+            x_provided = np.cos(ring_theta)          # provided nodes
             gl_nodes, gl_weights = np.polynomial.legendre.leggauss(R)
-            # Les nœuds GL sont triés par ordre croissant ; cos θ est décroissant
-            # (θ croissant), donc on les aligne par tri.
-            sort_gl  = np.argsort(gl_nodes)          # -1 → +1
-            sort_prov = np.argsort(x_provided)       # cos θ croissant
-            gl_w_sorted = gl_weights[sort_gl]        # poids alignés sur x croissant
-            # Réordonner dans l'ordre original des rings (θ croissant ≡ x décroissant)
-            # sort_prov[i] = indice dans rings du i-ème plus petit cos θ
+            # GL nodes are sorted in ascending order; cos θ is decreasing
+            # (θ increasing), so we align them by sorting.
+            sort_gl  = np.argsort(gl_nodes)          # -1 → +1 (ascending)
+            sort_prov = np.argsort(x_provided)       # cos θ ascending
+            gl_w_sorted = gl_weights[sort_gl]        # weights aligned on ascending x
+            # Reorder to original ring order (θ ascending ≡ x descending)
+            # sort_prov[i] = ring index of the i-th smallest cos θ
             w_theta = np.empty(R, dtype=np.float64)
             w_theta[sort_prov] = gl_w_sorted
-            # Vérification : les nœuds GL doivent correspondre aux cos(θ_r)
+            # Verification: GL nodes must match cos(θ_r)
             max_err = np.max(np.abs(np.sort(x_provided) - np.sort(gl_nodes)))
             if max_err > 1e-6:
                 import warnings
                 warnings.warn(
-                    f"gauss_legendre: les colatitudes fournies ne coïncident pas "
-                    f"avec les nœuds GL (erreur max = {max_err:.2e}). "
-                    "Vérifiez que la grille est bien une grille gaussienne avec "
-                    f"{R} points de latitude.",
+                    f"gauss_legendre: provided colatitudes do not match "
+                    f"GL nodes (max error = {max_err:.2e}). "
+                    "Check that the grid is a Gaussian grid with "
+                    f"{R} latitude points.",
                     UserWarning
                 )
 
         elif quadrature == 'equal_area':
             total_area = 4.0 * np.pi
-            w_theta = np.full(R, total_area / N_total)  # sera pondéré par N_r ensuite
+            w_theta = np.full(R, total_area / N_total)  # will be weighted by N_r below
             # Pour equal_area, le poids par pixel est uniforme : 4π/N_total
             weights = np.full(N_total, total_area / N_total, dtype=np.float64)
             return weights
 
         else:
             raise ValueError(
-                f"Quadrature inconnue : '{quadrature}'. "
-                "Valeurs acceptées : 'trapeze', 'gauss_legendre', 'equal_area'."
+                f"Unknown quadrature: '{quadrature}'. "
+                "Accepted values: 'trapeze', 'gauss_legendre', 'equal_area'."
             )
 
-        # ---- poids en φ (commun aux deux méthodes θ non-equal_area) ----
+        # ---- φ weights (common to both non-equal_area θ methods) ----
         for r in range(R):
             N_r   = int(ring_counts[r])
             phi_r = np.asarray(ring_phi_list[r], dtype=np.float64)
@@ -285,15 +284,15 @@ class alm_latlon(_alm):
 
         return np.concatenate(all_w)
     # ================================================================== #
-    #  Transformée de Fourier par ring                                    #
+    #  Fourier transform per ring                                         #
     # ================================================================== #
 
     @staticmethod
     def _check_uniform(phi, tol=1e-10):
         """
-        Retourne (True, phi0, N) si les φ sont uniformément espacés
-        à dphi = 2π/N, sinon (False, None, None).
-        Les φ peuvent ne pas être triés.
+        Return (True, phi0, N) if the φ values are uniformly spaced
+        at dphi = 2π/N, otherwise (False, None, None).
+        The φ values need not be sorted.
         """
         N = len(phi)
         if N <= 1:
@@ -307,23 +306,23 @@ class alm_latlon(_alm):
 
     def comp_tf_latlon(self, im, ring_phi_list, ring_counts, pixel_weights, mmax):
         """
-        DFT pondérée par pixel pour chaque ring.
+        Pixel-weighted DFT for each ring.
 
-        Pour un ring avec des φ uniformément espacés, on utilise
-        la FFT + déphasage (même logique que alm.comp_tf).
-        Pour un ring irrégulier, on fait la DFT directe.
+        For a ring with uniformly spaced φ values, uses the
+        FFT + phase shift (same logic as alm.comp_tf).
+        For an irregular ring, performs a direct DFT.
 
-        Paramètres
+        Parameters
         ----------
-        im            : [..., N_total]  carte (backend tensor ou ndarray)
-        ring_phi_list : list[ndarray]   longitudes par ring
-        ring_counts   : ndarray int64   nombre de pixels par ring
-        pixel_weights : ndarray float64 [N_total]  poids quadrature
-        mmax          : int  fréquence maximale
+        im            : [..., N_total]  map (backend tensor or ndarray)
+        ring_phi_list : list[ndarray]   longitudes per ring
+        ring_counts   : ndarray int64   number of pixels per ring
+        pixel_weights : ndarray float64 [N_total]  quadrature weights
+        mmax          : int  maximum frequency
 
-        Retourne
-        --------
-        ft : tensor [..., R, mmax+1]  complexe
+        Returns
+        -------
+        ft : tensor [..., R, mmax+1]  complex
         """
         R         = len(ring_counts)
         m_vec     = np.arange(mmax + 1, dtype=np.float64)
@@ -342,17 +341,17 @@ class alm_latlon(_alm):
             is_unif, phi0, _ = self._check_uniform(phi_r)
 
             if is_unif:
-                # ---- FFT + déphasage ----
-                # Trier v dans l'ordre croissant de φ
+                # ---- FFT + phase shift ----
+                # Sort v in ascending φ order
                 sort_phi = np.argsort(phi_r)
                 v_sorted = self.backend.bk_gather(v, sort_phi, axis=-1)
 
-                # Poids en φ uniformes : w_r[j] = w_th * (2π/N_r)
-                # On absorbe le poids θ (constant par ring) comme scalaire
-                w_scalar = float(w_r[0])  # tous les poids φ sont égaux pour un ring uniforme
+                # Uniform φ weights: w_r[j] = w_th * (2π/N_r)
+                # Absorb the θ weight (constant per ring) as a scalar
+                w_scalar = float(w_r[0])  # all φ weights equal for a uniform ring
                 v_sorted  = v_sorted * w_scalar
 
-                # FFT réelle → spectre complet
+                # Real FFT → full spectrum
                 tmp = self.rfft2fft(v_sorted)   # [..., N_r]
 
                 l_n = tmp.shape[-1]
@@ -361,13 +360,13 @@ class alm_latlon(_alm):
                     tmp = self.backend.bk_tile(tmp, repeat_n, axis=-1)
                 tmp = tmp[..., :mmax + 1]       # [..., mmax+1]
 
-                # Déphasage : exp(-i m phi0) pour m = 0..mmax
+                # Phase shift: exp(-i m phi0) for m = 0..mmax
                 shift = np.exp(-1j * m_vec * phi0).astype(np.complex128)
                 shift_bk = self.backend.bk_cast(shift)
                 tmp = tmp * shift_bk
 
             else:
-                # ---- DFT directe pondérée ----
+                # ---- Direct weighted DFT ----
                 # kernel[j, m] = w_r[j] * exp(-i m phi_r[j])
                 ang = np.outer(phi_r, m_vec)                   # [N_r, M]
                 ker = (np.exp(-1j * ang) * w_r[:, None])       # [N_r, M]
@@ -390,28 +389,28 @@ class alm_latlon(_alm):
     def map2alm_latlon(self, im, ring_theta, ring_phi_list, ring_counts,
                        lmax=None, weights=None, quadrature='trapeze'):
         """
-        Calcule les coefficients alm d'une carte définie sur une grille
-        arbitraire organisée en rings.
+        Compute the alm coefficients of a map defined on an arbitrary
+        grid organised into rings.
 
-        Paramètres
+        Parameters
         ----------
-        im            : [..., N_total]  valeurs de la carte, ordonnées ring
-                        par ring (utiliser sort_idx de build_rings_from_latlon
-                        si la carte est initialement dans un ordre quelconque)
-        ring_theta    : [R] colatitude (radians) de chaque ring
-        ring_phi_list : list[ndarray] ou ndarray [N_total]
-                        longitudes (radians) par ring (ou tableau plat)
-        ring_counts   : [R] nombre de pixels par ring
-        lmax          : multipôle maximal (défaut : self.lmax)
-        weights       : [N_total] poids par pixel (stéradians).
-                        Si None, la quadrature trapèze est calculée
-                        automatiquement.  Passer weights='uniform' pour
-                        utiliser 1/N_total (convention alm.map2alm).
+        im            : [..., N_total]  map values, ordered ring by ring
+                        (use sort_idx from build_rings_from_latlon
+                        if the map is initially in arbitrary order)
+        ring_theta    : [R] colatitude (radians) of each ring
+        ring_phi_list : list[ndarray] or ndarray [N_total]
+                        longitudes (radians) per ring (or flat array)
+        ring_counts   : [R] number of pixels per ring
+        lmax          : maximum multipole (default: self.lmax)
+        weights       : [N_total] per-pixel weights (steradians).
+                        If None, trapezoidal quadrature is computed
+                        automatically.  Pass weights='uniform' to
+                        use 1/N_total (alm.map2alm convention).
 
-        Retourne
-        --------
-        alm_out : [..., n_alm]  complexe,  n_alm = Σ_{m=0}^{lmax} (lmax-m+1)
-                  Mise en page : [m=0: l=0..lmax | m=1: l=1..lmax | …]
+        Returns
+        -------
+        alm_out : [..., n_alm]  complex,  n_alm = Σ_{m=0}^{lmax} (lmax-m+1)
+                  Layout: [m=0: l=0..lmax | m=1: l=1..lmax | …]
         """
         if lmax is None:
             lmax = self.lmax
@@ -422,7 +421,7 @@ class alm_latlon(_alm):
         N_total     = int(ring_counts.sum())
         phi_list    = self._parse_phi_list(ring_phi_list, ring_counts)
 
-        # Gestion de la dimension batch
+        # Handle batch dimension
         _added_batch = False
         if hasattr(im, 'ndim') and im.ndim == 1:
             im = im[None, :]
@@ -431,7 +430,7 @@ class alm_latlon(_alm):
             im = im[None, :]
             _added_batch = True
 
-        # Poids de quadrature
+        # Quadrature weights
         if weights is None:
             pixel_weights = self.compute_weights(ring_theta, phi_list, ring_counts,
                                                  quadrature=quadrature)
@@ -440,19 +439,19 @@ class alm_latlon(_alm):
         else:
             pixel_weights = np.asarray(weights, dtype=np.float64)
 
-        # DFT par ring : ft[..., R, mmax+1]
+        # DFT per ring: ft[..., R, mmax+1]
         ft = self.comp_tf_latlon(im, phi_list, ring_counts, pixel_weights, mmax=lmax)
 
-        # cos(θ) par ring pour la récurrence de Legendre
+        # cos(θ) per ring for the Legendre recurrence
         co_th = np.cos(ring_theta)          # [R]
 
-        # Projection de Legendre
+        # Legendre projection
         alm_out = None
         for m in range(lmax + 1):
-            # compute_legendre_m retourne sqrt(4π) · P_lm^norm(cos θ), soit [L, R].
-            # Les harmoniques sphériques normalisées sont Y_lm = sqrt((2l+1)/4π) · P_lm^norm.
-            # Le facteur manquant est sqrt(2l+1)/(4π) ; on l'applique ici pour que
-            # la projection donne a_lm = ∫ f Y_lm* dΩ (convention healpy/standard).
+            # compute_legendre_m returns sqrt(4π) · P_lm^norm(cos θ), shape [L, R].
+            # Normalised spherical harmonics are Y_lm = sqrt((2l+1)/4π) · P_lm^norm.
+            # The missing factor is sqrt(2l+1)/(4π); applied here so that
+            # the projection gives a_lm = ∫ f Y_lm* dΩ (healpy/standard convention).
             plm    = self.compute_legendre_m(co_th, m, lmax, nside=1)   # [L, R]
             l_vals  = np.arange(m, lmax + 1, dtype=np.float64)           # [L]
             ylm_factor = np.sqrt(2.0 * l_vals + 1.0) / (4.0 * np.pi)    # [L]
@@ -479,24 +478,24 @@ class alm_latlon(_alm):
         return alm_out
 
     # ================================================================== #
-    #  alm → map (synthèse)                                               #
+    #  alm → map (synthesis)                                              #
     # ================================================================== #
 
     def alm2map_latlon(self, alm, ring_theta, ring_phi_list, ring_counts, lmax=None):
         """
-        Synthèse : reconstruit la carte depuis les alm.
+        Synthesis: reconstruct the map from alm coefficients.
 
-        Paramètres
+        Parameters
         ----------
-        alm           : [..., n_alm]  coefficients harmoniques
+        alm           : [..., n_alm]  harmonic coefficients
         ring_theta    : [R] colatitudes (radians)
-        ring_phi_list : list[ndarray] ou ndarray [N_total] longitudes
-        ring_counts   : [R] nombre de pixels par ring
-        lmax          : multipôle maximal utilisé lors du calcul des alm
+        ring_phi_list : list[ndarray] or ndarray [N_total] longitudes
+        ring_counts   : [R] number of pixels per ring
+        lmax          : maximum multipole used when computing the alm
 
-        Retourne
-        --------
-        im_out : [..., N_total]  carte reconstruite
+        Returns
+        -------
+        im_out : [..., N_total]  reconstructed map
         """
         if lmax is None:
             lmax = self.lmax
@@ -510,8 +509,8 @@ class alm_latlon(_alm):
 
         co_th = np.cos(ring_theta)  # [R]
 
-        # Construire la partie Fourier par ring : ft[r, m] = sum_l alm[l,m] * plm[l-m, r]
-        # puis reconstruire la carte par DFT inverse
+        # Build the Fourier part per ring: ft[r, m] = sum_l alm[l,m] * plm[l-m, r]
+        # then reconstruct the map via inverse DFT
 
         _added_batch = False
         if hasattr(alm, 'ndim') and alm.ndim == 1:
@@ -544,7 +543,7 @@ class alm_latlon(_alm):
 
             ft_synth[..., :, m] = contrib
 
-        # DFT inverse par ring : im[r, j] = Re( sum_m ft[r,m] * exp(im phi_j) )
+        # Inverse DFT per ring: im[r, j] = Re( sum_m ft[r,m] * exp(i m phi_j) )
         out_per_ring = []
         for r in range(R):
             N_r   = int(ring_counts[r])
@@ -558,7 +557,7 @@ class alm_latlon(_alm):
 
             ft_r = ft_synth[..., r, :]   # [..., M]
 
-            # im[r, j] = Re( sum_m ft[r,m] * exp(im phi_j) )
+            # im[r, j] = Re( sum_m ft[r,m] * exp(i m phi_j) )
             # ft_r [..., M, 1] × ker [M, N_r] → sum_M → [..., N_r]
             pix = self.backend.bk_reduce_sum(
                 self.backend.bk_expand_dims(ft_r, axis=-1) * ker_bk,
@@ -581,10 +580,10 @@ class alm_latlon(_alm):
     def anafast_latlon(self, im, ring_theta, ring_phi_list, ring_counts,
                        lmax=None, weights=None, quadrature='trapeze'):
         """
-        Estime le spectre de puissance Cl d'une carte sur grille arbitraire.
+        Estimate the power spectrum Cl of a map on an arbitrary grid.
 
-        Retourne
-        --------
+        Returns
+        -------
         cl : tensor [..., lmax+1]
         """
         if lmax is None:
@@ -629,7 +628,7 @@ class alm_latlon(_alm):
         """
         Accepte ring_phi_list comme :
           - liste de tableaux
-          - tableau plat [N_total] (découpé selon ring_counts)
+          - flat array [N_total] (split according to ring_counts)
         Retourne toujours une liste de tableaux float64.
         """
         ring_counts = np.asarray(ring_counts, dtype=np.int64)
@@ -641,7 +640,7 @@ class alm_latlon(_alm):
 
     def grid_summary(self, ring_theta, ring_phi_list, ring_counts, lmax=None):
         """
-        Affiche un résumé de la grille et le coût de calcul estimé.
+        Print a summary of the grid and the estimated computation cost.
         """
         if lmax is None:
             lmax = self.lmax

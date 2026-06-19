@@ -369,7 +369,7 @@ class HOrientedConvol:
                                        allow_extrapolation=True):
         """
         Accept 1D (Npix,) or 2D (B, Npix) cell_ids and return
-        tensors batched sur la 1ère dim (B, ...).
+        tensors batched on the first dim (B, ...).
         """
         if device is None:
             device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -483,12 +483,12 @@ class HOrientedConvol:
         '''
         # calib : [Npix, K]
         calib = np.zeros((w_idx.shape[0], w_idx.shape[2]))
-        # Hypothèses : 
+        # Assumptions: 
         # w_idx.shape == (Npix, M, K)  et  w_w.shape == (Npix, M, K)
         Npix, M, K = w_idx.shape
         nb_cols = K
         
-        # 1) Accumulation par "bincount" avec décalage de ligne
+        # 1) Accumulation via "bincount" with row offset
         row_ids = np.arange(Npix, dtype=np.int64)[:, None, None] * nb_cols
         flat_idx = (row_ids + w_idx).ravel()           # indices dans [0, Npix*9)
         weights  = w_w.ravel().astype(np.float64)      # ou dtype de ton choix
@@ -496,7 +496,7 @@ class HOrientedConvol:
         calib = np.bincount(flat_idx, weights, minlength=Npix*nb_cols)\
                   .reshape(Npix, nb_cols)
         
-        # 2) Réinjection dans norm_a selon w_idx
+        # 2) Write back into norm_a according to w_idx
         norm_a = calib[np.arange(Npix)[:, None, None], w_idx]
 
         w_w /= norm_a
@@ -694,13 +694,13 @@ class HOrientedConvol:
         #   w_w_eff    : (B, Npix, S, P)
         if cell_ids is not None:
             # ---- Recompute (idx_nn, w_idx, w_w) depending on cell_ids shape ----
-            # Normaliser: accepter Tensor, ndarray ou list/tuple de 1 élément (cas var-length, B=1)
+            # Normalise: accept Tensor, ndarray, or list/tuple of 1 element (var-length case, B=1)
             if isinstance(cell_ids, (list, tuple)):
                 # liste d'ids (souvent longueur 1 en var-length)
                 if len(cell_ids) == 1:
                     cid = np.asarray(cell_ids[0])[None, :]  # -> (1, Npix)
                 else:
-                    # si jamais >1, on essaie d'empiler (doit avoir même Npix par élément)
+                    # if >1, try to stack (must have same Npix per element)
                     cid = np.stack([np.asarray(c) for c in cell_ids], axis=0)
             elif torch.is_tensor(cell_ids):
                 c = cell_ids.detach().cpu().numpy()
@@ -864,13 +864,13 @@ class HOrientedConvol:
             B = len(cell_ids)
             for b in range(B):
                 cid_b = self._to_numpy_1d(cell_ids[b])
-                # extraire le bon échantillon d'`im`
+                # extract the right sample from `im`
                 if torch.is_tensor(im):
                     xb = im[b:b+1]  # (1, C, N_b)
                     yb, ids_b = self.f.ud_grade_2(xb, cell_ids=cid_b, nside=nside,max_poll=max_poll)
                     outs.append(yb.squeeze(0))  # (C, N_b')
                 else:
-                    # si im est déjà une liste de (C, N_b)
+                    # if im is already a list of (C, N_b)
                     xb = im[b]
                     yb, ids_b = self.f.ud_grade_2(xb[None, ...], cell_ids=cid_b, nside=nside,max_poll=max_poll)
                     outs.append(yb.squeeze(0))
@@ -899,7 +899,7 @@ class HOrientedConvol:
         if nside is None:
             nside = self.nside
 
-        # var-length: listes parallèles
+        # var-length: parallel lists
         if self._is_varlength_batch(cell_ids):
             assert isinstance(o_cell_ids, (list, tuple)) and len(o_cell_ids) == len(cell_ids), \
                 "In var-length mode, `o_cell_ids` must be a list with same length as `cell_ids`."

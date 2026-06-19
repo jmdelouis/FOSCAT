@@ -16,7 +16,7 @@ class scat_cov2D:
 
 class funct(scat.funct):
     def __init__(self, *args, **kwargs):
-        # Impose que use_2D=True pour la classe scat
+        # Force use_2D=True for the scat class
         super().__init__(use_2D=True, KERNELSZ=5, *args, **kwargs)
 
     def spectrum(self, image):

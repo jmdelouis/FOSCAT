@@ -9,7 +9,7 @@ import foscat as foscat
 # import foscat.backend as bk
 import foscat.FoCUS as FOC
 
-# Vérifier si TensorFlow est importé et défini
+# Check whether TensorFlow is imported and available
 tf_defined = "tensorflow" in sys.modules
 
 if tf_defined:
@@ -6443,7 +6443,7 @@ class funct(FOC.FoCUS):
             s0, s2, s3, s4, s1=s1, s3p=s3p, backend=self.backend, use_1D=self.use_1D
         )
     def calc_matrix_orientation(self,noise_map,image2=None):
-        # Décalage circulaire par matrice de permutation
+        # Circular shift via permutation matrix
         def circ_shift_matrix(N,k):
             return np.roll(np.eye(N), shift=-k, axis=1)
         Norient = self.NORIENT
@@ -6489,6 +6489,9 @@ class funct(FOC.FoCUS):
         grd_mask=None,
         in_mask=None,
         iso_ang=False,
+        fft_ang=False,
+        fft_nharm=1,
+        fft_imaginary=True,
         EVAL_FREQUENCY=100,
         NUM_EPOCHS=300,
         scat_cov_method='eval',
@@ -6665,6 +6668,63 @@ class funct(FOC.FoCUS):
             S3, S3P       ``[…, L, L]``         ``[…, L]``  (by Δl = l₂−l₁)
             S4            ``[…, L, L, L]``      ``[…, L, L]``
             ============  ====================  =======================
+
+            .. note::
+                ``iso_ang`` and ``fft_ang`` should not be used together.
+                ``iso_ang`` is the harder reduction (mean only);
+                ``fft_ang`` is softer and keeps angular variation.
+
+        fft_ang : bool, optional
+            Use Fourier-compressed angular statistics in the loss.  Default is
+            ``False``.  Softer alternative to ``iso_ang``: instead of collapsing
+            each orientation axis to a single mean, keeps the first ``fft_nharm``
+            Fourier harmonics along each axis.
+
+            With ``fft_nharm=1, fft_imaginary=True`` (defaults), each orientation
+            axis L is projected to 3 coefficients:
+
+            - index 0 — DC (mean, same as ``iso_ang``);
+            - index 1 — cosine of first harmonic;
+            - index 2 — sine of first harmonic.
+
+            The amplitude :math:`A_1 = \\sqrt{c_1^2 + s_1^2}` is
+            **rotation-invariant**: it does not depend on the absolute
+            orientation of the image.
+
+            Shape reduction:
+
+            ============  ====================  ==========================
+            Statistic     Input shape           Output shape (nharm=1)
+            ============  ====================  ==========================
+            S1, S2        ``[…, L]``            ``[…, 3]``
+            S3, S3P       ``[…, L, L]``         ``[…, 3, 3]``
+            S4            ``[…, L, L, L]``      ``[…, 3, 3, 3]``
+            ============  ====================  ==========================
+
+            For S3/S4 the projection is the tensor product of independent 1-D
+            Fourier projections on each orientation axis::
+
+                result = scat_op.synthesis(xnorm, fft_ang=True, NUM_EPOCHS=300)
+
+        fft_nharm : int, optional
+            Number of Fourier harmonics to keep beyond the DC term when
+            ``fft_ang=True``.  Default is ``1``.  The number of output
+            coefficients per orientation axis is ``1 + 2*fft_nharm`` (with
+            ``fft_imaginary=True``) or ``1 + fft_nharm`` (with
+            ``fft_imaginary=False``).
+
+        fft_imaginary : bool, optional
+            Whether to include both cosine **and** sine components when
+            ``fft_ang=True``.  Default is ``True``.
+
+            - ``True`` *(recommended)*: output per axis = ``1 + 2*fft_nharm``
+              coefficients ``[DC, cos₁, sin₁, cos₂, sin₂, …]``.
+              The harmonic amplitude :math:`\\sqrt{c_k^2 + s_k^2}` is
+              independent of the image orientation.
+            - ``False``: output per axis = ``1 + fft_nharm`` coefficients
+              ``[DC, cos₁, cos₂, …]``.  A field oriented at 90° (zero of
+              cosine) gives a near-zero first-harmonic coefficient even if
+              strongly anisotropic — use only if orientation is fixed.
 
         EVAL_FREQUENCY : int, optional
             Print the current loss every N L-BFGS-B iterations.  Default is
@@ -6854,8 +6914,10 @@ class funct(FOC.FoCUS):
                 norm='auto',
                 )
             if iso_ang:
-                learn=learn.iso_mean()
-            
+                learn = learn.iso_mean()
+            if fft_ang:
+                learn = learn.fft_ang(nharm=fft_nharm, imaginary=fft_imaginary)
+
             if synthesised_N>1:
                 learn = scat_operator.reduce_mean_batch(learn)
             
@@ -7094,8 +7156,11 @@ class funct(FOC.FoCUS):
                     sref = ref
                     
                 if iso_ang:
-                    ref=ref.iso_mean()
-                    sref=sref.iso_mean()
+                    ref = ref.iso_mean()
+                    sref = sref.iso_mean()
+                if fft_ang:
+                    ref = ref.fft_ang(nharm=fft_nharm, imaginary=fft_imaginary)
+                    sref = sref.fft_ang(nharm=fft_nharm, imaginary=fft_imaginary)
 
             # compute the mean of the population does nothing if only one map is given
             ref = self.reduce_mean_batch(ref)

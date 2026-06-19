@@ -259,8 +259,27 @@ stat_fft = stat.fft_ang(nharm=1, imaginary=True)
 
 # Rotation-invariant angular amplitude for S2:
 A1_S2 = np.sqrt(stat_fft.S2[..., 1]**2 + stat_fft.S2[..., 2]**2)
+```
 
-# Use fft_ang in synthesis via a custom loss:
+**Using `fft_ang` directly in `synthesis`:**
+
+The `fft_ang` parameter is a first-class option of `synthesis`, exactly like `iso_ang`:
+
+```python
+# Soft angular compression — keeps DC + first harmonic amplitude (rotation-invariant)
+result = scat_op.synthesis(xnorm, fft_ang=True, NUM_EPOCHS=300)
+
+# Keep two harmonics:
+result = scat_op.synthesis(xnorm, fft_ang=True, fft_nharm=2, NUM_EPOCHS=300)
+```
+
+`fft_ang=True` is applied to both the target statistics and the statistics evaluated on the current
+candidate map at every optimisation step, so the loss is always comparing Fourier-compressed
+statistics in a consistent space.
+
+**Advanced: custom loss with `fft_ang` (manual control):**
+
+```python
 from foscat.Synthesis import Loss, Synthesis
 
 def fft_loss(u, scat_op, args):

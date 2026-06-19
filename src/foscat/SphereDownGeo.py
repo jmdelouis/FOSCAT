@@ -218,8 +218,8 @@ class SphereDownGeo(nn.Module):
         K = p_out.size
         offs = np.arange(4, dtype=np.int64)         # [4]
 
-        # --- (A) Choix du voisinage côté coarse
-        # Option 1 (minimal, très rapide) : uniquement le parent -> 4 enfants
+        # --- (A) Neighbourhood choice on the coarse side
+        # Option 1 (minimal, very fast): parent only -> 4 children
         #parents = p_out[:, None]                    # [K,1]
 
         # Option 2 (plus “lisse”) : parent + 8 voisins -> 9 parents -> 36 enfants
@@ -231,7 +231,7 @@ class SphereDownGeo(nn.Module):
         # --- enfants fins (NESTED) : child_id = 4*parent + {0,1,2,3}
         children = (4 * parents[..., None] + offs[None, None, :]).reshape(K, -1)  # [K, 4] ou [K,36]
 
-        # Si option voisins activée : invalider enfants des parents=-1
+        # If neighbour option active: invalidate children of parents=-1
         #mask_child = np.repeat(mask_parent, 4, axis=1)               # [K,36]
         #children_flat = children[mask_child]
         #print(mask_child.shape,children.shape,K)
@@ -243,7 +243,7 @@ class SphereDownGeo(nn.Module):
 
         # --- Subset: map vers indices compacts
         if self.has_in_subset:
-            in_ids = self.in_cell_ids  # trié/unique :contentReference[oaicite:4]{index=4}
+            in_ids = self.in_cell_ids  # sorted/unique
             idx = np.searchsorted(in_ids, children_flat)
 
             in_range = idx < in_ids.size          # idx est toujours >=0 pour searchsorted
@@ -268,12 +268,12 @@ class SphereDownGeo(nn.Module):
             return torch.sparse_coo_tensor(indices, vals_t, size=(self.K_out, self.K_in),
                                            device=self.device, dtype=self.dtype).coalesce()
 
-        # --- poids gaussiens (vectorisé)
+        # --- Gaussian weights (vectorised)
         # centres coarse: vec0 [K,3]
         vx0, vy0, vz0 = hp.pix2vec(nside_out, p_out, nest=True)
         vec0 = np.stack([vx0, vy0, vz0], axis=1)                        # [K,3]
 
-        # vec des enfants gardés
+        # vector of kept children
         vx, vy, vz = hp.pix2vec(nside_in, child_ids_kept, nest=True)
         vec = np.stack([vx, vy, vz], axis=1)                            # [nnz,3]
 
@@ -289,7 +289,7 @@ class SphereDownGeo(nn.Module):
         # position within row (0..m-1)
         jpos = np.tile(np.arange(m, dtype=np.int64), K)
         if self.has_in_subset:
-            jpos = jpos.reshape(-1)[ok]  # aligné sur rows_flat2/child_ids_kept
+            jpos = jpos.reshape(-1)[ok]  # aligned with rows_flat2/child_ids_kept
         # si option voisins + mask_child : jpos = jpos[mask_child.reshape(-1)][ok] etc.
 
         W = np.zeros((K, m), dtype=np.float64)
@@ -304,7 +304,7 @@ class SphereDownGeo(nn.Module):
             s2[s2 <= 0] = 1.0
             W /= s2
 
-        # extraire w normalisés aux mêmes nnz
+        # extract w normalised to the same nnz
         w_norm = W[rows_flat2, jpos].astype(np.float32)
 
         # --- sparse

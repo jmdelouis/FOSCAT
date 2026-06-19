@@ -162,24 +162,24 @@ def lgnomproject(
 
     if interp:
 
-        # Inputs attendus (déjà présents dans ton code):
+        # Expected inputs (already present in your code):
         # - nside, nest
         # - theta_img, lon  (angles pour chaque pixel de l'image, shape (ysize, xsize))
-        # - uniq (np.ndarray trié d'indices HEALPix présents)
-        # - agg_vals : valeurs associées à uniq
+        # - uniq (sorted np.ndarray of present HEALPix indices)
+        # - agg_vals: values associated with uniq
         #     * si is_rgb: shape (uniq.size, 3)
         #     * sinon:     shape (uniq.size,)
         # - ysize, xsize
         # - mask_outside (bool)
-        # - outside (masque bool à plat ou 2D selon ton code)
+        # - outside (flat or 2D bool mask according to your code)
         # - unseen_value (float), p.ex. np.nan ou autre
 
-        # -------- 5) (NOUVEAU) Interpolation bilinéaire via poids HEALPix --------
+        # -------- 5) (NEW) Bilinear interpolation via HEALPix weights --------
         # Aplatis les angles de l'image
         theta_flat = theta_img.ravel()
         phi_flat   = lon.ravel()
 
-        # Récupère pour chaque direction les indices de 4 voisins et leurs poids
+        # Get the 4 neighbour indices and weights for each direction
         # inds: shape (npix_img, 4) ; w: shape (npix_img, 4)
         inds, w = hp.get_interp_weights(nside, theta_flat, phi_flat, nest=nest)
 
@@ -189,27 +189,27 @@ def lgnomproject(
         match = np.zeros_like(in_range, dtype=bool)
         match[in_range] = (uniq[pos[in_range]] == inds[in_range])
 
-        # Construit un masque 'valid' des voisins présents dans tes données
+        # Build a 'valid' mask for neighbours present in your data
         # valid shape (npix_img, 4)
         valid = match
 
         if is_rgb:
-            # Récupère les valeurs des 4 voisins (3 canaux)
+            # Get the values of the 4 neighbours (3 channels)
             # vals shape (npix_img, 4, 3) avec NaN pour voisins absents
             vals = np.full((inds.shape[0], inds.shape[1], 3), np.nan, dtype=float)
-            # positions valides -> on insère les vraies valeurs RGB
+            # valid positions -> insert true RGB values
             vals[valid, :] = agg_vals[pos[valid], :]
 
-            # pondération : on annule le poids là où la valeur est absente
+            # weighting: zero out the weight where the value is absent
             w_eff = w.copy()
             w_eff[~valid] = 0.0
             ws = np.sum(w_eff, axis=0, keepdims=False)  # somme des poids utiles
 
-            # éviter division par 0 : pixels hors couverture -> unseen
+            # avoid division by zero: out-of-coverage pixels -> unseen
             nonzero = ws.squeeze() > 0
             img_flat = np.full((inds.shape[1], 3), unseen_value, dtype=float)
 
-            # combinaison pondérée (en ignorant les NaN via w_eff)
+            # weighted combination (ignoring NaN via w_eff)
             num = np.nansum(vals * w_eff[..., None], axis=0)  # (npix_img, 3)
             img_flat[nonzero, :] = (num[nonzero, :] / ws[nonzero,None]).astype(float)
 
@@ -1140,8 +1140,8 @@ def plot_wave(wave,title="spectrum",unit="Amplitude",cmap="viridis"):
     img, kx, ky = spectrum_polar_to_cartesian(
         wave,
         scales=2**np.arange(wave.shape[0]),                 # tailles croissantes
-        scale_kind="size",            # conversion automatique vers fréquence
-        size_to_freq_factor=50.0,      # cycles / (unit of size) (Sentinel-2 10m résolution ~to 20m resoltuion for smaller scale; equiv. 50 cycles/km
+        scale_kind="size",            # automatic conversion to frequency
+        size_to_freq_factor=50.0,      # cycles / (unit of size) (Sentinel-2 10 m resolution ~to 20 m resolution for smaller scale; equiv. 50 cycles/km
         method="bicubic",
         n_pixels=512,
     )

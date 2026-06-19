@@ -87,7 +87,7 @@ class SphericalStencil:
         self.w_norm_t   = None
         self.present_t  = None
 
-        # Optionnel : on garde une copie des ids par défaut si fournis
+        # Optional: keep a copy of the default ids if provided
         self.cell_ids_default = None
 
         # ---- Optional immediate preparation (Step A+B at init) ----
@@ -416,9 +416,9 @@ class SphericalStencil:
 
     def bind_support_torch_multi(self, ids_sorted_np, *, device=None, dtype=None):
         """
-        Multi-gauge sparse binding (Step B) AVEC logique 'domaine réduit':
-          - poids des voisins hors domaine mis à 0
-          - renormalisation par colonne à 1
+        Multi-gauge sparse binding (Step B) WITH 'reduced domain' logic:
+          - weights of out-of-domain neighbours set to 0
+          - column renormalisation to 1
           - si colonne vide: fallback sur le pixel cible (centre du stencil)
 
         Produit:
@@ -457,7 +457,7 @@ class SphericalStencil:
             cmp_vals[in_range] = ids_sorted[pos[in_range]]
             present = (cmp_vals == idx)                                     # (4, M) bool
 
-            # Colonnes sans AUCUN voisin présent
+            # Columns with NO neighbour present
             empty_cols = ~present.any(dim=0)                                # (M,)
             if empty_cols.any():
                 p_ref = (self.KERNELSZ // 2) * (self.KERNELSZ + 1)
@@ -480,7 +480,7 @@ class SphericalStencil:
                 present[:, empty_cols] = present_e.view(4, -1)
                 pos[:,      empty_cols] = pos_e_clipped.view(4, -1)
 
-            # Met à zéro les poids absents puis renormalise à 1 par colonne
+            # Zero out absent weights then renormalise to 1 per column
             w = w * present
             colsum = w.sum(dim=0, keepdim=True)
             zero_cols = (colsum == 0)
@@ -505,9 +505,9 @@ class SphericalStencil:
 
     def bind_support_torch(self, ids_sorted_np, *, device=None, dtype=None):
         """
-        Single-gauge sparse binding (Step B) AVEC logique 'domaine réduit':
-          - poids des voisins hors domaine mis à 0
-          - renormalisation par colonne à 1
+        Single-gauge sparse binding (Step B) WITH 'reduced domain' logic:
+          - weights of out-of-domain neighbours set to 0
+          - column renormalisation to 1
           - si colonne vide: fallback sur le pixel cible (centre du stencil)
         """
         if device is None:
@@ -557,12 +557,12 @@ class SphericalStencil:
             present[:, empty_cols] = present_e.view(4, -1)
             pos[:,      empty_cols] = pos_e_clipped.view(4, -1)
 
-        # Zéro poids absents + renormalisation à 1
+        # Zero absent weights + renormalise to 1
         w = w * present
         colsum = w.sum(dim=0, keepdim=True)
         zero_cols = (colsum == 0)
         if zero_cols.any():
-            # force 1 sur la première ligne disponible (ici ligne 0)
+            # force 1 on the first available row (here row 0)
             w[0, zero_cols[0]] = present[0, zero_cols[0]].to(w.dtype)
             colsum = w.sum(dim=0, keepdim=True)
         w_norm = w / colsum.clamp_min(1e-12)
