@@ -133,7 +133,7 @@ $\Phi(d_\text{ref})_k$ itself, making the loss scale-invariant).
 
 This is solved by gradient descent: since the entire pipeline is differentiable in
 PyTorch, $\nabla_u \mathcal{L}(u)$ is computed via autograd and the weights are
-updated with Adam. The `Synthesis` class handles the optimisation loop.
+updated via **L-BFGS-B** (`scipy.optimize.fmin_l_bfgs_b`), a quasi-Newton method that exploits second-order information to converge in tens to a few hundred iterations. The `Synthesis` class handles the optimisation loop.
 
 ---
 
@@ -157,7 +157,7 @@ MPI-parallel synthesis is supported via `mpi4py` for distributed HPC workflows
 | `foscat.scat_cov2D` | `funct` | 2D planar scattering-covariance operator |
 | `foscat.scat_cov1D` | `funct` | 1D scattering-covariance operator |
 | `foscat.FoCUS` | `FoCUS` | Core low-level class: wavelet construction, convolutions, GPU dispatch |
-| `foscat.Synthesis` | `Synthesis`, `Loss` | Adam optimisation loop for synthesis / reconstruction |
+| `foscat.Synthesis` | `Synthesis`, `Loss` | L-BFGS-B optimisation loop for synthesis / reconstruction |
 | `foscat.healpix_unet_torch` | `HealpixUNet` | PyTorch U-Net on HEALPix geometry |
 | `foscat.GCNN` | `GCNN` | Graph-convolutional neural network on HEALPix |
 | `foscat.CNN` | `CNN` | Classical CNN on HEALPix |

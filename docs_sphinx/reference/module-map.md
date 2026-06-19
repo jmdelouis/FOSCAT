@@ -17,7 +17,7 @@ Complete index of FOSCAT modules, classes, and key functions.
 
 | Module | Entry point | Description |
 |--------|-------------|-------------|
-| `foscat.Synthesis` | `Synthesis` | Adam optimisation loop for synthesis / reconstruction. |
+| `foscat.Synthesis` | `Synthesis` | L-BFGS-B optimisation loop for synthesis / reconstruction. |
 | `foscat.Synthesis` | `Loss` | Wraps a user loss function and a scattering operator. |
 
 ## Statistics objects
