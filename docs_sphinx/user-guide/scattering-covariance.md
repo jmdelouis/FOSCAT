@@ -219,24 +219,37 @@ along each orientation axis, preserving the *amplitude* of the angular variation
 stat_fft = stat.fft_ang(nharm=1, imaginary=True)
 ```
 
-**What is kept (nharm=1):**
+**Projection basis (nharm=1, imaginary=True)** — 3 output coefficients per orientation axis:
 
-| Output index | Content |
-|---|---|
-| `[…, 0]` | DC — mean over orientations (identical to `iso_mean`) |
-| `[…, 1]` | Cosine projection: $\sum_l \cos(2\pi l/L) \cdot S[l]$ |
-| `[…, 2]` | Sine projection: $\sum_l \sin(2\pi l/L) \cdot S[l]$ |
+| Index k | Basis function $\phi_k(l)$ | Physical meaning |
+|---|---|---|
+| 0 | $1$ | DC — sum over the projected axis |
+| 1 | $\cos(2\pi l/L)$ | In-phase first harmonic |
+| 2 | $\sin(2\pi l/L)$ | Quadrature first harmonic |
 
 **Shapes after `fft_ang(nharm=1, imaginary=True)`** (`nout = 3`):
 
-| Statistic | Before | After |
-|-----------|--------|-------|
-| S1, S2 | `(..., L)` | `(..., 3)` |
-| S3, S3P | `(..., L, L)` | `(..., 3, 3)` |
-| S4 | `(..., L, L, L)` | `(..., 3, 3, 3)` |
+| Statistic | Before | After | Projection axis |
+|-----------|--------|-------|-----------------|
+| S1, S2 | `(..., L)` | `(..., 3)` | the single orientation axis l |
+| S3, S3P | `(..., L, L)` | `(..., L, 3)` | l1 axis at fixed Δl = l2−l1 |
+| S4 | `(..., L, L, L)` | `(..., L, L, 3)` | l1 axis at fixed (Δl12, Δl13) |
 
-For S3/S4 the projection is the **tensor product** of independent 1D Fourier
-projections on each orientation axis.
+For **S1/S2** the projection is a straightforward 1-D Fourier basis on the orientation axis:
+
+$$\text{S1\_out}[k] = \sum_{l} \phi_k(l) \cdot S1[l]$$
+
+For **S3/S3P and S4** the projection is **not** a tensor product. The statistics are first
+reindexed by the relative-orientation differences (same regrouping as `iso_mean`), then
+the Fourier basis is applied to the absolute orientation axis l1:
+
+$$\text{S3\_out}[\Delta l, k] = \sum_{l_1} \phi_k(l_1) \cdot S3[l_1,\,(l_1+\Delta l)\bmod L]$$
+
+$$\text{S4\_out}[\Delta l_{12}, \Delta l_{13}, k] = \sum_{l_1} \phi_k(l_1) \cdot S4[l_1,\,(l_1+\Delta l_{12})\bmod L,\,(l_1+\Delta l_{13})\bmod L]$$
+
+The $k=0$ coefficient is a **sum** over l1 (= $L$ × `iso_mean` value). Components $k=1,2$
+capture how the statistics vary as the image frame rotates. The amplitude
+$A_1 = \sqrt{c_1^2 + s_1^2}$ is the same for all global rotations of the field.
 
 **Why `imaginary=True` is essential for rotation invariance:**
 

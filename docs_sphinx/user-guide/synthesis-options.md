@@ -344,39 +344,47 @@ The three parameters work together:
 
 #### What `fft_ang=True` keeps (with `fft_nharm=1, fft_imaginary=True`)
 
-For each orientation axis L, three coefficients are computed:
+Three coefficients per projected axis (basis functions $\phi_k$):
 
-| Output index | Content | Physical meaning |
+| Index k | $\phi_k(l)$ | Physical meaning |
 |---|---|---|
-| `[…, 0]` | DC = $\frac{1}{L}\sum_l S[l]$ | Same as `iso_ang` — global mean |
-| `[…, 1]` | $\sum_l \cos\!\bigl(\tfrac{2\pi l}{L}\bigr)\cdot S[l]$ | In-phase first harmonic |
-| `[…, 2]` | $\sum_l \sin\!\bigl(\tfrac{2\pi l}{L}\bigr)\cdot S[l]$ | Quadrature first harmonic |
+| 0 | $1$ | DC — sum over the projected axis |
+| 1 | $\cos(2\pi l/L)$ | In-phase first harmonic |
+| 2 | $\sin(2\pi l/L)$ | Quadrature first harmonic |
 
-The **amplitude** $A_1 = \sqrt{c_1^2 + s_1^2}$ measures the strength of the
-dominant angular variation and is **rotation-invariant** (independent of the
-absolute orientation of the image). This is why `fft_imaginary=True` is
-strongly recommended: with only the cosine (`fft_imaginary=False`) a field
-oriented at 90° gives $c_1 \approx 0$ even when strongly anisotropic.
+The **amplitude** $A_1 = \sqrt{c_1^2 + s_1^2}$ is **rotation-invariant** regardless
+of how the image is oriented. This is why `fft_imaginary=True` is strongly recommended:
+with cosine only (`fft_imaginary=False`) a field oriented at 90° gives $c_1 \approx 0$
+even when strongly anisotropic.
 
-#### Shapes after `fft_ang(nharm=1, imaginary=True)` → `nout = 3`
+#### Shapes and projection rules after `fft_ang(nharm=1, imaginary=True)` → `nout = 3`
 
-| Statistic | Before | After | Factor |
-|-----------|--------|-------|--------|
-| S1, S2 | `(…, L)` | `(…, 3)` | ×3/L |
-| S3, S3P | `(…, L, L)` | `(…, 3, 3)` | ×9/L² |
-| S4 | `(…, L, L, L)` | `(…, 3, 3, 3)` | ×27/L³ |
+| Statistic | Before | After | Projection axis |
+|-----------|--------|-------|-----------------|
+| S1, S2 | `(…, L)` | `(…, 3)` | the single orientation axis |
+| S3, S3P | `(…, L, L)` | `(…, L, 3)` | l1 at fixed Δl = l2−l1 |
+| S4 | `(…, L, L, L)` | `(…, L, L, 3)` | l1 at fixed (Δl12, Δl13) |
 
-For S3/S4 the projection is the **tensor product** of independent 1D Fourier
-projections on each orientation axis. For S3 with L=4 this reduces from 16 to 9
-orientation coefficients per scale pair, keeping the full angular power.
+For **S3/S4** the projection is **not** a tensor product. The relative-orientation
+axes (Δl) are preserved exactly as in `iso_mean`, and only the absolute orientation
+axis l1 is projected:
+
+$$\text{S3\_out}[\Delta l, k] = \sum_{l_1} \phi_k(l_1) \cdot S3[l_1,\,(l_1+\Delta l)\bmod L]$$
+
+$$\text{S4\_out}[\Delta l_{12}, \Delta l_{13}, k] = \sum_{l_1} \phi_k(l_1) \cdot S4[l_1,\,(l_1+\Delta l_{12})\bmod L,\,(l_1+\Delta l_{13})\bmod L]$$
+
+The $k=0$ coefficient equals $L \times \text{iso\_mean}$. Components $k=1,2$ capture
+the angular modulation around that mean.
 
 #### `fft_ang` vs `iso_ang` — choosing the right reduction
 
 | | `iso_ang=True` | `fft_ang=True` |
 |---|---|---|
-| S1/S2 output | scalar (1 value) | 3 values (DC + cos + sin) |
-| Angular information kept | mean only | mean + amplitude + phase of dominant mode |
-| Number of constraints | minimum | moderate (×3 per axis vs ×1) |
+| S1/S2 output shape | `(…)` scalar | `(…, 3)` |
+| S3/S3P output shape | `(…, L)` | `(…, L, 3)` |
+| S4 output shape | `(…, L, L)` | `(…, L, L, 3)` |
+| Angular information kept | mean only | mean + angular modulation amplitude |
+| Number of constraints | minimum | moderate (+factor 3 on last axis) |
 | Suited for | strictly isotropic fields | fields with preferred but variable orientation |
 | Cost per iteration | lowest | slightly higher |
 

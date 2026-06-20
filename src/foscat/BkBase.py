@@ -27,6 +27,13 @@ class BackendBase:
         self._fft_2_orient_C = {}
         self._fft_3_orient = {}
         self._fft_3_orient_C = {}
+        # "angular-FFT" matrices: reorganise by (Δl, l1) then project l1 onto Fourier basis
+        # S3/S3P: [L*L] → [L*nout]  (Δl axis kept, l1 axis compressed)
+        # S4:     [L*L*L] → [L*L*nout]  (Δl12, Δl13 kept, l1 compressed)
+        self._fft_ang2_orient = {}
+        self._fft_ang2_orient_C = {}
+        self._fft_ang3_orient = {}
+        self._fft_ang3_orient_C = {}
 
     def to_dict(self):
         return {
@@ -398,6 +405,80 @@ class BackendBase:
                 self._fft_3_orient[(norient, nharm, imaginary)],
                 0 * self._fft_3_orient[(norient, nharm, imaginary)],
             )
+
+    def calc_fft_ang_orient(self, norient, nharm, imaginary):
+        """Build projection matrices for the angular-FFT reduction of S3/S4.
+
+        Unlike the tensor-product ``_fft_2_orient`` / ``_fft_3_orient`` matrices
+        (which apply independent 1-D FFTs on each orientation axis), these matrices
+        first reindex (l1, l2) → (Δl, l1) and then project the l1 axis onto the
+        Fourier basis, keeping the Δl (relative-orientation) axis intact.
+
+        Results
+        -------
+        _fft_ang2_orient[(norient, nharm, imaginary)] : shape [L*L, L*nout]
+            Maps S3[l1, l2] (flat [L²]) → out[Δl, k] (flat [L*nout])
+            where Δl = (l2-l1) % L and k indexes the Fourier basis on l1.
+
+        _fft_ang3_orient[(norient, nharm, imaginary)] : shape [L*L*L, L*L*nout]
+            Maps S4[l1, l2, l3] (flat [L³]) → out[Δl12, Δl13, k] (flat [L²*nout])
+            where Δl12 = (l2-l1)%L, Δl13 = (l3-l1)%L.
+        """
+        L = norient
+        x = np.arange(L) / L * 2 * np.pi  # [L]
+
+        if imaginary:
+            nout = 1 + 2 * nharm
+            basis = np.zeros([L, nout])
+            basis[:, 0] = 1.0
+            for k in range(nharm):
+                basis[:, k * 2 + 1] = np.cos(x * (k + 1))
+                basis[:, k * 2 + 2] = np.sin(x * (k + 1))
+        else:
+            nout = 1 + nharm
+            basis = np.zeros([L, nout])
+            for k in range(nharm + 1):
+                basis[:, k] = np.cos(x * k)
+
+        # ---- S3/S3P: [L*L] → [L*nout] ----
+        # out[Δl, k] = Σ_{l1} basis[l1, k] · S3[l1, (l1+Δl)%L]
+        mat2 = np.zeros([L * L, L * nout])
+        for l1 in range(L):
+            for dl in range(L):
+                l2 = (l1 + dl) % L
+                in_idx = l1 * L + l2
+                for k in range(nout):
+                    out_idx = dl * nout + k
+                    mat2[in_idx, out_idx] = basis[l1, k]
+
+        self._fft_ang2_orient[(norient, nharm, imaginary)] = self.bk_cast(
+            self.bk_constant(mat2)
+        )
+        self._fft_ang2_orient_C[(norient, nharm, imaginary)] = self.bk_complex(
+            self._fft_ang2_orient[(norient, nharm, imaginary)],
+            0 * self._fft_ang2_orient[(norient, nharm, imaginary)],
+        )
+
+        # ---- S4: [L*L*L] → [L*L*nout] ----
+        # out[Δl12, Δl13, k] = Σ_{l1} basis[l1, k] · S4[l1, (l1+Δl12)%L, (l1+Δl13)%L]
+        mat3 = np.zeros([L * L * L, L * L * nout])
+        for l1 in range(L):
+            for dl12 in range(L):
+                for dl13 in range(L):
+                    l2 = (l1 + dl12) % L
+                    l3 = (l1 + dl13) % L
+                    in_idx = l1 * L * L + l2 * L + l3
+                    for k in range(nout):
+                        out_idx = dl12 * L * nout + dl13 * nout + k
+                        mat3[in_idx, out_idx] = basis[l1, k]
+
+        self._fft_ang3_orient[(norient, nharm, imaginary)] = self.bk_cast(
+            self.bk_constant(mat3)
+        )
+        self._fft_ang3_orient_C[(norient, nharm, imaginary)] = self.bk_complex(
+            self._fft_ang3_orient[(norient, nharm, imaginary)],
+            0 * self._fft_ang3_orient[(norient, nharm, imaginary)],
+        )
 
     # ---------------------------------------------−---------
     # --             BACKEND DEFINITION                    --

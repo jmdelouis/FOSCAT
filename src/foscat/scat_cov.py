@@ -1870,25 +1870,40 @@ class scat_cov:
 
         .. rubric:: Reduction per statistic
 
-        ============  ====================  =======================
-        Statistic     Input shape           Output shape
-        ============  ====================  =======================
+        ============  ====================  ==========================
+        Statistic     Input shape           Output shape (nharm=1)
+        ============  ====================  ==========================
         S1, S2        ``[…, L]``            ``[…, nout]``
-        S3, S3P       ``[…, L, L]``         ``[…, nout, nout]``
-        S4            ``[…, L, L, L]``      ``[…, nout, nout, nout]``
-        ============  ====================  =======================
+        S3, S3P       ``[…, L, L]``         ``[…, L, nout]``
+        S4            ``[…, L, L, L]``      ``[…, L, L, nout]``
+        ============  ====================  ==========================
 
-        For multi-axis statistics (S3, S4) the projection is the **tensor
-        product** of independent 1-D Fourier projections on each axis:
+        For S1/S2 the projection applies the Fourier basis directly on the
+        single orientation axis.
+
+        For S3/S3P and S4 the projection is **not** a tensor product.
+        Instead, the statistics are first reindexed by the relative-orientation
+        differences (exactly as in :meth:`iso_mean`), then the absolute
+        orientation axis :math:`l_1` is projected onto the Fourier basis:
 
         .. math::
 
-            \\text{output}[k_1, k_2] =
-              \\sum_{l_1, l_2} \\phi_{k_1}(l_1)\\, \\phi_{k_2}(l_2)\\,
-              S3[l_1, l_2]
+            \\text{S3\\_out}[\\Delta l,\\, k] =
+              \\sum_{l_1} \\phi_k(l_1)\\, S3[l_1,\\,(l_1+\\Delta l)\\bmod L]
 
-        where :math:`\\phi_0(l) = 1`,  :math:`\\phi_1(l) = \\cos(2\\pi l/L)`,
-        :math:`\\phi_2(l) = \\sin(2\\pi l/L)`.
+        .. math::
+
+            \\text{S4\\_out}[\\Delta l_{12},\\, \\Delta l_{13},\\, k] =
+              \\sum_{l_1} \\phi_k(l_1)\\,
+              S4[l_1,\\,(l_1+\\Delta l_{12})\\bmod L,\\,(l_1+\\Delta l_{13})\\bmod L]
+
+        where :math:`\\phi_0(l)=1`, :math:`\\phi_1(l)=\\cos(2\\pi l/L)`,
+        :math:`\\phi_2(l)=\\sin(2\\pi l/L)`.
+
+        This preserves the relative-orientation axes (same as iso_mean) while
+        also capturing how strongly the statistics vary as the whole frame
+        rotates.  The :math:`k=0` component is identical to the :meth:`iso_mean`
+        result.
 
         Parameters
         ----------
@@ -1912,13 +1927,16 @@ class scat_cov:
         --------
         >>> stat = scat_op.eval(image)
         >>> stat_fft = stat.fft_ang(nharm=1, imaginary=True)
-        >>> # S2 shape: (..., L) -> (..., 3)   [DC, cos, sin]
-        >>> # S3 shape: (..., L, L) -> (..., 3, 3)
-        >>> # S4 shape: (..., L, L, L) -> (..., 3, 3, 3)
+        >>> # S2 shape:  (..., L)       -> (..., 3)      [DC, cos, sin]
+        >>> # S3 shape:  (..., L, L)    -> (..., L, 3)   [Δl axis kept, l1 compressed]
+        >>> # S4 shape:  (..., L, L, L) -> (..., L, L, 3)
         >>>
         >>> # Rotation-invariant first-harmonic amplitude for S2:
         >>> import numpy as np
         >>> A1_S2 = np.sqrt(stat_fft.S2[..., 1]**2 + stat_fft.S2[..., 2]**2)
+        >>>
+        >>> # Angular modulation of S3 at a given relative angle Δl:
+        >>> A1_S3_delta0 = np.sqrt(stat_fft.S3[..., 0, 1]**2 + stat_fft.S3[..., 0, 2]**2)
         """
         shape = list(self.S2.shape)
         norient = shape[3]
@@ -1961,14 +1979,20 @@ class scat_cov:
             [shape[0], shape[1], shape[2], nout],
         )
 
-        S3 = self.S3
-        shape = list(self.S3.shape)
-        if self.S3 is not None:
-            if self.backend.bk_is_complex(self.S3):
-                lmat = self.backend._fft_2_orient_C[(norient, nharm, imaginary)]
-            else:
-                lmat = self.backend._fft_2_orient[(norient, nharm, imaginary)]
+        # Ensure angular-FFT matrices exist for S3/S3P/S4
+        if (norient, nharm, imaginary) not in self.backend._fft_ang2_orient:
+            self.backend.calc_fft_ang_orient(norient, nharm, imaginary)
 
+        S3 = self.S3
+        if self.S3 is not None:
+            shape = list(self.S3.shape)
+            if self.backend.bk_is_complex(self.S3):
+                lmat = self.backend._fft_ang2_orient_C[(norient, nharm, imaginary)]
+            else:
+                lmat = self.backend._fft_ang2_orient[(norient, nharm, imaginary)]
+
+            # [B, j1, j2, L, L] -> [B, j1, j2, L*L] -> matmul -> [B, j1, j2, L*nout]
+            # -> reshape -> [B, j1, j2, L, nout]
             S3 = self.backend.bk_reshape(
                 self.backend.backend.matmul(
                     self.backend.bk_reshape(
@@ -1976,15 +2000,16 @@ class scat_cov:
                     ),
                     lmat,
                 ),
-                [shape[0], shape[1], shape[2], nout, nout],
+                [shape[0], shape[1], shape[2], norient, nout],
             )
 
         S3P = self.S3P
         if self.S3P is not None:
+            shape = list(self.S3P.shape)
             if self.backend.bk_is_complex(self.S3P):
-                lmat = self.backend._fft_2_orient_C[(norient, nharm, imaginary)]
+                lmat = self.backend._fft_ang2_orient_C[(norient, nharm, imaginary)]
             else:
-                lmat = self.backend._fft_2_orient[(norient, nharm, imaginary)]
+                lmat = self.backend._fft_ang2_orient[(norient, nharm, imaginary)]
 
             S3P = self.backend.bk_reshape(
                 self.backend.backend.matmul(
@@ -1993,17 +2018,19 @@ class scat_cov:
                     ),
                     lmat,
                 ),
-                [shape[0], shape[1], shape[2], nout, nout],
+                [shape[0], shape[1], shape[2], norient, nout],
             )
 
         S4 = self.S4
         if self.S4 is not None:
-            if self.backend.bk_is_complex(self.S4):
-                lmat = self.backend._fft_3_orient_C[(norient, nharm, imaginary)]
-            else:
-                lmat = self.backend._fft_3_orient[(norient, nharm, imaginary)]
-
             shape = list(self.S4.shape)
+            if self.backend.bk_is_complex(self.S4):
+                lmat = self.backend._fft_ang3_orient_C[(norient, nharm, imaginary)]
+            else:
+                lmat = self.backend._fft_ang3_orient[(norient, nharm, imaginary)]
+
+            # [B, j1, j2, L, L, L] -> flat [B*j1*j2, L³] -> matmul -> [B*j1*j2, L²*nout]
+            # -> reshape -> [B, j1, j2, L, L, nout]
             S4 = self.backend.bk_reshape(
                 self.backend.backend.matmul(
                     self.backend.bk_reshape(
@@ -2012,7 +2039,7 @@ class scat_cov:
                     ),
                     lmat,
                 ),
-                [shape[0], shape[1], shape[2], nout, nout, nout],
+                [shape[0], shape[1], shape[2], norient, norient, nout],
             )
 
         return scat_cov(
