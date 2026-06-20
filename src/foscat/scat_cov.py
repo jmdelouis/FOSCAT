@@ -2108,7 +2108,7 @@ class scat_cov:
             # flatten all-but-last axis
             flat_sq = bk.bk_reshape(x_sq, [-1, norient])
             out_sq = bk.backend.matmul(flat_sq, lmat_sq)   # [..., nout]
-            out = bk.bk_sqrt(bk.bk_clip_by_value(out_sq, 1e-32, 1e32))
+            out = bk.bk_sqrt(bk.bk_abs(out_sq))
             return bk.bk_reshape(out, list(x.shape[:-1]) + [nout])
 
         # Helper for 2-D orientation axes [L*L] -> [L*nout]
@@ -2118,7 +2118,7 @@ class scat_cov:
             n = batch_shape[0] * batch_shape[1] * batch_shape[2]
             flat_sq = bk.bk_reshape(x_sq, [n, norient * norient])
             out_sq = bk.backend.matmul(flat_sq, lmat_sq)
-            out = bk.bk_sqrt(bk.bk_clip_by_value(out_sq, 1e-32, 1e32))
+            out = bk.bk_sqrt(bk.bk_abs(out_sq))
             return bk.bk_reshape(out, [batch_shape[0], batch_shape[1], batch_shape[2], norient, nout])
 
         # Helper for 3-D orientation axes [L*L*L] -> [L*L*nout]
@@ -2128,7 +2128,7 @@ class scat_cov:
             n = batch_shape[0] * batch_shape[1] * batch_shape[2]
             flat_sq = bk.bk_reshape(x_sq, [n, norient * norient * norient])
             out_sq = bk.backend.matmul(flat_sq, lmat_sq)
-            out = bk.bk_sqrt(bk.bk_clip_by_value(out_sq, 1e-32, 1e32))
+            out = bk.bk_sqrt(bk.bk_abs(out_sq))
             return bk.bk_reshape(out, [batch_shape[0], batch_shape[1], batch_shape[2], norient, norient, nout])
 
         # --- S1 ---
