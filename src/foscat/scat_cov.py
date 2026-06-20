@@ -2053,6 +2053,129 @@ class scat_cov:
             use_1D=self.use_1D,
         )
 
+    def fft_ang_sigma(self, nharm=1, imaginary=False):
+        """Propagate per-coefficient standard deviations through ``fft_ang``.
+
+        When the input object contains standard deviations ``sigma_j`` (e.g. the
+        variance output of :meth:`eval` with ``calc_var=True``), applying
+        :meth:`fft_ang` directly would be **wrong** because linear projection of
+        sigma gives near-zero values for harmonic components (cosine/sine sum to
+        zero over uniform sigma values).
+
+        The correct formula for a linear map :math:`y_k = \\sum_j A_{jk}\\,x_j`
+        with independent inputs of variance :math:`\\sigma_j^2` is:
+
+        .. math::
+
+            \\sigma_{y_k} = \\sqrt{\\sum_j A_{jk}^2 \\, \\sigma_j^2}
+
+        This method applies that formula element-wise using the squared projection
+        matrices, ensuring that the output sigma is always positive and physically
+        meaningful for use as the ``sigma`` argument of :meth:`reduce_distance`.
+
+        Parameters
+        ----------
+        nharm : int, optional
+            Passed through to the underlying projection matrices (same as in
+            :meth:`fft_ang`).
+        imaginary : bool, optional
+            Passed through (same as in :meth:`fft_ang`).
+
+        Returns
+        -------
+        scat_cov
+            A new statistics object with the same shape as ``fft_ang`` output
+            but containing propagated standard deviations.
+        """
+        shape = list(self.S2.shape)
+        norient = shape[3]
+
+        if (norient, nharm, imaginary) not in self.backend._fft_1_orient:
+            self.backend.calc_fft_orient(norient, nharm, imaginary)
+
+        nout = 1 + nharm
+        if imaginary:
+            nout = 1 + nharm * 2
+
+        bk = self.backend
+
+        # Helper: apply squared-matrix variance propagation for a 1-D orientation axis.
+        # input shape [..., L], output shape [..., nout]
+        def _prop1(x, lmat):
+            # lmat: [L, nout] (real)
+            lmat_sq = lmat * lmat
+            x_sq = x * x
+            # flatten all-but-last axis
+            flat_sq = bk.bk_reshape(x_sq, [-1, norient])
+            out_sq = bk.backend.matmul(flat_sq, lmat_sq)   # [..., nout]
+            out = bk.bk_sqrt(bk.bk_clip_by_value(out_sq, 1e-32, 1e32))
+            return bk.bk_reshape(out, list(x.shape[:-1]) + [nout])
+
+        # Helper for 2-D orientation axes [L*L] -> [L*nout]
+        def _prop2(x, lmat, batch_shape):
+            lmat_sq = lmat * lmat
+            x_sq = x * x
+            n = batch_shape[0] * batch_shape[1] * batch_shape[2]
+            flat_sq = bk.bk_reshape(x_sq, [n, norient * norient])
+            out_sq = bk.backend.matmul(flat_sq, lmat_sq)
+            out = bk.bk_sqrt(bk.bk_clip_by_value(out_sq, 1e-32, 1e32))
+            return bk.bk_reshape(out, [batch_shape[0], batch_shape[1], batch_shape[2], norient, nout])
+
+        # Helper for 3-D orientation axes [L*L*L] -> [L*L*nout]
+        def _prop3(x, lmat, batch_shape):
+            lmat_sq = lmat * lmat
+            x_sq = x * x
+            n = batch_shape[0] * batch_shape[1] * batch_shape[2]
+            flat_sq = bk.bk_reshape(x_sq, [n, norient * norient * norient])
+            out_sq = bk.backend.matmul(flat_sq, lmat_sq)
+            out = bk.bk_sqrt(bk.bk_clip_by_value(out_sq, 1e-32, 1e32))
+            return bk.bk_reshape(out, [batch_shape[0], batch_shape[1], batch_shape[2], norient, norient, nout])
+
+        # --- S1 ---
+        S1 = self.S1
+        if self.S1 is not None:
+            lmat = bk._fft_1_orient[(norient, nharm, imaginary)]
+            S1 = _prop1(self.S1, lmat)
+
+        # --- S2 ---
+        lmat = bk._fft_1_orient[(norient, nharm, imaginary)]
+        S2 = _prop1(self.S2, lmat)
+
+        if (norient, nharm, imaginary) not in bk._fft_ang2_orient:
+            bk.calc_fft_ang_orient(norient, nharm, imaginary)
+
+        # --- S3 ---
+        S3 = self.S3
+        if self.S3 is not None:
+            sh = list(self.S3.shape)
+            lmat = bk._fft_ang2_orient[(norient, nharm, imaginary)]
+            S3 = _prop2(self.S3, lmat, sh)
+
+        # --- S3P ---
+        S3P = self.S3P
+        if self.S3P is not None:
+            sh = list(self.S3P.shape)
+            lmat = bk._fft_ang2_orient[(norient, nharm, imaginary)]
+            S3P = _prop2(self.S3P, lmat, sh)
+
+        # --- S4 ---
+        S4 = self.S4
+        if self.S4 is not None:
+            sh = list(self.S4.shape)
+            lmat = bk._fft_ang3_orient[(norient, nharm, imaginary)]
+            S4 = _prop3(self.S4, lmat, sh)
+
+        return scat_cov(
+            self.S0,
+            S2,
+            S3,
+            S4,
+            s1=S1,
+            s3p=S3P,
+            backend=self.backend,
+            use_1D=self.use_1D,
+        )
+
     def iso_std(self, repeat=False):
 
         val = (self - self.iso_mean(repeat=True)).square_comp()
@@ -7187,7 +7310,9 @@ class funct(FOC.FoCUS):
                     sref = sref.iso_mean()
                 if fft_ang:
                     ref = ref.fft_ang(nharm=fft_nharm, imaginary=fft_imaginary)
-                    sref = sref.fft_ang(nharm=fft_nharm, imaginary=fft_imaginary)
+                    # sref contains per-coefficient standard deviations: propagate with A²
+                    # (not A) to avoid near-zero sigma for harmonic components
+                    sref = sref.fft_ang_sigma(nharm=fft_nharm, imaginary=fft_imaginary)
 
             # compute the mean of the population does nothing if only one map is given
             ref = self.reduce_mean_batch(ref)
