@@ -348,7 +348,7 @@ Three coefficients per projected axis (basis functions $\phi_k$):
 
 | Index k | $\phi_k(l)$ | Physical meaning |
 |---|---|---|
-| 0 | $1$ | DC — sum over the projected axis |
+| 0 | $1/L$ | DC — **mean** over the projected axis (= `iso_mean` value) |
 | 1 | $\cos(2\pi l/L)$ | In-phase first harmonic |
 | 2 | $\sin(2\pi l/L)$ | Quadrature first harmonic |
 
@@ -373,8 +373,8 @@ $$\text{S3\_out}[\Delta l, k] = \sum_{l_1} \phi_k(l_1) \cdot S3[l_1,\,(l_1+\Delt
 
 $$\text{S4\_out}[\Delta l_{12}, \Delta l_{13}, k] = \sum_{l_1} \phi_k(l_1) \cdot S4[l_1,\,(l_1+\Delta l_{12})\bmod L,\,(l_1+\Delta l_{13})\bmod L]$$
 
-The $k=0$ coefficient equals $L \times \text{iso\_mean}$. Components $k=1,2$ capture
-the angular modulation around that mean.
+The $k=0$ coefficient equals `iso_mean` exactly ($\phi_0 = 1/L$, so $\sum_{l_1}(1/L)\cdot S3[\ldots] = \text{mean}$).
+Components $k=1,2$ capture the angular modulation around that mean.
 
 #### `fft_ang` vs `iso_ang` — choosing the right reduction
 

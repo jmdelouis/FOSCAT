@@ -247,7 +247,7 @@ $$\text{S3\_out}[\Delta l, k] = \sum_{l_1} \phi_k(l_1) \cdot S3[l_1,\,(l_1+\Delt
 
 $$\text{S4\_out}[\Delta l_{12}, \Delta l_{13}, k] = \sum_{l_1} \phi_k(l_1) \cdot S4[l_1,\,(l_1+\Delta l_{12})\bmod L,\,(l_1+\Delta l_{13})\bmod L]$$
 
-The $k=0$ coefficient is a **sum** over l1 (= $L$ × `iso_mean` value). Components $k=1,2$
+The $k=0$ coefficient is the **mean** over l1 (identical to the `iso_mean` value at the same $\Delta l$). Components $k=1,2$
 capture how the statistics vary as the image frame rotates. The amplitude
 $A_1 = \sqrt{c_1^2 + s_1^2}$ is the same for all global rotations of the field.
 

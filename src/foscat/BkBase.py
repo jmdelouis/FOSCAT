@@ -182,7 +182,7 @@ class BackendBase:
 
         if imaginary:
             tmp = np.zeros([norient, 1 + nharm * 2])
-            tmp[:, 0] = 1.0
+            tmp[:, 0] = 1.0 / norient   # DC = mean (not sum), consistent with iso_mean
             for k in range(nharm):
                 tmp[:, k * 2 + 1] = np.cos(x * (k + 1))
                 tmp[:, k * 2 + 2] = np.sin(x * (k + 1))
@@ -196,7 +196,8 @@ class BackendBase:
             )
         else:
             tmp = np.zeros([norient, 1 + nharm])
-            for k in range(nharm + 1):
+            tmp[:, 0] = 1.0 / norient   # DC = mean (not sum)
+            for k in range(1, nharm + 1):
                 tmp[:, k] = np.cos(x * k)
 
             self._fft_1_orient[(norient, nharm, imaginary)] = self.bk_cast(
@@ -430,14 +431,15 @@ class BackendBase:
         if imaginary:
             nout = 1 + 2 * nharm
             basis = np.zeros([L, nout])
-            basis[:, 0] = 1.0
+            basis[:, 0] = 1.0 / L   # DC = mean over l1, consistent with iso_mean
             for k in range(nharm):
                 basis[:, k * 2 + 1] = np.cos(x * (k + 1))
                 basis[:, k * 2 + 2] = np.sin(x * (k + 1))
         else:
             nout = 1 + nharm
             basis = np.zeros([L, nout])
-            for k in range(nharm + 1):
+            basis[:, 0] = 1.0 / L   # DC = mean over l1
+            for k in range(1, nharm + 1):
                 basis[:, k] = np.cos(x * k)
 
         # ---- S3/S3P: [L*L] → [L*nout] ----
