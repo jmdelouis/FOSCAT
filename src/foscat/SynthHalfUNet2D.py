@@ -267,6 +267,11 @@ def train_synth_unet(
     eval_frequency: int = 100,
     norm: str = "auto",
     Jmax_scat=None,
+    edge: bool = False,
+    iso_ang: bool = False,
+    fft_ang: bool = False,
+    fft_nharm: int = 1,
+    fft_imaginary: bool = True,
     device: str | None = None,
 ) -> SynthHalfUNet2D:
     """Train a SynthHalfUNet2D to reproduce the scattering covariance of a target.
@@ -282,31 +287,47 @@ def train_synth_unet(
     scat_op : FoCUS
         Initialised FOSCAT operator (``use_2D=True``).
     Jmax : int
-        Number of wavelet scales (decoder depth).
+        Number of upsampling levels in the U-Net decoder.
     n_samples : int
-        Number of independent synthesis samples generated per training step
-        (= batch size of the noise z).  More samples → more stable gradient,
-        but more memory.
+        Noise batch size per training step.  More samples → more stable
+        gradient, more memory.
     channel_list : list[int] or None
-        Feature channels per decoder level, ordered **coarsest → finest**
-        (same convention as :class:`SynthHalfUNet2D`).
+        Feature channels per decoder level, ordered **coarsest → finest**.
         Default: ``[min(32·2^(Jmax-j), 256) for j in 0..Jmax]``.
     out_channels : int
-        Output channels of the network (1 for single-channel textures).
+        Output channels per image (1 for single-channel textures).
     lr : float
-        Learning rate for Adam.
+        Initial Adam learning rate.
     n_epochs : int
         Number of training epochs.
     eval_frequency : int
         Print loss every this many epochs.
     norm : str
-        Normalisation passed to ``scat_op.eval``.
+        Normalisation passed to ``scat_op.eval`` (e.g. ``'auto'``).
     Jmax_scat : int or None
-        Maximum wavelet scale used when computing scattering covariances
-        (passed as ``Jmax`` to ``scat_op.eval``).  ``None`` (default) lets
-        FOSCAT use all scales available in ``scat_op`` — recommended.
-        **Note**: this is independent of the U-Net depth ``Jmax``, which
-        controls how many upsampling levels the decoder has.
+        Maximum wavelet scale for the scattering-covariance loss.  ``None``
+        uses all scales available in ``scat_op``.  **Independent of the U-Net
+        depth** ``Jmax``.
+    edge : bool
+        If ``True``, pass ``edge=True`` to ``scat_op.eval`` to compute
+        statistics on edge pixels as well.  Must match how the target
+        statistics are used in the rest of the pipeline.
+    iso_ang : bool
+        If ``True``, apply :meth:`~foscat.scat_cov.scat_cov.iso_mean` to the
+        scattering covariance after ``eval``, collapsing the orientation axes
+        to a single isotropic mean.  Cannot be combined with ``fft_ang``.
+    fft_ang : bool
+        If ``True``, apply :meth:`~foscat.scat_cov.scat_cov.fft_ang` to the
+        scattering covariance after ``eval``, projecting the orientation axes
+        onto the first ``fft_nharm`` Fourier harmonics.  Cannot be combined
+        with ``iso_ang``.
+    fft_nharm : int
+        Number of harmonics kept by ``fft_ang`` (beyond the DC term).
+        Default 1.  Ignored when ``fft_ang=False``.
+    fft_imaginary : bool
+        If ``True`` (default), keep both cosine and sine components in
+        ``fft_ang``, giving rotation-invariant amplitudes.
+        Ignored when ``fft_ang=False``.
     device : str or None
         ``'cuda'``, ``'cpu'``, or None (auto-detect).
 
@@ -314,12 +335,38 @@ def train_synth_unet(
     -------
     SynthHalfUNet2D
         The trained network (in eval mode).
+
+    Examples
+    --------
+    >>> model = train_synth_unet(
+    ...     target, scat_op, Jmax=4,
+    ...     edge=True,          # same edge handling as scat_op.synthesis
+    ...     iso_ang=True,       # isotropic loss (fewer statistics)
+    ...     n_epochs=2000,
+    ... )
+
+    >>> model = train_synth_unet(
+    ...     target, scat_op, Jmax=4,
+    ...     fft_ang=True,       # orientation-aware Fourier loss
+    ...     fft_nharm=1,
+    ...     fft_imaginary=True,
+    ...     n_epochs=3000,
+    ... )
     """
+    if iso_ang and fft_ang:
+        raise ValueError("iso_ang and fft_ang are mutually exclusive.")
+
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    # Jmax_scat=None → FOSCAT uses all scales available in scat_op.
-    # Do NOT default to the U-Net Jmax: the two are independent parameters.
+    # ---- Helper: reduce statistics after eval -------------------------- #
+    def _reduce(sc):
+        """Apply iso_ang / fft_ang reduction (or none) to a scat_cov."""
+        if iso_ang:
+            return sc.iso_mean()
+        if fft_ang:
+            return sc.fft_ang(nharm=fft_nharm, imaginary=fft_imaginary)
+        return sc
 
     # ---- Prepare target image ----------------------------------------- #
     if target_image.dim() == 2:
@@ -327,13 +374,10 @@ def train_synth_unet(
     H, W = target_image.shape[-2], target_image.shape[-1]
     target_image = target_image.to(device)
 
-    # ---- Compute target scattering covariance -------------------------- #
+    # ---- Compute target scattering covariance (once) ------------------- #
     with torch.no_grad():
-        # scat_op.eval expects [batch, H, W] (2D mode)
-        target_sc = scat_op.eval(
-            target_image,
-            Jmax=Jmax_scat,   # None → use all available scales
-            norm=norm,
+        target_sc = _reduce(
+            scat_op.eval(target_image, Jmax=Jmax_scat, norm=norm, edge=edge)
         )
 
     # ---- Build model --------------------------------------------------- #
@@ -352,18 +396,14 @@ def train_synth_unet(
     for epoch in range(1, n_epochs + 1):
         optimizer.zero_grad()
 
-        # Sample fresh white noise each epoch
         z = torch.randn(n_samples, 1, H, W, device=device)
+        x_synth = model(z)                          # [N, out_ch, H, W]
+        x_input = x_synth[:, 0, :, :]              # [N, H, W]
 
-        # Forward pass → [N, out_channels, H, W]
-        x_synth = model(z)   # [N, 1, H, W]
+        synth_sc = _reduce(
+            scat_op.eval(x_input, Jmax=Jmax_scat, norm=norm, edge=edge)
+        )
 
-        # Compute scattering covariance of all N synthesised maps
-        # scat_op.eval expects [batch, H, W]
-        x_input = x_synth[:, 0, :, :]   # [N, H, W]
-        synth_sc = scat_op.eval(x_input, Jmax=Jmax_scat, norm=norm)
-
-        # Loss: mean scat-cov distance across the N samples
         loss = scat_op.reduce_distance(synth_sc, target_sc) / n_samples
 
         loss.backward()

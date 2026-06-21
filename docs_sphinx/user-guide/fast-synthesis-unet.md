@@ -125,6 +125,11 @@ The optimizer is Adam with a cosine-annealing learning-rate schedule.
 | `eval_frequency` | `100` | Print loss every N epochs. |
 | `norm` | `'auto'` | Normalisation passed to `scat_op.eval`. Must be the same at training and evaluation time. |
 | `Jmax_scat` | `None` | Maximum scale for scattering-covariance computation. `None` uses all scales available in `scat_op` — recommended. **Do not confuse with the U-Net `Jmax`.** |
+| `edge` | `False` | If `True`, pass `edge=True` to `scat_op.eval`. Controls whether edge pixels contribute to the statistics. Must match the convention used in the rest of the pipeline. |
+| `iso_ang` | `False` | Apply `iso_mean()` after `eval`, collapsing orientation axes to a single isotropic mean. Reduces the number of loss terms and speeds up training. Mutually exclusive with `fft_ang`. |
+| `fft_ang` | `False` | Apply `fft_ang()` after `eval`, projecting the orientation axes onto the first `fft_nharm` Fourier harmonics. Keeps orientation information in a compact form. Mutually exclusive with `iso_ang`. |
+| `fft_nharm` | `1` | Number of harmonics beyond DC kept by `fft_ang`. Ignored when `fft_ang=False`. |
+| `fft_imaginary` | `True` | If `True`, keep both cosine and sine components in `fft_ang` (rotation-invariant amplitudes). Ignored when `fft_ang=False`. |
 | `device` | auto | `'cuda'` or `'cpu'`. Defaults to CUDA if available. |
 
 ### `generate_samples`
@@ -200,7 +205,9 @@ target = torch.tensor(np.load("my_texture.npy"), dtype=torch.float32)  # [H, W]
 
 # 3. Train the decoder U-Net
 #    - Jmax=4: 4 upsampling levels  (coarsest map = H/16 × W/16 for H=256)
-#    - channel_list: 128 channels at coarsest, 16 at finest
+#    - channel_list: 128 channels at coarsest, 8 at finest
+#    - edge=True: include edge pixels in the statistics (match synthesis convention)
+#    - fft_ang=True: orientation-aware Fourier loss (keeps DC = iso_mean + harmonics)
 #    - Jmax_scat=None: use all FOSCAT scales
 model = train_synth_unet(
     target,
@@ -211,6 +218,10 @@ model = train_synth_unet(
     lr=1e-3,
     n_epochs=3000,
     eval_frequency=200,
+    edge=True,
+    fft_ang=True,        # or iso_ang=True for isotropic loss
+    fft_nharm=1,
+    fft_imaginary=True,
 )
 
 # 4. Generate new samples instantly
