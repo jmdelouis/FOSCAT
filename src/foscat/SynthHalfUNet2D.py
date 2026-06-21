@@ -68,25 +68,46 @@ class ConvBlock2D(nn.Module):
 class SynthHalfUNet2D(nn.Module):
     """Decoder-only U-Net for fast scattering-covariance texture synthesis.
 
+    At inference time a single forward pass (milliseconds) replaces the slow
+    gradient-descent synthesis (minutes).  The network is trained by
+    overfitting to a single target scattering covariance using
+    :func:`train_synth_unet`.
+
     Parameters
     ----------
     scat_op : FoCUS
         A FOSCAT FoCUS object initialised with ``use_2D=True``.  Its oriented
         wavelet kernels (``ww_RealT[1]``, ``ww_ImagT[1]``) are extracted and
-        registered as frozen buffers.
+        registered as **frozen** buffers (not trained).
     Jmax : int
-        Number of wavelet scales (depth of the decoder).  The spatial
-        resolution at the coarsest level is  H/2^Jmax × W/2^Jmax.
+        Number of wavelet scales (decoder depth).  The spatial resolution at
+        the coarsest level is H/2^Jmax × W/2^Jmax.
     channel_list : list[int] or None
-        Number of feature-map channels at each decoder level, ordered from
-        **coarsest to finest**: ``channel_list[0]`` is used at level Jmax,
-        ``channel_list[-1]`` just before the output convolution.
-        Length must be ``Jmax + 1``.
-        Default: doubles from finest to coarsest, capped at 256.
-        Example for Jmax=3: [256, 128, 64, 32].
+        Feature-map channels at each decoder level, ordered **coarsest →
+        finest**: ``channel_list[0]`` is used at level Jmax (coarsest),
+        ``channel_list[-1]`` is used just before the output Conv1×1.
+        Must have length ``Jmax + 1``.
+        Default: ``[min(32·2^(Jmax-j), 256) for j in 0..Jmax]``,
+        e.g. ``[256, 128, 64, 32]`` for Jmax=3.
     out_channels : int
-        Number of output image channels.  Use 1 for single-channel textures.
-        Run N independent samples by setting the batch size to N.
+        Number of output image channels (1 for single-channel textures).
+        Generate N independent samples by setting the batch size of z to N.
+
+    Examples
+    --------
+    >>> import torch
+    >>> from foscat.SynthHalfUNet2D import SynthHalfUNet2D, train_synth_unet, generate_samples
+    >>> import foscat.scat_cov2D as sc
+    >>>
+    >>> scat_op = sc.funct(NORIENT=4, KERNELSZ=3, use_2D=True)
+    >>> target = torch.tensor(my_image_2d)           # shape [H, W]
+    >>>
+    >>> # Train (overfits to the scattering covariance of target)
+    >>> model = train_synth_unet(target, scat_op, Jmax=3, n_epochs=2000)
+    >>>
+    >>> # Generate new samples instantly
+    >>> samples = generate_samples(model, n_samples=8, H=256, W=256)
+    >>> # samples: torch.Tensor [8, 1, 256, 256]
     """
 
     def __init__(
@@ -196,16 +217,15 @@ class SynthHalfUNet2D(nn.Module):
         """
         skips = self._wavelet_skips(z)   # skips[0]=finest .. skips[Jmax]=coarsest
 
-        # Low-frequency component of z at coarsest scale
-        z_avg = skips[self.Jmax][:, :1, :, :]   # reuse already-pooled z_Jmax (1 ch)
-        # Note: skips[Jmax][:, 0, :, :] is Re(ψ_0 ★ z_Jmax), not z_Jmax itself.
-        # We need the actual pooled z.  Compute it separately.
+        # Low-frequency component of z at coarsest resolution.
+        # Cannot reuse skips[Jmax] (those are wavelet responses, not z itself).
         z_coarse = z
         for _ in range(self.Jmax):
             z_coarse = F.avg_pool2d(z_coarse, 2)
         # z_coarse: [N, 1, H/2^Jmax, W/2^Jmax]
 
         # ---- Initial block at coarsest scale ----
+        # Input: wavelet skip (2L ch) + low-frequency z (1 ch) = 2L+1 channels
         x = self.init_block(torch.cat([skips[self.Jmax], z_coarse], dim=1))
 
         # ---- Decode from Jmax-1 down to 0 ----
@@ -232,7 +252,7 @@ def train_synth_unet(
     n_epochs: int = 2000,
     eval_frequency: int = 100,
     norm: str = "auto",
-    Jmax_eval=None,
+    Jmax_scat=None,
     device: str | None = None,
 ) -> SynthHalfUNet2D:
     """Train a SynthHalfUNet2D to reproduce the scattering covariance of a target.
@@ -254,8 +274,9 @@ def train_synth_unet(
         (= batch size of the noise z).  More samples → more stable gradient,
         but more memory.
     channel_list : list[int] or None
-        Feature channels per decoder level (coarsest to finest).
-        Default: [min(32·2^(Jmax-j), 256) for j=0..Jmax].
+        Feature channels per decoder level, ordered **coarsest → finest**
+        (same convention as :class:`SynthHalfUNet2D`).
+        Default: ``[min(32·2^(Jmax-j), 256) for j in 0..Jmax]``.
     out_channels : int
         Output channels of the network (1 for single-channel textures).
     lr : float
@@ -266,8 +287,12 @@ def train_synth_unet(
         Print loss every this many epochs.
     norm : str
         Normalisation passed to ``scat_op.eval``.
-    Jmax_eval : int or None
-        Maximum scale passed to ``scat_op.eval`` (default = Jmax).
+    Jmax_scat : int or None
+        Maximum wavelet scale used when computing scattering covariances
+        (passed as ``Jmax`` to ``scat_op.eval``).  ``None`` (default) lets
+        FOSCAT use all scales available in ``scat_op`` — recommended.
+        **Note**: this is independent of the U-Net depth ``Jmax``, which
+        controls how many upsampling levels the decoder has.
     device : str or None
         ``'cuda'``, ``'cpu'``, or None (auto-detect).
 
@@ -279,8 +304,8 @@ def train_synth_unet(
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    if Jmax_eval is None:
-        Jmax_eval = Jmax
+    # Jmax_scat=None → FOSCAT uses all scales available in scat_op.
+    # Do NOT default to the U-Net Jmax: the two are independent parameters.
 
     # ---- Prepare target image ----------------------------------------- #
     if target_image.dim() == 2:
@@ -293,7 +318,7 @@ def train_synth_unet(
         # scat_op.eval expects [batch, H, W] (2D mode)
         target_sc = scat_op.eval(
             target_image,
-            Jmax=Jmax_eval,
+            Jmax=Jmax_scat,   # None → use all available scales
             norm=norm,
         )
 
@@ -322,7 +347,7 @@ def train_synth_unet(
         # Compute scattering covariance of all N synthesised maps
         # scat_op.eval expects [batch, H, W]
         x_input = x_synth[:, 0, :, :]   # [N, H, W]
-        synth_sc = scat_op.eval(x_input, Jmax=Jmax_eval, norm=norm)
+        synth_sc = scat_op.eval(x_input, Jmax=Jmax_scat, norm=norm)
 
         # Loss: mean scat-cov distance across the N samples
         loss = scat_op.reduce_distance(synth_sc, target_sc) / n_samples
