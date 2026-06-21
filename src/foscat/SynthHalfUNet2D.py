@@ -44,16 +44,23 @@ import torch.nn.functional as F
 # ---------------------------------------------------------------------------
 
 class ConvBlock2D(nn.Module):
-    """Two stacked Conv3×3 + BatchNorm + LeakyReLU layers."""
+    """Two stacked Conv3×3 + InstanceNorm + LeakyReLU layers.
+
+    InstanceNorm is used instead of BatchNorm so that each sample in the batch
+    is normalised independently.  BatchNorm computes statistics across the
+    batch dimension and therefore averages out the sample-to-sample variation
+    introduced by the noise input z, causing mode collapse (all z produce the
+    same output).  InstanceNorm has no such effect.
+    """
 
     def __init__(self, in_ch: int, out_ch: int, negative_slope: float = 0.2):
         super().__init__()
         self.block = nn.Sequential(
-            nn.Conv2d(in_ch, out_ch, 3, padding=1, bias=False),
-            nn.BatchNorm2d(out_ch),
+            nn.Conv2d(in_ch, out_ch, 3, padding=1, bias=True),
+            nn.InstanceNorm2d(out_ch, affine=True),
             nn.LeakyReLU(negative_slope, inplace=True),
-            nn.Conv2d(out_ch, out_ch, 3, padding=1, bias=False),
-            nn.BatchNorm2d(out_ch),
+            nn.Conv2d(out_ch, out_ch, 3, padding=1, bias=True),
+            nn.InstanceNorm2d(out_ch, affine=True),
             nn.LeakyReLU(negative_slope, inplace=True),
         )
 
@@ -151,13 +158,16 @@ class SynthHalfUNet2D(nn.Module):
         )
         self.channel_list = channel_list
 
-        skip_ch = 2 * L   # real + imaginary channels per scale
+        # Each skip contains: Re(ψ_l ★ z_j), Im(ψ_l ★ z_j), z_j
+        # The extra z_j channel gives the decoder a direct, unfiltered path
+        # from the noise to each decoder level, preventing mode collapse.
+        skip_ch = 2 * L + 1   # real + imaginary (2L) + raw z (1)
 
         # ------------------------------------------------------------------ #
         # Decoder blocks                                                       #
         # ------------------------------------------------------------------ #
-        # InitBlock: processes [skip_Jmax (2L ch) + z_avg (1 ch)] at coarsest
-        self.init_block = ConvBlock2D(skip_ch + 1, channel_list[0])
+        # InitBlock: input = skip_Jmax (2L+1 ch, which already contains z_Jmax)
+        self.init_block = ConvBlock2D(skip_ch, channel_list[0])
 
         # One ConvBlock per upsampling step (Jmax steps, from Jmax-1 to 0)
         self.decoder_blocks = nn.ModuleList()
@@ -178,10 +188,19 @@ class SynthHalfUNet2D(nn.Module):
     def _wavelet_skips(self, z: torch.Tensor) -> list[torch.Tensor]:
         """Return skip tensors at every scale.
 
+        Each skip contains the oriented wavelet responses of z at that scale
+        **plus the raw (downsampled) noise z_j itself**.  The extra z_j
+        channel gives the decoder a direct, unfiltered path from the noise to
+        each spatial resolution, which is the primary mechanism for producing
+        diverse outputs.
+
         Returns
         -------
         skips : list of tensors, len = Jmax+1
-            ``skips[j]`` has shape ``[N, 2L, H/2^j, W/2^j]``
+            ``skips[j]`` has shape ``[N, 2L+1, H/2^j, W/2^j]``
+            Channels: ``[Re(ψ_0★z_j), …, Re(ψ_{L-1}★z_j),``
+                        ``Im(ψ_0★z_j), …, Im(ψ_{L-1}★z_j),``
+                        ``z_j]``
             (j=0 finest, j=Jmax coarsest).
         """
         pad = self._pad
@@ -195,7 +214,8 @@ class SynthHalfUNet2D(nn.Module):
                 z_j = F.avg_pool2d(z_j, kernel_size=2, stride=2)
             real = F.conv2d(z_j, wc, padding=pad)   # [N, L, H/2^j, W/2^j]
             imag = F.conv2d(z_j, ws, padding=pad)
-            skips.append(torch.cat([real, imag], dim=1))  # [N, 2L, ...]
+            # Concatenate wavelet responses + raw noise: [N, 2L+1, H/2^j, W/2^j]
+            skips.append(torch.cat([real, imag, z_j], dim=1))
 
         return skips   # index 0 = finest, index Jmax = coarsest
 
@@ -216,17 +236,11 @@ class SynthHalfUNet2D(nn.Module):
         torch.Tensor, shape [N, out_channels, H, W]
         """
         skips = self._wavelet_skips(z)   # skips[0]=finest .. skips[Jmax]=coarsest
-
-        # Low-frequency component of z at coarsest resolution.
-        # Cannot reuse skips[Jmax] (those are wavelet responses, not z itself).
-        z_coarse = z
-        for _ in range(self.Jmax):
-            z_coarse = F.avg_pool2d(z_coarse, 2)
-        # z_coarse: [N, 1, H/2^Jmax, W/2^Jmax]
+        # Each skip[j] already contains [Re, Im, z_j] — 2L+1 channels.
 
         # ---- Initial block at coarsest scale ----
-        # Input: wavelet skip (2L ch) + low-frequency z (1 ch) = 2L+1 channels
-        x = self.init_block(torch.cat([skips[self.Jmax], z_coarse], dim=1))
+        # skip[Jmax] = [Re(ψ★z_J), Im(ψ★z_J), z_J]  — 2L+1 channels
+        x = self.init_block(skips[self.Jmax])
 
         # ---- Decode from Jmax-1 down to 0 ----
         for k, block in enumerate(self.decoder_blocks):
