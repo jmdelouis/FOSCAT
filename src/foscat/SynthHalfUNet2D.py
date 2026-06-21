@@ -255,23 +255,42 @@ class SynthHalfUNet2D(nn.Module):
 # Microcanonical loss helper
 # ---------------------------------------------------------------------------
 
-def _microcanonical_loss(synth_sc, target_sc, eps: float = 1e-6) -> torch.Tensor:
+def _microcanonical_loss(
+    synth_sc,
+    target_sc,
+    sigma_synth: bool = True,
+    eps: float = 1e-6,
+) -> torch.Tensor:
     """Microcanonical scattering-covariance loss.
 
     Instead of penalising each generated image individually, this loss
-    constrains the **distribution** of statistics across the N-sample batch:
+    constrains the **distribution** of statistics across the N-sample batch.
+
+    Two normalisation modes are supported:
+
+    **With** ``sigma_synth=True`` (default) — combined normalisation:
 
     .. math::
 
         \\mathcal{L} = \\sum_k
-            \\frac{(\\bar{\\Phi}_k - \\Phi^*_k)^2}{\\sigma^2_k + \\varepsilon}
+            \\frac{(\\bar{\\Phi}_k - \\Phi^*_k)^2}
+                  {\\sigma_{k,\\text{batch}} \\cdot |\\Phi^*_k| + \\varepsilon}
 
-    where :math:`\\bar{\\Phi}_k` and :math:`\\sigma^2_k` are the empirical
-    mean and variance of coefficient *k* across the N generated images.
+    The denominator is the product of two complementary terms:
 
-    **Key property:** if all generated images are identical (mode collapse),
-    :math:`\\sigma^2_k \\to 0` and the loss diverges, naturally penalising
-    collapse and encouraging diversity.
+    * :math:`\\sigma_{k,\\text{batch}}` — empirical standard deviation of
+      coefficient *k* across the N generated images.  Diverges when all images
+      are identical (mode collapse → anti-collapse).
+    * :math:`|\\Phi^*_k|` — absolute value of the target coefficient, i.e. the
+      synthesis sigma used by the classical FOSCAT loss.  Properly re-scales
+      coefficients with very different magnitudes.
+
+    **With** ``sigma_synth=False`` — pure microcanonical:
+
+    .. math::
+
+        \\mathcal{L} = \\sum_k
+            \\frac{(\\bar{\\Phi}_k - \\Phi^*_k)^2}{\\sigma^2_{k,\\text{batch}} + \\varepsilon}
 
     Parameters
     ----------
@@ -279,8 +298,12 @@ def _microcanonical_loss(synth_sc, target_sc, eps: float = 1e-6) -> torch.Tensor
         Scattering covariance of the N generated images (batch dimension N).
     target_sc : scat_cov
         Scattering covariance of the target image (batch dimension 1).
+    sigma_synth : bool
+        If ``True`` (default), multiply the batch std by ``|Φ*|`` to also
+        normalise by the natural scale of each coefficient (as in the classical
+        synthesis loss).  If ``False``, use only the batch variance.
     eps : float
-        Floor added to the variance to avoid division by zero.
+        Floor added to the denominator to avoid division by zero.
 
     Returns
     -------
@@ -293,29 +316,40 @@ def _microcanonical_loss(synth_sc, target_sc, eps: float = 1e-6) -> torch.Tensor
         None,
     )
     device = _ref.device if _ref is not None else "cpu"
-    dtype  = _ref.dtype  if _ref is not None else torch.float32
+    _rdtype = _ref.real.dtype if torch.is_complex(_ref) else _ref.dtype
 
-    loss = torch.zeros([], device=device, dtype=dtype if not torch.is_complex(_ref) else _ref.real.dtype)
+    loss = torch.zeros([], device=device, dtype=_rdtype)
 
     def _term(s_t, t_t):
         if s_t is None or t_t is None:
             return 0.0
         # target may have batch=1; take mean over it to be safe
         t = t_t.mean(dim=0)          # [...] — removes batch dimension
+
         if torch.is_complex(s_t):
             s_r, s_i = s_t.real, s_t.imag
-            mean_r = s_r.mean(dim=0)
-            mean_i = s_i.mean(dim=0)
-            var_r  = s_r.var(dim=0, unbiased=False).clamp(min=eps)
-            var_i  = s_i.var(dim=0, unbiased=False).clamp(min=eps)
+            mean_r  = s_r.mean(dim=0)
+            mean_i  = s_i.mean(dim=0)
+            std_r   = s_r.var(dim=0, unbiased=False).sqrt()
+            std_i   = s_i.var(dim=0, unbiased=False).sqrt()
+            if sigma_synth:
+                denom_r = (std_r * t.real.abs()).clamp(min=eps)
+                denom_i = (std_i * t.imag.abs()).clamp(min=eps)
+            else:
+                denom_r = std_r.pow(2).clamp(min=eps)
+                denom_i = std_i.pow(2).clamp(min=eps)
             return (
-                ((mean_r - t.real) ** 2 / var_r).sum()
-                + ((mean_i - t.imag) ** 2 / var_i).sum()
+                ((mean_r - t.real) ** 2 / denom_r).sum()
+                + ((mean_i - t.imag) ** 2 / denom_i).sum()
             )
         else:
-            mean = s_t.mean(dim=0)
-            var  = s_t.var(dim=0, unbiased=False).clamp(min=eps)
-            return ((mean - t) ** 2 / var).sum()
+            mean    = s_t.mean(dim=0)
+            std_b   = s_t.var(dim=0, unbiased=False).sqrt()
+            if sigma_synth:
+                denom = (std_b * t.abs()).clamp(min=eps)
+            else:
+                denom = std_b.pow(2).clamp(min=eps)
+            return ((mean - t) ** 2 / denom).sum()
 
     for attr in ("S0", "S1", "S2", "S3", "S3P", "S4"):
         loss = loss + _term(getattr(synth_sc, attr, None),
@@ -346,6 +380,7 @@ def train_synth_unet(
     fft_nharm: int = 1,
     fft_imaginary: bool = True,
     microcanonical: bool = True,
+    sigma_synth: bool = True,
     micro_eps: float = 1e-6,
     device: str | None = None,
 ) -> SynthHalfUNet2D:
@@ -406,11 +441,18 @@ def train_synth_unet(
     microcanonical : bool
         If ``True`` (default), use the **microcanonical loss**
         :func:`_microcanonical_loss`: the batch mean of statistics must match
-        the target, normalised by the batch variance.  Mode collapse is
-        naturally penalised because variance → 0 makes the loss diverge.
+        the target, normalised by the batch standard deviation.  Mode collapse
+        is naturally penalised because σ_batch → 0 makes the loss diverge.
         If ``False``, use the classical per-sample distance (each generated
         image must independently match the target) averaged over the batch.
         Requires ``n_samples >= 2``.
+    sigma_synth : bool
+        Only used when ``microcanonical=True``.  If ``True`` (default), the
+        denominator is :math:`\\sigma_{k,\\text{batch}} \\times |\\Phi^*_k|`,
+        combining the anti-collapse property (from :math:`\\sigma_\\text{batch}`)
+        with the per-coefficient scaling from the synthesis sigma
+        (:math:`|\\Phi^*_k|`).  If ``False``, use only
+        :math:`\\sigma^2_{k,\\text{batch}}` (pure microcanonical).
     micro_eps : float
         Variance floor for the microcanonical loss (prevents division by
         exactly zero at the very start of training).  Default ``1e-6``.
@@ -496,9 +538,14 @@ def train_synth_unet(
         )
 
         if microcanonical:
-            # Microcanonical loss: (mean_k - target_k)^2 / var_k
-            # — naturally penalises mode collapse (var → 0 → loss diverges)
-            loss = _microcanonical_loss(synth_sc, target_sc, eps=micro_eps)
+            # Microcanonical loss: (mean_k - target_k)^2 / (σ_batch × |Φ*| + ε)
+            # σ_batch → 0 (mode collapse) → loss diverges (anti-collapse)
+            # |Φ*| re-scales coefficients (synthesis sigma)
+            loss = _microcanonical_loss(
+                synth_sc, target_sc,
+                sigma_synth=sigma_synth,
+                eps=micro_eps,
+            )
         else:
             # Classical: each sample independently matches the target
             loss = scat_op.reduce_distance(synth_sc, target_sc) / n_samples

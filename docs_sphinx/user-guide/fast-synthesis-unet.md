@@ -85,18 +85,27 @@ No skip connections from an encoder; the wavelet responses of $z$ play that role
 
 The default training objective is the **microcanonical loss**, which constrains
 the *distribution* of statistics across the N generated images rather than each
-image individually:
+image individually.
+
+**Combined normalisation** (`sigma_synth=True`, default):
 
 $$\mathcal{L}(\theta) =
-  \sum_k \frac{\bigl(\bar{\Phi}_k - \Phi^*_k\bigr)^2}{\sigma^2_k + \varepsilon}$$
+  \sum_k \frac{\bigl(\bar{\Phi}_k - \Phi^*_k\bigr)^2}
+              {\sigma_{k,\text{batch}} \cdot |\Phi^*_k| + \varepsilon}$$
 
-where
+The denominator is the product of two complementary normalisation terms:
 
-$$\bar{\Phi}_k = \frac{1}{N}\sum_{i=1}^N \Phi_k(G_\theta(z_i)), \qquad
-  \sigma^2_k = \frac{1}{N}\sum_{i=1}^N \bigl(\Phi_k(G_\theta(z_i)) - \bar{\Phi}_k\bigr)^2$$
+| Term | Formula | Role |
+|------|---------|------|
+| Batch std | $\sigma_{k,\text{batch}} = \sqrt{\tfrac{1}{N}\sum_i (\Phi_k(x_i) - \bar\Phi_k)^2}$ | Anti-collapse: diverges if all images identical |
+| Synthesis sigma | $|\Phi^*_k|$ | Per-coefficient scale matching the classical FOSCAT synthesis loss |
 
-are the empirical mean and variance of coefficient $k$ across the batch, and
-$\Phi^*$ is the target scattering covariance.
+where $\bar{\Phi}_k = \frac{1}{N}\sum_{i=1}^N \Phi_k(G_\theta(z_i))$.
+
+**Pure microcanonical** (`sigma_synth=False`):
+
+$$\mathcal{L}(\theta) =
+  \sum_k \frac{\bigl(\bar{\Phi}_k - \Phi^*_k\bigr)^2}{\sigma^2_{k,\text{batch}} + \varepsilon}$$
 
 **Why microcanonical?** The analogy is to statistical physics:
 - The **canonical** approach (classical gradient-descent synthesis) forces every
@@ -106,14 +115,13 @@ $\Phi^*$ is the target scattering covariance.
   are correct.
 
 **Key property — built-in anti-collapse:** if all N images become identical
-(mode collapse), $\sigma^2_k \to 0$ and the loss diverges.  The gradient
+(mode collapse), $\sigma_{k,\text{batch}} \to 0$ and the loss diverges.  The gradient
 therefore simultaneously pushes:
 1. $\bar{\Phi}_k \to \Phi^*_k$ (match the target mean), and
-2. $\sigma^2_k$ to be large enough to keep the loss finite (enforce diversity).
+2. $\sigma_{k,\text{batch}}$ to remain nonzero (enforce sample diversity).
 
-The equilibrium is reached when $\bar{\Phi}_k = \Phi^*_k$ and $\sigma^2_k$
-reflects the natural variability of textures with those statistics — which is
-exactly the microcanonical ensemble of textures consistent with $\Phi^*$.
+The equilibrium is the microcanonical ensemble of textures consistent with
+$\Phi^*$: distinct images whose collective statistics reproduce the target.
 
 ### Classical loss (`microcanonical=False`)
 
@@ -165,8 +173,9 @@ cosine-annealing learning-rate schedule.
 | `fft_ang` | `False` | Apply `fft_ang()` after `eval`, projecting the orientation axes onto the first `fft_nharm` Fourier harmonics. Keeps orientation information in a compact form. Mutually exclusive with `iso_ang`. |
 | `fft_nharm` | `1` | Number of harmonics beyond DC kept by `fft_ang`. Ignored when `fft_ang=False`. |
 | `fft_imaginary` | `True` | If `True`, keep both cosine and sine components in `fft_ang` (rotation-invariant amplitudes). Ignored when `fft_ang=False`. |
-| `microcanonical` | `True` | Use the microcanonical loss (see [Training objective](#training-objective)). Constrains the ensemble mean of statistics to match the target, normalised by the ensemble variance. Requires `n_samples >= 2`. Set to `False` for the classical per-sample distance. |
-| `micro_eps` | `1e-6` | Variance floor in the microcanonical loss. Prevents division by zero when the network's outputs are nearly identical at the start of training. |
+| `microcanonical` | `True` | Use the microcanonical loss (see [Training objective](#training-objective)). Constrains the ensemble mean of statistics to match the target, normalised by the batch std. Requires `n_samples >= 2`. Set to `False` for the classical per-sample distance. |
+| `sigma_synth` | `True` | Only used when `microcanonical=True`. If `True`, multiply the batch std by `|Φ*_k|` (synthesis sigma) in the denominator — combines anti-collapse with proper coefficient scaling. If `False`, use only the batch variance. |
+| `micro_eps` | `1e-6` | Floor on the denominator of the microcanonical loss. Prevents division by zero at the very start of training. |
 | `device` | auto | `'cuda'` or `'cpu'`. Defaults to CUDA if available. |
 
 ### `generate_samples`
