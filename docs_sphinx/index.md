@@ -139,6 +139,15 @@ Train U-Net and graph-convolutional models that operate directly on HEALPix
 geometry using FOSCAT oriented convolutions as the spatial primitive.
 :::
 
+:::{grid-item-card} Fast synthesis — decoder U-Net
+:link: user-guide/fast-synthesis-unet
+:link-type: doc
+
+Replace slow gradient-descent synthesis with a single neural-network forward
+pass. Train once on a target scattering covariance; generate thousands of
+independent samples in milliseconds.
+:::
+
 ::::
 
 ---
@@ -173,6 +182,7 @@ user-guide/2d-synthesis
 user-guide/component-separation
 user-guide/local-healpix-wavelets
 user-guide/neural-networks
+user-guide/fast-synthesis-unet
 ```
 
 ```{toctree}
