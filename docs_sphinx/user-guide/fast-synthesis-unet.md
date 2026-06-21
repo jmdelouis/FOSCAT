@@ -81,21 +81,56 @@ No skip connections from an encoder; the wavelet responses of $z$ play that role
 
 ## Training objective
 
-The network $G_\theta$ is trained by minimising the scattering-covariance
-distance between its outputs and the target statistics $\Phi^*$:
+### Microcanonical loss (default)
+
+The default training objective is the **microcanonical loss**, which constrains
+the *distribution* of statistics across the N generated images rather than each
+image individually:
+
+$$\mathcal{L}(\theta) =
+  \sum_k \frac{\bigl(\bar{\Phi}_k - \Phi^*_k\bigr)^2}{\sigma^2_k + \varepsilon}$$
+
+where
+
+$$\bar{\Phi}_k = \frac{1}{N}\sum_{i=1}^N \Phi_k(G_\theta(z_i)), \qquad
+  \sigma^2_k = \frac{1}{N}\sum_{i=1}^N \bigl(\Phi_k(G_\theta(z_i)) - \bar{\Phi}_k\bigr)^2$$
+
+are the empirical mean and variance of coefficient $k$ across the batch, and
+$\Phi^*$ is the target scattering covariance.
+
+**Why microcanonical?** The analogy is to statistical physics:
+- The **canonical** approach (classical gradient-descent synthesis) forces every
+  microstate (generated image) to individually satisfy the constraints.
+- The **microcanonical** approach only requires the ensemble average to match the
+  target.  Individual images may differ, as long as their collective statistics
+  are correct.
+
+**Key property — built-in anti-collapse:** if all N images become identical
+(mode collapse), $\sigma^2_k \to 0$ and the loss diverges.  The gradient
+therefore simultaneously pushes:
+1. $\bar{\Phi}_k \to \Phi^*_k$ (match the target mean), and
+2. $\sigma^2_k$ to be large enough to keep the loss finite (enforce diversity).
+
+The equilibrium is reached when $\bar{\Phi}_k = \Phi^*_k$ and $\sigma^2_k$
+reflects the natural variability of textures with those statistics — which is
+exactly the microcanonical ensemble of textures consistent with $\Phi^*$.
+
+### Classical loss (`microcanonical=False`)
+
+Setting `microcanonical=False` reverts to the canonical per-sample loss:
 
 $$\mathcal{L}(\theta) =
   \frac{1}{N} \sum_{i=1}^{N}
-  \mathrm{dist}\!\bigl(\Phi(G_\theta(z_i)),\; \Phi^*\bigr),
-  \qquad z_i \sim \mathcal{N}(0, I)$$
+  \mathrm{dist}\!\bigl(\Phi(G_\theta(z_i)),\; \Phi^*\bigr)$$
 
-where $\mathrm{dist}$ is `scat_op.reduce_distance` (sum of squared
-differences) and $\Phi^*$ is computed once from the target image with
-`scat_op.eval(..., norm='auto')`.
+This penalises each image independently; it converges reliably but is prone to
+mode collapse (all samples look the same), especially with expressive networks.
+
+---
 
 At each epoch, a fresh batch of $N$ noise vectors is drawn, ensuring the network
-learns to map *any* noise to a valid texture rather than memorising one solution.
-The optimizer is Adam with a cosine-annealing learning-rate schedule.
+learns to map *any* noise to a valid texture.  The optimizer is Adam with a
+cosine-annealing learning-rate schedule.
 
 ---
 
@@ -130,6 +165,8 @@ The optimizer is Adam with a cosine-annealing learning-rate schedule.
 | `fft_ang` | `False` | Apply `fft_ang()` after `eval`, projecting the orientation axes onto the first `fft_nharm` Fourier harmonics. Keeps orientation information in a compact form. Mutually exclusive with `iso_ang`. |
 | `fft_nharm` | `1` | Number of harmonics beyond DC kept by `fft_ang`. Ignored when `fft_ang=False`. |
 | `fft_imaginary` | `True` | If `True`, keep both cosine and sine components in `fft_ang` (rotation-invariant amplitudes). Ignored when `fft_ang=False`. |
+| `microcanonical` | `True` | Use the microcanonical loss (see [Training objective](#training-objective)). Constrains the ensemble mean of statistics to match the target, normalised by the ensemble variance. Requires `n_samples >= 2`. Set to `False` for the classical per-sample distance. |
+| `micro_eps` | `1e-6` | Variance floor in the microcanonical loss. Prevents division by zero when the network's outputs are nearly identical at the start of training. |
 | `device` | auto | `'cuda'` or `'cpu'`. Defaults to CUDA if available. |
 
 ### `generate_samples`
@@ -260,7 +297,8 @@ model2.eval()
 | Multiple samples | Restart from scratch | Instant (single forward pass) |
 | Memory | Low | Depends on `channel_list` |
 | Geometry | 2D and HEALPix | 2D only (this module) |
-| Orientation reduction | `iso_ang`, `fft_ang` | Not built-in (uses raw scat-cov) |
+| Orientation reduction | `iso_ang`, `fft_ang` | `iso_ang`, `fft_ang` |
+| Diversity enforcement | Manual (restart needed) | Microcanonical loss (built-in) |
 
 The two approaches are complementary: gradient descent is the gold standard for
 a single high-quality synthesis; the U-Net is preferable whenever many
