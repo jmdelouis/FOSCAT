@@ -440,14 +440,33 @@ result_v2 = scat_op.synthesis(xnorm, nstep=3, NUM_EPOCHS=500,
 
 ### `scat_cov_method` *(default: `'eval'`)*
 
-Internal method used to compute scattering covariances.
+Selects the internal method used to compute scattering covariances at each
+optimisation step.
 
-- **`'eval'`** *(recommended):* uses `funct.eval()` with `norm='auto'`.
-  The normalisation is cached after the first call (`clean_norm()`), which
-  makes subsequent iterations fast. Works for all geometry types.
+- **`'eval'`** *(default):* uses `funct.eval()` with `norm='auto'`.
+  The normalisation factors are computed from the target image on the first
+  call and cached; subsequent iterations reuse the same normalisation.
+  Works for all geometry types (2D, HEALPix, 1D).
+  Supports all orientation reductions: `iso_ang`, `fft_ang`.
 
-- Any other value: uses the legacy `scattering_cov()` path (2D only). Kept
-  for backward compatibility; in practice `'eval'` is always preferred.
+- **any other value** (e.g. `'scattering_cov'`): uses the direct
+  `scattering_cov()` path.  **2D only.**  Statistics are computed without
+  the `norm='auto'` caching layer; normalisation is applied via the
+  `ref_sigma` mechanism inside `scattering_cov` itself.  Supports
+  `iso_ang` and `fft_ang` (both with and without `use_variance`).
+
+  Use this path when you want to bypass the `eval` normalisation cache —
+  for example, in cases where the cached norm from the target image is not
+  appropriate for the synthesised image (non-stationary textures, masked
+  domains with very different statistics).
+
+| | `'eval'` | `'scattering_cov'` |
+|---|---|---|
+| Geometry | 2D, HEALPix, 1D | 2D only |
+| `iso_ang` | ✓ | ✓ |
+| `fft_ang` | ✓ | ✓ |
+| Normalisation | cached from target (`norm='auto'`) | via `ref_sigma` at each step |
+| `use_variance` | ✓ (`calc_var=True`) | ✓ (`get_variance=True`) |
 
 ---
 
