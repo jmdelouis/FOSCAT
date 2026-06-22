@@ -7401,6 +7401,34 @@ class funct(FOC.FoCUS):
             if l_jmax[nstep - 1] is not None:
                 n_up_jmax = min(n_up_jmax, l_jmax[nstep - 1])
 
+            # When using the scattering_cov path, ref/sref are flat tensors
+            # whose size depends on image dimensions (J = int(log(nside)/log(2))-1).
+            # Upsampled images have larger J even with the same Jmax → size mismatch.
+            # Recompute ref via eval (scat_cov objects, size-invariant) so that
+            # The_lossH can compare consistently at any resolution.
+            if self.use_2D and scat_cov_method != 'eval':
+                self.clean_norm()
+                ref_nup = self.eval(
+                    tmp[nstep - 1],
+                    Jmax=n_up_jmax,
+                    norm='auto',
+                )
+                if use_variance:
+                    ref_nup, sref_nup = self.eval(
+                        tmp[nstep - 1],
+                        Jmax=n_up_jmax,
+                        calc_var=True,
+                        norm='auto',
+                    )
+                else:
+                    sref_nup = ref_nup
+                if iso_ang:
+                    ref_nup  = ref_nup.iso_mean()
+                    sref_nup = sref_nup.iso_mean()
+                # fft_ang is guaranteed False here (ValueError raised above otherwise)
+            else:
+                ref_nup, sref_nup = ref, sref
+
             for up in range(n_up):
                 # Upsample current result by factor 2 in each spatial dimension
                 imap = self.up_grade(
@@ -7410,16 +7438,9 @@ class funct(FOC.FoCUS):
                     nouty=omap.shape[2] * 2,
                 )
 
-                if self.use_2D and scat_cov_method != 'eval':
-                    # scattering_cov path: ref/sref are flat tensors — use The_loss
-                    loss_up = synthe.Loss(
-                        The_loss, self, ref, sref, use_variance, n_up_jmax
-                    )
-                else:
-                    # eval path: ref/sref are scat_cov objects — use The_lossH
-                    loss_up = synthe.Loss(
-                        The_lossH, self, ref, sref, use_variance, n_up_jmax
-                    )
+                loss_up = synthe.Loss(
+                    The_lossH, self, ref_nup, sref_nup, use_variance, n_up_jmax
+                )
                 sy_up = synthe.Synthesis([loss_up])
 
                 print(
