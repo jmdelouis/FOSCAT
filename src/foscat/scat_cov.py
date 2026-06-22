@@ -5234,17 +5234,21 @@ class funct(FOC.FoCUS):
                                 (S2 / ref_sigma["S2_sigma"]), \
                                 (S3 / ref_sigma["S3_sigma"]), \
                                 (S4 / ref_sigma["S4_sigma"])
-                        
+
+                        # After fft_ang, S2/S1 contain cos/sin projections that
+                        # can be negative -- log(negative) = NaN.  Skip log.
+                        s2_n = (S2 / ref_sigma["S2_sigma"]).reshape((N_image, -1))
+                        s1_n = (S1 / ref_sigma["S1_sigma"]).reshape((N_image, -1))
+                        if not fft_ang:
+                            s2_n = s2_n.log()
+                            s1_n = s1_n.log()
+
                         for_synthesis = self.backend.backend.cat(
                             (
                                 mean_data / ref_sigma["std_data"],
                                 std_data / ref_sigma["std_data"],
-                                (S2 / ref_sigma["S2_sigma"])
-                                .reshape((N_image, -1))
-                                .log(),
-                                (S1 / ref_sigma["S1_sigma"])
-                                .reshape((N_image, -1))
-                                .log(),
+                                s2_n,
+                                s1_n,
                                 (S3 / ref_sigma["S3_sigma"])
                                 .reshape((N_image, -1))
                                 .real,
@@ -5263,13 +5267,20 @@ class funct(FOC.FoCUS):
                     else:
                         if return_table:
                             return S1,S2,S3,S4
-                        
+
+                        # Same guard: skip log when fft_ang projects to signed values.
+                        s2_n = S2.reshape((N_image, -1))
+                        s1_n = S1.reshape((N_image, -1))
+                        if not fft_ang:
+                            s2_n = s2_n.log()
+                            s1_n = s1_n.log()
+
                         for_synthesis = self.backend.backend.cat(
                             (
                                 mean_data / std_data,
                                 std_data,
-                                S2.reshape((N_image, -1)).log(),
-                                S1.reshape((N_image, -1)).log(),
+                                s2_n,
+                                s1_n,
                                 S3.reshape((N_image, -1)).real,
                                 S3.reshape((N_image, -1)).imag,
                                 S4.reshape((N_image, -1)).real,
