@@ -7046,6 +7046,9 @@ class funct(FOC.FoCUS):
                     )
                 )
 
+            if fft_ang:
+                learn = learn.fft_ang(nharm=fft_nharm, imaginary=fft_imaginary)
+
             # make the difference withe the reference coordinates
             loss = scat_operator.backend.bk_reduce_mean(
                 scat_operator.backend.bk_square(learn - ref)
@@ -7110,6 +7113,9 @@ class funct(FOC.FoCUS):
                         iso_ang=iso_ang,
                     )
                 )
+
+            if fft_ang:
+                learn = learn.fft_ang(nharm=fft_nharm, imaginary=fft_imaginary)
 
             # make the difference withe the reference coordinates
             loss = scat_operator.backend.bk_reduce_mean(
@@ -7274,6 +7280,9 @@ class funct(FOC.FoCUS):
                         iso_ang=iso_ang,
                     )
                     sref = ref
+                if fft_ang:
+                    ref = ref.fft_ang(nharm=fft_nharm, imaginary=fft_imaginary)
+                    sref = sref.fft_ang_sigma(nharm=fft_nharm, imaginary=fft_imaginary)
             else:
                 self.clean_norm()
                 
