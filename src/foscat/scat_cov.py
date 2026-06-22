@@ -5405,8 +5405,9 @@ class funct(FOC.FoCUS):
                         )
 
             if not use_ref:
-                # Store the un-projected S2 so that subsequent use_ref=True
-                # calls can still normalise S3/S4 by raw wavelet power.
+                # Store the original (un-projected, un-logged) S2 so that
+                # subsequent use_ref=True calls can normalise raw S3/S4 values
+                # by true wavelet power before projecting.
                 self.ref_scattering_cov_S2 = (
                     S2_raw_for_norm if fft_ang else S2
                 )
@@ -6340,6 +6341,9 @@ class funct(FOC.FoCUS):
                     )
 
         if not use_ref:
+            # Store the original (un-projected, un-logged) S2 so that
+            # subsequent use_ref=True calls can normalise raw S3/S4 values
+            # by true wavelet power before projecting.
             self.ref_scattering_cov_S2 = (
                 S2_raw_for_norm if fft_ang else S2
             )
