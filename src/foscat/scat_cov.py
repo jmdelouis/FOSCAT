@@ -5131,21 +5131,24 @@ class funct(FOC.FoCUS):
                         ), [n, nd, L, L, nout]
                     )
 
-                S2 = _pa(S2)
-                S1 = _pa(S1)
+                # S1/S2 are positive power spectra: log first, then project.
+                # This ensures the projected values represent log-space harmonics,
+                # which are always well-defined and avoids NaN from log(negative).
+                # S3/S4 are complex covariances: project directly (no log).
+                S2 = _pa(S2.log())
+                S1 = _pa(S1.log())
                 S3 = _pb(S3)
                 S4 = _pc(S4)
                 if get_variance:
-                    S2_sigma = _pa(S2_sigma)
-                    S1_sigma = _pa(S1_sigma)
+                    S2_sigma = _pa(S2_sigma.log())
+                    S1_sigma = _pa(S1_sigma.log())
                     S3_sigma = _pb(S3_sigma)
                     S4_sigma = _pc(S4_sigma)
                 if data2 is not None:
                     S3p = _pb(S3p)
                     if get_variance:
                         S3p_sigma = _pb(S3p_sigma)
-                # ref_sigma passed in is already fft_ang'd (from a previous
-                # get_variance=True call with fft_ang=True) — do not re-project.
+                # ref_sigma passed in is already fft_ang'd — do not re-project.
 
             mean_data = self.backend.bk_zeros((N_image, 1), dtype=data.dtype)
             std_data = self.backend.bk_zeros((N_image, 1), dtype=data.dtype)
@@ -5235,13 +5238,15 @@ class funct(FOC.FoCUS):
                                 (S3 / ref_sigma["S3_sigma"]), \
                                 (S4 / ref_sigma["S4_sigma"])
 
-                        # After fft_ang, S2/S1 contain cos/sin projections that
-                        # can be negative -- log(negative) = NaN.  Skip log.
-                        s2_n = (S2 / ref_sigma["S2_sigma"]).reshape((N_image, -1))
-                        s1_n = (S1 / ref_sigma["S1_sigma"]).reshape((N_image, -1))
-                        if not fft_ang:
-                            s2_n = s2_n.log()
-                            s1_n = s1_n.log()
+                        if fft_ang:
+                            # S2/S1 are _pa(log(.)); ref_sigma sigmas are _pa(log(sigma)).
+                            # Normalized log-projection = _pa(log S2 - log S2_sigma)
+                            #   = _pa(log S2) - _pa(log S2_sigma) = S2 - S2_sigma.
+                            s2_n = (S2 - ref_sigma["S2_sigma"]).reshape((N_image, -1))
+                            s1_n = (S1 - ref_sigma["S1_sigma"]).reshape((N_image, -1))
+                        else:
+                            s2_n = (S2 / ref_sigma["S2_sigma"]).reshape((N_image, -1)).log()
+                            s1_n = (S1 / ref_sigma["S1_sigma"]).reshape((N_image, -1)).log()
 
                         for_synthesis = self.backend.backend.cat(
                             (
@@ -5268,12 +5273,13 @@ class funct(FOC.FoCUS):
                         if return_table:
                             return S1,S2,S3,S4
 
-                        # Same guard: skip log when fft_ang projects to signed values.
-                        s2_n = S2.reshape((N_image, -1))
-                        s1_n = S1.reshape((N_image, -1))
-                        if not fft_ang:
-                            s2_n = s2_n.log()
-                            s1_n = s1_n.log()
+                        if fft_ang:
+                            # S2/S1 already = _pa(log(S2_orig)): use directly.
+                            s2_n = S2.reshape((N_image, -1))
+                            s1_n = S1.reshape((N_image, -1))
+                        else:
+                            s2_n = S2.reshape((N_image, -1)).log()
+                            s1_n = S1.reshape((N_image, -1)).log()
 
                         for_synthesis = self.backend.backend.cat(
                             (
