@@ -7403,6 +7403,36 @@ class funct(FOC.FoCUS):
             if l_jmax[nstep - 1] is not None:
                 n_up_jmax = min(n_up_jmax, l_jmax[nstep - 1])
 
+            if self.use_2D and scat_cov_method != 'eval':
+                # Recompute the reference on the ORIGINAL TARGET with exactly n_up_jmax.
+                # The existing `ref` was built with Jmax=l_jmax[nstep-1] (often None),
+                # which may derive a different internal J than what scattering_cov produces
+                # for the upsampled image with Jmax=n_up_jmax.  Building ref_up with the
+                # same Jmax guarantees identical tensor shapes for (ref_up, learn).
+                if use_variance:
+                    ref_up, sref_up = self.scattering_cov(
+                        tmp[nstep - 1],
+                        data2=l_ref[nstep - 1],
+                        get_variance=True,
+                        edge=l_edge,
+                        Jmax=n_up_jmax,
+                        in_mask=l_in_mask[nstep - 1],
+                        iso_ang=iso_ang,
+                    )
+                else:
+                    ref_up = self.scattering_cov(
+                        tmp[nstep - 1],
+                        data2=l_ref[nstep - 1],
+                        in_mask=l_in_mask[nstep - 1],
+                        edge=l_edge,
+                        Jmax=n_up_jmax,
+                        iso_ang=iso_ang,
+                    )
+                    sref_up = ref_up
+                ref_up = self.reduce_mean_batch(ref_up)
+            else:
+                ref_up, sref_up = ref, sref
+
             for up in range(n_up):
                 # Upsample current result by factor 2 in each spatial dimension
                 imap = self.up_grade(
@@ -7413,18 +7443,12 @@ class funct(FOC.FoCUS):
                 )
 
                 if self.use_2D and scat_cov_method != 'eval':
-                    # The fix lives in scattering_cov itself: when Jmax is supplied,
-                    # J is clamped to min(J, Jmax), so the output tensor size is the
-                    # same regardless of the image resolution.
-                    # ref was computed with Jmax=l_jmax[nstep-1] on the original target;
-                    # The_loss computes learn with the same n_up_jmax on the upsampled
-                    # image — both produce J = min(J_image, Jmax), so sizes match.
                     loss_up = synthe.Loss(
-                        The_loss, self, ref, sref, use_variance, n_up_jmax
+                        The_loss, self, ref_up, sref_up, use_variance, n_up_jmax
                     )
                 else:
                     loss_up = synthe.Loss(
-                        The_lossH, self, ref, sref, use_variance, n_up_jmax
+                        The_lossH, self, ref_up, sref_up, use_variance, n_up_jmax
                     )
                 sy_up = synthe.Synthesis([loss_up])
 
