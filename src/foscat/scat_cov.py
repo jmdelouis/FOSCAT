@@ -7483,6 +7483,29 @@ class funct(FOC.FoCUS):
                 grd_mask=l_grd_mask[k],
             )
             
+        # When nstep=0 the main loop is skipped entirely.  Initialise omap with
+        # noise (or the provided input_image) at target resolution so that the
+        # n_up loop can start directly at the upsampled size.
+        if nstep == 0 and n_up > 0 and self.use_2D:
+            np.random.seed(seed)
+            _tgt = tmp[nstep - 1]
+            if input_image is None:
+                omap = self.backend.bk_cast(
+                    np.random.randn(
+                        synthesised_N, _tgt.shape[1], _tgt.shape[2]
+                    )
+                )
+            else:
+                omap = self.backend.bk_reshape(
+                    self.backend.bk_tile(
+                        self.backend.bk_cast(
+                            self.backend.bk_cast(input_image).flatten()
+                        ),
+                        synthesised_N,
+                    ),
+                    [synthesised_N, _tgt.shape[1], _tgt.shape[2]],
+                )
+
         if n_up > 0 and self.use_2D:
             # Extra upsampling steps: synthesise at 2^n_up times the target size
             # while keeping the SAME Jmax as the original target (same wavelet scales,
@@ -7533,7 +7556,39 @@ class funct(FOC.FoCUS):
                     sref_up = ref_up
                 ref_up = self.reduce_mean_batch(ref_up)
             else:
-                ref_up, sref_up = ref, sref
+                if nstep > 0:
+                    # ref was computed by the main synthesis loop above
+                    ref_up, sref_up = ref, sref
+                else:
+                    # nstep=0: main loop was skipped — build ref now via eval
+                    self.clean_norm()
+                    if use_variance:
+                        ref_up, sref_up = self.eval(
+                            tmp[nstep - 1],
+                            image2=l_ref[nstep - 1],
+                            mask=l_in_mask[nstep - 1],
+                            Jmax=n_up_jmax,
+                            norm='auto',
+                            calc_var=True,
+                        )
+                    else:
+                        ref_up = self.eval(
+                            tmp[nstep - 1],
+                            image2=l_ref[nstep - 1],
+                            mask=l_in_mask[nstep - 1],
+                            Jmax=n_up_jmax,
+                            norm='auto',
+                        )
+                        sref_up = ref_up
+                    if iso_ang:
+                        ref_up = ref_up.iso_mean()
+                        sref_up = sref_up.iso_mean()
+                    if fft_ang:
+                        ref_up = ref_up.fft_ang(nharm=fft_nharm, imaginary=fft_imaginary)
+                        sref_up = sref_up.fft_ang_sigma(
+                            nharm=fft_nharm, imaginary=fft_imaginary
+                        )
+                    ref_up = self.reduce_mean_batch(ref_up)
 
             for up in range(n_up):
                 # Upsample current result by factor 2 in each spatial dimension
