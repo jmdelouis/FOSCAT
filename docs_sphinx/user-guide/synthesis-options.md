@@ -465,7 +465,7 @@ optimisation step.
 | Geometry | 2D, HEALPix, 1D | 2D only |
 | `iso_ang` | ✓ | ✓ (native) |
 | `fft_ang` | ✓ | ✗ — raises `ValueError` |
-| `n_up` | ✓ | ✓ |
+| `n_up` | ✓ | ✓ (ref recomputed at each resolution) |
 | Normalisation | cached from target (`norm='auto'`) | via `ref_sigma` at each step |
 | `use_variance` | ✓ (`calc_var=True`) | ✓ (`get_variance=True`) |
 
