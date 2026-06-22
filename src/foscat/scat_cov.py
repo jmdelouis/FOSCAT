@@ -5135,13 +5135,13 @@ class funct(FOC.FoCUS):
                 # This ensures the projected values represent log-space harmonics,
                 # which are always well-defined and avoids NaN from log(negative).
                 # S3/S4 are complex covariances: project directly (no log).
-                S2 = _pa(S2.log())
-                S1 = _pa(S1.log())
+                S2 = _pa(S2).log()
+                S1 = _pa(S1).log()
                 S3 = _pb(S3)
                 S4 = _pc(S4)
                 if get_variance:
-                    S2_sigma = _pa(S2_sigma.log())
-                    S1_sigma = _pa(S1_sigma.log())
+                    S2_sigma = _pa(S2_sigma).log()
+                    S1_sigma = _pa(S1_sigma).log()
                     S3_sigma = _pb(S3_sigma)
                     S4_sigma = _pc(S4_sigma)
                 if data2 is not None:
