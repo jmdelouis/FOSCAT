@@ -4403,6 +4403,9 @@ class funct(FOC.FoCUS):
             ref_sigma=None,
             iso_ang=False,
             return_table=False,
+            fft_ang=False,
+            fft_nharm=1,
+            fft_imaginary=True,
     ):
         """
         Calculates the scattering correlations for a batch of images, including:
@@ -5076,6 +5079,74 @@ class funct(FOC.FoCUS):
                     if data2 is not None:
                         S3p_sigma_iso /= L
 
+            # ---- fft_ang: project orientation axes onto Fourier harmonics ----
+            # Applied before building ref_sigma / for_synthesis so that all
+            # tensors (and their sigma counterparts) share the same nout shape.
+            # The raw S2 is preserved in S2_raw_for_norm because
+            # self.ref_scattering_cov_S2 must remain un-projected (it is used
+            # as a normalization divisor inside the scattering loops).
+            if fft_ang:
+                S2_raw_for_norm = S2
+                nout = 1 + fft_nharm * (2 if fft_imaginary else 1)
+                if (L, fft_nharm) not in self.backend._fft_1_orient:
+                    self.backend.calc_fft_orient(L, fft_nharm, fft_imaginary)
+                if (L, fft_nharm, fft_imaginary) not in self.backend._fft_ang2_orient:
+                    self.backend.calc_fft_ang_orient(L, fft_nharm, fft_imaginary)
+
+                m1  = self.backend._fft_1_orient[(L, fft_nharm, fft_imaginary)]
+                m1c = self.backend._fft_1_orient_C[(L, fft_nharm, fft_imaginary)]
+                m2  = self.backend._fft_ang2_orient[(L, fft_nharm, fft_imaginary)]
+                m2c = self.backend._fft_ang2_orient_C[(L, fft_nharm, fft_imaginary)]
+                m3  = self.backend._fft_ang3_orient[(L, fft_nharm, fft_imaginary)]
+                m3c = self.backend._fft_ang3_orient_C[(L, fft_nharm, fft_imaginary)]
+                bkc = self.backend.bk_is_complex
+
+                def _pa(x):
+                    """S1/S2  [N, J, L]        → [N, J, nout]"""
+                    n, j_ = x.shape[0], x.shape[1]
+                    m = m1c if bkc(x) else m1
+                    return self.backend.bk_reshape(
+                        self.backend.backend.matmul(
+                            self.backend.bk_reshape(x, [n * j_, L]), m
+                        ), [n, j_, nout]
+                    )
+
+                def _pb(x):
+                    """S3/S3p [N, Nd, L, L]    → [N, Nd, L, nout]"""
+                    n, nd = x.shape[0], x.shape[1]
+                    m = m2c if bkc(x) else m2
+                    return self.backend.bk_reshape(
+                        self.backend.backend.matmul(
+                            self.backend.bk_reshape(x, [n * nd, L * L]), m
+                        ), [n, nd, L, nout]
+                    )
+
+                def _pc(x):
+                    """S4     [N, Nd, L, L, L] → [N, Nd, L, L, nout]"""
+                    n, nd = x.shape[0], x.shape[1]
+                    m = m3c if bkc(x) else m3
+                    return self.backend.bk_reshape(
+                        self.backend.backend.matmul(
+                            self.backend.bk_reshape(x, [n * nd, L * L * L]), m
+                        ), [n, nd, L, L, nout]
+                    )
+
+                S2 = _pa(S2)
+                S1 = _pa(S1)
+                S3 = _pb(S3)
+                S4 = _pc(S4)
+                if get_variance:
+                    S2_sigma = _pa(S2_sigma)
+                    S1_sigma = _pa(S1_sigma)
+                    S3_sigma = _pb(S3_sigma)
+                    S4_sigma = _pc(S4_sigma)
+                if data2 is not None:
+                    S3p = _pb(S3p)
+                    if get_variance:
+                        S3p_sigma = _pb(S3p_sigma)
+                # ref_sigma passed in is already fft_ang'd (from a previous
+                # get_variance=True call with fft_ang=True) — do not re-project.
+
             mean_data = self.backend.bk_zeros((N_image, 1), dtype=data.dtype)
             std_data = self.backend.bk_zeros((N_image, 1), dtype=data.dtype)
 
@@ -5317,7 +5388,11 @@ class funct(FOC.FoCUS):
                         )
 
             if not use_ref:
-                self.ref_scattering_cov_S2 = S2
+                # Store the un-projected S2 so that subsequent use_ref=True
+                # calls can still normalise S3/S4 by raw wavelet power.
+                self.ref_scattering_cov_S2 = (
+                    S2_raw_for_norm if fft_ang else S2
+                )
 
             if get_variance:
                 return for_synthesis, ref_sigma
@@ -6248,7 +6323,9 @@ class funct(FOC.FoCUS):
                     )
 
         if not use_ref:
-            self.ref_scattering_cov_S2 = S2
+            self.ref_scattering_cov_S2 = (
+                S2_raw_for_norm if fft_ang else S2
+            )
 
         if get_variance:
             return for_synthesis, ref_sigma
@@ -7007,14 +7084,9 @@ class funct(FOC.FoCUS):
 
         import foscat.Synthesis as synthe
 
-        # Validate incompatible option combinations
-        if fft_ang and scat_cov_method != 'eval':
-            raise ValueError(
-                "fft_ang=True requires scat_cov_method='eval' (default). "
-                "The 'scattering_cov' path returns a flat concatenated tensor "
-                "that does not support fft_ang post-processing. "
-                "Either remove scat_cov_method or set fft_ang=False."
-            )
+        # fft_ang is now supported natively inside scattering_cov (the S tensors
+        # are projected onto Fourier harmonics before for_synthesis is built).
+        # No fallback to 'eval' is needed.
 
         l_edge = edge
         if in_mask is not None:
@@ -7048,18 +7120,24 @@ class funct(FOC.FoCUS):
                         ref_sigma=sref,
                         use_ref=True,
                         iso_ang=iso_ang,
+                        fft_ang=fft_ang,
+                        fft_nharm=fft_nharm,
+                        fft_imaginary=fft_imaginary,
                     )
                 )
             else:
                 learn = scat_operator.reduce_mean_batch(
                     scat_operator.scattering_cov(
-                        u, edge=l_edge, Jmax=ljmax, use_ref=True, iso_ang=iso_ang
+                        u,
+                        edge=l_edge,
+                        Jmax=ljmax,
+                        use_ref=True,
+                        iso_ang=iso_ang,
+                        fft_ang=fft_ang,
+                        fft_nharm=fft_nharm,
+                        fft_imaginary=fft_imaginary,
                     )
                 )
-
-            # NOTE: fft_ang is not supported on the scattering_cov path because
-            # scattering_cov returns a flat concatenated tensor, not a scat_cov
-            # object.  Use scat_cov_method='eval' to enable fft_ang.
 
             # make the difference withe the reference coordinates
             loss = scat_operator.backend.bk_reduce_mean(
@@ -7112,6 +7190,9 @@ class funct(FOC.FoCUS):
                         ref_sigma=sref,
                         use_ref=True,
                         iso_ang=iso_ang,
+                        fft_ang=fft_ang,
+                        fft_nharm=fft_nharm,
+                        fft_imaginary=fft_imaginary,
                     )
                 )
             else:
@@ -7123,10 +7204,11 @@ class funct(FOC.FoCUS):
                         Jmax=ljmax,
                         use_ref=True,
                         iso_ang=iso_ang,
+                        fft_ang=fft_ang,
+                        fft_nharm=fft_nharm,
+                        fft_imaginary=fft_imaginary,
                     )
                 )
-
-            # NOTE: fft_ang is not supported on the scattering_cov path.
 
             # make the difference withe the reference coordinates
             loss = scat_operator.backend.bk_reduce_mean(
@@ -7280,6 +7362,9 @@ class funct(FOC.FoCUS):
                         Jmax=l_jmax[k],
                         in_mask=l_in_mask[k],
                         iso_ang=iso_ang,
+                        fft_ang=fft_ang,
+                        fft_nharm=fft_nharm,
+                        fft_imaginary=fft_imaginary,
                     )
                 else:
                     ref = self.scattering_cov(
@@ -7289,11 +7374,11 @@ class funct(FOC.FoCUS):
                         edge=l_edge,
                         Jmax=l_jmax[k],
                         iso_ang=iso_ang,
+                        fft_ang=fft_ang,
+                        fft_nharm=fft_nharm,
+                        fft_imaginary=fft_imaginary,
                     )
                     sref = ref
-                # NOTE: fft_ang is not applicable here — scattering_cov returns
-                # a flat concatenated tensor, not a scat_cov object.
-                # Use scat_cov_method='eval' (default) to enable fft_ang.
             else:
                 self.clean_norm()
                 
@@ -7418,6 +7503,9 @@ class funct(FOC.FoCUS):
                         Jmax=n_up_jmax,
                         in_mask=l_in_mask[nstep - 1],
                         iso_ang=iso_ang,
+                        fft_ang=fft_ang,
+                        fft_nharm=fft_nharm,
+                        fft_imaginary=fft_imaginary,
                     )
                 else:
                     ref_up = self.scattering_cov(
@@ -7427,6 +7515,9 @@ class funct(FOC.FoCUS):
                         edge=l_edge,
                         Jmax=n_up_jmax,
                         iso_ang=iso_ang,
+                        fft_ang=fft_ang,
+                        fft_nharm=fft_nharm,
+                        fft_imaginary=fft_imaginary,
                     )
                     sref_up = ref_up
                 ref_up = self.reduce_mean_batch(ref_up)
