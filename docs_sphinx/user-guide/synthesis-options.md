@@ -463,10 +463,20 @@ optimisation step.
 | | `'eval'` | `'scattering_cov'` |
 |---|---|---|
 | Geometry | 2D, HEALPix, 1D | 2D only |
-| `iso_ang` | ✓ | ✓ |
-| `fft_ang` | ✓ | ✓ |
+| `iso_ang` | ✓ | ✓ (native) |
+| `fft_ang` | ✓ | ✗ — raises `ValueError` |
+| `n_up` | ✓ | ✓ |
 | Normalisation | cached from target (`norm='auto'`) | via `ref_sigma` at each step |
 | `use_variance` | ✓ (`calc_var=True`) | ✓ (`get_variance=True`) |
+
+```{note}
+`fft_ang=True` is incompatible with `scat_cov_method != 'eval'`.  The
+`scattering_cov` path returns a flat concatenated tensor (all statistics
+serialised into a 1-D vector) rather than a structured `scat_cov` object,
+so the orientation-Fourier post-processing that `fft_ang` requires cannot
+be applied.  A `ValueError` is raised immediately if this combination is
+attempted.
+```
 
 ---
 

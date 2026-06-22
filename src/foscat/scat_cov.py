@@ -7005,6 +7005,15 @@ class funct(FOC.FoCUS):
 
         import foscat.Synthesis as synthe
 
+        # Validate incompatible option combinations
+        if fft_ang and scat_cov_method != 'eval':
+            raise ValueError(
+                "fft_ang=True requires scat_cov_method='eval' (default). "
+                "The 'scattering_cov' path returns a flat concatenated tensor "
+                "that does not support fft_ang post-processing. "
+                "Either remove scat_cov_method or set fft_ang=False."
+            )
+
         l_edge = edge
         if in_mask is not None:
             l_edge = True
@@ -7046,8 +7055,9 @@ class funct(FOC.FoCUS):
                     )
                 )
 
-            if fft_ang:
-                learn = learn.fft_ang(nharm=fft_nharm, imaginary=fft_imaginary)
+            # NOTE: fft_ang is not supported on the scattering_cov path because
+            # scattering_cov returns a flat concatenated tensor, not a scat_cov
+            # object.  Use scat_cov_method='eval' to enable fft_ang.
 
             # make the difference withe the reference coordinates
             loss = scat_operator.backend.bk_reduce_mean(
@@ -7114,8 +7124,7 @@ class funct(FOC.FoCUS):
                     )
                 )
 
-            if fft_ang:
-                learn = learn.fft_ang(nharm=fft_nharm, imaginary=fft_imaginary)
+            # NOTE: fft_ang is not supported on the scattering_cov path.
 
             # make the difference withe the reference coordinates
             loss = scat_operator.backend.bk_reduce_mean(
@@ -7280,9 +7289,9 @@ class funct(FOC.FoCUS):
                         iso_ang=iso_ang,
                     )
                     sref = ref
-                if fft_ang:
-                    ref = ref.fft_ang(nharm=fft_nharm, imaginary=fft_imaginary)
-                    sref = sref.fft_ang_sigma(nharm=fft_nharm, imaginary=fft_imaginary)
+                # NOTE: fft_ang is not applicable here — scattering_cov returns
+                # a flat concatenated tensor, not a scat_cov object.
+                # Use scat_cov_method='eval' (default) to enable fft_ang.
             else:
                 self.clean_norm()
                 
@@ -7401,9 +7410,16 @@ class funct(FOC.FoCUS):
                     nouty=omap.shape[2] * 2,
                 )
 
-                loss_up = synthe.Loss(
-                    The_lossH, self, ref, sref, use_variance, n_up_jmax
-                )
+                if self.use_2D and scat_cov_method != 'eval':
+                    # scattering_cov path: ref/sref are flat tensors — use The_loss
+                    loss_up = synthe.Loss(
+                        The_loss, self, ref, sref, use_variance, n_up_jmax
+                    )
+                else:
+                    # eval path: ref/sref are scat_cov objects — use The_lossH
+                    loss_up = synthe.Loss(
+                        The_lossH, self, ref, sref, use_variance, n_up_jmax
+                    )
                 sy_up = synthe.Synthesis([loss_up])
 
                 print(
